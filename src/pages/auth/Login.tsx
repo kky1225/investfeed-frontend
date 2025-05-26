@@ -88,14 +88,14 @@ export default function Login(props: { disableCustomTheme?: boolean }) {
     };
 
     const validateInputs = () => {
-        const email = document.getElementById('email') as HTMLInputElement;
+        const userId = document.getElementById('userId') as HTMLInputElement;
         const password = document.getElementById('password') as HTMLInputElement;
 
         let isValid = true;
 
-        if (!email.value || !/\S+@\S+\.\S+/.test(email.value)) {
+        if (!userId.value || !/\S+@\S+\.\S+/.test(userId.value)) {
             setEmailError(true);
-            setEmailErrorMessage('Please enter a valid email address.');
+            setEmailErrorMessage('아이디를 입력해주세요.');
             isValid = false;
         } else {
             setEmailError(false);
@@ -104,7 +104,7 @@ export default function Login(props: { disableCustomTheme?: boolean }) {
 
         if (!password.value || password.value.length < 6) {
             setPasswordError(true);
-            setPasswordErrorMessage('Password must be at least 6 characters long.');
+            setPasswordErrorMessage('비밀번호를 입력해주세요.');
             isValid = false;
         } else {
             setPasswordError(false);
@@ -140,15 +140,15 @@ export default function Login(props: { disableCustomTheme?: boolean }) {
                         }}
                     >
                         <FormControl>
-                            <FormLabel htmlFor="email">Email</FormLabel>
+                            <FormLabel htmlFor="userId">아이디</FormLabel>
                             <TextField
                                 error={emailError}
                                 helperText={emailErrorMessage}
-                                id="email"
-                                type="email"
-                                name="email"
-                                placeholder="id"
-                                autoComplete="email"
+                                type="text"
+                                id="userId"
+                                name="userId"
+                                placeholder="아이디"
+                                autoComplete="userId"
                                 autoFocus
                                 required
                                 fullWidth
@@ -157,15 +157,15 @@ export default function Login(props: { disableCustomTheme?: boolean }) {
                             />
                         </FormControl>
                         <FormControl>
-                            <FormLabel htmlFor="password">Password</FormLabel>
+                            <FormLabel htmlFor="password">비밀번호</FormLabel>
                             <TextField
                                 error={passwordError}
                                 helperText={passwordErrorMessage}
-                                name="password"
-                                placeholder="password"
                                 type="password"
                                 id="password"
-                                autoComplete="current-password"
+                                name="password"
+                                placeholder="비밀번호"
+                                autoComplete="password"
                                 autoFocus
                                 required
                                 fullWidth
