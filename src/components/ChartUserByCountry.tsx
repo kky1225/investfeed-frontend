@@ -10,30 +10,30 @@ import LinearProgress, { linearProgressClasses } from '@mui/material/LinearProgr
 import {Fragment} from "react";
 
 const data = [
-    { label: 'India', value: 50000 },
-    { label: 'USA', value: 35000 },
-    { label: 'Brazil', value: 10000 },
-    { label: 'Other', value: 5000 },
+    { label: '삼성전자', value: 50000 },
+    { label: '넥슨게임즈', value: 35000 },
+    { label: '삼성SDI', value: 10000 },
+    { label: '리졸브AI', value: 5000 },
 ];
 
 const countries = [
     {
-        name: 'India',
+        name: '삼성전자',
         value: 50,
         color: 'hsl(220, 25%, 65%)',
     },
     {
-        name: 'USA',
+        name: '넥슨게임즈',
         value: 35,
         color: 'hsl(220, 25%, 45%)',
     },
     {
-        name: 'Brazil',
+        name: '삼성SDI',
         value: 10,
         color: 'hsl(220, 25%, 30%)',
     },
     {
-        name: 'Other',
+        name: '리졸브AI',
         value: 5,
         color: 'hsl(220, 25%, 20%)',
     },
@@ -118,7 +118,7 @@ export default function ChartUserByCountry() {
         >
             <CardContent>
                 <Typography component="h2" variant="subtitle2">
-                    Users by country
+                    투자 비중
                 </Typography>
                 <Box sx={{ display: 'flex', alignItems: 'center' }}>
                     <PieChart
@@ -140,11 +140,8 @@ export default function ChartUserByCountry() {
                         ]}
                         height={260}
                         width={260}
-                        // slotProps={{
-                        //     legend: { hidden: true },
-                        // }}
                     >
-                        <PieCenterLabel primaryText="98.5K" secondaryText="Total" />
+                        <PieCenterLabel primaryText="63,092,578" secondaryText="Total" />
                     </PieChart>
                 </Box>
                 {countries.map((country, index) => (

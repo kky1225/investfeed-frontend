@@ -7,7 +7,7 @@ import Box from '@mui/material/Box';
 import AppTheme from "../../components/AppTheme.tsx";
 import AppNavbar from "../../components/AppNavbar.tsx";
 import SideMenu from "../../components/SideMenu.tsx";
-import {alpha, useTheme} from "@mui/material/styles";
+import {alpha, styled, useTheme} from "@mui/material/styles";
 import Stack from "@mui/material/Stack";
 import Header from "../../components/Header.tsx";
 import Typography from "@mui/material/Typography";
@@ -16,11 +16,15 @@ import StatCard, {StatCardProps} from "../../components/StatCard.tsx";
 import Card from "@mui/material/Card";
 import CardContent from "@mui/material/CardContent";
 import Button from "@mui/material/Button";
-import {useMediaQuery} from "@mui/material";
+import {LinearProgress, useMediaQuery} from "@mui/material";
 import InsightsRoundedIcon from '@mui/icons-material/InsightsRounded';
 import ChevronRightRoundedIcon from '@mui/icons-material/ChevronRightRounded';
-import {LineChart} from "@mui/x-charts";
+import {BarChart, LineChart, PieChart} from "@mui/x-charts";
 import Chip from "@mui/material/Chip";
+import {useDrawingArea} from "@mui/x-charts/hooks";
+import {Fragment} from "react";
+import {linearProgressClasses} from "@mui/material/LinearProgress";
+import ChartUserByCountry from "../../components/ChartUserByCountry.tsx";
 
 
 export default function Dashboard(props: { disableCustomTheme?: boolean }) {
@@ -61,7 +65,7 @@ export default function Dashboard(props: { disableCustomTheme?: boolean }) {
 
     const isSmallScreen = useMediaQuery(theme.breakpoints.down('sm'));
 
-    const investorData = getDaysInMonth(4, 2024);
+    const time = getMinuteTimes();
 
     const colorPalette = [
         theme.palette.primary.light,
@@ -80,19 +84,36 @@ export default function Dashboard(props: { disableCustomTheme?: boolean }) {
         );
     }
 
-    function getDaysInMonth(month: number, year: number) {
-        const date = new Date(year, month, 0);
-        const monthName = date.toLocaleDateString('en-US', {
-            month: 'short',
-        });
-        const daysInMonth = date.getDate();
-        const days = [];
-        let i = 1;
-        while (days.length < daysInMonth) {
-            days.push(`${monthName} ${i}`);
-            i += 1;
+    function getMinuteTimes(
+        startHour: number = 8,
+        endHour: number = 20,
+        current: Date = new Date()
+    ) {
+        const times: string[] = [];
+
+        //const nowHour = current.getHours();
+        //const nowMinute = current.getMinutes();
+
+        const nowHour = 8;
+        const nowMinute = 30;
+
+        for (let hour = startHour; hour <= endHour; hour++) {
+            for (let minute = 0; minute < 60; minute++) {
+                if (
+                    hour > nowHour ||
+                    (hour === nowHour && minute > nowMinute) ||
+                    (hour === endHour && minute > 0)
+                ) {
+                    break;
+                }
+
+                const h = hour.toString().padStart(2, '0');
+                const m = minute.toString().padStart(2, '0');
+                times.push(`${h}:${m}`);
+            }
         }
-        return days;
+
+        return times;
     }
 
     return (
@@ -187,7 +208,7 @@ export default function Dashboard(props: { disableCustomTheme?: boolean }) {
                                                     <Chip size="small" color="success" label="+35%" />
                                                 </Stack>
                                                 <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-                                                    2025.05.26 09:31
+                                                    2025.05.26 08:30
                                                 </Typography>
                                             </Stack>
                                             <LineChart
@@ -195,8 +216,8 @@ export default function Dashboard(props: { disableCustomTheme?: boolean }) {
                                                 xAxis={[
                                                     {
                                                         scaleType: 'point',
-                                                        data: investorData,
-                                                        tickInterval: (_index: any, i: number) => (i + 1) % 5 === 0,
+                                                        data: time,
+                                                        tickInterval: (_index: any, i: number) => i % 30 === 0,
                                                     },
                                                 ]}
                                                 yAxis={[
@@ -217,7 +238,7 @@ export default function Dashboard(props: { disableCustomTheme?: boolean }) {
                                                         data: [
                                                             -300, -900, -600, -1200, -1500, -1800, -2400, -2100, -2700, -3000, -1800, -3300,
                                                             -3600, -3900, -4200, -4500, -3900, -4800, -5100, -5400, -4800, -5700, -6000,
-                                                            -6300, -6600, -6900, -7200, -7500, -7800, -8100,
+                                                            -6300, -6600, -6900, -7200, -7500, -7800, -8100, -8000
                                                         ],
                                                     },
                                                     {
@@ -231,7 +252,7 @@ export default function Dashboard(props: { disableCustomTheme?: boolean }) {
                                                         data: [
                                                             500, 900, 700, 1400, 1100, 1700, 2300, 2000, 2600, 2900, 2300, 3200,
                                                             3500, 3800, 4100, 4400, 2900, 4700, 5000, 5300, 5600, 5900, 6200,
-                                                            6500, 5600, 6800, 7100, 7400, 7700, 8000,
+                                                            6500, 5600, 6800, 7100, 7400, 7700, 8000, 7500
                                                         ],
                                                     },
                                                     {
@@ -244,7 +265,7 @@ export default function Dashboard(props: { disableCustomTheme?: boolean }) {
                                                         data: [
                                                             1000, 1500, 1200, 1700, 1300, 2000, 2400, 2200, 2600, 2800, 2500,
                                                             3000, 3400, 3700, 3200, 3900, 4100, 3500, 4300, 4500, 4000, 4700,
-                                                            5000, 5200, 4800, 5400, 5600, 5900, 6100, 6300,
+                                                            5000, 5200, 4800, 5400, 5600, 5900, 6100, 6300, 6800
                                                         ],
                                                         area: true,
                                                     },
@@ -268,6 +289,36 @@ export default function Dashboard(props: { disableCustomTheme?: boolean }) {
                                                 <AreaGradient color={theme.palette.primary.main} id="referral" />
                                                 <AreaGradient color={theme.palette.primary.light} id="direct" />
                                             </LineChart>
+                                            {/*<BarChart*/}
+                                            {/*    borderRadius={8}*/}
+                                            {/*    colors={colorPalette}*/}
+                                            {/*    xAxis={*/}
+                                            {/*        [*/}
+                                            {/*            {*/}
+                                            {/*                scaleType: 'band',*/}
+                                            {/*                data: time,*/}
+                                            {/*                categoryGapRatio: 0.5,*/}
+                                            {/*                tickInterval: (_index: any, i: number) => i % 30 === 0,*/}
+                                            {/*            },*/}
+                                            {/*        ]*/}
+                                            {/*    }*/}
+                                            {/*    yAxis={[*/}
+                                            {/*        {*/}
+                                            {/*            valueFormatter: (value: any) => value.toLocaleString(),*/}
+                                            {/*            width: 50,*/}
+                                            {/*        },*/}
+                                            {/*    ]}*/}
+                                            {/*    series={[*/}
+                                            {/*        {*/}
+                                            {/*            id: 'page-views',*/}
+                                            {/*            data: [2234, 3872, 2998, 4125, 3357, 2789, 2998],*/}
+                                            {/*            stack: 'A',*/}
+                                            {/*        }*/}
+                                            {/*    ]}*/}
+                                            {/*    height={250}*/}
+                                            {/*    margin={{ left: 50, right: 0, top: 20, bottom: 20 }}*/}
+                                            {/*    grid={{ horizontal: true }}*/}
+                                            {/*/>*/}
                                         </CardContent>
                                     </Card>
                                 </Grid>
@@ -295,7 +346,7 @@ export default function Dashboard(props: { disableCustomTheme?: boolean }) {
                                                     <Chip size="small" color="success" label="+35%" />
                                                 </Stack>
                                                 <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-                                                    2025.05.26 09:31
+                                                    2025.05.26 08:30
                                                 </Typography>
                                             </Stack>
                                             <LineChart
@@ -303,8 +354,8 @@ export default function Dashboard(props: { disableCustomTheme?: boolean }) {
                                                 xAxis={[
                                                     {
                                                         scaleType: 'point',
-                                                        data: investorData,
-                                                        tickInterval: (_index: any, i: number) => (i + 1) % 5 === 0,
+                                                        data: time,
+                                                        tickInterval: (_index: any, i: number) => i % 30 === 0,
                                                     },
                                                 ]}
                                                 yAxis={[
@@ -325,7 +376,7 @@ export default function Dashboard(props: { disableCustomTheme?: boolean }) {
                                                         data: [
                                                             -300, -900, -600, -1200, -1500, -1800, -2400, -2100, -2700, -3000, -1800, -3300,
                                                             -3600, -3900, -4200, -4500, -3900, -4800, -5100, -5400, -4800, -5700, -6000,
-                                                            -6300, -6600, -6900, -7200, -7500, -7800, -8100,
+                                                            -6300, -6600, -6900, -7200, -7500, -7800, -8100, -8000
                                                         ],
                                                     },
                                                     {
@@ -339,7 +390,7 @@ export default function Dashboard(props: { disableCustomTheme?: boolean }) {
                                                         data: [
                                                             500, 900, 700, 1400, 1100, 1700, 2300, 2000, 2600, 2900, 2300, 3200,
                                                             3500, 3800, 4100, 4400, 2900, 4700, 5000, 5300, 5600, 5900, 6200,
-                                                            6500, 5600, 6800, 7100, 7400, 7700, 8000,
+                                                            6500, 5600, 6800, 7100, 7400, 7700, 8000, 7500
                                                         ],
                                                     },
                                                     {
@@ -352,7 +403,7 @@ export default function Dashboard(props: { disableCustomTheme?: boolean }) {
                                                         data: [
                                                             1000, 1500, 1200, 1700, 1300, 2000, 2400, 2200, 2600, 2800, 2500,
                                                             3000, 3400, 3700, 3200, 3900, 4100, 3500, 4300, 4500, 4000, 4700,
-                                                            5000, 5200, 4800, 5400, 5600, 5900, 6100, 6300,
+                                                            5000, 5200, 4800, 5400, 5600, 5900, 6100, 6300, 6800
                                                         ],
                                                         area: true,
                                                     },
@@ -378,6 +429,17 @@ export default function Dashboard(props: { disableCustomTheme?: boolean }) {
                                             </LineChart>
                                         </CardContent>
                                     </Card>
+                                </Grid>
+                            </Grid>
+                            <Typography component="h2" variant="h6" sx={{ mb: 2 }}>
+                                업종별 주가 상승 TOP 10
+                            </Typography>
+                            <Grid container spacing={2} columns={12}>
+                                <Grid size={{ xs: 12, lg: 8 }}>
+
+                                </Grid>
+                                <Grid size={{ xs: 12, lg: 4 }}>
+                                    <ChartUserByCountry />
                                 </Grid>
                             </Grid>
                         </Box>
