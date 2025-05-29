@@ -10,33 +10,45 @@ import LinearProgress, { linearProgressClasses } from '@mui/material/LinearProgr
 import {Fragment} from "react";
 
 const data = [
-    { label: '삼성전자', value: 50000 },
-    { label: '넥슨게임즈', value: 35000 },
-    { label: '삼성SDI', value: 10000 },
-    { label: '리졸브AI', value: 5000 },
+    { label: '삼성전자', value: 22100000 },
+    { label: '넥슨게임즈', value: 16100000 },
+    { label: '삼성SDI', value: 10900000 },
+    { label: 'KODEX 2차전지산업레버리지', value: 8000000 },
+    { label: '리졸브AI', value: 3900000 },
+    { label: '그 외', value: 1540000 },
 ];
 
 const countries = [
     {
         name: '삼성전자',
-        value: 50,
-        color: 'hsl(220, 25%, 65%)',
+        value: 37.1,
+        color: 'hsl(220, 100%, 70%)'
     },
     {
         name: '넥슨게임즈',
-        value: 35,
-        color: 'hsl(220, 25%, 45%)',
+        value: 27.2,
+        color: 'hsl(220, 80%, 70%)'
     },
     {
         name: '삼성SDI',
-        value: 10,
-        color: 'hsl(220, 25%, 30%)',
+        value: 16.8,
+        color: 'hsl(220, 60%, 70%)'
+    },
+    {
+        name: 'KODEX 2차전지산업레버리지',
+        value: 13.2,
+        color: 'hsl(220, 45%, 70%)'
     },
     {
         name: '리졸브AI',
-        value: 5,
-        color: 'hsl(220, 25%, 20%)',
+        value: 4.3,
+        color: 'hsl(220, 30%, 70%)'
     },
+    {
+        name: '그 외',
+        value: 1.1,
+        color: 'hsl(220, 15%, 70%)'
+    }
 ];
 
 interface StyledTextProps {
@@ -104,13 +116,15 @@ function PieCenterLabel({ primaryText, secondaryText }: PieCenterLabelProps) {
 }
 
 const colors = [
-    'hsl(220, 20%, 65%)',
-    'hsl(220, 20%, 42%)',
-    'hsl(220, 20%, 35%)',
-    'hsl(220, 20%, 25%)',
+    'hsl(220, 100%, 70%)',
+    'hsl(220, 80%, 70%)',
+    'hsl(220, 60%, 70%)',
+    'hsl(220, 45%, 70%)',
+    'hsl(220, 30%, 70%)',
+    'hsl(220, 15%, 70%)'
 ];
 
-export default function ChartUserByCountry() {
+export default function CustomPieChart() {
     return (
         <Card
             variant="outlined"
@@ -118,13 +132,13 @@ export default function ChartUserByCountry() {
         >
             <CardContent>
                 <Typography component="h2" variant="subtitle2">
-                    투자 비중
+                    보유 주식
                 </Typography>
                 <Box sx={{ display: 'flex', alignItems: 'center' }}>
                     <PieChart
                         colors={colors}
                         margin={{
-                            left: 80,
+                            left: 50,
                             right: 80,
                             top: 80,
                             bottom: 80,
@@ -138,8 +152,8 @@ export default function ChartUserByCountry() {
                                 highlightScope: { fade: 'global', highlight: 'item' },
                             },
                         ]}
-                        height={260}
-                        width={260}
+                        height={280}
+                        width={280}
                     >
                         <PieCenterLabel primaryText="63,092,578" secondaryText="Total" />
                     </PieChart>

@@ -2,14 +2,9 @@ import type {} from '@mui/x-date-pickers/themeAugmentation';
 import type {} from '@mui/x-charts/themeAugmentation';
 import type {} from '@mui/x-data-grid/themeAugmentation';
 import type {} from '@mui/x-tree-view/themeAugmentation';
-import CssBaseline from '@mui/material/CssBaseline';
 import Box from '@mui/material/Box';
-import AppTheme from "../../components/AppTheme.tsx";
-import AppNavbar from "../../components/AppNavbar.tsx";
-import SideMenu from "../../components/SideMenu.tsx";
 import {alpha, styled, useTheme} from "@mui/material/styles";
 import Stack from "@mui/material/Stack";
-import Header from "../../components/Header.tsx";
 import Typography from "@mui/material/Typography";
 import Grid from "@mui/material/Grid";
 import StatCard, {StatCardProps} from "../../components/StatCard.tsx";
@@ -24,15 +19,18 @@ import Chip from "@mui/material/Chip";
 import {useDrawingArea} from "@mui/x-charts/hooks";
 import {Fragment} from "react";
 import {linearProgressClasses} from "@mui/material/LinearProgress";
-import ChartUserByCountry from "../../components/ChartUserByCountry.tsx";
+import CustomPieChart from "../../components/CustomPieChart.tsx";
+import { DataGrid, GridCellParams, GridColDef, GridRowsProp } from '@mui/x-data-grid';
+import CustomLineChart from '../../components/CustomLineChart.tsx'
+import type { CustomLineChartProps } from '../../components/CustomLineChart';
+import CustomDataTable from "../../components/CustomDataTable.tsx";
 
-
-export default function Dashboard(props: { disableCustomTheme?: boolean }) {
+export default function Dashboard() {
     const indexData: StatCardProps[] = [
         {
             title: '코스피',
             value: '2,644.4',
-            interval: 'Last 30 days',
+            interval: '2025.05.26 08:30',
             trend: 'up',
             data: [
                 2644.4, 2621.1, 2643.9, 2621.1, 2583.4, 2551.1, 2593.9, 2621.1, 2644.4, 2621.1, 2643.9, 2621.1, 2583.4, 2551.1, 2593.9, 2621.1,
@@ -42,7 +40,7 @@ export default function Dashboard(props: { disableCustomTheme?: boolean }) {
         {
             title: '코스닥',
             value: '725.27',
-            interval: 'Last 30 days',
+            interval: '2025.05.26 08:30',
             trend: 'down',
             data: [
                 725.27, 721.27, 709.27, 685.27, 666.27, 641.27, 593.27, 551.27, 601.27, 630.27, 650.27, 690.27, 725.27, 756.27, 800.27,
@@ -52,7 +50,7 @@ export default function Dashboard(props: { disableCustomTheme?: boolean }) {
         {
             title: '달러',
             value: '1,368.05',
-            interval: 'Last 30 days',
+            interval: '2025.05.26 08:30',
             trend: 'neutral',
             data: [
                 500, 400, 510, 530, 520, 600, 530, 520, 510, 730, 520, 510, 530, 620, 510, 530,
@@ -65,387 +63,394 @@ export default function Dashboard(props: { disableCustomTheme?: boolean }) {
 
     const isSmallScreen = useMediaQuery(theme.breakpoints.down('sm'));
 
-    const time = getMinuteTimes();
-
-    const colorPalette = [
-        theme.palette.primary.light,
-        theme.palette.primary.main,
-        theme.palette.primary.dark,
+    const data: CustomLineChartProps = [
+        {
+            id: 'direct',
+            label: '개인',
+            showMark: false,
+            curve: 'linear',
+            area: true,
+            stackOrder: 'ascending',
+            color: 'green',
+            data: [
+                -300, -900, -600, -1200, -1500, -1800, -2400, -2100, -2700, -3000, -1800, -3300,
+                -3600, -3900, -4200, -4500, -3900, -4800, -5100, -5400, -4800, -5700, -6000,
+                -6300, -6600, -6900, -7200, -7500, -7800, -8100, -8000
+            ],
+        },
+        {
+            id: 'referral',
+            label: '기관',
+            showMark: false,
+            curve: 'linear',
+            area: true,
+            stackOrder: 'ascending',
+            color: 'blue',
+            data: [
+                500, 900, 700, 1400, 1100, 1700, 2300, 2000, 2600, 2900, 2300, 3200,
+                3500, 3800, 4100, 4400, 2900, 4700, 5000, 5300, 5600, 5900, 6200,
+                6500, 5600, 6800, 7100, 7400, 7700, 8000, 7500
+            ],
+        },
+        {
+            id: 'organic',
+            label: '외국인',
+            showMark: false,
+            curve: 'linear',
+            stackOrder: 'ascending',
+            color: 'red',
+            data: [
+                1000, 1500, 1200, 1700, 1300, 2000, 2400, 2200, 2600, 2800, 2500,
+                3000, 3400, 3700, 3200, 3900, 4100, 3500, 4300, 4500, 4000, 4700,
+                5000, 5200, 4800, 5400, 5600, 5900, 6100, 6300, 6800
+            ],
+            area: true,
+        },
     ];
 
-    function AreaGradient({ color, id }: { color: string; id: string }) {
-        return (
-            <defs>
-                <linearGradient id={id} x1="50%" y1="0%" x2="50%" y2="100%">
-                    <stop offset="0%" stopColor={color} stopOpacity={0.5} />
-                    <stop offset="100%" stopColor={color} stopOpacity={0} />
-                </linearGradient>
-            </defs>
-        );
+    function renderStatus(status: number) {
+        const colors = status > 0 ? 'error' : 'info';
+
+        return <Chip label={status > 0 ? `+${status}%` : `${status}%`} color={colors} />;
     }
 
-    function getMinuteTimes(
-        startHour: number = 8,
-        endHour: number = 20,
-        current: Date = new Date()
-    ) {
-        const times: string[] = [];
-
-        //const nowHour = current.getHours();
-        //const nowMinute = current.getMinutes();
-
-        const nowHour = 8;
-        const nowMinute = 30;
-
-        for (let hour = startHour; hour <= endHour; hour++) {
-            for (let minute = 0; minute < 60; minute++) {
-                if (
-                    hour > nowHour ||
-                    (hour === nowHour && minute > nowMinute) ||
-                    (hour === endHour && minute > 0)
-                ) {
-                    break;
-                }
-
-                const h = hour.toString().padStart(2, '0');
-                const m = minute.toString().padStart(2, '0');
-                times.push(`${h}:${m}`);
-            }
+    const columns: GridColDef[] = [
+        {
+            field: 'rank',
+            headerName: '순위',
+            headerAlign: 'center',
+            align: 'center',
+            flex: 1,
+            maxWidth: 50,
+        },
+        { field: 'pageTitle', headerName: '이름', flex: 1.5, minWidth: 180 },
+        {
+            field: 'status',
+            headerName: '주가',
+            flex: 0.5,
+            minWidth: 100,
+            renderCell: (params) => renderStatus(params.value as any),
+        },
+        {
+            field: 'users',
+            headerName: '대표종목',
+            flex: 1,
+            minWidth: 200,
+        },
+        {
+            field: 'eventCount',
+            headerName: '거래량(억)',
+            flex: 1,
+            minWidth: 100,
         }
+    ];
 
-        return times;
-    }
+    const rows: GridRowsProp = [
+        {
+            id: 1,
+            rank: 1,
+            pageTitle: '이동통신사',
+            status: 4.2,
+            users: 'SK텔레콤',
+            eventCount: 8345
+        },
+        {
+            id: 2,
+            rank: 1,
+            pageTitle: '출판',
+            status: 3.3,
+            users: '알라딘',
+            eventCount: 5653,
+        },
+        {
+            id: 3,
+            rank: 3,
+            pageTitle: '돼지고기',
+            status: 2.4,
+            users: '하림',
+            eventCount: 3455,
+        },
+        {
+            id: 4,
+            rank: 4,
+            pageTitle: '호텔과 리조트',
+            status: 2.0,
+            users: '신라호텔',
+            eventCount: 112543,
+        },
+        {
+            id: 5,
+            rank: 5,
+            pageTitle: '전기설비',
+            status: 1.8,
+            eventCount: 3653,
+            users: 172240
+        },
+        {
+            id: 6,
+            rank: 6,
+            pageTitle: '종합반도체',
+            status: 1.5,
+            users: '삼성전자',
+            eventCount: 106543,
+        },
+        {
+            id: 7,
+            rank: 7,
+            pageTitle: '바이오',
+            status: 0.9,
+            users: '셀트리온 헬스케어',
+            eventCount: 7853,
+        },
+        {
+            id: 8,
+            rank: 8,
+            pageTitle: '게임',
+            status: 0.1,
+            eventCount: 8563,
+            users: 48240
+        },
+        {
+            rank: 9,
+            id: 9,
+            pageTitle: '주유소',
+            status: 0.1,
+            eventCount: 4563,
+            users: 18240,
+        },
+        {
+            id: 10,
+            rank: 10,
+            pageTitle: '통신',
+            status: 0.1,
+            eventCount: 9863,
+            users: 28240
+        },
+        {
+            id: 11,
+            rank: 11,
+            pageTitle: '철강',
+            status: -0.1,
+            eventCount: 6563,
+            users: 24240
+        },
+        {
+            id: 12,
+            rank: 12,
+            pageTitle: '무역',
+            status: -0.1,
+            eventCount: 12353,
+            users: 38240
+        },
+        {
+            id: 13,
+            rank: 13,
+            pageTitle: '건설사',
+            status: -0.2,
+            eventCount: 5863,
+            users: 13240
+        },
+        {
+            id: 14,
+            rank: 14,
+            pageTitle: '금융',
+            status: -0.3,
+            eventCount: 7853,
+            users: 18240,
+        },
+        {
+            id: 15,
+            rank: 15,
+            pageTitle: '술',
+            status: -0.3,
+            eventCount: 9563,
+            users: 24240,
+        },
+        {
+            id: 16,
+            rank: 16,
+            pageTitle: '음식점브랜드',
+            status: -0.3,
+            eventCount: 13423,
+            users: 54230,
+        },
+        {
+            id: 17,
+            rank: 17,
+            pageTitle: '통신장비',
+            status: -0.3,
+            eventCount: 4234,
+            users: 19342
+        },
+        {
+            id: 18,
+            rank: 18,
+            pageTitle: '금속',
+            status: -0.3,
+            eventCount: 8567,
+            users: 34234
+        },
+        {
+            id: 19,
+            rank: 19,
+            pageTitle: '식품첨가물',
+            status: -0.3,
+            eventCount: 3456,
+            users: 19234
+        },
+        {
+            id: 20,
+            rank: 20,
+            pageTitle: '화학',
+            status: -0.3,
+            eventCount: 6734,
+            users: 27645
+        },
+        {
+            id: 21,
+            rank: 21,
+            pageTitle: '건설',
+            status: -0.7,
+            eventCount: 4567,
+            users: 19345
+        },
+        {
+            id: 22,
+            rank: 22,
+            pageTitle: '의료기기',
+            status: -1.5,
+            eventCount: 7856,
+            users: 34567
+        },
+    ];
 
     return (
-        <AppTheme {...props}>
-            <CssBaseline enableColorScheme />
-            <Box sx={{ display: 'flex' }}>
-                <SideMenu />
-                <AppNavbar />
-                <Box
-                    component="main"
-                    sx={(theme) => ({
-                        flexGrow: 1,
-                        backgroundColor: theme.vars
-                            ? `rgba(${theme.vars.palette.background.defaultChannel} / 1)`
-                            : alpha(theme.palette.background.default, 1),
-                        overflow: 'auto',
-                    })}
-                >
-                    <Stack
-                        spacing={2}
-                        sx={{
-                            alignItems: 'center',
-                            mx: 3,
-                            pb: 5,
-                            mt: { xs: 8, md: 0 },
-                        }}
-                    >
-                        <Header />
-                        <Box sx={{ width: '100%', maxWidth: { sm: '100%', md: '1700px' } }}>
-                            <Typography component="h2" variant="h6" sx={{ mb: 2 }}>
-                                주요 지수
-                            </Typography>
-                            <Grid
-                                container
-                                spacing={2}
-                                columns={12}
-                                sx={{ mb: (theme) => theme.spacing(2) }}
+        <Box sx={{ width: '100%', maxWidth: { sm: '100%', md: '1700px' } }}>
+            <Typography component="h2" variant="h6" sx={{ mb: 2 }}>
+                주요 지수
+            </Typography>
+            <Grid
+                container
+                spacing={2}
+                columns={12}
+                sx={{ mb: (theme) => theme.spacing(2) }}
+            >
+                {indexData.map((card, index) => (
+                    <Grid key={index} size={{ xs: 12, sm: 6, lg: 3 }}>
+                        <StatCard {...card} />
+                    </Grid>
+                ))}
+                <Grid size={{ xs: 12, sm: 6, lg: 3 }}>
+                    <Card sx={{ height: '100%' }}>
+                        <CardContent>
+                            <InsightsRoundedIcon />
+                            <Typography
+                                component="h2"
+                                variant="subtitle2"
+                                gutterBottom
+                                sx={{ fontWeight: '600' }}
                             >
-                                {indexData.map((card, index) => (
-                                    <Grid key={index} size={{ xs: 12, sm: 6, lg: 3 }}>
-                                        <StatCard {...card} />
-                                    </Grid>
-                                ))}
-                                <Grid size={{ xs: 12, sm: 6, lg: 3 }}>
-                                    <Card sx={{ height: '100%' }}>
-                                        <CardContent>
-                                            <InsightsRoundedIcon />
-                                            <Typography
-                                                component="h2"
-                                                variant="subtitle2"
-                                                gutterBottom
-                                                sx={{ fontWeight: '600' }}
-                                            >
-                                                Explore your data
-                                            </Typography>
-                                            <Typography sx={{ color: 'text.secondary', mb: '8px' }}>
-                                                Uncover performance and visitor insights with our data wizardry.
-                                            </Typography>
-                                            <Button
-                                                variant="contained"
-                                                size="small"
-                                                color="primary"
-                                                endIcon={<ChevronRightRoundedIcon />}
-                                                fullWidth={isSmallScreen}
-                                            >
-                                                Get insights
-                                            </Button>
-                                        </CardContent>
-                                    </Card>
-                                </Grid>
-                                <Grid size={{ xs: 12, md: 6 }}>
-                                    <Typography component="h2" variant="h6" sx={{ mb: 2 }}>
-                                        코스피
-                                    </Typography>
-                                    <Card variant="outlined" sx={{ width: '100%' }}>
-                                        <CardContent>
-                                            <Typography component="h2" variant="subtitle2" gutterBottom>
-                                                투자자별 순매수 현황
-                                            </Typography>
-                                            <Stack sx={{ justifyContent: 'space-between' }}>
-                                                <Stack
-                                                    direction="row"
-                                                    sx={{
-                                                        alignContent: { xs: 'center', sm: 'flex-start' },
-                                                        alignItems: 'center',
-                                                        gap: 1,
-                                                    }}
-                                                >
-                                                    <Typography variant="h4" component="p">
-                                                        2,644.4
-                                                    </Typography>
-                                                    <Chip size="small" color="success" label="+35%" />
-                                                </Stack>
-                                                <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-                                                    2025.05.26 08:30
-                                                </Typography>
-                                            </Stack>
-                                            <LineChart
-                                                colors={colorPalette}
-                                                xAxis={[
-                                                    {
-                                                        scaleType: 'point',
-                                                        data: time,
-                                                        tickInterval: (_index: any, i: number) => i % 30 === 0,
-                                                    },
-                                                ]}
-                                                yAxis={[
-                                                    {
-                                                        valueFormatter: (value: any) => value.toLocaleString(),
-                                                        width: 50,
-                                                    },
-                                                ]}
-                                                series={[
-                                                    {
-                                                        id: 'direct',
-                                                        label: '개인',
-                                                        showMark: false,
-                                                        curve: 'linear',
-                                                        area: true,
-                                                        stackOrder: 'ascending',
-                                                        color: 'green',
-                                                        data: [
-                                                            -300, -900, -600, -1200, -1500, -1800, -2400, -2100, -2700, -3000, -1800, -3300,
-                                                            -3600, -3900, -4200, -4500, -3900, -4800, -5100, -5400, -4800, -5700, -6000,
-                                                            -6300, -6600, -6900, -7200, -7500, -7800, -8100, -8000
-                                                        ],
-                                                    },
-                                                    {
-                                                        id: 'referral',
-                                                        label: '기관',
-                                                        showMark: false,
-                                                        curve: 'linear',
-                                                        area: true,
-                                                        stackOrder: 'ascending',
-                                                        color: 'blue',
-                                                        data: [
-                                                            500, 900, 700, 1400, 1100, 1700, 2300, 2000, 2600, 2900, 2300, 3200,
-                                                            3500, 3800, 4100, 4400, 2900, 4700, 5000, 5300, 5600, 5900, 6200,
-                                                            6500, 5600, 6800, 7100, 7400, 7700, 8000, 7500
-                                                        ],
-                                                    },
-                                                    {
-                                                        id: 'organic',
-                                                        label: '외국인',
-                                                        showMark: false,
-                                                        curve: 'linear',
-                                                        stackOrder: 'ascending',
-                                                        color: 'red',
-                                                        data: [
-                                                            1000, 1500, 1200, 1700, 1300, 2000, 2400, 2200, 2600, 2800, 2500,
-                                                            3000, 3400, 3700, 3200, 3900, 4100, 3500, 4300, 4500, 4000, 4700,
-                                                            5000, 5200, 4800, 5400, 5600, 5900, 6100, 6300, 6800
-                                                        ],
-                                                        area: true,
-                                                    },
-                                                ]}
-                                                height={250}
-                                                margin={{ left: 50, right: 20, top: 20, bottom: 20 }}
-                                                grid={{ horizontal: true }}
-                                                sx={{
-                                                    '& .MuiAreaElement-series-organic': {
-                                                        fill: "url('#organic')",
-                                                    },
-                                                    '& .MuiAreaElement-series-referral': {
-                                                        fill: "url('#referral')",
-                                                    },
-                                                    '& .MuiAreaElement-series-direct': {
-                                                        fill: "url('#direct')",
-                                                    },
-                                                }}
-                                            >
-                                                <AreaGradient color={theme.palette.primary.dark} id="organic" />
-                                                <AreaGradient color={theme.palette.primary.main} id="referral" />
-                                                <AreaGradient color={theme.palette.primary.light} id="direct" />
-                                            </LineChart>
-                                            {/*<BarChart*/}
-                                            {/*    borderRadius={8}*/}
-                                            {/*    colors={colorPalette}*/}
-                                            {/*    xAxis={*/}
-                                            {/*        [*/}
-                                            {/*            {*/}
-                                            {/*                scaleType: 'band',*/}
-                                            {/*                data: time,*/}
-                                            {/*                categoryGapRatio: 0.5,*/}
-                                            {/*                tickInterval: (_index: any, i: number) => i % 30 === 0,*/}
-                                            {/*            },*/}
-                                            {/*        ]*/}
-                                            {/*    }*/}
-                                            {/*    yAxis={[*/}
-                                            {/*        {*/}
-                                            {/*            valueFormatter: (value: any) => value.toLocaleString(),*/}
-                                            {/*            width: 50,*/}
-                                            {/*        },*/}
-                                            {/*    ]}*/}
-                                            {/*    series={[*/}
-                                            {/*        {*/}
-                                            {/*            id: 'page-views',*/}
-                                            {/*            data: [2234, 3872, 2998, 4125, 3357, 2789, 2998],*/}
-                                            {/*            stack: 'A',*/}
-                                            {/*        }*/}
-                                            {/*    ]}*/}
-                                            {/*    height={250}*/}
-                                            {/*    margin={{ left: 50, right: 0, top: 20, bottom: 20 }}*/}
-                                            {/*    grid={{ horizontal: true }}*/}
-                                            {/*/>*/}
-                                        </CardContent>
-                                    </Card>
-                                </Grid>
-                                <Grid size={{ xs: 12, md: 6 }}>
-                                    <Typography component="h2" variant="h6" sx={{ mb: 2 }}>
-                                        코스닥
-                                    </Typography>
-                                    <Card variant="outlined" sx={{ width: '100%' }}>
-                                        <CardContent>
-                                            <Typography component="h2" variant="subtitle2" gutterBottom>
-                                                투자자별 순매수 현황
-                                            </Typography>
-                                            <Stack sx={{ justifyContent: 'space-between' }}>
-                                                <Stack
-                                                    direction="row"
-                                                    sx={{
-                                                        alignContent: { xs: 'center', sm: 'flex-start' },
-                                                        alignItems: 'center',
-                                                        gap: 1,
-                                                    }}
-                                                >
-                                                    <Typography variant="h4" component="p">
-                                                        725.27
-                                                    </Typography>
-                                                    <Chip size="small" color="success" label="+35%" />
-                                                </Stack>
-                                                <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-                                                    2025.05.26 08:30
-                                                </Typography>
-                                            </Stack>
-                                            <LineChart
-                                                colors={colorPalette}
-                                                xAxis={[
-                                                    {
-                                                        scaleType: 'point',
-                                                        data: time,
-                                                        tickInterval: (_index: any, i: number) => i % 30 === 0,
-                                                    },
-                                                ]}
-                                                yAxis={[
-                                                    {
-                                                        valueFormatter: (value: any) => value.toLocaleString(),
-                                                        width: 50,
-                                                    },
-                                                ]}
-                                                series={[
-                                                    {
-                                                        id: 'direct',
-                                                        label: '개인',
-                                                        showMark: false,
-                                                        curve: 'linear',
-                                                        area: true,
-                                                        stackOrder: 'ascending',
-                                                        color: 'green',
-                                                        data: [
-                                                            -300, -900, -600, -1200, -1500, -1800, -2400, -2100, -2700, -3000, -1800, -3300,
-                                                            -3600, -3900, -4200, -4500, -3900, -4800, -5100, -5400, -4800, -5700, -6000,
-                                                            -6300, -6600, -6900, -7200, -7500, -7800, -8100, -8000
-                                                        ],
-                                                    },
-                                                    {
-                                                        id: 'referral',
-                                                        label: '기관',
-                                                        showMark: false,
-                                                        curve: 'linear',
-                                                        area: true,
-                                                        stackOrder: 'ascending',
-                                                        color: 'blue',
-                                                        data: [
-                                                            500, 900, 700, 1400, 1100, 1700, 2300, 2000, 2600, 2900, 2300, 3200,
-                                                            3500, 3800, 4100, 4400, 2900, 4700, 5000, 5300, 5600, 5900, 6200,
-                                                            6500, 5600, 6800, 7100, 7400, 7700, 8000, 7500
-                                                        ],
-                                                    },
-                                                    {
-                                                        id: 'organic',
-                                                        label: '외국인',
-                                                        showMark: false,
-                                                        curve: 'linear',
-                                                        stackOrder: 'ascending',
-                                                        color: 'red',
-                                                        data: [
-                                                            1000, 1500, 1200, 1700, 1300, 2000, 2400, 2200, 2600, 2800, 2500,
-                                                            3000, 3400, 3700, 3200, 3900, 4100, 3500, 4300, 4500, 4000, 4700,
-                                                            5000, 5200, 4800, 5400, 5600, 5900, 6100, 6300, 6800
-                                                        ],
-                                                        area: true,
-                                                    },
-                                                ]}
-                                                height={250}
-                                                margin={{ left: 50, right: 20, top: 20, bottom: 20 }}
-                                                grid={{ horizontal: true }}
-                                                sx={{
-                                                    '& .MuiAreaElement-series-organic': {
-                                                        fill: "url('#organic')",
-                                                    },
-                                                    '& .MuiAreaElement-series-referral': {
-                                                        fill: "url('#referral')",
-                                                    },
-                                                    '& .MuiAreaElement-series-direct': {
-                                                        fill: "url('#direct')",
-                                                    },
-                                                }}
-                                            >
-                                                <AreaGradient color={theme.palette.primary.dark} id="organic" />
-                                                <AreaGradient color={theme.palette.primary.main} id="referral" />
-                                                <AreaGradient color={theme.palette.primary.light} id="direct" />
-                                            </LineChart>
-                                        </CardContent>
-                                    </Card>
-                                </Grid>
-                            </Grid>
-                            <Typography component="h2" variant="h6" sx={{ mb: 2 }}>
-                                업종별 주가 상승 TOP 10
+                                지수 확인
                             </Typography>
-                            <Grid container spacing={2} columns={12}>
-                                <Grid size={{ xs: 12, lg: 8 }}>
-
-                                </Grid>
-                                <Grid size={{ xs: 12, lg: 4 }}>
-                                    <ChartUserByCountry />
-                                </Grid>
-                            </Grid>
-                        </Box>
+                            <Typography sx={{ color: 'text.secondary', mb: '8px' }}>
+                                주요 주가 지수를 확인하고 싶다면 더보기를 눌러주세요.
+                            </Typography>
+                            <Button
+                                variant="contained"
+                                size="small"
+                                color="primary"
+                                endIcon={<ChevronRightRoundedIcon />}
+                                fullWidth={isSmallScreen}
+                            >
+                                더보기
+                            </Button>
+                        </CardContent>
+                    </Card>
+                </Grid>
+                <Grid size={{ xs: 12, md: 12 }}>
+                    <Typography component="h2" variant="h6">
+                        투자자별 순매수 현황(억)
+                    </Typography>
+                </Grid>
+                <Grid size={{ xs: 12, md: 6 }}>
+                    <Card variant="outlined" sx={{ width: '100%' }}>
+                        <CardContent>
+                            <Typography component="h2" variant="subtitle2" gutterBottom>
+                                코스피
+                            </Typography>
+                            <Stack sx={{ justifyContent: 'space-between' }}>
+                                <Stack
+                                    direction="row"
+                                    sx={{
+                                        alignContent: { xs: 'center', sm: 'flex-start' },
+                                        alignItems: 'center',
+                                        gap: 1,
+                                    }}
+                                >
+                                    <Typography variant="h4" component="p">
+                                        2,644.4
+                                    </Typography>
+                                    <Chip size="small" color="error" label='+2.02%' />
+                                </Stack>
+                                <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+                                    2025.05.26 08:30
+                                </Typography>
+                            </Stack>
+                        </CardContent>
+                        <CustomLineChart seriesData={data} />
+                    </Card>
+                </Grid>
+                <Grid size={{ xs: 12, md: 6 }}>
+                    <Card variant="outlined" sx={{ width: '100%' }}>
+                        <CardContent>
+                            <Typography component="h2" variant="subtitle2" gutterBottom>
+                                코스닥
+                            </Typography>
+                            <Stack sx={{ justifyContent: 'space-between' }}>
+                                <Stack
+                                    direction="row"
+                                    sx={{
+                                        alignContent: { xs: 'center', sm: 'flex-start' },
+                                        alignItems: 'center',
+                                        gap: 1,
+                                    }}
+                                >
+                                    <Typography variant="h4" component="p">
+                                        725.27
+                                    </Typography>
+                                    <Chip size="small" color="info" label='-1.30%' />
+                                </Stack>
+                                <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+                                    2025.05.26 08:30
+                                </Typography>
+                            </Stack>
+                        </CardContent>
+                        <CustomLineChart seriesData={data} />
+                    </Card>
+                </Grid>
+            </Grid>
+            <Grid container spacing={2} columns={12}>
+                <Grid size={{ xs: 12, lg: 7 }}>
+                    <Typography component="h2" variant="h6" sx={{ mb: 2 }}>
+                        업종별 주가 순위
+                    </Typography>
+                </Grid>
+                <Grid size={{ xs: 12, lg: 5 }}>
+                    <Typography component="h2" variant="h6" sx={{ mb: 2 }}>
+                        투자 비중
+                    </Typography>
+                </Grid>
+            </Grid>
+            <Grid container spacing={2} columns={12}>
+                <Grid size={{ xs: 12, lg: 7 }}>
+                    <CustomDataTable rows={rows} columns={columns} />
+                </Grid>
+                <Grid size={{ xs: 12, lg: 5 }}>
+                    <Stack gap={2} direction={{ xs: 'column', sm: 'row', lg: 'column' }}>
+                        <CustomPieChart />
                     </Stack>
-                </Box>
-            </Box>
-        </AppTheme>
+                </Grid>
+            </Grid>
+        </Box>
     );
 }

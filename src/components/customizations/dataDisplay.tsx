@@ -5,6 +5,7 @@ import { buttonBaseClasses } from '@mui/material/ButtonBase';
 import { chipClasses } from '@mui/material/Chip';
 import { iconButtonClasses } from '@mui/material/IconButton';
 import { gray, red, green } from '../themePrimitives';
+import {blue} from "@mui/material/colors";
 
 export const dataDisplayCustomizations: Components<Theme> = {
     MuiList: {
@@ -162,12 +163,37 @@ export const dataDisplayCustomizations: Components<Theme> = {
                             },
                             ...theme.applyStyles('dark', {
                                 borderColor: red[800],
-                                backgroundColor: red[900],
+                                backgroundColor: red[800],
                                 [`& .${chipClasses.label}`]: {
                                     color: red[200],
                                 },
                                 [`& .${chipClasses.icon}`]: {
                                     color: red[300],
+                                },
+                            }),
+                        },
+                    },
+                    {
+                        props: {
+                            color: 'info',
+                        },
+                        style: {
+                            borderColor: blue[100],
+                            backgroundColor: blue[50],
+                            [`& .${chipClasses.label}`]: {
+                                color: blue[500],
+                            },
+                            [`& .${chipClasses.icon}`]: {
+                                color: blue[500],
+                            },
+                            ...theme.applyStyles('dark', {
+                                borderColor: blue[800],
+                                backgroundColor: blue[900],
+                                [`& .${chipClasses.label}`]: {
+                                    color: blue[200],
+                                },
+                                [`& .${chipClasses.icon}`]: {
+                                    color: blue[300],
                                 },
                             }),
                         },

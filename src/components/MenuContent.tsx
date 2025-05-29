@@ -13,10 +13,11 @@ import InfoRoundedIcon from '@mui/icons-material/InfoRounded';
 import HelpRoundedIcon from '@mui/icons-material/HelpRounded';
 
 const mainListItems = [
-    { text: 'Home', icon: <HomeRoundedIcon /> },
-    { text: 'Analytics', icon: <AnalyticsRoundedIcon /> },
-    { text: 'Clients', icon: <PeopleRoundedIcon /> },
-    { text: 'Tasks', icon: <AssignmentRoundedIcon /> },
+    { text: '대시보드', icon: <HomeRoundedIcon /> },
+    { text: '주요 지수', icon: <AnalyticsRoundedIcon /> },
+    { text: '차트', icon: <AssignmentRoundedIcon /> },
+    { text: '관심 종목', icon: <PeopleRoundedIcon /> },
+    { text: '보유 주식', icon: <PeopleRoundedIcon /> },
 ];
 
 const secondaryListItems = [

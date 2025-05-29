@@ -55,12 +55,12 @@ export default function StatCard({
     const trendColors = {
         up:
             theme.palette.mode === 'light'
-                ? theme.palette.success.main
-                : theme.palette.success.dark,
-        down:
-            theme.palette.mode === 'light'
                 ? theme.palette.error.main
                 : theme.palette.error.dark,
+        down:
+            theme.palette.mode === 'light'
+                ? theme.palette.primary.main
+                : theme.palette.primary.dark,
         neutral:
             theme.palette.mode === 'light'
                 ? theme.palette.grey[400]
@@ -68,14 +68,14 @@ export default function StatCard({
     };
 
     const labelColors = {
-        up: 'success' as const,
-        down: 'error' as const,
+        up: 'error' as const,
+        down: 'info' as const,
         neutral: 'default' as const,
     };
 
     const color = labelColors[trend];
     const chartColor = trendColors[trend];
-    const trendValues = { up: '+2.02%', down: '-1.30%', neutral: '+5%' };
+    const trendValues = { up: '+2.02%', down: '-1.30%', neutral: '0%' };
 
     return (
         <Card variant="outlined" sx={{ height: '100%', flexGrow: 1 }}>
@@ -103,6 +103,7 @@ export default function StatCard({
                     </Stack>
                     <Box sx={{ width: '100%', height: 50 }}>
                         <SparkLineChart
+                            color={chartColor}
                             data={data}
                             area
                             showHighlight
