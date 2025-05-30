@@ -21,8 +21,8 @@ import {Fragment} from "react";
 import {linearProgressClasses} from "@mui/material/LinearProgress";
 import CustomPieChart from "../../components/CustomPieChart.tsx";
 import { DataGrid, GridCellParams, GridColDef, GridRowsProp } from '@mui/x-data-grid';
-import CustomLineChart from '../../components/CustomLineChart.tsx'
-import type { CustomLineChartProps } from '../../components/CustomLineChart';
+import InvestorLineChart from '../../components/InvestorLineChart.tsx'
+import type { CustomLineChartProps } from '../../components/InvestorLineChart.tsx';
 import CustomDataTable from "../../components/CustomDataTable.tsx";
 
 export default function Dashboard() {
@@ -397,7 +397,7 @@ export default function Dashboard() {
                                 </Typography>
                             </Stack>
                         </CardContent>
-                        <CustomLineChart seriesData={data} />
+                        <InvestorLineChart seriesData={data} />
                     </Card>
                 </Grid>
                 <Grid size={{ xs: 12, md: 6 }}>
@@ -425,7 +425,7 @@ export default function Dashboard() {
                                 </Typography>
                             </Stack>
                         </CardContent>
-                        <CustomLineChart seriesData={data} />
+                        <InvestorLineChart seriesData={data} />
                     </Card>
                 </Grid>
             </Grid>

@@ -4,6 +4,7 @@ import Login from "./pages/auth/Login.tsx";
 import Dashboard from "./pages/dashboard/Dashboard.tsx";
 import MainLayout from "./layout/MainLayout.tsx";
 import Interest from "./pages/interest/Interest.tsx";
+import Index from "./pages/index";
 
 function App() {
 
@@ -15,6 +16,7 @@ function App() {
                 <Route element={<MainLayout />} >
                     <Route path="/" Component={Dashboard} />
                     <Route path="/interest" Component={Interest} />
+                    <Route path="/index" Component={Index} />
                 </Route>
             </Routes>
         </>

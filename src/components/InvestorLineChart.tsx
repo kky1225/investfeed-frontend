@@ -2,11 +2,11 @@ import {useTheme} from "@mui/material/styles";
 import {LineChart, LineSeriesType} from "@mui/x-charts";
 import { MakeOptional } from '@mui/x-internals/types';
 
-interface CustomLineChartProps {
+export interface CustomLineChartProps {
     seriesData: MakeOptional<LineSeriesType, 'type'>[]
 }
 
-const CustomLineChart = (
+const InvestorLineChart = (
     { seriesData }: CustomLineChartProps
 ) => {
     const theme = useTheme();
@@ -78,7 +78,7 @@ const CustomLineChart = (
             ]}
             series={seriesData}
             height={250}
-            margin={{ left: 50, right: 20, top: 20, bottom: 20 }}
+            margin={{ left: 20, right: 20, top: 20, bottom: 20 }}
             grid={{ horizontal: true }}
             sx={{
                 '& .MuiAreaElement-series-organic': {
@@ -130,4 +130,4 @@ const CustomLineChart = (
 {/*    grid={{ horizontal: true }}*/}
 {/*/>*/}
 
-export default CustomLineChart;
+export default InvestorLineChart;
