@@ -36,38 +36,6 @@ const IndexLineChart = (
         return days;
     }
 
-    function getMinuteTimes(
-        startHour: number = 8,
-        endHour: number = 20,
-        // current: Date = new Date()
-    ) {
-        const times: string[] = [];
-
-        //const nowHour = current.getHours();
-        //const nowMinute = current.getMinutes();
-
-        const nowHour = 8;
-        const nowMinute = 30;
-
-        for (let hour = startHour; hour <= endHour; hour++) {
-            for (let minute = 0; minute < 60; minute++) {
-                if (
-                    hour > nowHour ||
-                    (hour === nowHour && minute > nowMinute) ||
-                    (hour === endHour && minute > 0)
-                ) {
-                    break;
-                }
-
-                const h = hour.toString().padStart(2, '0');
-                const m = minute.toString().padStart(2, '0');
-                times.push(`${h}:${m}`);
-            }
-        }
-
-        return times;
-    }
-
     const AreaGradient = ({ color, id }: { color: string; id: string })=> {
         return (
             <defs>

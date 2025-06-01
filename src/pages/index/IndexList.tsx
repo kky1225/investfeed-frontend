@@ -10,7 +10,7 @@ import type { CustomLineChartProps } from '../../components/InvestorLineChart.ts
 import OptionTable from "../../components/OptionTable.tsx";
 import {GridColDef, GridRowsProp} from "@mui/x-data-grid";
 
-const Index = () => {
+const IndexList = () => {
     const data: CustomLineChartProps = {
         seriesData: [
             {
@@ -322,4 +322,4 @@ const Index = () => {
     )
 }
 
-export default Index
+export default IndexList
