@@ -4,7 +4,6 @@ import Grid from "@mui/material/Grid";
 import CardContent from "@mui/material/CardContent";
 import Stack from "@mui/material/Stack";
 import Chip from "@mui/material/Chip";
-import IndexLineChart from "../../components/IndexLineChart.tsx";
 import Card from "@mui/material/Card";
 import {CustomLineChartProps} from "../../components/InvestorLineChart.tsx";
 import { useState, MouseEvent } from "react";
@@ -15,10 +14,9 @@ import ToggleButtonGroup, {
     toggleButtonGroupClasses,
 } from '@mui/material/ToggleButtonGroup';
 import {styled} from "@mui/material/styles";
-import {Select, SelectChangeEvent} from "@mui/material";
+import {Divider, Select, SelectChangeEvent} from "@mui/material";
 import MenuItem from "@mui/material/MenuItem";
-import DefaultChart, {CombinedChartProps} from "../../components/DefaultChart.tsx";
-import IndexBarChart from "../../components/IndexBarChart.tsx";
+import DetailChart from "../../components/DetailChart.tsx";
 
 const StyledToggleButtonGroup = styled(ToggleButtonGroup)(({ theme }) => ({
     border: 'none',
@@ -147,8 +145,7 @@ const IndexDetail = () => {
                                 </Typography>
                             </Stack>
                         </CardContent>
-                        <IndexLineChart seriesData={data.seriesData} />
-                        <IndexBarChart />
+                        <DetailChart />
                         <Box
                             display="flex"
                             justifyContent="space-between"
@@ -214,6 +211,64 @@ const IndexDetail = () => {
                                 </ToggleButton>
                             </StyledToggleButtonGroup>
                         </Box>
+                    </Card>
+                </Grid>
+            </Grid>
+            <Typography component="h2" variant="h6" sx={{ mb: 2 }}>
+                상세 정보
+            </Typography>
+            <Grid
+                container
+                spacing={2}
+                columns={12}
+                sx={{ mb: (theme) => theme.spacing(2) }}
+            >
+                <Grid size={{ xs: 12, md: 6 }}>
+                    <Card variant="outlined" sx={{ width: '100%' }}>
+                        <CardContent>
+                            <Grid container spacing={2}>
+                                <Grid size={{xs: 12, md: 3}}>
+                                    <Typography component="h2" variant="subtitle2" gutterBottom>
+                                        거래량
+                                    </Typography>
+                                </Grid>
+                                <Grid size={{xs: 12, md: 3}}>
+                                    <Typography component="h3" variant="subtitle2" gutterBottom>
+                                        3억 2,031만주
+                                    </Typography>
+                                </Grid>
+                                <Grid size={{xs: 12, md: 3}}>
+                                    <Typography component="h2" variant="subtitle2" gutterBottom>
+                                        거래대금
+                                    </Typography>
+                                </Grid>
+                                <Grid size={{xs: 12, md: 3}}>
+                                    <Typography component="h3" variant="subtitle2" gutterBottom>
+                                        9,031억원
+                                    </Typography>
+                                </Grid>
+                                <Grid size={{xs: 12, md: 3}}>
+                                    <Typography component="h2" variant="subtitle2" gutterBottom>
+                                        시가
+                                    </Typography>
+                                </Grid>
+                                <Grid size={{xs: 12, md: 3}}>
+                                    <Typography component="h3" variant="subtitle2" gutterBottom>
+                                        3억 2,031만주
+                                    </Typography>
+                                </Grid>
+                                <Grid size={{xs: 12, md: 3}}>
+                                    <Typography component="h2" variant="subtitle2" gutterBottom>
+                                        종가
+                                    </Typography>
+                                </Grid>
+                                <Grid size={{xs: 12, md: 3}}>
+                                    <Typography component="h3" variant="subtitle2" gutterBottom>
+                                        9,031억원
+                                    </Typography>
+                                </Grid>
+                            </Grid>
+                        </CardContent>
                     </Card>
                 </Grid>
             </Grid>
