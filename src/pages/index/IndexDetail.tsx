@@ -5,7 +5,7 @@ import CardContent from "@mui/material/CardContent";
 import Stack from "@mui/material/Stack";
 import Chip from "@mui/material/Chip";
 import Card from "@mui/material/Card";
-import {CustomLineChartProps} from "../../components/InvestorLineChart.tsx";
+import InvestorLineChart, {CustomLineChartProps} from "../../components/InvestorLineChart.tsx";
 import { useState, MouseEvent } from "react";
 import CandlestickChartIcon from '@mui/icons-material/CandlestickChart';
 import StackedLineChartIcon from '@mui/icons-material/StackedLineChart';
@@ -14,9 +14,10 @@ import ToggleButtonGroup, {
     toggleButtonGroupClasses,
 } from '@mui/material/ToggleButtonGroup';
 import {styled} from "@mui/material/styles";
-import {Divider, Select, SelectChangeEvent} from "@mui/material";
+import {Select, SelectChangeEvent} from "@mui/material";
 import MenuItem from "@mui/material/MenuItem";
 import DetailChart from "../../components/DetailChart.tsx";
+import InvestorBarChart from "../../components/InvestorBarChart.tsx";
 
 const StyledToggleButtonGroup = styled(ToggleButtonGroup)(({ theme }) => ({
     border: 'none',
@@ -54,45 +55,62 @@ const IndexDetail = () => {
         ]
     }
 
-    const data2: CombinedChartProps = {
-        lineSeriesData: [
-            {
-                id: 'direct',
-                showMark: false,
-                curve: 'linear',
-                area: true,
-                stackOrder: 'ascending',
-                color: 'red',
-                data: [
-                    2644.4, 2634.4, 2604.7, 2601.2, 2600.3, 2612.4, 2603.4, 2591.5, 2594.8, 2591.2, 2589.9, 2593.4,
-                    2599.4, 2604.4, 2614.3, 2619.6, 2621.3, 2626.3, 2633.9, 2635.5, 2635.9, 2644.4, 2649.3,
-                    2653.5, 2655.7, 2661.4, 2666.6, 2669.1, 2670.4, 2673.4, 2680.8
-                ],
-            }
-        ],
-        barSeriesData: [
-            {
-                id: 'volume',
-                type: 'bar',
-                color: '#90caf9',
-                data: [
-                    105000, 98000, 112000, 102000, 95000, 100000, 99000, 101000, 97000, 94000,
-                    95000, 96000, 97000, 99000, 103000, 108000, 110000, 107000, 104000, 101000,
-                    99000, 97000, 95000, 93000, 91000, 89000, 87000, 85000, 83000, 81000, 80000
-                ],
-            }
-        ]
-    };
+    const data2: CustomLineChartProps = [
+        {
+            id: 'direct',
+            label: '개인',
+            showMark: false,
+            curve: 'linear',
+            area: true,
+            stackOrder: 'ascending',
+            color: 'green',
+            data: [
+                -300, -900, -600, -1200, -1500, -1800, -2400, -2100, -2700, -3000, -1800, -3300,
+                -3600, -3900, -4200, -4500, -3900, -4800, -5100, -5400, -4800, -5700, -6000,
+                -6300, -6600, -6900, -7200, -7500, -7800, -8100, -8000
+            ],
+        },
+        {
+            id: 'referral',
+            label: '기관',
+            showMark: false,
+            curve: 'linear',
+            area: true,
+            stackOrder: 'ascending',
+            color: 'blue',
+            data: [
+                500, 900, 700, 1400, 1100, 1700, 2300, 2000, 2600, 2900, 2300, 3200,
+                3500, 3800, 4100, 4400, 2900, 4700, 5000, 5300, 5600, 5900, 6200,
+                6500, 5600, 6800, 7100, 7400, 7700, 8000, 7500
+            ],
+        },
+        {
+            id: 'organic',
+            label: '외국인',
+            showMark: false,
+            curve: 'linear',
+            stackOrder: 'ascending',
+            color: 'red',
+            data: [
+                1000, 1500, 1200, 1700, 1300, 2000, 2400, 2200, 2600, 2800, 2500,
+                3000, 3400, 3700, 3200, 3900, 4100, 3500, 4300, 4500, 4000, 4700,
+                5000, 5200, 4800, 5400, 5600, 5900, 6100, 6300, 6800
+            ],
+            area: true,
+        },
+    ];
 
     const [alignment, setAlignment] = useState('day');
-    const [formats, setFormats] = useState('candle');
+    const [formats, setFormats] = useState('line');
     const [minute, setMinute] = useState('1');
 
     const handleFormat = (
         _event: MouseEvent<HTMLElement>,
         newFormats: string,
     ) => {
-        setFormats(newFormats);
+        if(newFormats !== null) {
+            setFormats(newFormats);
+        }
     };
 
     const handleAlignment = (
@@ -203,7 +221,7 @@ const IndexDetail = () => {
                                 onChange={handleFormat}
                                 aria-label="text formatting"
                             >
-                                <ToggleButton value="candle" key="candle" aria-label="candle">
+                                <ToggleButton value="candle" key="candle" aria-label="candle" disabled>
                                     <CandlestickChartIcon />
                                 </ToggleButton>
                                 <ToggleButton value="line" key="line" aria-label="line">
@@ -214,16 +232,16 @@ const IndexDetail = () => {
                     </Card>
                 </Grid>
             </Grid>
-            <Typography component="h2" variant="h6" sx={{ mb: 2 }}>
-                상세 정보
-            </Typography>
             <Grid
                 container
                 spacing={2}
                 columns={12}
                 sx={{ mb: (theme) => theme.spacing(2) }}
             >
-                <Grid size={{ xs: 12, md: 6 }}>
+                <Grid size={{ xs: 12, md: 12 }}>
+                    <Typography component="h2" variant="h6" sx={{ mb: 2 }}>
+                        상세 정보
+                    </Typography>
                     <Card variant="outlined" sx={{ width: '100%' }}>
                         <CardContent>
                             <Grid container spacing={2}>
@@ -254,7 +272,7 @@ const IndexDetail = () => {
                                 </Grid>
                                 <Grid size={{xs: 12, md: 3}}>
                                     <Typography component="h3" variant="subtitle2" gutterBottom>
-                                        3억 2,031만주
+                                        2,644.4
                                     </Typography>
                                 </Grid>
                                 <Grid size={{xs: 12, md: 3}}>
@@ -264,10 +282,50 @@ const IndexDetail = () => {
                                 </Grid>
                                 <Grid size={{xs: 12, md: 3}}>
                                     <Typography component="h3" variant="subtitle2" gutterBottom>
-                                        9,031억원
+                                        2,680.4
+                                    </Typography>
+                                </Grid>
+                                <Grid size={{xs: 12, md: 3}}>
+                                    <Typography component="h2" variant="subtitle2" gutterBottom>
+                                        52주 최저가
+                                    </Typography>
+                                </Grid>
+                                <Grid size={{xs: 12, md: 3}}>
+                                    <Typography component="h3" variant="subtitle2" gutterBottom>
+                                        2,720.4
+                                    </Typography>
+                                </Grid>
+                                <Grid size={{xs: 12, md: 3}}>
+                                    <Typography component="h2" variant="subtitle2" gutterBottom>
+                                        52주 최고가
+                                    </Typography>
+                                </Grid>
+                                <Grid size={{xs: 12, md: 3}}>
+                                    <Typography component="h3" variant="subtitle2" gutterBottom>
+                                        2,289.4
                                     </Typography>
                                 </Grid>
                             </Grid>
+                        </CardContent>
+                    </Card>
+                </Grid>
+                <Grid size={{ xs: 12, md: 4 }}>
+                    <Typography component="h2" variant="h6" sx={{ mb: 2 }}>
+                        당일 투자자별 순매수(억)
+                    </Typography>
+                    <Card variant="outlined" sx={{ width: '100%' }}>
+                        <CardContent>
+                            <InvestorBarChart />
+                        </CardContent>
+                    </Card>
+                </Grid>
+                <Grid size={{ xs: 12, md: 8 }}>
+                    <Typography component="h2" variant="h6" sx={{ mb: 2 }}>
+                        시간별 투자자별 순매수(억)
+                    </Typography>
+                    <Card variant="outlined" sx={{ width: '100%' }}>
+                        <CardContent>
+                            <InvestorLineChart seriesData={data2} />
                         </CardContent>
                     </Card>
                 </Grid>
