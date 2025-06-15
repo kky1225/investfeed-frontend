@@ -17,15 +17,73 @@ import ChevronRightRoundedIcon from '@mui/icons-material/ChevronRightRounded';
 import {BarChart, LineChart, PieChart} from "@mui/x-charts";
 import Chip from "@mui/material/Chip";
 import {useDrawingArea} from "@mui/x-charts/hooks";
-import {Fragment} from "react";
+import {Fragment, useEffect, useState} from "react";
 import {linearProgressClasses} from "@mui/material/LinearProgress";
 import CustomPieChart from "../../components/CustomPieChart.tsx";
 import { DataGrid, GridCellParams, GridColDef, GridRowsProp } from '@mui/x-data-grid';
 import InvestorLineChart from '../../components/InvestorLineChart.tsx'
 import type { CustomLineChartProps } from '../../components/InvestorLineChart.tsx';
 import CustomDataTable from "../../components/CustomDataTable.tsx";
+import api from "../../axios.ts";
+import {fetchIndexList} from "../../api/sect/sectApi.ts";
+import {indexListReq, SectIndexListStream} from "../../type/sectType.ts";
+
+
 
 export default function Dashboard() {
+    const [req, setReq] = useState<indexListReq>({
+        inds_cd: '001', // 업종코드 001:종합(KOSPI), 002:대형주, 003:중형주, 004:소형주 101:종합(KOSDAQ), 201:KOSPI200, 302:KOSTAR, 701: KRX100 나머지 ※ 업종코드 참고
+        trnm: 'REG', // 서비스명 REG : 등록 , REMOVE : 해지
+        grp_no: '1', // 그룹번호
+        refresh: '1', // 기존등록유지여부 등록(REG)시 0:기존유지안함 1:기존유지(Default) 0일경우 기존등록한 item/type은 해지, 1일경우 기존등록한 item/type 유지 해지(REMOVE)시 값 불필요
+        data: [
+            {
+                item: [
+                    "001", "002", "003", "004", "005", "006", "007", "008", "009", "010", "011", "012",
+                    "013", "014", "015", "016", "017", "018", "019", "020", "021", "024", "025", "026",
+                    "027", "028", "029", "030", "603", "604", "605"
+                ],
+                type: [
+                    '0J'
+                ]
+            }
+        ] // 실시간 등록 리스트
+    })
+
+    const indexListData = async () => {
+        try {
+            const result = await fetchIndexList(req);
+
+            console.log(result);
+        } catch (err) {
+            console.error(err);
+        }
+    };
+
+    useEffect(() => {
+        indexListData()
+    }, []);
+
+    const socket = new WebSocket("ws://localhost:8080/ws");
+
+    socket.onopen = () => {
+        console.log("웹소켓 연결됨");
+        socket.send("Hello Server!"); // 서버에 초기 메시지 전송 (선택)
+    };
+
+    socket.onmessage = (event) => {
+        console.log("서버로부터 메시지 수신:", event.data);
+        // 실시간 주식 데이터 처리
+    };
+
+    socket.onclose = () => {
+        console.log("웹소켓 연결 종료됨");
+    };
+
+    socket.onerror = (error) => {
+        console.error("웹소켓 에러:", error);
+    };
+
     const indexData: StatCardProps[] = [
         {
             title: '코스피',
