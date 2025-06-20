@@ -13,23 +13,10 @@ export type StatCardProps = {
     value: string;
     interval: string;
     trend: 'up' | 'down' | 'neutral';
-    data: number[];
+    data: number[],
+    dateList: string[],
+    fluRt: string
 };
-
-function getDaysInMonth(month: number, year: number) {
-    const date = new Date(year, month, 0);
-    const monthName = date.toLocaleDateString('en-US', {
-        month: 'short',
-    });
-    const daysInMonth = date.getDate();
-    const days = [];
-    let i = 1;
-    while (days.length < daysInMonth) {
-        days.push(`${monthName} ${i}`);
-        i += 1;
-    }
-    return days;
-}
 
 function AreaGradient({ color, id }: { color: string; id: string }) {
     return (
@@ -48,9 +35,15 @@ export default function StatCard({
     interval,
     trend,
     data,
+    dateList,
+    fluRt
 }: StatCardProps) {
     const theme = useTheme();
-    const daysInWeek = getDaysInMonth(4, 2024);
+
+    const numericDates = data.map(Number);
+
+    const min = Math.min(...numericDates);
+    const max = Math.max(...numericDates);
 
     const trendColors = {
         up:
@@ -75,7 +68,7 @@ export default function StatCard({
 
     const color = labelColors[trend];
     const chartColor = trendColors[trend];
-    const trendValues = { up: '+2.02%', down: '-1.30%', neutral: '0%' };
+    const trendValues = { up: `${fluRt}%`, down: `${fluRt}%`, neutral: `${fluRt}%` };
 
     return (
         <Card variant="outlined" sx={{ height: '100%', flexGrow: 1 }}>
@@ -110,7 +103,11 @@ export default function StatCard({
                             showTooltip
                             xAxis={{
                                 scaleType: 'band',
-                                data: daysInWeek, // Use the correct property 'data' for xAxis
+                                data: dateList,
+                            }}
+                            yAxis={{
+                                min: min,
+                                max: max
                             }}
                             sx={{
                                 [`& .${areaElementClasses.root}`]: {

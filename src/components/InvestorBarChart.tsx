@@ -1,7 +1,13 @@
 import { BarChart } from "@mui/x-charts"
 import {useTheme} from "@mui/material/styles";
 
-const IndexBarChart = () => {
+export type IndexBarChartProps = {
+    data: string[]
+};
+
+const IndexBarChart = (
+    {data}: IndexBarChartProps
+) => {
     const theme = useTheme()
 
     const colorPalette = [
@@ -9,21 +15,6 @@ const IndexBarChart = () => {
         theme.palette.primary.main,
         theme.palette.primary.dark,
     ];
-
-    function getDaysInMonth(month: number, year: number) {
-        const date = new Date(year, month, 0);
-        const monthName = date.toLocaleDateString('en-US', {
-            month: 'short',
-        });
-        const daysInMonth = date.getDate();
-        const days = [];
-        let i = 1;
-        while (days.length < daysInMonth) {
-            days.push(`${monthName} ${i}`);
-            i += 1;
-        }
-        return days;
-    }
 
     return (
         <BarChart
@@ -47,9 +38,7 @@ const IndexBarChart = () => {
             series={[
                 {
                     id: 'page-views',
-                    data: [
-                        -8000, +7500, +6800
-                    ],
+                    data: data,
                     stack: 'A',
                 }
             ]}

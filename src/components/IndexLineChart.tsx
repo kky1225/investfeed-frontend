@@ -1,19 +1,37 @@
 import {useTheme} from "@mui/material/styles";
-import {LineChart, LineSeriesType} from "@mui/x-charts";
+import {ChartsReferenceLine, LineChart, LineSeriesType} from "@mui/x-charts";
 import { MakeOptional } from '@mui/x-internals/types';
+import Card from "@mui/material/Card";
+import CardContent from "@mui/material/CardContent";
+import Typography from "@mui/material/Typography";
+import Stack from "@mui/material/Stack";
+import Chip from "@mui/material/Chip";
+import {areaElementClasses} from "@mui/x-charts/LineChart";
+import {CardActionArea} from "@mui/material";
+import {useNavigate} from "react-router-dom";
 
 interface CustomLineChartProps {
-    seriesData: MakeOptional<LineSeriesType, 'type'>[]
+    title: string,
+    value: string,
+    fluRt: string,
+    openPric: number,
+    interval: string,
+    trend: 'up' | 'down' | 'neutral',
+    seriesData: MakeOptional<LineSeriesType, 'type'>[],
+    dateList: string[]
 }
 
 const IndexLineChart = (
-    { seriesData }: CustomLineChartProps
+    { title, value, fluRt, openPric, interval, trend, seriesData, dateList }: CustomLineChartProps,
 ) => {
-
     const theme = useTheme();
 
-    const minY = Math.min(...seriesData[0].data);
-    const maxY = Math.max(...seriesData[0].data);
+    const navigate = useNavigate();
+
+    const numericDates = seriesData[0].data ? seriesData[0].data.map(Number) : [];
+
+    const minY = numericDates.length > 0 ?  Math.min(...numericDates) : 0;
+    const maxY = numericDates.length > 0 ? Math.max(...numericDates) : 0;
 
     const colorPalette = [
         theme.palette.primary.light,
@@ -21,106 +39,100 @@ const IndexLineChart = (
         theme.palette.primary.dark,
     ];
 
-    function getDaysInMonth(month: number, year: number) {
-        const date = new Date(year, month, 0);
-        const monthName = date.toLocaleDateString('en-US', {
-            month: 'short',
-        });
-        const daysInMonth = date.getDate();
-        const days = [];
-        let i = 1;
-        while (days.length < daysInMonth) {
-            days.push(`${monthName} ${i}`);
-            i += 1;
-        }
-        return days;
-    }
+    const labelColors = {
+        up: 'error' as const,
+        down: 'info' as const,
+        neutral: 'default' as const,
+    };
 
-    const AreaGradient = ({ color, id }: { color: string; id: string })=> {
-        return (
-            <defs>
-                <linearGradient id={id} x1="50%" y1="0%" x2="50%" y2="100%">
-                    <stop offset="0%" stopColor={color} stopOpacity={0.5} />
-                    <stop offset="100%" stopColor={color} stopOpacity={0} />
-                </linearGradient>
-            </defs>
-        );
+    const color = labelColors[trend];
+    const trendValues = { up: `${fluRt}%`, down: `${fluRt}%`, neutral: `${fluRt}%` };
+
+    const onClick = () => {
+        navigate(`/index/kospi`);
     }
 
     return (
-        <LineChart
-            colors={colorPalette}
-            xAxis={[
-                {
-                    scaleType: 'point',
-                    data: getDaysInMonth(2024, 5),
-                    tickInterval: (_index: any, i: number) => i % 5 === 0 //i % 30 === 0,
-                },
-            ]}
-            yAxis={[
-                {
-                    valueFormatter: (value: any) => value.toLocaleString(),
-                    width: 60,
-                    min: minY,
-                    max: maxY,
-                },
-            ]}
-            series={seriesData}
-            margin={{ left:10, right: 20, top: 20, bottom: 20 }}
-            grid={{ horizontal: true }}
+        <CardActionArea
+            onClick={() => onClick()}
             sx={{
-                '& .MuiAreaElement-series-organic': {
-                    fill: "url('#organic')",
+                height: '100%',
+                '&[data-active]': {
+                    backgroundColor: 'action.selected',
+                    '&:hover': {
+                        backgroundColor: 'action.selectedHover',
+                    },
                 },
-                '& .MuiAreaElement-series-referral': {
-                    fill: "url('#referral')",
-                },
-                '& .MuiAreaElement-series-direct': {
-                    fill: "url('#direct')",
-                },
-                height: {
-                    xs: 250,
-                    sm: 250,
-                    md: 310
-                }
             }}
         >
-            <AreaGradient color={theme.palette.primary.dark} id="organic" />
-            <AreaGradient color={theme.palette.primary.main} id="referral" />
-            <AreaGradient color={theme.palette.primary.light} id="direct" />
-        </LineChart>
+            <Card variant="outlined" sx={{ width: '100%' }}>
+                <CardContent>
+                    <Typography component="h2" variant="subtitle2" gutterBottom>
+                        {title}
+                    </Typography>
+                    <Stack sx={{ justifyContent: 'space-between' }}>
+                        <Stack
+                            direction="row"
+                            sx={{
+                                alignContent: { xs: 'center', sm: 'flex-start' },
+                                alignItems: 'center',
+                                gap: 1,
+                            }}
+                        >
+                            <Typography variant="h4" component="p">
+                                {value}
+                            </Typography>
+                            <Chip size="small" color={color} label={trendValues[trend]} />
+                        </Stack>
+                        <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+                            {interval}
+                        </Typography>
+                    </Stack>
+                </CardContent>
+                <LineChart
+                    colors={colorPalette}
+                    xAxis={[
+                        {
+                            scaleType: 'point',
+                            data: dateList,
+                            tickLabelStyle: {
+                                display: 'none'
+                            },
+                            tickInterval: (_index: any, i: number) => i % 5 === 0 //i % 30 === 0,
+                        },
+                    ]}
+                    yAxis={[
+                        {
+                            valueFormatter: (value: any) => value.toLocaleString(),
+                            width: 60,
+                            min: minY,
+                            max: maxY,
+                        },
+                    ]}
+                    series={seriesData}
+                    margin={{ left:10, right: 20, top: 20, bottom: 20 }}
+                    grid={{ horizontal: true }}
+                    sx={{
+                        [`& .${areaElementClasses.root}`]: {
+                            fill: 'url(#switch-color-id-1)',
+                            filter: 'none',
+                        },
+                        height: {
+                            xs: 250,
+                            sm: 250,
+                            md: 310
+                        }
+                    }}
+                >
+                    <ChartsReferenceLine
+                        y={openPric}
+                        label={String(openPric)}
+                        lineStyle={{ stroke: 'grey', strokeWidth: 2, strokeDasharray: '4 4' }}
+                    />
+                </LineChart>
+            </Card>
+        </CardActionArea>
     )
 }
-
-{/*<BarChart*/}
-{/*    borderRadius={8}*/}
-{/*    colors={colorPalette}*/}
-{/*    xAxis={*/}
-{/*        [*/}
-{/*            {*/}
-{/*                scaleType: 'band',*/}
-{/*                data: time,*/}
-{/*                categoryGapRatio: 0.5,*/}
-{/*                tickInterval: (_index: any, i: number) => i % 30 === 0,*/}
-{/*            },*/}
-{/*        ]*/}
-{/*    }*/}
-{/*    yAxis={[*/}
-{/*        {*/}
-{/*            valueFormatter: (value: any) => value.toLocaleString(),*/}
-{/*            width: 50,*/}
-{/*        },*/}
-{/*    ]}*/}
-{/*    series={[*/}
-{/*        {*/}
-{/*            id: 'page-views',*/}
-{/*            data: [2234, 3872, 2998, 4125, 3357, 2789, 2998],*/}
-{/*            stack: 'A',*/}
-{/*        }*/}
-{/*    ]}*/}
-{/*    height={250}*/}
-{/*    margin={{ left: 50, right: 0, top: 20, bottom: 20 }}*/}
-{/*    grid={{ horizontal: true }}*/}
-{/*/>*/}
 
 export default IndexLineChart;

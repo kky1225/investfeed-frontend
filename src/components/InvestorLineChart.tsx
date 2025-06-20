@@ -3,7 +3,7 @@ import {LineChart, LineSeriesType} from "@mui/x-charts";
 import { MakeOptional } from '@mui/x-internals/types';
 
 export interface CustomLineChartProps {
-    seriesData: MakeOptional<LineSeriesType, 'type'>[]
+    seriesData: MakeOptional<LineSeriesType, 'type'>[],
 }
 
 const InvestorLineChart = (

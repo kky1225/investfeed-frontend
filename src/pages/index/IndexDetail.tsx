@@ -37,6 +37,8 @@ const StyledToggleButtonGroup = styled(ToggleButtonGroup)(({ theme }) => ({
 }));
 
 const IndexDetail = () => {
+    const [barData, setBarData] = useState<Array<number>>([0, 0, 0]);
+
     const data: CustomLineChartProps = {
         seriesData: [
             {
@@ -52,7 +54,7 @@ const IndexDetail = () => {
                     2653.5, 2655.7, 2661.4, 2666.6, 2669.1, 2670.4, 2673.4, 2680.8
                 ],
             },
-        ]
+        ],
     }
 
     const data2: CustomLineChartProps = [
@@ -315,7 +317,7 @@ const IndexDetail = () => {
                     </Typography>
                     <Card variant="outlined" sx={{ width: '100%' }}>
                         <CardContent>
-                            <InvestorBarChart />
+                            <InvestorBarChart data={barData} />
                         </CardContent>
                     </Card>
                 </Grid>
