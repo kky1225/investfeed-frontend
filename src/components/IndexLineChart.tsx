@@ -10,7 +10,7 @@ import {areaElementClasses} from "@mui/x-charts/LineChart";
 import {CardActionArea} from "@mui/material";
 import {useNavigate} from "react-router-dom";
 
-interface CustomLineChartProps {
+export interface CustomLineChartProps {
     title: string,
     value: string,
     fluRt: string,
@@ -30,8 +30,8 @@ const IndexLineChart = (
 
     const numericDates = seriesData[0].data ? seriesData[0].data.map(Number) : [];
 
-    const minY = numericDates.length > 0 ?  Math.min(...numericDates) : 0;
-    const maxY = numericDates.length > 0 ? Math.max(...numericDates) : 0;
+    const minY = numericDates.length > 0 ?  Math.min(...numericDates, openPric) : 0;
+    const maxY = numericDates.length > 0 ? Math.max(...numericDates, openPric) : 0;
 
     const colorPalette = [
         theme.palette.primary.light,

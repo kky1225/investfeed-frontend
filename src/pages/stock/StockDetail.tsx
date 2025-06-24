@@ -16,7 +16,7 @@ import ToggleButtonGroup, {
 import {styled} from "@mui/material/styles";
 import {Select, SelectChangeEvent} from "@mui/material";
 import MenuItem from "@mui/material/MenuItem";
-import DetailChart from "../../components/DetailChart.tsx";
+import IndexDetailLineChart from "../../components/IndexDetailLineChart.tsx";
 import InvestorBarChart from "../../components/InvestorBarChart.tsx";
 import {GridColDef, GridRowsProp} from "@mui/x-data-grid";
 import OptionTable from "../../components/OptionTable.tsx";
@@ -309,7 +309,7 @@ const IndexDetail = () => {
                                 </Typography>
                             </Stack>
                         </CardContent>
-                        <DetailChart />
+                        <IndexDetailLineChart />
                         <Box
                             display="flex"
                             justifyContent="space-between"

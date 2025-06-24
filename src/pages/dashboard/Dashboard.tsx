@@ -153,7 +153,7 @@ export default function Dashboard() {
                         title: 'KOSPI 200',
                         value: kospi200PriceRes.cur_prc.replace(/^[+-]/, ''),
                         interval: today,
-                        trend: kospi200PriceRes.pred_pre_sig === '1' ? 'down' : kospi200PriceRes.pred_pre_sig === '2' ? 'up' : 'neutral',
+                        trend: kospi200PriceRes.pred_pre_sig === '5' ? 'down' : kospi200PriceRes.pred_pre_sig === '2' ? 'up' : 'neutral',
                         data: todayKospi200Data,
                         dateList: dateList,
                         fluRt: kospi200PriceRes.flu_rt

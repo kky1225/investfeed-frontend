@@ -4,12 +4,32 @@ import {
     ChartsTooltip,
     ChartsXAxis,
     ChartsYAxis, LineHighlightPlot,
-    LinePlot,
+    LinePlot, LineSeriesType,
 } from "@mui/x-charts";
+import { MakeOptional } from '@mui/x-internals/types';
 import {useTheme} from "@mui/material/styles";
 
-const DetailChart = () => {
+export interface CustomIndexDetailLineChartProps {
+    title: string,
+    value: string,
+    fluRt: string,
+    openPric: number,
+    interval: string,
+    trend: 'up' | 'down' | 'neutral',
+    seriesData: MakeOptional<LineSeriesType, 'type'>[],
+    barDataList: number[],
+    dateList: string[]
+}
+
+const IndexDetailLineChart = (
+    { title, value, fluRt, interval, trend, seriesData, barDataList, dateList }: CustomIndexDetailLineChartProps,
+) => {
     const theme = useTheme();
+
+    const numericDates = seriesData[0].data ? seriesData[0].data.map(Number) : [];
+
+    const lineMinY = numericDates.length > 0 ?  Math.min(...numericDates) : 0;
+    const lineMaxY = numericDates.length > 0 ? Math.max(...numericDates) : 0;
 
     const colorPalette = [
         theme.palette.primary.light,
@@ -17,25 +37,15 @@ const DetailChart = () => {
         theme.palette.primary.dark,
     ];
 
-    function getDaysInMonth(month: number, year: number) {
-        const date = new Date(year, month, 0);
-        const monthName = date.toLocaleDateString('en-US', {
-            month: 'short',
-        });
-        const daysInMonth = date.getDate();
-        const days = [];
-        let i = 1;
-        while (days.length < daysInMonth) {
-            days.push(`${monthName} ${i}`);
-            i += 1;
-        }
-        return days;
-    }
+    const labelColors = {
+        up: 'red' as const,
+        down: 'skyblue' as const,
+        neutral: 'grey' as const,
+    };
 
-    const lineMinY = 2700;
-    const lineMaxY = 2550;
+    const color = labelColors[trend];
 
-    const barMaxY = 2700;
+    const barMaxY = Math.max(...barDataList) * 10;
 
     return (
         <ChartContainer
@@ -45,7 +55,7 @@ const DetailChart = () => {
                 {
                     id: 'x-line',
                     scaleType: 'band',
-                    data: getDaysInMonth(2024, 5),
+                    data: dateList,
                     position: 'bottom',
                     tickInterval: (_index: any, i: number) => i % 5 === 0,
                 },
@@ -53,15 +63,15 @@ const DetailChart = () => {
                     id: 'x-bar',
                     scaleType: 'band',
                     categoryGapRatio: 0.5,
-                    data: getDaysInMonth(2024, 5),
+                    data: dateList,
                 },
             ]}
             yAxis={[
                 {
                     id: 'y-line',
                     valueFormatter: (value: any) => value.toLocaleString(),
-                    min: lineMaxY,
-                    max: lineMinY,
+                    min: lineMinY,
+                    max: lineMaxY,
                     position: 'left',
                     width: 60,
                 },
@@ -81,23 +91,15 @@ const DetailChart = () => {
                     curve: 'linear',
                     area: true,
                     stackOrder: 'ascending',
-                    color: 'red',
-                    data: [
-                        2644.4, 2634.4, 2604.7, 2601.2, 2600.3, 2612.4, 2603.4, 2591.5, 2594.8, 2591.2,
-                        2589.9, 2593.4, 2599.4, 2604.4, 2614.3, 2619.6, 2621.3, 2626.3, 2633.9, 2635.5,
-                        2635.9, 2644.4, 2649.3, 2653.5, 2655.7, 2661.4, 2666.6, 2669.1, 2670.4, 2673.4, 2680.8
-                    ],
+                    color: color,
+                    data: numericDates || [],
                     xAxisId: 'x-line',
                     yAxisId: 'y-line'
                 },
                 {
                     type: 'bar',
                     id: 'bar',
-                    data: [
-                        100.00, 10.00, 10.00, 13.10, 12.00, 9.00, 10.00, 10.00, 10.00, 10.00,
-                        100.00, 10.00, 10.00, 13.10, 12.00, 9.00, 10.00, 10.00, 10.00, 10.00,
-                        100.00, 10.00, 10.00, 13.10, 12.00, 9.00, 10.00, 10.00, 10.00, 10.00, 30.00
-                    ],
+                    data: barDataList || [],
                     stack: 'B',
                     xAxisId: 'x-bar',
                     yAxisId: 'y-bar',
@@ -135,4 +137,4 @@ const DetailChart = () => {
     )
 }
 
-export default DetailChart;
+export default IndexDetailLineChart;

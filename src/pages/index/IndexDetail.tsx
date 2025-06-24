@@ -5,19 +5,18 @@ import CardContent from "@mui/material/CardContent";
 import Stack from "@mui/material/Stack";
 import Chip from "@mui/material/Chip";
 import Card from "@mui/material/Card";
-import InvestorLineChart, {CustomLineChartProps} from "../../components/InvestorLineChart.tsx";
-import { useState, MouseEvent } from "react";
+import {MouseEvent, useEffect, useRef, useState} from "react";
 import CandlestickChartIcon from '@mui/icons-material/CandlestickChart';
 import StackedLineChartIcon from '@mui/icons-material/StackedLineChart';
 import ToggleButton from '@mui/material/ToggleButton';
-import ToggleButtonGroup, {
-    toggleButtonGroupClasses,
-} from '@mui/material/ToggleButtonGroup';
+import ToggleButtonGroup, {toggleButtonGroupClasses,} from '@mui/material/ToggleButtonGroup';
 import {styled} from "@mui/material/styles";
 import {Select, SelectChangeEvent} from "@mui/material";
 import MenuItem from "@mui/material/MenuItem";
-import DetailChart from "../../components/DetailChart.tsx";
+import IndexDetailLineChart, {CustomIndexDetailLineChartProps} from "../../components/IndexDetailLineChart.tsx";
 import InvestorBarChart from "../../components/InvestorBarChart.tsx";
+import {fetchIndexDetail} from "../../api/index/IndexApi.ts";
+import {ChartType, indexDetailReq} from "../../type/IndexType.ts";
 
 const StyledToggleButtonGroup = styled(ToggleButtonGroup)(({ theme }) => ({
     border: 'none',
@@ -37,24 +36,133 @@ const StyledToggleButtonGroup = styled(ToggleButtonGroup)(({ theme }) => ({
 }));
 
 const IndexDetail = () => {
-    const [barData, setBarData] = useState<Array<number>>([0, 0, 0]);
+    const [req, setReq] = useState<indexDetailReq>({
+        inds_cd: "001",
+        chart_type: ChartType.DAY
+    });
 
-    const data: CustomLineChartProps = {
+    const [sectChartData, setSectChartData] = useState<CustomIndexDetailLineChartProps>({
+        title: 'KOSPI',
+        value: '-',
+        fluRt: '0',
+        openPric: 0,
+        interval: '-',
+        trend: 'neutral',
         seriesData: [
             {
-                id: 'direct',
+                id: 'KOSPI',
                 showMark: false,
                 curve: 'linear',
                 area: true,
                 stackOrder: 'ascending',
-                color: 'red',
-                data: [
-                    2644.4, 2634.4, 2604.7, 2601.2, 2600.3, 2612.4, 2603.4, 2591.5, 2594.8, 2591.2, 2589.9, 2593.4,
-                    2599.4, 2604.4, 2614.3, 2619.6, 2621.3, 2626.3, 2633.9, 2635.5, 2635.9, 2644.4, 2649.3,
-                    2653.5, 2655.7, 2661.4, 2666.6, 2669.1, 2670.4, 2673.4, 2680.8
-                ],
-            },
+                color: 'grey',
+                data: []
+            }
         ],
+        barDataList: [],
+        dateList: []
+    });
+
+    const [barData, setBarData] = useState<Array<number>>([0, 0, 0]);
+
+    useEffect(() => {
+        indexDetail(req)
+    }, [req]);
+
+    const indexDetail = async (req: indexDetailReq) => {
+        try {
+            const data = await fetchIndexDetail(req);
+
+            if (data.code !== "0000") {
+                throw new Error(data.msg);
+            }
+
+            console.log(data);
+
+            const {
+                sectPriceRes, chartListRes,
+            } = data.result;
+
+            let year, month, day, minute, second;
+            let dateList;
+            let lineData, barDataList;
+
+            switch (req.chart_type) {
+                case ChartType.MINUTE_1:
+                case ChartType.MINUTE_3:
+                case ChartType.MINUTE_5:
+                case ChartType.MINUTE_10:
+                case ChartType.MINUTE_30: {
+                    year = chartListRes.inds_min_pole_qry[0].cntr_tm.substring(0, 4);
+                    month = chartListRes.inds_min_pole_qry[0].cntr_tm.substring(4, 6);
+                    day = chartListRes.inds_min_pole_qry[0].cntr_tm.substring(6, 8);
+                    minute = sectPriceRes.inds_cur_prc_tm[0].tm_n.substring(0, 2);
+                    second = sectPriceRes.inds_cur_prc_tm[0].tm_n.substring(2, 4);
+
+                    dateList = chartListRes.inds_min_pole_qry.map(item => {
+                        return `${item.cntr_tm.slice(0, 4)}.${item.cntr_tm.slice(4, 6)}.${item.cntr_tm.slice(6, 8)} ${item.cntr_tm.slice(8, 10)}:${item.cntr_tm.slice(10, 12)}`
+                    }).reverse();
+
+                    lineData = chartListRes.inds_min_pole_qry.map(item => parsePrice(item.cur_prc)).reverse();
+                    barDataList = chartListRes.inds_min_pole_qry.map(item => item.trde_qty).reverse();
+
+                    break;
+                }
+                case ChartType.DAY: {
+                    year = chartListRes.inds_dt_pole_qry[0].dt.substring(0, 4);
+                    month = chartListRes.inds_dt_pole_qry[0].dt.substring(4, 6);
+                    day = chartListRes.inds_dt_pole_qry[0].dt.substring(6, 8);
+                    minute = sectPriceRes.inds_cur_prc_tm[0].tm_n.substring(0, 2);
+                    second = sectPriceRes.inds_cur_prc_tm[0].tm_n.substring(2, 4);
+
+                    dateList = chartListRes.inds_dt_pole_qry.map(item => {
+                        return `${item.dt.slice(0, 4)}.${item.dt.slice(4, 6)}.${item.dt.slice(6, 8)}`
+                    }).reverse();
+
+                    lineData = chartListRes.inds_dt_pole_qry.map(item => parsePrice(item.cur_prc)).reverse();
+                    barDataList = chartListRes.inds_dt_pole_qry.map(item => item.trde_qty.slice(0, 3)).reverse();
+
+                    break;
+                }
+            }
+
+            let today;
+
+            if(minute === '88' && second === '88') {
+                today = `${year}.${month}.${day} 장마감`;
+            }else {
+                today = `${year}.${month}.${day} ${minute}:${second}`;
+            }
+
+            setSectChartData({
+                title: 'KOSPI',
+                value: sectPriceRes.cur_prc.replace(/^[+-]/, ''),
+                fluRt: sectPriceRes.flu_rt,
+                openPric: parseFloat(sectPriceRes.open_pric.replace(/^[+-]/, '')),
+                interval: today,
+                trend: sectPriceRes.pred_pre_sig === '5' ? 'down' : sectPriceRes.pred_pre_sig === '2' ? 'up' : 'neutral',
+                seriesData: [
+                    {
+                        id: 'KOSPI',
+                        showMark: false,
+                        curve: 'linear',
+                        area: true,
+                        stackOrder: 'ascending',
+                        color: sectPriceRes.pred_pre_sig === '2' ? 'red' : 'blue',
+                        data: lineData,
+                    }
+                ],
+                barDataList: barDataList,
+                dateList: dateList
+            });
+        }catch(error) {
+            console.error(error);
+        }
+    }
+
+    const parsePrice = (raw: string)  => {
+        if (!raw) return null;
+        return (parseInt(raw, 10) / 100).toFixed(2);
     }
 
     const data2: CustomLineChartProps = [
@@ -102,9 +210,9 @@ const IndexDetail = () => {
         },
     ];
 
-    const [alignment, setAlignment] = useState('day');
+    const [toggle, setToggle] = useState('DAY');
     const [formats, setFormats] = useState('line');
-    const [minute, setMinute] = useState('1');
+    const minute = useRef('1');
 
     const handleFormat = (
         _event: MouseEvent<HTMLElement>,
@@ -120,19 +228,45 @@ const IndexDetail = () => {
         newAlignment: string,
     ) => {
         if(newAlignment !== null) {
-            setAlignment(newAlignment);
+            setToggle(newAlignment);
+
+            if(newAlignment === 'MINUTE') {
+                newAlignment = newAlignment + '_' + minute.current;
+            }
+
+            console.log(newAlignment);
+
+            setReq({
+                ...req,
+                chart_type: newAlignment as ChartType
+            })
         }
     };
 
     function handleOptionChange(event: SelectChangeEvent) {
-        setMinute(event.target.value as string)
+        minute.current = event.target.value as string
+
+        const value = 'MINUTE_' + event.target.value;
+
+        setReq({
+            ...req,
+            chart_type: value as ChartType
+        })
     }
 
+    const labelColors = {
+        up: 'error' as const,
+        down: 'info' as const,
+        neutral: 'default' as const,
+    };
+
+    const color = labelColors[sectChartData.trend];
+    const trendValues = { up: `${sectChartData.fluRt}%`, down: `${sectChartData.fluRt}%`, neutral: `${sectChartData.fluRt}%` };
 
     return (
         <Box sx={{ width: '100%', maxWidth: { sm: '100%', md: '1700px' } }}>
             <Typography component="h2" variant="h6" sx={{ mb: 2 }}>
-                코스피
+                지수 상세
             </Typography>
             <Grid
                 container
@@ -144,7 +278,7 @@ const IndexDetail = () => {
                     <Card variant="outlined" sx={{ width: '100%' }}>
                         <CardContent>
                             <Typography component="h2" variant="subtitle2" gutterBottom>
-                                코스피
+                                {sectChartData.title}
                             </Typography>
                             <Stack sx={{ justifyContent: 'space-between' }}>
                                 <Stack
@@ -156,16 +290,16 @@ const IndexDetail = () => {
                                     }}
                                 >
                                     <Typography variant="h4" component="p">
-                                        2,644.4
+                                        {sectChartData.value}
                                     </Typography>
-                                    <Chip size="small" color="error" label='+2.02%' />
+                                    <Chip size="small" color={color} label={trendValues[sectChartData.trend]} />
                                 </Stack>
                                 <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-                                    2025.05.26 08:30
+                                    {sectChartData.interval}
                                 </Typography>
                             </Stack>
                         </CardContent>
-                        <DetailChart />
+                        <IndexDetailLineChart {...sectChartData} />
                         <Box
                             display="flex"
                             justifyContent="space-between"
@@ -174,22 +308,22 @@ const IndexDetail = () => {
                         >
                             <StyledToggleButtonGroup
                                 size="small"
-                                value={alignment}
+                                value={toggle}
                                 exclusive
                                 onChange={handleAlignment}
                                 aria-label="text alignment"
                             >
                                 <ToggleButton
-                                    value="minute"
-                                    key="minute"
-                                    aria-label="minute"
+                                    value="MINUTE"
+                                    key="MINUTE"
+                                    aria-label="MINUTE"
                                     sx={{
                                         padding: 1
                                     }}
                                 >
                                     <Select
                                         size="small"
-                                        value={minute}
+                                        value={minute.current}
                                         onChange={handleOptionChange}
                                         variant="standard"
                                         disableUnderline
@@ -205,15 +339,13 @@ const IndexDetail = () => {
                                         <MenuItem value="1">1분</MenuItem>
                                         <MenuItem value="3">3분</MenuItem>
                                         <MenuItem value="5">5분</MenuItem>
-                                        <MenuItem value="15">15분</MenuItem>
                                         <MenuItem value="30">30분</MenuItem>
-                                        <MenuItem value="60">60분</MenuItem>
                                     </Select>
                                 </ToggleButton>
-                                <ToggleButton value="day" key="day" aria-label="day">일</ToggleButton>
-                                <ToggleButton value="week" key="week" aria-label="week">주</ToggleButton>
-                                <ToggleButton value="month" key="month" aria-label="month">월</ToggleButton>
-                                <ToggleButton value="year" key="year" aria-label="year">년</ToggleButton>
+                                <ToggleButton value="DAY" key="DAY" aria-label="DAY">일</ToggleButton>
+                                <ToggleButton value="WEEK" key="WEEK" aria-label="WEEK">주</ToggleButton>
+                                <ToggleButton value="MONTH" key="MONTH" aria-label="MONTH">월</ToggleButton>
+                                <ToggleButton value="YEAR" key="YEAR" aria-label="YEAR">년</ToggleButton>
                             </StyledToggleButtonGroup>
 
                             <StyledToggleButtonGroup
@@ -327,7 +459,7 @@ const IndexDetail = () => {
                     </Typography>
                     <Card variant="outlined" sx={{ width: '100%' }}>
                         <CardContent>
-                            <InvestorLineChart seriesData={data2} />
+                            {/*<InvestorLineChart seriesData={data2} />*/}
                         </CardContent>
                     </Card>
                 </Grid>
