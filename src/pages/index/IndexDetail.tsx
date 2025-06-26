@@ -11,12 +11,13 @@ import StackedLineChartIcon from '@mui/icons-material/StackedLineChart';
 import ToggleButton from '@mui/material/ToggleButton';
 import ToggleButtonGroup, {toggleButtonGroupClasses,} from '@mui/material/ToggleButtonGroup';
 import {styled} from "@mui/material/styles";
-import {Select, SelectChangeEvent} from "@mui/material";
+import {Select, SelectChangeEvent, Slider} from "@mui/material";
 import MenuItem from "@mui/material/MenuItem";
 import IndexDetailLineChart, {CustomIndexDetailLineChartProps} from "../../components/IndexDetailLineChart.tsx";
 import InvestorBarChart from "../../components/InvestorBarChart.tsx";
 import {fetchIndexDetail} from "../../api/index/IndexApi.ts";
 import {ChartType, indexDetailReq} from "../../type/IndexType.ts";
+import {GridColDef} from "@mui/x-data-grid";
 
 const StyledToggleButtonGroup = styled(ToggleButtonGroup)(({ theme }) => ({
     border: 'none',
@@ -65,6 +66,15 @@ const IndexDetail = () => {
 
     const [barData, setBarData] = useState<Array<number>>([0, 0, 0]);
 
+    const [info, setInfo] = useState<object>({
+        trde_qty: 0,
+        trde_prica: 0,
+        open_pric: 0,
+        cur_prc: 0,
+        _52wk_lwst_pric: 0,
+        _52wk_hgst_pric: 0
+    });
+
     useEffect(() => {
         indexDetail(req)
     }, [req]);
@@ -80,7 +90,7 @@ const IndexDetail = () => {
             console.log(data);
 
             const {
-                sectPriceRes, chartListRes,
+                sectPriceRes, chartListRes, sectInvestor
             } = data.result;
 
             let year, month, day, minute, second;
@@ -103,7 +113,7 @@ const IndexDetail = () => {
                         return `${item.cntr_tm.slice(0, 4)}.${item.cntr_tm.slice(4, 6)}.${item.cntr_tm.slice(6, 8)} ${item.cntr_tm.slice(8, 10)}:${item.cntr_tm.slice(10, 12)}`
                     }).reverse();
 
-                    lineData = chartListRes.inds_min_pole_qry.map(item => parsePrice(item.cur_prc)).reverse();
+                    lineData = chartListRes.inds_min_pole_qry.map(item => parsePrice(item.cur_prc.replace(/^[+-]/, ''))).reverse();
                     barDataList = chartListRes.inds_min_pole_qry.map(item => item.trde_qty).reverse();
 
                     break;
@@ -121,6 +131,54 @@ const IndexDetail = () => {
 
                     lineData = chartListRes.inds_dt_pole_qry.map(item => parsePrice(item.cur_prc)).reverse();
                     barDataList = chartListRes.inds_dt_pole_qry.map(item => item.trde_qty.slice(0, 3)).reverse();
+
+                    break;
+                }
+                case ChartType.WEEK: {
+                    year = chartListRes.inds_stk_pole_qry[0].dt.substring(0, 4);
+                    month = chartListRes.inds_stk_pole_qry[0].dt.substring(4, 6);
+                    day = chartListRes.inds_stk_pole_qry[0].dt.substring(6, 8);
+                    minute = sectPriceRes.inds_cur_prc_tm[0].tm_n.substring(0, 2);
+                    second = sectPriceRes.inds_cur_prc_tm[0].tm_n.substring(2, 4);
+
+                    dateList = chartListRes.inds_stk_pole_qry.map(item => {
+                        return `${item.dt.slice(0, 4)}.${item.dt.slice(4, 6)}.${item.dt.slice(6, 8)}`
+                    }).reverse();
+
+                    lineData = chartListRes.inds_stk_pole_qry.map(item => parsePrice(item.cur_prc)).reverse();
+                    barDataList = chartListRes.inds_stk_pole_qry.map(item => item.trde_qty.slice(0, 3)).reverse();
+
+                    break;
+                }
+                case ChartType.MONTH: {
+                    year = chartListRes.inds_mth_pole_qry[0].dt.substring(0, 4);
+                    month = chartListRes.inds_mth_pole_qry[0].dt.substring(4, 6);
+                    day = chartListRes.inds_mth_pole_qry[0].dt.substring(6, 8);
+                    minute = sectPriceRes.inds_cur_prc_tm[0].tm_n.substring(0, 2);
+                    second = sectPriceRes.inds_cur_prc_tm[0].tm_n.substring(2, 4);
+
+                    dateList = chartListRes.inds_mth_pole_qry.map(item => {
+                        return `${item.dt.slice(0, 4)}.${item.dt.slice(4, 6)}.${item.dt.slice(6, 8)}`
+                    }).reverse();
+
+                    lineData = chartListRes.inds_mth_pole_qry.map(item => parsePrice(item.cur_prc)).reverse();
+                    barDataList = chartListRes.inds_mth_pole_qry.map(item => item.trde_qty.slice(0, 3)).reverse();
+
+                    break;
+                }
+                case ChartType.YEAR: {
+                    year = chartListRes.inds_yr_pole_qry[0].dt.substring(0, 4);
+                    month = chartListRes.inds_yr_pole_qry[0].dt.substring(4, 6);
+                    day = chartListRes.inds_yr_pole_qry[0].dt.substring(6, 8);
+                    minute = sectPriceRes.inds_cur_prc_tm[0].tm_n.substring(0, 2);
+                    second = sectPriceRes.inds_cur_prc_tm[0].tm_n.substring(2, 4);
+
+                    dateList = chartListRes.inds_yr_pole_qry.map(item => {
+                        return `${item.dt.slice(0, 4)}.${item.dt.slice(4, 6)}.${item.dt.slice(6, 8)}`
+                    }).reverse();
+
+                    lineData = chartListRes.inds_yr_pole_qry.map(item => parsePrice(item.cur_prc)).reverse();
+                    barDataList = chartListRes.inds_yr_pole_qry.map(item => item.trde_qty.slice(0, 3)).reverse();
 
                     break;
                 }
@@ -155,6 +213,17 @@ const IndexDetail = () => {
                 barDataList: barDataList,
                 dateList: dateList
             });
+
+            setInfo({
+                trde_qty: `${sectPriceRes.trde_qty.substring(0, 1)}억 ${sectPriceRes.trde_qty.substring(1, 5)}만주`,
+                trde_prica: `${Number(sectPriceRes.trde_prica).toLocaleString()}`,
+                open_pric: parseFloat(sectPriceRes.open_pric.replace(/^[+-]/, '')),
+                cur_prc: sectPriceRes.cur_prc.replace(/^[+-]/, ''),
+                _52wk_lwst_pric: sectPriceRes['52wk_lwst_pric'].replace(/^[+-]/, ''),
+                _52wk_hgst_pric: sectPriceRes['52wk_hgst_pric'].replace(/^[+-]/, '')
+            })
+
+            setBarData([sectInvestor.inds_netprps[0].ind_netprps, sectInvestor.inds_netprps[0].orgn_netprps, sectInvestor.inds_netprps[0].frgnr_netprps])
         }catch(error) {
             console.error(error);
         }
@@ -165,54 +234,41 @@ const IndexDetail = () => {
         return (parseInt(raw, 10) / 100).toFixed(2);
     }
 
-    const data2: CustomLineChartProps = [
-        {
-            id: 'direct',
-            label: '개인',
-            showMark: false,
-            curve: 'linear',
-            area: true,
-            stackOrder: 'ascending',
-            color: 'green',
-            data: [
-                -300, -900, -600, -1200, -1500, -1800, -2400, -2100, -2700, -3000, -1800, -3300,
-                -3600, -3900, -4200, -4500, -3900, -4800, -5100, -5400, -4800, -5700, -6000,
-                -6300, -6600, -6900, -7200, -7500, -7800, -8100, -8000
-            ],
-        },
-        {
-            id: 'referral',
-            label: '기관',
-            showMark: false,
-            curve: 'linear',
-            area: true,
-            stackOrder: 'ascending',
-            color: 'blue',
-            data: [
-                500, 900, 700, 1400, 1100, 1700, 2300, 2000, 2600, 2900, 2300, 3200,
-                3500, 3800, 4100, 4400, 2900, 4700, 5000, 5300, 5600, 5900, 6200,
-                6500, 5600, 6800, 7100, 7400, 7700, 8000, 7500
-            ],
-        },
-        {
-            id: 'organic',
-            label: '외국인',
-            showMark: false,
-            curve: 'linear',
-            stackOrder: 'ascending',
-            color: 'red',
-            data: [
-                1000, 1500, 1200, 1700, 1300, 2000, 2400, 2200, 2600, 2800, 2500,
-                3000, 3400, 3700, 3200, 3900, 4100, 3500, 4300, 4500, 4000, 4700,
-                5000, 5200, 4800, 5400, 5600, 5900, 6100, 6300, 6800
-            ],
-            area: true,
-        },
-    ];
-
     const [toggle, setToggle] = useState('DAY');
     const [formats, setFormats] = useState('line');
     const minute = useRef('1');
+
+    const columns: GridColDef[] = [
+        {
+            field: 'rank',
+            headerName: '날짜',
+            flex: 1,
+            minWidth: 80,
+            maxWidth: 80
+        },
+        { field: 'stkNm', headerName: '종가', flex: 1, minWidth: 150 },
+        {
+            field: 'pridStkpcFluRt',
+            headerName: '상승',
+            flex: 1,
+            minWidth: 100,
+            renderCell: (params) => renderStatus(params.value as any),
+        },
+        {
+            field: 'pridStkpcFluRt',
+            headerName: '상승률',
+            flex: 1,
+            minWidth: 100,
+            renderCell: (params) => renderStatus(params.value as any),
+        },
+        {
+            field: 'nettrdeAmt',
+            headerName: '합계 순매수',
+            flex: 1,
+            minWidth: 100,
+            valueFormatter: (value: any) => `${value.slice(0, -2).toLocaleString()}억`,
+        }
+    ];
 
     const handleFormat = (
         _event: MouseEvent<HTMLElement>,
@@ -262,6 +318,28 @@ const IndexDetail = () => {
 
     const color = labelColors[sectChartData.trend];
     const trendValues = { up: `${sectChartData.fluRt}%`, down: `${sectChartData.fluRt}%`, neutral: `${sectChartData.fluRt}%` };
+
+    const dayMarks = [
+        {
+            value: 3084.86,
+            label: <p>1일 최저가 <br />3084.86</p>,
+        },
+        {
+            value: 3129.09,
+            label: <p>1일 최고가 <br />3129.09</p>,
+        },
+    ];
+
+    const yearMarks = [
+        {
+            value: 2284.72,
+            label: <p>52주 최저가 <br />2284.72</p>,
+        },
+        {
+            value: 3129.09,
+            label: <p>52주 최고가 <br />3129.09</p>,
+        },
+    ];
 
     return (
         <Box sx={{ width: '100%', maxWidth: { sm: '100%', md: '1700px' } }}>
@@ -386,17 +464,17 @@ const IndexDetail = () => {
                                 </Grid>
                                 <Grid size={{xs: 12, md: 3}}>
                                     <Typography component="h3" variant="subtitle2" gutterBottom>
-                                        3억 2,031만주
+                                        {info.trde_qty}
                                     </Typography>
                                 </Grid>
                                 <Grid size={{xs: 12, md: 3}}>
                                     <Typography component="h2" variant="subtitle2" gutterBottom>
-                                        거래대금
+                                        거래대금 (백만원)
                                     </Typography>
                                 </Grid>
                                 <Grid size={{xs: 12, md: 3}}>
                                     <Typography component="h3" variant="subtitle2" gutterBottom>
-                                        9,031억원
+                                        {info.trde_prica}
                                     </Typography>
                                 </Grid>
                                 <Grid size={{xs: 12, md: 3}}>
@@ -406,17 +484,17 @@ const IndexDetail = () => {
                                 </Grid>
                                 <Grid size={{xs: 12, md: 3}}>
                                     <Typography component="h3" variant="subtitle2" gutterBottom>
-                                        2,644.4
+                                        {info.open_pric}
                                     </Typography>
                                 </Grid>
                                 <Grid size={{xs: 12, md: 3}}>
                                     <Typography component="h2" variant="subtitle2" gutterBottom>
-                                        종가
+                                        현재가
                                     </Typography>
                                 </Grid>
                                 <Grid size={{xs: 12, md: 3}}>
                                     <Typography component="h3" variant="subtitle2" gutterBottom>
-                                        2,680.4
+                                        {info.cur_prc}
                                     </Typography>
                                 </Grid>
                                 <Grid size={{xs: 12, md: 3}}>
@@ -426,7 +504,7 @@ const IndexDetail = () => {
                                 </Grid>
                                 <Grid size={{xs: 12, md: 3}}>
                                     <Typography component="h3" variant="subtitle2" gutterBottom>
-                                        2,720.4
+                                        {info._52wk_lwst_pric}
                                     </Typography>
                                 </Grid>
                                 <Grid size={{xs: 12, md: 3}}>
@@ -436,7 +514,7 @@ const IndexDetail = () => {
                                 </Grid>
                                 <Grid size={{xs: 12, md: 3}}>
                                     <Typography component="h3" variant="subtitle2" gutterBottom>
-                                        2,289.4
+                                        {info._52wk_hgst_pric}
                                     </Typography>
                                 </Grid>
                             </Grid>
@@ -453,13 +531,44 @@ const IndexDetail = () => {
                         </CardContent>
                     </Card>
                 </Grid>
-                <Grid size={{ xs: 12, md: 8 }}>
+                <Grid size={{ xs: 12, md: 4 }}>
                     <Typography component="h2" variant="h6" sx={{ mb: 2 }}>
-                        시간별 투자자별 순매수(억)
+                        일별 시세
                     </Typography>
                     <Card variant="outlined" sx={{ width: '100%' }}>
                         <CardContent>
                             {/*<InvestorLineChart seriesData={data2} />*/}
+                        </CardContent>
+                    </Card>
+                </Grid>
+                <Grid size={{ xs: 12, md: 4 }}>
+                    <Typography component="h2" variant="h6" sx={{ mb: 2 }}>
+                        일별 시세
+                    </Typography>
+                    <Card variant="outlined" sx={{ width: '100%', overflow: 'visible' }}>
+                        <CardContent sx={{ overflow: 'visible', px: 5, height: 100 }}>
+                            <Slider
+                                aria-label="Custom marks"
+                                track={false}
+                                value={3108.25}
+                                valueLabelDisplay="auto"
+                                disabled
+                                max={3129.09}
+                                min={3084.86}
+                                marks={dayMarks}
+                            />
+                        </CardContent>
+                        <CardContent sx={{ overflow: 'visible', px: 5, height: 100 }}>
+                            <Slider
+                                aria-label="Custom marks"
+                                track={false}
+                                value={3108.25}
+                                valueLabelDisplay="auto"
+                                disabled
+                                max={3129.09}
+                                min={2284.72}
+                                marks={yearMarks}
+                            />
                         </CardContent>
                     </Card>
                 </Grid>

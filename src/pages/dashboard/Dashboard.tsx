@@ -96,8 +96,6 @@ export default function Dashboard() {
                 throw new Error(data.msg);
             }
 
-            console.log(data);
-
             const {
                 kospiPriceRes, kospiIndexDailyListRes, kospiInvestor,
                 kosdacPriceRes, kosdacIndexDailyListRes, kosdacInvestor,

@@ -22,14 +22,14 @@ export interface CustomIndexDetailLineChartProps {
 }
 
 const IndexDetailLineChart = (
-    { title, value, fluRt, interval, trend, seriesData, barDataList, dateList }: CustomIndexDetailLineChartProps,
+    { trend, seriesData, barDataList, dateList }: CustomIndexDetailLineChartProps,
 ) => {
     const theme = useTheme();
 
     const numericDates = seriesData[0].data ? seriesData[0].data.map(Number) : [];
 
-    const lineMinY = numericDates.length > 0 ?  Math.min(...numericDates) : 0;
-    const lineMaxY = numericDates.length > 0 ? Math.max(...numericDates) : 0;
+    const lineMinY = numericDates.length > 0 ?  Math.min(...numericDates) - 5 : 0;
+    const lineMaxY = numericDates.length > 0 ? Math.max(...numericDates) + 5 : 0;
 
     const colorPalette = [
         theme.palette.primary.light,
@@ -39,7 +39,7 @@ const IndexDetailLineChart = (
 
     const labelColors = {
         up: 'red' as const,
-        down: 'skyblue' as const,
+        down: 'blue' as const,
         neutral: 'grey' as const,
     };
 
@@ -57,6 +57,9 @@ const IndexDetailLineChart = (
                     scaleType: 'band',
                     data: dateList,
                     position: 'bottom',
+                    tickLabelStyle: {
+                        display: 'none'
+                    },
                     tickInterval: (_index: any, i: number) => i % 5 === 0,
                 },
                 {
