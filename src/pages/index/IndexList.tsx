@@ -307,12 +307,12 @@ const IndexList = () => {
                         </Card>
                     </Stack>
                 </Grid>
-                <Grid size={{ xs: 12, md: 6 }}>
-                    <IndexLineChart {...kospiChartData} />
-                </Grid>
-                <Grid size={{ xs: 12, md: 6 }}>
-                    <IndexLineChart {...kospiChartData} />
-                </Grid>
+                {/*<Grid size={{ xs: 12, md: 6 }}>*/}
+                {/*    <IndexLineChart {...kospiChartData} />*/}
+                {/*</Grid>*/}
+                {/*<Grid size={{ xs: 12, md: 6 }}>*/}
+                {/*    <IndexLineChart {...kospiChartData} />*/}
+                {/*</Grid>*/}
             </Grid>
         </Box>
     )

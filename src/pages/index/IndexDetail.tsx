@@ -18,6 +18,10 @@ import InvestorBarChart from "../../components/InvestorBarChart.tsx";
 import {fetchIndexDetail} from "../../api/index/IndexApi.ts";
 import {ChartType, indexDetailReq} from "../../type/IndexType.ts";
 import {GridColDef} from "@mui/x-data-grid";
+import RemoveIcon from "@mui/icons-material/Remove";
+import CheckIcon from "@mui/icons-material/Check";
+import PriorityHighIcon from "@mui/icons-material/PriorityHigh";
+import DoNotDisturbIcon from "@mui/icons-material/DoNotDisturb";
 
 const StyledToggleButtonGroup = styled(ToggleButtonGroup)(({ theme }) => ({
     border: 'none',
@@ -224,6 +228,12 @@ const IndexDetail = () => {
             })
 
             setBarData([sectInvestor.inds_netprps[0].ind_netprps, sectInvestor.inds_netprps[0].orgn_netprps, sectInvestor.inds_netprps[0].frgnr_netprps])
+
+            let message = {
+                ...checkInvestor('KOSPI', sectInvestor.inds_netprps[0].orgn_netprps, sectInvestor.inds_netprps[0].frgnr_netprps)
+            };
+
+            setMessage(message);
         }catch(error) {
             console.error(error);
         }
@@ -340,6 +350,42 @@ const IndexDetail = () => {
             label: <p>52주 최고가 <br />3129.09</p>,
         },
     ];
+
+    const [message, setMessage] = useState<object>({
+        icon: <RemoveIcon />,
+        title: '-',
+        message: '-'
+    });
+
+    function checkInvestor(name: string, orgn: number, frgnr: number): object {
+        let message: string;
+        let title: string;
+        let icon: JSX.Element;
+
+        if(orgn > 0 && frgnr > 0) {
+            message = '기관과 외국인이 매수 중입니다.'
+            title = `${name} 투자 양호`
+            icon = <CheckIcon color="success" />;
+        }else if(orgn > 0 && frgnr < 0) {
+            message = '기관 매수, 외국인 매도 중입니다.'
+            title = `${name} 투자 주의`
+            icon = <PriorityHighIcon color="warning" />
+        }else if(orgn < 0 && frgnr > 0) {
+            message = '기관 매도, 외국인 매수 중입니다.'
+            title = `${name} 투자 주의`
+            icon = <PriorityHighIcon color="warning" />
+        }else {
+            message = '기관과 외국인이 매도 중입니다.'
+            title = `${name} 투자 위험`
+            icon = <DoNotDisturbIcon color="error" />
+        }
+
+        return {
+            message,
+            title,
+            icon,
+        }
+    }
 
     return (
         <Box sx={{ width: '100%', maxWidth: { sm: '100%', md: '1700px' } }}>
@@ -533,11 +579,17 @@ const IndexDetail = () => {
                 </Grid>
                 <Grid size={{ xs: 12, md: 4 }}>
                     <Typography component="h2" variant="h6" sx={{ mb: 2 }}>
-                        일별 시세
+                        요약
                     </Typography>
                     <Card variant="outlined" sx={{ width: '100%' }}>
+                        {message.icon}
                         <CardContent>
-                            {/*<InvestorLineChart seriesData={data2} />*/}
+                            <Typography gutterBottom variant="h5" component="div">
+                                {message.title}
+                            </Typography>
+                            <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+                                {message.message}
+                            </Typography>
                         </CardContent>
                     </Card>
                 </Grid>
