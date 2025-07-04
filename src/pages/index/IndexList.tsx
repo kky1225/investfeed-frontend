@@ -129,7 +129,7 @@ const IndexList = () => {
                         area: true,
                         stackOrder: 'ascending',
                         color: kospiPriceRes.pred_pre_sig === '2' ? 'red' : 'blue',
-                        data: kospiChartMinuteListRes.inds_min_pole_qry.map(item => parsePrice(item.cur_prc.slice(1))).reverse(),
+                        data: kospiChartMinuteListRes.inds_min_pole_qry.map(item => parsePrice(item.cur_prc.replace(/^[+-]/, ''))).reverse(),
                     }
                 ],
                 dateList: dateList
@@ -150,7 +150,7 @@ const IndexList = () => {
                         area: true,
                         stackOrder: 'ascending',
                         color: kosdacPriceRes.pred_pre_sig === '2' ? 'red' : 'blue',
-                        data: kosdacChartMinuteListRes.inds_min_pole_qry.map(item => parsePrice(item.cur_prc.slice(1))).reverse(),
+                        data: kosdacChartMinuteListRes.inds_min_pole_qry.map(item => parsePrice(item.cur_prc.replace(/^[+-]/, ''))).reverse(),
                     }
                 ],
                 dateList: dateList
@@ -171,7 +171,7 @@ const IndexList = () => {
                         area: true,
                         stackOrder: 'ascending',
                         color: kospi200PriceRes.pred_pre_sig === '2' ? 'red' : 'blue',
-                        data: kospi200ChartMinuteListRes.inds_min_pole_qry.map(item => parsePrice(item.cur_prc.slice(1))).reverse(),
+                        data: kospi200ChartMinuteListRes.inds_min_pole_qry.map(item => parsePrice(item.cur_prc.replace(/^[+-]/, ''))).reverse(),
                     }
                 ],
                 dateList: dateList
