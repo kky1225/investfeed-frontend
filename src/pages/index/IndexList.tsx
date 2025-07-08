@@ -15,6 +15,12 @@ import {useEffect, useState} from "react";
 const IndexList = () => {
     useEffect(() => {
         indexList();
+
+        const interval = setInterval(() => {
+            indexList();
+        }, 60 * 1000);
+
+        return () => clearInterval(interval);
     }, [])
 
     const [kospiChartData, setKospiChartData] = useState<CustomLineChartProps>({
