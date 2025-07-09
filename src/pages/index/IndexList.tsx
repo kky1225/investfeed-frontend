@@ -16,12 +16,69 @@ const IndexList = () => {
     useEffect(() => {
         indexList();
 
+        const socket = new WebSocket("ws://localhost:8080/ws");
+
+        socket.onmessage = (event) => {
+            const data = JSON.parse(event.data);
+
+            if (data.trnm === "REAL" && Array.isArray(data.data)) {
+                const parsed = data.data.map((entry) => {
+                    const values = entry.values;
+                    return {
+                        code: entry.item, // ex: "001"
+                        value: values["10"], // 현재가
+                        change: values["11"], // 전일 대비
+                        fluRt: values["12"],   // 등락률
+                        trend: values["25"],   // 등락기호
+                    };
+                });
+
+                parsed.map((data) => {
+                    switch(data.code) {
+                        case "001": {
+                            setKospiChartData((prev) => ({
+                                ...prev,
+                                value: data.value.replace(/^[+-]/, ''),
+                                fluRt: data.fluRt,
+                                trend: data.trend === '5' ? 'down' : data.trend === '2' ? 'up' : 'neutral',
+                            }));
+
+                            break;
+                        }
+                        case "101":
+                            setKosdacChartData((prev) => ({
+                                ...prev,
+                                value: data.value.replace(/^[+-]/, ''),
+                                fluRt: data.fluRt,
+                                trend: data.trend === '5' ? 'down' : data.trend === '2' ? 'up' : 'neutral',
+                            }));
+
+                            break;
+                        case "201":
+                            setKospi200ChartData((prev) => ({
+                                ...prev,
+                                value: data.value.replace(/^[+-]/, ''),
+                                fluRt: data.fluRt,
+                                trend: data.trend === '5' ? 'down' : data.trend === '2' ? 'up' : 'neutral',
+                            }));
+
+                            break;
+                    }
+                });
+
+                // console.log("실시간 지수 데이터:", parsed);
+            }
+        };
+
         const interval = setInterval(() => {
             indexList();
         }, 60 * 1000);
 
-        return () => clearInterval(interval);
-    }, [])
+        return () => {
+            socket.close();
+            clearInterval(interval);
+        }
+    }, []);
 
     const [kospiChartData, setKospiChartData] = useState<CustomLineChartProps>({
         title: 'KOSPI',
