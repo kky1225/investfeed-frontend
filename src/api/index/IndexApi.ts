@@ -6,6 +6,11 @@ export const fetchIndexList = async () => {
     return response.data
 }
 
+export const fetchIndexListStream = async () => {
+    const response = await api.get(`/index/list/stream`);
+    return response.data
+}
+
 export const fetchIndexDetail = async (req: indexDetailReq) => {
     const response = await api.get(`/index/detail`, {params: req});
     return response.data

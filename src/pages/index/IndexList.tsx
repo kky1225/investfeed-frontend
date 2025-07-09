@@ -9,12 +9,13 @@ import IndexLineChart from "../../components/IndexLineChart.tsx";
 import type { CustomLineChartProps } from '../../components/IndexLineChart.tsx';
 import OptionTable from "../../components/OptionTable.tsx";
 import {GridColDef, GridRowsProp} from "@mui/x-data-grid";
-import {fetchIndexList} from "../../api/index/IndexApi.ts";
+import {fetchIndexList, fetchIndexListStream} from "../../api/index/IndexApi.ts";
 import {useEffect, useState} from "react";
 
 const IndexList = () => {
     useEffect(() => {
         indexList();
+        indexListStream();
 
         const socket = new WebSocket("ws://localhost:8080/ws");
 
@@ -142,6 +143,20 @@ const IndexList = () => {
         ],
         dateList: []
     });
+
+    const indexListStream = async () => {
+        try {
+            const data = await fetchIndexList();
+
+            if (data.code !== "0000") {
+                throw new Error(data.msg);
+            }
+
+            return data.code;
+        }catch (error) {
+            console.error(error);
+        }
+    }
 
     const indexList = async () => {
         try {
