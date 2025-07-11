@@ -66,8 +66,6 @@ const IndexList = () => {
                             break;
                     }
                 });
-
-                // console.log("실시간 지수 데이터:", parsed);
             }
         };
 
@@ -146,13 +144,13 @@ const IndexList = () => {
 
     const indexListStream = async () => {
         try {
-            const data = await fetchIndexList();
+            const data = await fetchIndexListStream();
+
+            console.log(data);
 
             if (data.code !== "0000") {
                 throw new Error(data.msg);
             }
-
-            return data.code;
         }catch (error) {
             console.error(error);
         }
