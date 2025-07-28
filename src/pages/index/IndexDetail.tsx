@@ -22,6 +22,7 @@ import RemoveIcon from "@mui/icons-material/Remove";
 import CheckIcon from "@mui/icons-material/Check";
 import PriorityHighIcon from "@mui/icons-material/PriorityHigh";
 import DoNotDisturbIcon from "@mui/icons-material/DoNotDisturb";
+import {useParams} from "react-router-dom";
 
 const StyledToggleButtonGroup = styled(ToggleButtonGroup)(({ theme }) => ({
     border: 'none',
@@ -41,13 +42,16 @@ const StyledToggleButtonGroup = styled(ToggleButtonGroup)(({ theme }) => ({
 }));
 
 const IndexDetail = () => {
+    const { id } = useParams();
+
     const [req, setReq] = useState<indexDetailReq>({
-        inds_cd: "001",
+        inds_cd: id,
         chart_type: ChartType.DAY
     });
 
     const [sectChartData, setSectChartData] = useState<CustomIndexDetailLineChartProps>({
-        title: 'KOSPI',
+        id: '-',
+        title: '-',
         value: '-',
         fluRt: '0',
         openPric: 0,
@@ -188,6 +192,9 @@ const IndexDetail = () => {
                 }
             }
 
+            let id = chartListRes.inds_cd;
+            let title = id === '201' ? 'KOSPI 200' : sectInvestor.inds_netprps.find(it => it.inds_cd == id).inds_nm
+
             let today;
 
             if(minute === '88' && second === '88') {
@@ -197,7 +204,8 @@ const IndexDetail = () => {
             }
 
             setSectChartData({
-                title: 'KOSPI',
+                id: id,
+                title: title,
                 value: sectPriceRes.cur_prc.replace(/^[+-]/, ''),
                 fluRt: sectPriceRes.flu_rt,
                 openPric: parseFloat(sectPriceRes.open_pric.replace(/^[+-]/, '')),
@@ -205,7 +213,7 @@ const IndexDetail = () => {
                 trend: sectPriceRes.pred_pre_sig === '5' ? 'down' : sectPriceRes.pred_pre_sig === '2' ? 'up' : 'neutral',
                 seriesData: [
                     {
-                        id: 'KOSPI',
+                        id: id,
                         showMark: false,
                         curve: 'linear',
                         area: true,
@@ -230,7 +238,11 @@ const IndexDetail = () => {
             setBarData([sectInvestor.inds_netprps[0].ind_netprps, sectInvestor.inds_netprps[0].orgn_netprps, sectInvestor.inds_netprps[0].frgnr_netprps])
 
             let message = {
-                ...checkInvestor('KOSPI', sectInvestor.inds_netprps[0].orgn_netprps, sectInvestor.inds_netprps[0].frgnr_netprps)
+                ...checkInvestor(
+                    title,
+                    sectInvestor.inds_netprps[0].orgn_netprps,
+                    sectInvestor.inds_netprps[0].frgnr_netprps
+                )
             };
 
             setMessage(message);
@@ -617,8 +629,8 @@ const IndexDetail = () => {
                                 value={3108.25}
                                 valueLabelDisplay="auto"
                                 disabled
-                                max={3129.09}
-                                min={2284.72}
+                                max={info._52wk_lwst_pric}
+                                min={info._52wk_hgst_pric}
                                 marks={yearMarks}
                             />
                         </CardContent>

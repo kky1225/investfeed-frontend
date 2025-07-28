@@ -10,6 +10,7 @@ import { MakeOptional } from '@mui/x-internals/types';
 import {useTheme} from "@mui/material/styles";
 
 export interface CustomIndexDetailLineChartProps {
+    id: string,
     title: string,
     value: string,
     fluRt: string,

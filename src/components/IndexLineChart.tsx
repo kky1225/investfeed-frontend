@@ -11,6 +11,7 @@ import {CardActionArea} from "@mui/material";
 import {useNavigate} from "react-router-dom";
 
 export interface CustomLineChartProps {
+    id: string,
     title: string,
     value: string,
     fluRt: string,
@@ -22,7 +23,7 @@ export interface CustomLineChartProps {
 }
 
 const IndexLineChart = (
-    { title, value, fluRt, openPric, interval, trend, seriesData, dateList }: CustomLineChartProps,
+    { id, title, value, fluRt, openPric, interval, trend, seriesData, dateList }: CustomLineChartProps,
 ) => {
     const theme = useTheme();
 
@@ -48,13 +49,13 @@ const IndexLineChart = (
     const color = labelColors[trend];
     const trendValues = { up: `${fluRt}%`, down: `${fluRt}%`, neutral: `${fluRt}%` };
 
-    const onClick = () => {
-        navigate(`/index/kospi`);
+    const onClick = (id: string) => {
+        navigate(`/index/${id}`);
     }
 
     return (
         <CardActionArea
-            onClick={() => onClick()}
+            onClick={() => onClick(id)}
             sx={{
                 height: '100%',
                 '&[data-active]': {

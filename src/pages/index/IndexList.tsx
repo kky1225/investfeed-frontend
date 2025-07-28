@@ -80,7 +80,8 @@ const IndexList = () => {
     }, []);
 
     const [kospiChartData, setKospiChartData] = useState<CustomLineChartProps>({
-        title: 'KOSPI',
+        id: '-',
+        title: '-',
         value: '-',
         fluRt: '0',
         openPric: 0,
@@ -101,7 +102,8 @@ const IndexList = () => {
     });
 
     const [kosdacChartData, setKosdacChartData] = useState<CustomLineChartProps>({
-        title: 'KOSDAC',
+        id: '-',
+        title: '-',
         value: '-',
         fluRt: '0',
         openPric: 0,
@@ -122,7 +124,8 @@ const IndexList = () => {
     });
 
     const [kospi200ChartData, setKospi200ChartData] = useState<CustomLineChartProps>({
-        title: 'KOSPI 200',
+        id: '-',
+        title: '-',
         value: '-',
         fluRt: '0',
         openPric: 0,
@@ -191,7 +194,8 @@ const IndexList = () => {
             }).reverse();
 
             setKospiChartData({
-                title: 'KOSPI',
+                id: kospiChartMinuteListRes.inds_cd,
+                title: '종합(KOSPI)',
                 value: kospiPriceRes.cur_prc.replace(/^[+-]/, ''),
                 fluRt: kospiPriceRes.flu_rt,
                 openPric: parseFloat(kospiPriceRes.open_pric.replace(/^[+-]/, '')),
@@ -199,7 +203,7 @@ const IndexList = () => {
                 trend: kospiPriceRes.pred_pre_sig === '5' ? 'down' : kospiPriceRes.pred_pre_sig === '2' ? 'up' : 'neutral',
                 seriesData: [
                     {
-                        id: 'KOSPI',
+                        id: kospiChartMinuteListRes.inds_cd,
                         showMark: false,
                         curve: 'linear',
                         area: true,
@@ -212,7 +216,8 @@ const IndexList = () => {
             });
 
             setKosdacChartData({
-                title: 'KOSDAC',
+                id: kosdacChartMinuteListRes.inds_cd,
+                title: '종합(KOSDAQ)',
                 value: kosdacPriceRes.cur_prc.replace(/^[+-]/, ''),
                 fluRt: kosdacPriceRes.flu_rt,
                 openPric: parseFloat(kosdacPriceRes.open_pric.replace(/^[+-]/, '')),
@@ -220,7 +225,7 @@ const IndexList = () => {
                 trend: kosdacPriceRes.pred_pre_sig === '5' ? 'down' : kosdacPriceRes.pred_pre_sig === '2' ? 'up' : 'neutral',
                 seriesData: [
                     {
-                        id: 'KOSDAC',
+                        id: kosdacChartMinuteListRes.inds_cd,
                         showMark: false,
                         curve: 'linear',
                         area: true,
@@ -233,6 +238,7 @@ const IndexList = () => {
             });
 
             setKospi200ChartData({
+                id: kospi200ChartMinuteListRes.inds_cd,
                 title: 'KOSPI 200',
                 value: kospi200PriceRes.cur_prc.replace(/^[+-]/, ''),
                 fluRt: kospi200PriceRes.flu_rt,
@@ -241,7 +247,7 @@ const IndexList = () => {
                 trend: kospi200PriceRes.pred_pre_sig === '5' ? 'down' : kospi200PriceRes.pred_pre_sig === '2' ? 'up' : 'neutral',
                 seriesData: [
                     {
-                        id: 'KOSPI 200',
+                        id: kospi200ChartMinuteListRes.inds_cd,
                         showMark: false,
                         curve: 'linear',
                         area: true,
