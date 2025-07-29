@@ -5,7 +5,7 @@ import CardContent from "@mui/material/CardContent";
 import Stack from "@mui/material/Stack";
 import Chip from "@mui/material/Chip";
 import Card from "@mui/material/Card";
-import {JSX, MouseEvent, useEffect, useRef, useState} from "react";
+import {JSX, MouseEvent, ReactElement, useEffect, useRef, useState} from "react";
 import CandlestickChartIcon from '@mui/icons-material/CandlestickChart';
 import StackedLineChartIcon from '@mui/icons-material/StackedLineChart';
 import ToggleButton from '@mui/material/ToggleButton';
@@ -40,6 +40,11 @@ const StyledToggleButtonGroup = styled(ToggleButtonGroup)(({ theme }) => ({
             borderLeft: '1px solid transparent',
         },
 }));
+
+interface IndexRangeProps {
+    value: number;
+    label: ReactElement;
+}
 
 const IndexDetail = () => {
     const { id } = useParams();
@@ -83,8 +88,39 @@ const IndexDetail = () => {
         _52wk_hgst_pric: 0
     });
 
+    const [dayRange, setDayRange] = useState<IndexRangeProps[]>([
+        {
+            value: 0.0,
+            label: <p>1일 최저가 <br />0</p>
+        },
+        {
+            value: 0.0,
+            label: <p>1일 최고가 <br />0</p>,
+        }
+    ]);
+
+    const [yearRange, setYearRange] = useState<IndexRangeProps[]>([
+        {
+            value: 0.0,
+            label: <p>52주 최저가 <br />0</p>,
+        },
+        {
+            value: 0.0,
+            label: <p>52주 최고가 <br />0</p>,
+        }
+    ]);
+
     useEffect(() => {
-        indexDetail(req)
+        indexDetail(req);
+
+        const interval = setInterval(() => {
+            indexDetail(req);
+        }, 60 * 1000);
+
+        return () => {
+            //socket.close();
+            clearInterval(interval);
+        }
     }, [req]);
 
     const indexDetail = async (req: indexDetailReq) => {
@@ -226,13 +262,41 @@ const IndexDetail = () => {
                 dateList: dateList
             });
 
+            const dayMin = sectPriceRes['low_pric'].replace(/^[+-]/, '');
+            const dayMax = sectPriceRes['high_pric'].replace(/^[+-]/, '')
+
+            setDayRange([
+                {
+                    value: parseFloat(dayMin),
+                    label: <p>1일 최저가 <br />{dayMin}</p>
+                },
+                {
+                    value: parseFloat(dayMax),
+                    label: <p>1일 최고가 <br />{dayMax}</p>
+                }
+            ]);
+
+            const yearMin = sectPriceRes['52wk_lwst_pric'].replace(/^[+-]/, '');
+            const yearMax = sectPriceRes['52wk_hgst_pric'].replace(/^[+-]/, '')
+
+            setYearRange([
+                {
+                    value: parseFloat(yearMin),
+                    label: <p>52주 최저가 <br />{yearMin}</p>
+                },
+                {
+                    value: parseFloat(yearMax),
+                    label: <p>52주 최고가 <br />{yearMax}</p>
+                }
+            ]);
+
             setInfo({
                 trde_qty: `${sectPriceRes.trde_qty.substring(0, 1)}억 ${sectPriceRes.trde_qty.substring(1, 5)}만주`,
                 trde_prica: `${Number(sectPriceRes.trde_prica).toLocaleString()}`,
                 open_pric: parseFloat(sectPriceRes.open_pric.replace(/^[+-]/, '')),
                 cur_prc: sectPriceRes.cur_prc.replace(/^[+-]/, ''),
-                _52wk_lwst_pric: sectPriceRes['52wk_lwst_pric'].replace(/^[+-]/, ''),
-                _52wk_hgst_pric: sectPriceRes['52wk_hgst_pric'].replace(/^[+-]/, '')
+                _52wk_lwst_pric: yearMin,
+                _52wk_hgst_pric: yearMax
             })
 
             setBarData([sectInvestor.inds_netprps[0].ind_netprps, sectInvestor.inds_netprps[0].orgn_netprps, sectInvestor.inds_netprps[0].frgnr_netprps])
@@ -340,28 +404,6 @@ const IndexDetail = () => {
 
     const color = labelColors[sectChartData.trend];
     const trendValues = { up: `${sectChartData.fluRt}%`, down: `${sectChartData.fluRt}%`, neutral: `${sectChartData.fluRt}%` };
-
-    const dayMarks = [
-        {
-            value: 3084.86,
-            label: <p>1일 최저가 <br />3084.86</p>,
-        },
-        {
-            value: 3129.09,
-            label: <p>1일 최고가 <br />3129.09</p>,
-        },
-    ];
-
-    const yearMarks = [
-        {
-            value: 2284.72,
-            label: <p>52주 최저가 <br />2284.72</p>,
-        },
-        {
-            value: 3129.09,
-            label: <p>52주 최고가 <br />3129.09</p>,
-        },
-    ];
 
     const [message, setMessage] = useState<object>({
         icon: <RemoveIcon />,
@@ -614,24 +656,24 @@ const IndexDetail = () => {
                             <Slider
                                 aria-label="Custom marks"
                                 track={false}
-                                value={3108.25}
+                                value={parseFloat(info.cur_prc)}
                                 valueLabelDisplay="auto"
                                 disabled
-                                max={3129.09}
-                                min={3084.86}
-                                marks={dayMarks}
+                                max={dayRange[1].value}
+                                min={dayRange[0].value}
+                                marks={dayRange}
                             />
                         </CardContent>
                         <CardContent sx={{ overflow: 'visible', px: 5, height: 100 }}>
                             <Slider
                                 aria-label="Custom marks"
                                 track={false}
-                                value={3108.25}
+                                value={parseFloat(info.cur_prc)}
                                 valueLabelDisplay="auto"
                                 disabled
-                                max={info._52wk_lwst_pric}
-                                min={info._52wk_hgst_pric}
-                                marks={yearMarks}
+                                max={yearRange[1].value}
+                                min={yearRange[0].value}
+                                marks={yearRange}
                             />
                         </CardContent>
                     </Card>
