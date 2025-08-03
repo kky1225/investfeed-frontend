@@ -15,8 +15,8 @@ import {Select, SelectChangeEvent, Slider} from "@mui/material";
 import MenuItem from "@mui/material/MenuItem";
 import IndexDetailLineChart, {CustomIndexDetailLineChartProps} from "../../components/IndexDetailLineChart.tsx";
 import InvestorBarChart from "../../components/InvestorBarChart.tsx";
-import {fetchIndexDetail} from "../../api/index/IndexApi.ts";
-import {ChartType, indexDetailReq} from "../../type/IndexType.ts";
+import {fetchIndexDetail, fetchIndexDetailStream, fetchIndexListStream} from "../../api/index/IndexApi.ts";
+import {ChartType, indexDetailReq, indexDetailSteamReq} from "../../type/IndexType.ts";
 import {GridColDef} from "@mui/x-data-grid";
 import RemoveIcon from "@mui/icons-material/Remove";
 import CheckIcon from "@mui/icons-material/Check";
@@ -112,6 +112,37 @@ const IndexDetail = () => {
 
     useEffect(() => {
         indexDetail(req);
+        indexDetailStream({
+            inds_cd: req.inds_cd
+        });
+
+        const socket = new WebSocket("ws://localhost:8080/ws");
+
+        socket.onmessage = (event) => {
+            const data = JSON.parse(event.data);
+
+            if (data.trnm === "REAL" && Array.isArray(data.data)) {
+                const parsed = data.data.map((entry) => {
+                    const values = entry.values;
+                    return {
+                        code: entry.item, // ex: "001"
+                        value: values["10"], // 현재가
+                        change: values["11"], // 전일 대비
+                        fluRt: values["12"],   // 등락률
+                        trend: values["25"],   // 등락기호
+                    };
+                });
+
+                parsed.map((data) => {
+                    setSectChartData((prev) => ({
+                        ...prev,
+                        value: data.value.replace(/^[+-]/, ''),
+                        fluRt: data.fluRt,
+                        trend: data.trend === '5' ? 'down' : data.trend === '2' ? 'up' : 'neutral',
+                    }));
+                });
+            }
+        };
 
         const interval = setInterval(() => {
             indexDetail(req);
@@ -311,6 +342,20 @@ const IndexDetail = () => {
 
             setMessage(message);
         }catch(error) {
+            console.error(error);
+        }
+    }
+
+    const indexDetailStream = async (req: indexDetailSteamReq) => {
+        try {
+            const data = await fetchIndexDetailStream(req);
+
+            console.log(data);
+
+            if (data.code !== "0000") {
+                throw new Error(data.msg);
+            }
+        }catch (error) {
             console.error(error);
         }
     }
