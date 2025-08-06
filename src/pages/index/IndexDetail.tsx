@@ -134,12 +134,14 @@ const IndexDetail = () => {
                 });
 
                 parsed.map((data) => {
-                    setSectChartData((prev) => ({
-                        ...prev,
-                        value: data.value.replace(/^[+-]/, ''),
-                        fluRt: data.fluRt,
-                        trend: data.trend === '5' ? 'down' : data.trend === '2' ? 'up' : 'neutral',
-                    }));
+                    if(data.code === sectChartData.id) {
+                        setSectChartData((prev) => ({
+                            ...prev,
+                            value: data.value.replace(/^[+-]/, ''),
+                            fluRt: data.fluRt,
+                            trend: data.trend === '5' ? 'down' : data.trend === '2' ? 'up' : 'neutral',
+                        }));
+                    }
                 });
             }
         };
