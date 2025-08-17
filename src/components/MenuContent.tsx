@@ -11,28 +11,36 @@ import AssignmentRoundedIcon from '@mui/icons-material/AssignmentRounded';
 import SettingsRoundedIcon from '@mui/icons-material/SettingsRounded';
 import InfoRoundedIcon from '@mui/icons-material/InfoRounded';
 import HelpRoundedIcon from '@mui/icons-material/HelpRounded';
+import {useLocation, useNavigate} from "react-router-dom";
 
 const mainListItems = [
-    { text: '대시보드', icon: <HomeRoundedIcon /> },
-    { text: '주요 지수', icon: <AnalyticsRoundedIcon /> },
-    { text: '차트', icon: <AssignmentRoundedIcon /> },
-    { text: '관심 종목', icon: <PeopleRoundedIcon /> },
-    { text: '보유 주식', icon: <PeopleRoundedIcon /> },
+    { id: 1, text: '대시보드', icon: <HomeRoundedIcon />, url: '/' },
+    { id: 2, text: '주요 지수', icon: <AnalyticsRoundedIcon />, url: '/index' },
+    { id: 3, text: '차트', icon: <AssignmentRoundedIcon />, url: '/chart' },
+    { id: 4, text: '관심 종목', icon: <PeopleRoundedIcon />, url: '/favorite' },
+    { id: 5, text: '보유 주식', icon: <PeopleRoundedIcon />, url: '/holding' },
 ];
 
 const secondaryListItems = [
-    { text: 'Settings', icon: <SettingsRoundedIcon /> },
-    { text: 'About', icon: <InfoRoundedIcon /> },
-    { text: 'Feedback', icon: <HelpRoundedIcon /> },
+    { text: 'Settings', icon: <SettingsRoundedIcon />, url: '/setting' },
+    { text: 'About', icon: <InfoRoundedIcon />, url: '/about' },
+    { text: 'Feedback', icon: <HelpRoundedIcon />, url: '/feedback' },
 ];
 
 export default function MenuContent() {
+    const location = useLocation();
+    const navigate = useNavigate();
+
+    const onClick = (url: string) => {
+        navigate(url);
+    };
+
     return (
         <Stack sx={{ flexGrow: 1, p: 1, justifyContent: 'space-between' }}>
             <List dense>
                 {mainListItems.map((item, index) => (
                     <ListItem key={index} disablePadding sx={{ display: 'block' }}>
-                        <ListItemButton selected={index === 0}>
+                        <ListItemButton selected={location.pathname === item.url} onClick={() => onClick(item.url)}>
                             <ListItemIcon>{item.icon}</ListItemIcon>
                             <ListItemText primary={item.text} />
                         </ListItemButton>

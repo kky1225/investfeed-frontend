@@ -26,8 +26,11 @@ import CheckIcon from '@mui/icons-material/Check';
 import PriorityHighIcon from '@mui/icons-material/PriorityHigh';
 import RemoveIcon from '@mui/icons-material/Remove';
 import DoNotDisturbIcon from '@mui/icons-material/DoNotDisturb';
+import {useNavigate} from "react-router-dom";
 
 export default function Dashboard() {
+    const navigate = useNavigate();
+
     const [req, setReq] = useState<indexListReq>({
         inds_cd: "001",
         trnm: "REG",
@@ -254,6 +257,10 @@ export default function Dashboard() {
         return <Chip label={status > 0 ? `${status}%` : `${status}%`} color={colors} />;
     }
 
+    const onClick = () => {
+        navigate('/index');
+    }
+
     const columns: GridColDef[] = [
         {
             field: 'rank',
@@ -317,6 +324,7 @@ export default function Dashboard() {
                                 color="primary"
                                 endIcon={<ChevronRightRoundedIcon />}
                                 fullWidth={isSmallScreen}
+                                onClick={onClick}
                             >
                                 더보기
                             </Button>
