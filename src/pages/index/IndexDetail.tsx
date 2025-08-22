@@ -122,8 +122,11 @@ const IndexDetail = () => {
             const data = JSON.parse(event.data);
 
             if (data.trnm === "REAL" && Array.isArray(data.data)) {
+                let item;
+
                 const parsed = data.data.map((entry) => {
                     const values = entry.values;
+                    item = entry.item;
                     return {
                         code: entry.item, // ex: "001"
                         value: values["10"], // 현재가
@@ -134,7 +137,7 @@ const IndexDetail = () => {
                 });
 
                 parsed.map((data) => {
-                    if(data.code === sectChartData.id) {
+                    if(item === req.inds_cd) {
                         setSectChartData((prev) => ({
                             ...prev,
                             value: data.value.replace(/^[+-]/, ''),
