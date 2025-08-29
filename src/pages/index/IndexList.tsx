@@ -154,7 +154,7 @@ const IndexList = () => {
                 interval = setInterval(() => {
                     indexList();
                 }, (60 * 1000));
-            }, waitTime);
+            }, waitTime + 200);
         })();
 
         return () => {
@@ -227,11 +227,21 @@ const IndexList = () => {
 
             if(minute === '88' && second === '88') {
                 today = `${year}.${month}.${day} 장마감`;
-            }else {
+            } else if(minute === '' || second === '') {
+                today = `${year}.${month}.${day} 장전`;
+            } else {
                 today = `${year}.${month}.${day} ${minute}:${second}`;
             }
 
-            const dateList = kospiChartMinuteListRes.inds_min_pole_qry.map(item => {
+            const kospiDateList = kospiChartMinuteListRes.inds_min_pole_qry.map(item => {
+                return `${item.cntr_tm.slice(0, 4)}.${item.cntr_tm.slice(4, 6)}.${item.cntr_tm.slice(6, 8)} ${item.cntr_tm.slice(8, 10)}:${item.cntr_tm.slice(10, 12)}`
+            }).reverse();
+
+            const kospi200DateList = kospi200ChartMinuteListRes.inds_min_pole_qry.map(item => {
+                return `${item.cntr_tm.slice(0, 4)}.${item.cntr_tm.slice(4, 6)}.${item.cntr_tm.slice(6, 8)} ${item.cntr_tm.slice(8, 10)}:${item.cntr_tm.slice(10, 12)}`
+            }).reverse();
+
+            const kosdacDateList = kosdacChartMinuteListRes.inds_min_pole_qry.map(item => {
                 return `${item.cntr_tm.slice(0, 4)}.${item.cntr_tm.slice(4, 6)}.${item.cntr_tm.slice(6, 8)} ${item.cntr_tm.slice(8, 10)}:${item.cntr_tm.slice(10, 12)}`
             }).reverse();
 
@@ -254,7 +264,7 @@ const IndexList = () => {
                         data: kospiChartMinuteListRes.inds_min_pole_qry.map(item => parsePrice(item.cur_prc.replace(/^[+-]/, ''))).reverse(),
                     }
                 ],
-                dateList: dateList
+                dateList: kospiDateList
             });
 
             setKosdacChartData({
@@ -276,7 +286,7 @@ const IndexList = () => {
                         data: kosdacChartMinuteListRes.inds_min_pole_qry.map(item => parsePrice(item.cur_prc.replace(/^[+-]/, ''))).reverse(),
                     }
                 ],
-                dateList: dateList
+                dateList: kosdacDateList
             });
 
             setKospi200ChartData({
@@ -298,7 +308,7 @@ const IndexList = () => {
                         data: kospi200ChartMinuteListRes.inds_min_pole_qry.map(item => parsePrice(item.cur_prc.replace(/^[+-]/, ''))).reverse(),
                     }
                 ],
-                dateList: dateList
+                dateList: kospi200DateList
             });
         }catch (error) {
             console.error(error);
