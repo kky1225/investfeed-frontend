@@ -14,7 +14,8 @@ import {useEffect, useRef, useState} from "react";
 import {fetchTimeNow} from "../../api/time/TimeApi.ts";
 
 const IndexList = () => {
-    const offset = useRef<number>(0);
+    const chartTimer = useRef<number>(0);
+    const marketTimer = useRef<number>(0);
     const [kospiChartData, setKospiChartData] = useState<CustomLineChartProps>({
         id: '-',
         title: '-',
@@ -83,73 +84,36 @@ const IndexList = () => {
 
     useEffect(() => {
         indexList();
-        indexListStream();
 
-        const socket = new WebSocket("ws://localhost:8080/ws");
-
-        socket.onmessage = (event) => {
-            const data = JSON.parse(event.data);
-
-            if (data.trnm === "REAL" && Array.isArray(data.data)) {
-                const parsed = data.data.map((entry) => {
-                    const values = entry.values;
-                    return {
-                        code: entry.item, // ex: "001"
-                        value: values["10"], // 현재가
-                        change: values["11"], // 전일 대비
-                        fluRt: values["12"],   // 등락률
-                        trend: values["25"],   // 등락기호
-                    };
-                });
-
-                parsed.forEach((data) => {
-                    switch(data.code) {
-                        case "001": {
-                            setKospiChartData((prev) => ({
-                                ...prev,
-                                value: data.value.replace(/^[+-]/, ''),
-                                fluRt: data.fluRt,
-                                trend: data.trend === '5' ? 'down' : data.trend === '2' ? 'up' : 'neutral',
-                            }));
-
-                            break;
-                        }
-                        case "101":
-                            setKosdacChartData((prev) => ({
-                                ...prev,
-                                value: data.value.replace(/^[+-]/, ''),
-                                fluRt: data.fluRt,
-                                trend: data.trend === '5' ? 'down' : data.trend === '2' ? 'up' : 'neutral',
-                            }));
-
-                            break;
-                        case "201":
-                            setKospi200ChartData((prev) => ({
-                                ...prev,
-                                value: data.value.replace(/^[+-]/, ''),
-                                fluRt: data.fluRt,
-                                trend: data.trend === '5' ? 'down' : data.trend === '2' ? 'up' : 'neutral',
-                            }));
-
-                            break;
-                    }
-                });
-            }
-        };
-
-        let timeout: ReturnType<typeof setTimeout>;
+        let chartTimeout: ReturnType<typeof setTimeout>;
+        let socketTimeout: ReturnType<typeof setTimeout>;
         let interval: ReturnType<typeof setInterval>;
+        let socket: WebSocket;
 
         (async () => {
-            await timeNow();
+            const marketInfo = await timeNow();
 
-            const now = Date.now() + offset.current;
+            const now = Date.now() + chartTimer.current;
             const waitTime = 60_000 - (now % 60_000);
 
-            console.log(now)
-            console.log(waitTime)
+            if(marketInfo.isMarketOpen) {
+                await indexListStream();
+                socket = openSocket();
+            } else {
+                console.log(marketTimer.current);
 
-            timeout = setTimeout(() => {
+                socketTimeout = setTimeout(async () => {
+                    socket?.close();
+
+                    const again = await timeNow();
+                    if (again.isMarketOpen) {
+                        await indexListStream();
+                        socket = openSocket();
+                    }
+                }, marketTimer.current + 200);
+            }
+
+            chartTimeout = setTimeout(() => {
                 indexList();
                 interval = setInterval(() => {
                     indexList();
@@ -158,8 +122,9 @@ const IndexList = () => {
         })();
 
         return () => {
-            socket.close();
-            clearTimeout(timeout);
+            socket?.close();
+            clearInterval(socketTimeout);
+            clearTimeout(chartTimeout);
             clearInterval(interval);
         }
     }, []);
@@ -169,19 +134,26 @@ const IndexList = () => {
             const startTime = Date.now();
             const data = await fetchTimeNow();
 
-            console.log(data);
-
             if(data.code !== "0000") {
                 throw new Error(data.msg);
             }
 
+            const { time, isMarketOpen, startMarketTime, endMarketTime, marketType } = data.result
+
             const endTime = Date.now();
             const delayTime = endTime - startTime;
 
-            const serverTime = data.result.time;
-            const revisionServerTime = serverTime + delayTime / 2; // startTime과 endTime 사이에 API 응답을 받기 때문에 2를 나눠서 보정
+            const revisionServerTime = time + delayTime / 2; // startTime과 endTime 사이에 API 응답을 받기 때문에 2를 나눠서 보정
 
-            offset.current = revisionServerTime - endTime;
+            chartTimer.current = revisionServerTime - endTime;
+
+            if(!isMarketOpen) {
+                marketTimer.current = startMarketTime - revisionServerTime;
+            }
+
+            return {
+                ...data.result
+            }
         }catch (error) {
             console.error(error);
         }
@@ -313,6 +285,62 @@ const IndexList = () => {
         }catch (error) {
             console.error(error);
         }
+    }
+
+    const openSocket = () => {
+        const socket = new WebSocket("ws://localhost:8080/ws");
+
+        socket.onmessage = (event) => {
+            const data = JSON.parse(event.data);
+
+            if (data.trnm === "REAL" && Array.isArray(data.data)) {
+                const parsed = data.data.map((entry) => {
+                    const values = entry.values;
+                    return {
+                        code: entry.item, // ex: "001"
+                        value: values["10"], // 현재가
+                        change: values["11"], // 전일 대비
+                        fluRt: values["12"],   // 등락률
+                        trend: values["25"],   // 등락기호
+                    };
+                });
+
+                parsed.forEach((data) => {
+                    switch(data.code) {
+                        case "001": {
+                            setKospiChartData((prev) => ({
+                                ...prev,
+                                value: data.value.replace(/^[+-]/, ''),
+                                fluRt: data.fluRt,
+                                trend: data.trend === '5' ? 'down' : data.trend === '2' ? 'up' : 'neutral',
+                            }));
+
+                            break;
+                        }
+                        case "101":
+                            setKosdacChartData((prev) => ({
+                                ...prev,
+                                value: data.value.replace(/^[+-]/, ''),
+                                fluRt: data.fluRt,
+                                trend: data.trend === '5' ? 'down' : data.trend === '2' ? 'up' : 'neutral',
+                            }));
+
+                            break;
+                        case "201":
+                            setKospi200ChartData((prev) => ({
+                                ...prev,
+                                value: data.value.replace(/^[+-]/, ''),
+                                fluRt: data.fluRt,
+                                trend: data.trend === '5' ? 'down' : data.trend === '2' ? 'up' : 'neutral',
+                            }));
+
+                            break;
+                    }
+                });
+            }
+        };
+
+        return socket;
     }
 
     const parsePrice = (raw: string)  => {
