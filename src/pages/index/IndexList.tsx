@@ -12,6 +12,7 @@ import {GridColDef, GridRowsProp} from "@mui/x-data-grid";
 import {fetchIndexList, fetchIndexListStream} from "../../api/index/IndexApi.ts";
 import {useEffect, useRef, useState} from "react";
 import {fetchTimeNow} from "../../api/time/TimeApi.ts";
+import {MarketType} from "../../type/timeType.ts";
 
 const IndexList = () => {
     const chartTimer = useRef<number>(0);
@@ -100,8 +101,6 @@ const IndexList = () => {
                 await indexListStream();
                 socket = openSocket();
             } else {
-                console.log(marketTimer.current);
-
                 socketTimeout = setTimeout(async () => {
                     socket?.close();
 
@@ -132,13 +131,19 @@ const IndexList = () => {
     const timeNow = async () => {
         try {
             const startTime = Date.now();
-            const data = await fetchTimeNow();
+            const data = await fetchTimeNow({
+                marketType: MarketType.INDEX
+            });
 
             if(data.code !== "0000") {
                 throw new Error(data.msg);
             }
 
-            const { time, isMarketOpen, startMarketTime, endMarketTime, marketType } = data.result
+            const { time, isMarketOpen, startMarketTime, marketType } = data.result
+
+            if(marketType !== MarketType.INDEX) {
+                throw new Error(data.msg);
+            }
 
             const endTime = Date.now();
             const delayTime = endTime - startTime;
@@ -197,10 +202,10 @@ const IndexList = () => {
 
             let today;
 
-            if(minute === '88' && second === '88') {
+            if(minute === '88' && second === '88' || minute === '99' && second === '99') {
                 today = `${year}.${month}.${day} 장마감`;
             } else if(minute === '' || second === '') {
-                today = `${year}.${month}.${day} 장전`;
+                today = `${year}.${month}.${day}`;
             } else {
                 today = `${year}.${month}.${day} ${minute}:${second}`;
             }

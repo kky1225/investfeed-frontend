@@ -23,6 +23,8 @@ import CheckIcon from "@mui/icons-material/Check";
 import PriorityHighIcon from "@mui/icons-material/PriorityHigh";
 import DoNotDisturbIcon from "@mui/icons-material/DoNotDisturb";
 import {useParams} from "react-router-dom";
+import {fetchTimeNow} from "../../api/time/TimeApi.ts";
+import {MarketType} from "../../type/timeType.ts";
 
 const StyledToggleButtonGroup = styled(ToggleButtonGroup)(({ theme }) => ({
     border: 'none',
@@ -49,6 +51,8 @@ interface IndexRangeProps {
 const IndexDetail = () => {
     const { id } = useParams();
 
+    const chartTimer = useRef<number>(0);
+    const marketTimer = useRef<number>(0);
     const [req, setReq] = useState<indexDetailReq>({
         inds_cd: id,
         chart_type: ChartType.DAY
@@ -112,49 +116,45 @@ const IndexDetail = () => {
 
     useEffect(() => {
         indexDetail(req);
-        indexDetailStream({
-            inds_cd: req.inds_cd
-        });
 
-        const socket = new WebSocket("ws://localhost:8080/ws");
+        let chartTimeout: ReturnType<typeof setTimeout>;
+        let socketTimeout: ReturnType<typeof setTimeout>;
+        let interval: ReturnType<typeof setInterval>;
+        let socket: WebSocket;
 
-        socket.onmessage = (event) => {
-            const data = JSON.parse(event.data);
+        (async () => {
+            const marketInfo = await timeNow();
 
-            if (data.trnm === "REAL" && Array.isArray(data.data)) {
-                let item;
+            const now = Date.now() + chartTimer.current;
+            const waitTime = 60_000 - (now % 60_000);
 
-                const parsed = data.data.map((entry) => {
-                    const values = entry.values;
-                    item = entry.item;
-                    return {
-                        code: entry.item, // ex: "001"
-                        value: values["10"], // 현재가
-                        change: values["11"], // 전일 대비
-                        fluRt: values["12"],   // 등락률
-                        trend: values["25"],   // 등락기호
-                    };
-                });
+            if (marketInfo.isMarketOpen) {
+                await indexDetailStream(req);
+                socket = openSocket();
+            } else {
+                socketTimeout = setTimeout(async () => {
+                    socket?.close();
 
-                parsed.map((data) => {
-                    if(item === req.inds_cd) {
-                        setSectChartData((prev) => ({
-                            ...prev,
-                            value: data.value.replace(/^[+-]/, ''),
-                            fluRt: data.fluRt,
-                            trend: data.trend === '5' ? 'down' : data.trend === '2' ? 'up' : 'neutral',
-                        }));
+                    const again = await timeNow();
+                    if (again.isMarketOpen) {
+                        await indexDetailStream(req);
+                        socket = openSocket();
                     }
-                });
+                }, marketTimer.current + 200);
             }
-        };
 
-        const interval = setInterval(() => {
-            indexDetail(req);
-        }, 60 * 1000);
+            chartTimeout = setTimeout(() => {
+                indexDetail(req);
+                interval = setInterval(() => {
+                    indexDetail(req);
+                }, (60 * 1000));
+            }, waitTime + 200);
+        })();
 
         return () => {
-            //socket.close();
+            socket?.close();
+            clearInterval(socketTimeout);
+            clearTimeout(chartTimeout);
             clearInterval(interval);
         }
     }, [req]);
@@ -351,6 +351,42 @@ const IndexDetail = () => {
         }
     }
 
+    const timeNow = async () => {
+        try {
+            const startTime = Date.now();
+            const data = await fetchTimeNow({
+                marketType: MarketType.INDEX
+            });
+
+            if(data.code !== "0000") {
+                throw new Error(data.msg);
+            }
+
+            const { time, isMarketOpen, startMarketTime, marketType } = data.result
+
+            if(marketType !== MarketType.INDEX) {
+                throw new Error(data.msg);
+            }
+
+            const endTime = Date.now();
+            const delayTime = endTime - startTime;
+
+            const revisionServerTime = time + delayTime / 2; // startTime과 endTime 사이에 API 응답을 받기 때문에 2를 나눠서 보정
+
+            chartTimer.current = revisionServerTime - endTime;
+
+            if(!isMarketOpen) {
+                marketTimer.current = startMarketTime - revisionServerTime;
+            }
+
+            return {
+                ...data.result
+            }
+        }catch (error) {
+            console.error(error);
+        }
+    }
+
     const indexDetailStream = async (req: indexDetailSteamReq) => {
         try {
             const data = await fetchIndexDetailStream(req);
@@ -363,6 +399,43 @@ const IndexDetail = () => {
         }catch (error) {
             console.error(error);
         }
+    }
+
+    const openSocket = () => {
+        const socket = new WebSocket("ws://localhost:8080/ws");
+
+        socket.onmessage = (event) => {
+            const data = JSON.parse(event.data);
+
+            if (data.trnm === "REAL" && Array.isArray(data.data)) {
+                let item;
+
+                const parsed = data.data.map((entry) => {
+                    const values = entry.values;
+                    item = entry.item;
+                    return {
+                        code: entry.item, // ex: "001"
+                        value: values["10"], // 현재가
+                        change: values["11"], // 전일 대비
+                        fluRt: values["12"],   // 등락률
+                        trend: values["25"],   // 등락기호
+                    };
+                });
+
+                parsed.map((data) => {
+                    if(item === req.inds_cd) {
+                        setSectChartData((prev) => ({
+                            ...prev,
+                            value: data.value.replace(/^[+-]/, ''),
+                            fluRt: data.fluRt,
+                            trend: data.trend === '5' ? 'down' : data.trend === '2' ? 'up' : 'neutral',
+                        }));
+                    }
+                });
+            }
+        };
+
+        return socket;
     }
 
     const parsePrice = (raw: string)  => {

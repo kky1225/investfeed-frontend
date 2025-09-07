@@ -2,22 +2,21 @@ import api from "../../axios.ts";
 import {indexDetailReq, indexDetailSteamReq} from "../../type/IndexType.ts";
 
 export const fetchIndexList = async () => {
-    const response = await api.get(`/index/list`);
-    return response.data
+    const res = await api.get(`/index/list`);
+    return res.data
 }
 
 export const fetchIndexListStream = async () => {
-    const response = await api.get(`/index/list/stream`);
-    return response.data
+    const res = await api.get(`/index/list/stream`);
+    return res.data
 }
 
 export const fetchIndexDetail = async (req: indexDetailReq) => {
-    const response = await api.get(`/index/detail`, {params: req});
-    return response.data
+    const res = await api.get(`/index/detail`, {params: req});
+    return res.data
 }
 
 export const fetchIndexDetailStream = async (req: indexDetailSteamReq) => {
-    const response = await api.get(`/index/detail/stream`, {params: req});
-
-    return response.data
+    const res = await api.get(`/index/detail/stream`, {params: req});
+    return res.data
 }
