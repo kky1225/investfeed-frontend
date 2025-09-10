@@ -15,11 +15,11 @@ import {LinearProgress, useMediaQuery} from "@mui/material";
 import InsightsRoundedIcon from '@mui/icons-material/InsightsRounded';
 import ChevronRightRoundedIcon from '@mui/icons-material/ChevronRightRounded';
 import Chip from "@mui/material/Chip";
-import {Fragment, JSX, useEffect, useState} from "react";
+import {Fragment, JSX, useEffect, useRef, useState} from "react";
 import CustomPieChart from "../../components/CustomPieChart.tsx";
 import { DataGrid, GridCellParams, GridColDef, GridRowsProp } from '@mui/x-data-grid';
 import CustomDataTable from "../../components/CustomDataTable.tsx";
-import {fetchDashboard} from "../../api/sect/sectApi.ts";
+import {fetchDashboard, fetchDashboardStream} from "../../api/sect/sectApi.ts";
 import {indexListReq, SectIndexListStream} from "../../type/sectType.ts";
 import InvestorBarChart from "../../components/InvestorBarChart.tsx";
 import CheckIcon from '@mui/icons-material/Check';
@@ -27,9 +27,14 @@ import PriorityHighIcon from '@mui/icons-material/PriorityHigh';
 import RemoveIcon from '@mui/icons-material/Remove';
 import DoNotDisturbIcon from '@mui/icons-material/DoNotDisturb';
 import {useNavigate} from "react-router-dom";
+import {fetchTimeNow} from "../../api/time/TimeApi.ts";
+import {MarketType} from "../../type/timeType.ts";
 
 export default function Dashboard() {
     const navigate = useNavigate();
+
+    const chartTimer = useRef<number>(0);
+    const marketTimer = useRef<number>(0);
 
     const [req, setReq] = useState<indexListReq>({
         inds_cd: "001",
@@ -46,7 +51,8 @@ export default function Dashboard() {
 
     const [indexData, setIndexData] = useState<StatCardProps[]>([
         {
-            title: '코스피',
+            id: '001',
+            title: '종합(KOSPI)',
             value: '0',
             interval: '-',
             trend: 'neutral',
@@ -55,7 +61,8 @@ export default function Dashboard() {
             fluRt: "0"
         },
         {
-            title: '코스닥',
+            id: '101',
+            title: '종합(KOSDAQ)',
             value: '0',
             interval: '-',
             trend: 'neutral',
@@ -64,6 +71,7 @@ export default function Dashboard() {
             fluRt: "0"
         },
         {
+            id: '201',
             title: '달러',
             value: '0',
             interval: '-',
@@ -91,13 +99,96 @@ export default function Dashboard() {
 
     const [row, setRow] = useState<GridRowsProp[]>([]);
 
-    const indexList = async (req: indexListReq) => {
+    useEffect(() => {
+        dashboard(req);
+
+        let chartTimeout: ReturnType<typeof setTimeout>;
+        let socketTimeout: ReturnType<typeof setTimeout>;
+        let interval: ReturnType<typeof setInterval>;
+        let socket: WebSocket;
+
+        (async () => {
+            const marketInfo = await timeNow();
+
+            const now = Date.now() + chartTimer.current;
+            const waitTime = 60_000 - (now % 60_000);
+
+            if (marketInfo.isMarketOpen) {
+                await dashboardStream();
+                socket = openSocket();
+            } else {
+                socketTimeout = setTimeout(async () => {
+                    socket?.close();
+
+                    const again = await timeNow();
+                    if (again.isMarketOpen) {
+                        await dashboardStream();
+                        socket = openSocket();
+                    }
+                }, marketTimer.current + 200);
+            }
+
+            chartTimeout = setTimeout(() => {
+                dashboard(req);
+                interval = setInterval(() => {
+                    dashboard(req);
+                }, (60 * 1000));
+            }, waitTime + 200);
+        })();
+
+        return () => {
+            socket?.close();
+            clearInterval(socketTimeout);
+            clearTimeout(chartTimeout);
+            clearInterval(interval);
+        }
+    }, [req]);
+
+    const timeNow = async () => {
+        try {
+            const startTime = Date.now();
+            const data = await fetchTimeNow({
+                marketType: MarketType.INDEX
+            });
+
+            if(data.code !== "0000") {
+                throw new Error(data.msg);
+            }
+
+            const { time, isMarketOpen, startMarketTime, marketType } = data.result
+
+            if(marketType !== MarketType.INDEX) {
+                throw new Error(data.msg);
+            }
+
+            const endTime = Date.now();
+            const delayTime = endTime - startTime;
+
+            const revisionServerTime = time + delayTime / 2; // startTime과 endTime 사이에 API 응답을 받기 때문에 2를 나눠서 보정
+
+            chartTimer.current = revisionServerTime - endTime;
+
+            if(!isMarketOpen) {
+                marketTimer.current = startMarketTime - revisionServerTime;
+            }
+
+            return {
+                ...data.result
+            }
+        }catch (error) {
+            console.error(error);
+        }
+    }
+
+    const dashboard = async (req: indexListReq) => {
         try {
             const data = await fetchDashboard(req);
 
             if(data.code !== "0000") {
                 throw new Error(data.msg);
             }
+
+            console.log(data);
 
             const {
                 kospiPriceRes, kospiIndexDailyListRes, kospiInvestor,
@@ -114,16 +205,16 @@ export default function Dashboard() {
 
             let today;
 
-            if(minute === '88' && second === '88') {
+            if(minute === '88' && second === '88' || minute === '99' && second === '99') {
                 today = `${year}.${month}.${day} 장마감`;
-            }else {
+            } else if(minute === '' || second === '') {
+                today = `${year}.${month}.${day}`;
+            } else {
                 today = `${year}.${month}.${day} ${minute}:${second}`;
             }
 
             const todayKospiData = kospiIndexDailyListRes.inds_cur_prc_daly_rept.map(item => item.cur_prc_n.slice(1)).reverse();
-
             const todayKosdacData = kosdacIndexDailyListRes.inds_cur_prc_daly_rept.map(item => item.cur_prc_n.slice(1)).reverse();
-
             const todayKospi200Data = kospi200IndexDailyListRes.inds_cur_prc_daly_rept.map(item => item.cur_prc_n.slice(1)).reverse();
 
             const dateList = kospiIndexDailyListRes.inds_cur_prc_daly_rept.map(item => {
@@ -133,7 +224,8 @@ export default function Dashboard() {
             setIndexData(
                 [
                     {
-                        title: 'KOSPI',
+                        id: '001',
+                        title: '종합(KOSPI)',
                         value: kospiPriceRes.cur_prc.replace(/^[+-]/, ''),
                         interval: today,
                         trend: kospiPriceRes.pred_pre_sig === '5' ? 'down' : kospiPriceRes.pred_pre_sig === '2' ? 'up' : 'neutral',
@@ -142,7 +234,8 @@ export default function Dashboard() {
                         fluRt: kospiPriceRes.flu_rt
                     },
                     {
-                        title: 'KOSDAC',
+                        id: '101',
+                        title: '종합(KOSDAQ)',
                         value: kosdacPriceRes.cur_prc.replace(/^[+-]/, ''),
                         interval: today,
                         trend: kosdacPriceRes.pred_pre_sig === '5' ? 'down' : kosdacPriceRes.pred_pre_sig === '2' ? 'up' : 'neutral',
@@ -151,6 +244,7 @@ export default function Dashboard() {
                         fluRt: kosdacPriceRes.flu_rt
                     },
                     {
+                        id: '201',
                         title: 'KOSPI 200',
                         value: kospi200PriceRes.cur_prc.replace(/^[+-]/, ''),
                         interval: today,
@@ -167,10 +261,10 @@ export default function Dashboard() {
 
             let message = {
                 kospi: {
-                    ...checkInvestor('KOSPI', kospiInvestor.inds_netprps[0].orgn_netprps, kospiInvestor.inds_netprps[0].frgnr_netprps)
+                    ...checkInvestor('종합(KOSPI)', kospiInvestor.inds_netprps[0].orgn_netprps, kospiInvestor.inds_netprps[0].frgnr_netprps)
                  },
                 kosdac: {
-                    ...checkInvestor('KOSDAC', kosdacInvestor.inds_netprps[0].orgn_netprps, kosdacInvestor.inds_netprps[0].frgnr_netprps)
+                    ...checkInvestor('종합(KOSDAQ)', kosdacInvestor.inds_netprps[0].orgn_netprps, kosdacInvestor.inds_netprps[0].frgnr_netprps)
                 }
             };
 
@@ -193,9 +287,57 @@ export default function Dashboard() {
         }
     };
 
-    useEffect(() => {
-        indexList(req)
-    }, [req]);
+    const dashboardStream = async () => {
+        try {
+            const data = await fetchDashboardStream();
+
+            if(data.code !== "0000") {
+                throw new Error(data.msg);
+            }
+
+            console.log(data);
+        }catch (error) {
+            console.log(error);
+        }
+    }
+
+    const openSocket = () => {
+        const socket = new WebSocket("ws://localhost:8080/ws");
+
+        socket.onmessage = (event) => {
+            const data = JSON.parse(event.data);
+
+            if (data.trnm === "REAL" && Array.isArray(data.data)) {
+                const parsed = data.data.map((entry) => {
+                    const values = entry.values;
+                    return {
+                        code: entry.item, // ex: "001"
+                        value: values["10"], // 현재가
+                        change: values["11"], // 전일 대비
+                        fluRt: values["12"],   // 등락률
+                        trend: values["25"],   // 등락기호
+                    };
+                });
+
+                parsed.forEach((data) => {
+                    setIndexData(index =>
+                        index.map(item =>
+                            item.id === data.code ?
+                                {
+                                    ...item,
+                                    value: data.value.replace(/^[+-]/, ''),
+                                    fluRt: data.fluRt,
+                                    trend: data.trend === '5' ? 'down' : data.trend === '2' ? 'up' : 'neutral',
+                                }
+                                : item
+                        )
+                    );
+                });
+            }
+        };
+
+        return socket;
+    }
 
     function checkInvestor(name: string, orgn: number, frgnr: number): object {
         let message: string;
@@ -340,7 +482,7 @@ export default function Dashboard() {
                     <Card variant="outlined" sx={{ width: '100%' }}>
                         <CardContent>
                             <Typography component="h2" variant="subtitle2" gutterBottom>
-                                KOSPI
+                                종합(KOSPI)
                             </Typography>
                             <InvestorBarChart data={kospiBarData} />
                         </CardContent>
@@ -350,7 +492,7 @@ export default function Dashboard() {
                     <Card variant="outlined" sx={{ width: '100%' }}>
                         <CardContent>
                             <Typography component="h2" variant="subtitle2" gutterBottom>
-                                KOSDAC
+                                종합(KOSDAQ)
                             </Typography>
                             <InvestorBarChart data={kosdacBarData} />
                         </CardContent>

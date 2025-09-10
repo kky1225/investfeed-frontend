@@ -9,6 +9,7 @@ import { SparkLineChart } from '@mui/x-charts/SparkLineChart';
 import { areaElementClasses } from '@mui/x-charts/LineChart';
 
 export type StatCardProps = {
+    id: string;
     title: string;
     value: string;
     interval: string;
