@@ -299,7 +299,7 @@ const IndexList = () => {
             const data = JSON.parse(event.data);
 
             if (data.trnm === "REAL" && Array.isArray(data.data)) {
-                const parsed = data.data.map((entry) => {
+                const indexList = data.data.map((entry) => {
                     const values = entry.values;
                     return {
                         code: entry.item, // ex: "001"
@@ -310,7 +310,7 @@ const IndexList = () => {
                     };
                 });
 
-                parsed.forEach((data) => {
+                indexList.forEach((data) => {
                     switch(data.code) {
                         case "001": {
                             setKospiChartData((prev) => ({

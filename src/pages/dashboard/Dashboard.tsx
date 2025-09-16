@@ -11,7 +11,7 @@ import StatCard, {StatCardProps} from "../../components/StatCard.tsx";
 import Card from "@mui/material/Card";
 import CardContent from "@mui/material/CardContent";
 import Button from "@mui/material/Button";
-import {LinearProgress, useMediaQuery} from "@mui/material";
+import {colors, LinearProgress, useMediaQuery} from "@mui/material";
 import InsightsRoundedIcon from '@mui/icons-material/InsightsRounded';
 import ChevronRightRoundedIcon from '@mui/icons-material/ChevronRightRounded';
 import Chip from "@mui/material/Chip";
@@ -29,6 +29,7 @@ import DoNotDisturbIcon from '@mui/icons-material/DoNotDisturb';
 import {useNavigate} from "react-router-dom";
 import {fetchTimeNow} from "../../api/time/TimeApi.ts";
 import {MarketType} from "../../type/timeType.ts";
+import {DashboardStreamReq} from "../../type/dashboardType.ts";
 
 export default function Dashboard() {
     const navigate = useNavigate();
@@ -36,17 +37,8 @@ export default function Dashboard() {
     const chartTimer = useRef<number>(0);
     const marketTimer = useRef<number>(0);
 
-    const [req, setReq] = useState<indexListReq>({
-        inds_cd: "001",
-        trnm: "REG",
-        grp_no: "1",
-        refresh: "0",
-        data: [
-            {
-                item: ["001"],
-                type: ["0J"]
-            }
-        ]
+    const [req, setReq] = useState<DashboardStreamReq>({
+        items: []
     });
 
     const [indexData, setIndexData] = useState<StatCardProps[]>([
@@ -100,21 +92,25 @@ export default function Dashboard() {
     const [row, setRow] = useState<GridRowsProp[]>([]);
 
     useEffect(() => {
-        dashboard(req);
-
         let chartTimeout: ReturnType<typeof setTimeout>;
         let socketTimeout: ReturnType<typeof setTimeout>;
         let interval: ReturnType<typeof setInterval>;
         let socket: WebSocket;
 
         (async () => {
+            const items = await dashboard();
+
             const marketInfo = await timeNow();
 
             const now = Date.now() + chartTimer.current;
             const waitTime = 60_000 - (now % 60_000);
 
+            const req: DashboardStreamReq = {
+                items: items,
+            }
+
             if (marketInfo.isMarketOpen) {
-                await dashboardStream();
+                await dashboardStream(req);
                 socket = openSocket();
             } else {
                 socketTimeout = setTimeout(async () => {
@@ -122,16 +118,16 @@ export default function Dashboard() {
 
                     const again = await timeNow();
                     if (again.isMarketOpen) {
-                        await dashboardStream();
+                        await dashboardStream(req);
                         socket = openSocket();
                     }
                 }, marketTimer.current + 200);
             }
 
             chartTimeout = setTimeout(() => {
-                dashboard(req);
+                dashboard();
                 interval = setInterval(() => {
-                    dashboard(req);
+                    dashboard();
                 }, (60 * 1000));
             }, waitTime + 200);
         })();
@@ -142,7 +138,7 @@ export default function Dashboard() {
             clearTimeout(chartTimeout);
             clearInterval(interval);
         }
-    }, [req]);
+    }, []);
 
     const timeNow = async () => {
         try {
@@ -180,9 +176,9 @@ export default function Dashboard() {
         }
     }
 
-    const dashboard = async (req: indexListReq) => {
+    const dashboard = async () => {
         try {
-            const data = await fetchDashboard(req);
+            const data = await fetchDashboard();
 
             if(data.code !== "0000") {
                 throw new Error(data.msg);
@@ -270,7 +266,7 @@ export default function Dashboard() {
 
             setMessage(message);
 
-            const mappingRow = investorTradeRankRes.orgn_frgnr_cont_trde_prst.map(item => {
+            const ranking = investorTradeRankRes.orgn_frgnr_cont_trde_prst.map(item => {
                 return {
                     id: item.stk_cd,
                     stkCd: item.stk_cd,
@@ -281,15 +277,17 @@ export default function Dashboard() {
                 }
             });
 
-            setRow(mappingRow);
+            setRow(ranking);
+
+            return ranking.map(item => item.stkCd);
         } catch (err) {
             console.error(err);
         }
     };
 
-    const dashboardStream = async () => {
+    const dashboardStream = async (req: DashboardStreamReq) => {
         try {
-            const data = await fetchDashboardStream();
+            const data = await fetchDashboardStream(req);
 
             if(data.code !== "0000") {
                 throw new Error(data.msg);
@@ -307,32 +305,66 @@ export default function Dashboard() {
         socket.onmessage = (event) => {
             const data = JSON.parse(event.data);
 
-            if (data.trnm === "REAL" && Array.isArray(data.data)) {
-                const parsed = data.data.map((entry) => {
-                    const values = entry.values;
-                    return {
-                        code: entry.item, // ex: "001"
-                        value: values["10"], // 현재가
-                        change: values["11"], // 전일 대비
-                        fluRt: values["12"],   // 등락률
-                        trend: values["25"],   // 등락기호
-                    };
-                });
+            if (data.type === '0J') {
+                if (data.trnm === "REAL" && Array.isArray(data.data)) {
+                    let code;
 
-                parsed.forEach((data) => {
-                    setIndexData(index =>
-                        index.map(item =>
-                            item.id === data.code ?
-                                {
-                                    ...item,
-                                    value: data.value.replace(/^[+-]/, ''),
-                                    fluRt: data.fluRt,
-                                    trend: data.trend === '5' ? 'down' : data.trend === '2' ? 'up' : 'neutral',
-                                }
-                                : item
-                        )
-                    );
-                });
+                    const indexList = data.data.map((entry) => {
+                        const values = entry.values;
+                        code = entry.item;
+                        return {
+                            code: entry.item, // ex: "001"
+                            value: values["10"], // 현재가
+                            change: values["11"], // 전일 대비
+                            fluRt: values["12"],   // 등락률
+                            trend: values["25"],   // 등락기호
+                        };
+                    });
+
+                    indexList.forEach((data) => {
+                        setIndexData(index =>
+                            index.map(item =>
+                                code === item.id ?
+                                    {
+                                        ...item,
+                                        value: data.value.replace(/^[+-]/, ''),
+                                        fluRt: data.fluRt,
+                                        trend: data.trend === '5' ? 'down' : data.trend === '2' ? 'up' : 'neutral',
+                                    }
+                                    : item
+                            )
+                        );
+                    });
+                }
+            } else if (data.type === '0A') {
+                if (data.trnm === "REAL" && Array.isArray(data.data)) {
+                    let code;
+
+                    const indexList = data.data.map((entry) => {
+                        const values = entry.values;
+                        code = entry.item;
+                        return {
+                            code: entry.item, // ex: "001"
+                            value: values["10"], // 현재가
+                            change: values["11"], // 전일 대비
+                            fluRt: values["12"],   // 등락률
+                            trend: values["25"],   // 등락기호
+                        };
+                    });
+
+                    indexList.forEach((data) => {
+                        setRow(stock =>
+                            stock.map(item =>
+                                code = item.id ?
+                                    {
+                                        ...item,
+                                        pridStkpcFluRt: data.fluRt,
+                                    }
+                                    : item
+                            )
+                        );
+                    });
+                }
             }
         };
 

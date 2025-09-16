@@ -410,7 +410,7 @@ const IndexDetail = () => {
             if (data.trnm === "REAL" && Array.isArray(data.data)) {
                 let item;
 
-                const parsed = data.data.map((entry) => {
+                const indexList = data.data.map((entry) => {
                     const values = entry.values;
                     item = entry.item;
                     return {
@@ -422,7 +422,7 @@ const IndexDetail = () => {
                     };
                 });
 
-                parsed.map((data) => {
+                indexList.forEach((data) => {
                     if(item === req.inds_cd) {
                         setSectChartData((prev) => ({
                             ...prev,

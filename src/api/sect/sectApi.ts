@@ -1,12 +1,12 @@
 import api from "../../axios.ts";
-import {indexListReq} from "../../type/sectType.ts";
+import {DashboardStreamReq} from "../../type/dashboardType.ts";
 
-export const fetchDashboard = async (req: indexListReq) => {
-    const res = await api.post(`/dashboard`, req);
+export const fetchDashboard = async () => {
+    const res = await api.post(`/dashboard`);
     return res.data;
 };
 
-export const fetchDashboardStream = async () => {
-    const res = await api.get(`/dashboard/stream`, {});
+export const fetchDashboardStream = async (req: DashboardStreamReq) => {
+    const res = await api.post(`/dashboard/stream`, req);
     return res.data;
 }
