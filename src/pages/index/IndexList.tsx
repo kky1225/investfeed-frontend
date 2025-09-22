@@ -83,6 +83,28 @@ const IndexList = () => {
         dateList: []
     });
 
+    const [goldChartData, setGoldChartData] = useState<CustomLineChartProps>({
+        id: '-',
+        title: '-',
+        value: '-',
+        fluRt: '0',
+        openPric: 0,
+        interval: '-',
+        trend: 'neutral',
+        seriesData: [
+            {
+                id: 'Gold',
+                showMark: false,
+                curve: 'linear',
+                area: true,
+                stackOrder: 'ascending',
+                color: 'grey',
+                data: []
+            }
+        ],
+        dateList: []
+    });
+
     useEffect(() => {
         indexList();
 
@@ -192,6 +214,7 @@ const IndexList = () => {
                 kospiPriceRes, kospiChartMinuteListRes,
                 kosdacPriceRes, kosdacChartMinuteListRes,
                 kospi200PriceRes, kospi200ChartMinuteListRes,
+                goldPriceRes, goldChartMinuteListRes
             } = data.result;
 
             const year = kospiChartMinuteListRes.inds_min_pole_qry[0].cntr_tm.substring(0, 4);
@@ -219,6 +242,10 @@ const IndexList = () => {
             }).reverse();
 
             const kosdacDateList = kosdacChartMinuteListRes.inds_min_pole_qry.map(item => {
+                return `${item.cntr_tm.slice(0, 4)}.${item.cntr_tm.slice(4, 6)}.${item.cntr_tm.slice(6, 8)} ${item.cntr_tm.slice(8, 10)}:${item.cntr_tm.slice(10, 12)}`
+            }).reverse();
+
+            const goldDateList = goldChartMinuteListRes.gds_min_chart_qry.map(item => {
                 return `${item.cntr_tm.slice(0, 4)}.${item.cntr_tm.slice(4, 6)}.${item.cntr_tm.slice(6, 8)} ${item.cntr_tm.slice(8, 10)}:${item.cntr_tm.slice(10, 12)}`
             }).reverse();
 
@@ -286,6 +313,30 @@ const IndexList = () => {
                     }
                 ],
                 dateList: kospi200DateList
+            });
+
+            const goldPrice = Number(goldPriceRes.pred_close_pric) + Number(goldPriceRes.pred_pre)
+
+            setGoldChartData({
+                id: 'M04020000',
+                title: '금현물',
+                value: goldPrice.toLocaleString().replace(/^[+-]/, ''),
+                fluRt: goldPriceRes.flu_rt,
+                openPric: parseFloat(goldPriceRes.open_pric.replace(/^[+-]/, '')),
+                interval: today,
+                trend: goldPriceRes.pred_pre_sig === '5' ? 'down' : goldPriceRes.pred_pre_sig === '2' ? 'up' : 'neutral',
+                seriesData: [
+                    {
+                        id: 'M04020000',
+                        showMark: false,
+                        curve: 'linear',
+                        area: true,
+                        stackOrder: 'ascending',
+                        color: goldPriceRes.pred_pre_sig === '2' ? 'red' : 'blue',
+                        data: goldChartMinuteListRes.gds_min_chart_qry.map(item => Number(item.cntr_pric.toLocaleString())).reverse(),
+                    }
+                ],
+                dateList: goldDateList
             });
         }catch (error) {
             console.error(error);
@@ -434,46 +485,49 @@ const IndexList = () => {
                     <IndexLineChart {...kospi200ChartData} />
                 </Grid>
                 <Grid size={{ xs: 12, md: 6 }}>
-                    <Card variant="outlined" sx={{ width: '100%', mb: 1}}>
-                        <CardContent>
-                            <Typography component="h2" variant="subtitle2" gutterBottom>
-                                코스피200 옵션
-                            </Typography>
-                            <Stack sx={{ justifyContent: 'space-between' }}>
-                                <OptionTable rows={rows} columns={columns} />
-                            </Stack>
-                        </CardContent>
-                    </Card>
-                    <Stack
-                        direction="row"
-                        sx={{
-                            alignContent: { xs: 'center', sm: 'flex-start' },
-                            alignItems: 'center',
-                            gap: 1,
-                        }}
-                    >
-                        <Card variant="outlined" sx={{ width: '100%' }}>
-                            <CardContent>
-                                <Typography component="h2" variant="subtitle2" gutterBottom>
-                                    코스피200 위클리 옵션(월)
-                                </Typography>
-                                <Stack sx={{ justifyContent: 'space-between' }}>
-                                    <OptionTable rows={rows} columns={columns} />
-                                </Stack>
-                            </CardContent>
-                        </Card>
-                        <Card variant="outlined" sx={{ width: '100%' }}>
-                            <CardContent>
-                                <Typography component="h2" variant="subtitle2" gutterBottom>
-                                    코스피200 위클리 콜옵션(목)
-                                </Typography>
-                                <Stack sx={{ justifyContent: 'space-between' }}>
-                                    <OptionTable rows={rows} columns={columns} />
-                                </Stack>
-                            </CardContent>
-                        </Card>
-                    </Stack>
+                    <IndexLineChart {...goldChartData} />
                 </Grid>
+                {/*<Grid size={{ xs: 12, md: 6 }}>*/}
+                {/*    <Card variant="outlined" sx={{ width: '100%', mb: 1}}>*/}
+                {/*        <CardContent>*/}
+                {/*            <Typography component="h2" variant="subtitle2" gutterBottom>*/}
+                {/*                코스피200 옵션*/}
+                {/*            </Typography>*/}
+                {/*            <Stack sx={{ justifyContent: 'space-between' }}>*/}
+                {/*                <OptionTable rows={rows} columns={columns} />*/}
+                {/*            </Stack>*/}
+                {/*        </CardContent>*/}
+                {/*    </Card>*/}
+                {/*    <Stack*/}
+                {/*        direction="row"*/}
+                {/*        sx={{*/}
+                {/*            alignContent: { xs: 'center', sm: 'flex-start' },*/}
+                {/*            alignItems: 'center',*/}
+                {/*            gap: 1,*/}
+                {/*        }}*/}
+                {/*    >*/}
+                {/*        <Card variant="outlined" sx={{ width: '100%' }}>*/}
+                {/*            <CardContent>*/}
+                {/*                <Typography component="h2" variant="subtitle2" gutterBottom>*/}
+                {/*                    코스피200 위클리 옵션(월)*/}
+                {/*                </Typography>*/}
+                {/*                <Stack sx={{ justifyContent: 'space-between' }}>*/}
+                {/*                    <OptionTable rows={rows} columns={columns} />*/}
+                {/*                </Stack>*/}
+                {/*            </CardContent>*/}
+                {/*        </Card>*/}
+                {/*        <Card variant="outlined" sx={{ width: '100%' }}>*/}
+                {/*            <CardContent>*/}
+                {/*                <Typography component="h2" variant="subtitle2" gutterBottom>*/}
+                {/*                    코스피200 위클리 콜옵션(목)*/}
+                {/*                </Typography>*/}
+                {/*                <Stack sx={{ justifyContent: 'space-between' }}>*/}
+                {/*                    <OptionTable rows={rows} columns={columns} />*/}
+                {/*                </Stack>*/}
+                {/*            </CardContent>*/}
+                {/*        </Card>*/}
+                {/*    </Stack>*/}
+                {/*</Grid>*/}
                 {/*<Grid size={{ xs: 12, md: 6 }}>*/}
                 {/*    <IndexLineChart {...kospiChartData} />*/}
                 {/*</Grid>*/}
