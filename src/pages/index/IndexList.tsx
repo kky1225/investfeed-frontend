@@ -333,7 +333,7 @@ const IndexList = () => {
                         area: true,
                         stackOrder: 'ascending',
                         color: goldPriceRes.pred_pre_sig === '2' ? 'red' : 'blue',
-                        data: goldChartMinuteListRes.gds_min_chart_qry.map(item => Number(item.cntr_pric.toLocaleString())).reverse(),
+                        data: goldChartMinuteListRes.gds_min_chart_qry.map(item => Number(item.cntr_pric.toLocaleString().replace(/^[+-]/, ''))).reverse(),
                     }
                 ],
                 dateList: goldDateList
@@ -391,6 +391,13 @@ const IndexList = () => {
                             }));
 
                             break;
+                        case "M04020000":
+                            setGoldChartData((prev) => ({
+                                ...prev,
+                                value: data.value.replace(/^[+-]/, ''),
+                                fluRt: data.fluRt,
+                                trend: data.trend === '5' ? 'down' : data.trend === '2' ? 'up' : 'neutral',
+                            }));
                     }
                 });
             }
