@@ -355,7 +355,7 @@ export default function Dashboard() {
                     indexList.forEach((data) => {
                         setRow(stock =>
                             stock.map(item =>
-                                code = item.id ?
+                                code === item.id ?
                                     {
                                         ...item,
                                         pridStkpcFluRt: data.fluRt,
@@ -451,13 +451,12 @@ export default function Dashboard() {
             minWidth: 100,
             renderCell: (params) => renderStatus(params.value as any),
         },
-
         {
             field: 'nettrdeAmt',
             headerName: '합계 순매수',
             flex: 1,
             minWidth: 100,
-            valueFormatter: (value: any) => `${value.slice(0, -2).toLocaleString()}억`,
+            valueFormatter: (value: any) => `${Number(value.slice(0, -2)).toLocaleString()}억`,
         }
     ];
 

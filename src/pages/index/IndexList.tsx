@@ -333,7 +333,7 @@ const IndexList = () => {
                         area: true,
                         stackOrder: 'ascending',
                         color: goldPriceRes.pred_pre_sig === '2' ? 'red' : 'blue',
-                        data: goldChartMinuteListRes.gds_min_chart_qry.map(item => Number(item.cntr_pric.toLocaleString().replace(/^[+-]/, ''))).reverse(),
+                        data: goldChartMinuteListRes.gds_min_chart_qry.map(item => Number(item.cur_prc.toLocaleString().replace(/^[+-]/, ''))).reverse(),
                     }
                 ],
                 dateList: goldDateList
