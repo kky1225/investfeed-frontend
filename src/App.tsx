@@ -8,6 +8,7 @@ import IndexList from "./pages/index/IndexList.tsx";
 import IndexDetail from "./pages/index/IndexDetail.tsx";
 import StockDetail from "./pages/stock/StockDetail.tsx";
 import StockList from "./pages/stock/StockList.tsx";
+import GoldDetail from "./pages/gold/GoldDetail.tsx";
 
 function App() {
 
@@ -21,6 +22,7 @@ function App() {
                     <Route path="/interest" Component={Interest} />
                     <Route path="/index" Component={IndexList} />
                     <Route path="/index/:id" Component={IndexDetail} />
+                    <Route path="/gold/:id" Component={GoldDetail} />
 
                     <Route path="/stock" Component={StockList} />
                     <Route path="/stock/:id" Component={StockDetail} />

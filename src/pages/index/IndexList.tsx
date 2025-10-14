@@ -13,6 +13,7 @@ import {fetchIndexList, fetchIndexListStream} from "../../api/index/IndexApi.ts"
 import {useEffect, useRef, useState} from "react";
 import {fetchTimeNow} from "../../api/time/TimeApi.ts";
 import {MarketType} from "../../type/timeType.ts";
+import GoldLineChart from "../../components/GoldLineChart.tsx";
 
 const IndexList = () => {
     const chartTimer = useRef<number>(0);
@@ -333,7 +334,7 @@ const IndexList = () => {
                         area: true,
                         stackOrder: 'ascending',
                         color: goldPriceRes.pred_pre_sig === '2' ? 'red' : 'blue',
-                        data: goldChartMinuteListRes.gds_min_chart_qry.map(item => Number(item.cur_prc.toLocaleString().replace(/^[+-]/, ''))).reverse(),
+                        data: goldChartMinuteListRes.gds_min_chart_qry.map(item => Number(item.cntr_pric.toLocaleString().replace(/^[+-]/, ''))).reverse(),
                     }
                 ],
                 dateList: goldDateList
@@ -492,7 +493,7 @@ const IndexList = () => {
                     <IndexLineChart {...kospi200ChartData} />
                 </Grid>
                 <Grid size={{ xs: 12, md: 6 }}>
-                    <IndexLineChart {...goldChartData} />
+                    <GoldLineChart {...goldChartData} />
                 </Grid>
                 {/*<Grid size={{ xs: 12, md: 6 }}>*/}
                 {/*    <Card variant="outlined" sx={{ width: '100%', mb: 1}}>*/}
