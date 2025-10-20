@@ -7,7 +7,7 @@ import Stack from '@mui/material/Stack';
 import HomeRoundedIcon from '@mui/icons-material/HomeRounded';
 import AnalyticsRoundedIcon from '@mui/icons-material/AnalyticsRounded';
 import PeopleRoundedIcon from '@mui/icons-material/PeopleRounded';
-import AssignmentRoundedIcon from '@mui/icons-material/AssignmentRounded';
+import ShowChartIcon from '@mui/icons-material/ShowChart';
 import SettingsRoundedIcon from '@mui/icons-material/SettingsRounded';
 import InfoRoundedIcon from '@mui/icons-material/InfoRounded';
 import HelpRoundedIcon from '@mui/icons-material/HelpRounded';
@@ -16,7 +16,7 @@ import {useLocation, useNavigate} from "react-router-dom";
 const mainListItems = [
     { id: 1, text: '대시보드', icon: <HomeRoundedIcon />, url: '/' },
     { id: 2, text: '주요 지수', icon: <AnalyticsRoundedIcon />, url: '/index' },
-    { id: 3, text: '차트', icon: <AssignmentRoundedIcon />, url: '/chart' },
+    { id: 3, text: '주식', icon: <ShowChartIcon />, url: '/stock' },
     { id: 4, text: '관심 종목', icon: <PeopleRoundedIcon />, url: '/favorite' },
     { id: 5, text: '보유 주식', icon: <PeopleRoundedIcon />, url: '/holding' },
 ];

@@ -4,87 +4,100 @@ import Grid from "@mui/material/Grid";
 import {GridColDef, GridRowsProp} from "@mui/x-data-grid";
 import StockTable from "../../components/StockTable.tsx";
 import Chip from "@mui/material/Chip";
+import {useEffect, useState} from "react";
+import {fetchStockList} from "../../api/stock/StockApi.ts";
 
 const StockList = () => {
+    const [row, setRow] = useState<GridRowsProp[]>([]);
+
+    useEffect(() => {
+        stockList();
+    }, []);
+
+    const stockList = async () => {
+        try {
+            const data = await fetchStockList();
+
+            if (data.code !== "0000") {
+                throw new Error(data.msg);
+            }
+
+            console.log(data);
+
+            const { trde_prica_upper } = data.result;
+
+            const ranking = trde_prica_upper.map(item => {
+                return {
+                    id: item.stk_cd,
+                    rank: item.now_rank,
+                    stk_nm: item.stk_nm,
+                    flu_rt: item.flu_rt,
+                    cur_prc: item.cur_prc,
+                    trde_prica: item.trde_prica,
+                }
+            });
+
+            setRow(ranking);
+        } catch (error) {
+            console.log(error);
+        }
+    }
+
     function renderStatus(status: number) {
         const colors = status > 0 ? 'error' : 'info';
 
-        return <Chip label={status > 0 ? `+${status}%` : `${status}%`} color={colors} />;
+        return <Chip label={status > 0 ? `${status}%` : `${status}%`} color={colors} />;
     }
 
-    function renderStatus2(status: number) {
-        const text = status.toLocaleString()
-
-        return (
-            <span style={{color: status > 0 ? 'red' : 'blue'}}>
-                {status > 0 ? `+${text}` : `${text}`}
-            </span>
-        )
-    }
+    // function renderStatus2(status: number) {
+    //     const text = status.toLocaleString()
+    //
+    //     return (
+    //         <span style={{color: status > 0 ? 'red' : 'blue'}}>
+    //             {status > 0 ? `+${text}` : `${text}`}
+    //         </span>
+    //     )
+    // }
 
     const columns: GridColDef[] = [
-        { field: 'pageTitle', headerName: '이름', flex: 1.5, minWidth: 180 },
         {
-            field: 'status',
-            headerName: '주가',
+            field: 'rank',
+            headerName: '순위',
+            flex: 1,
+            minWidth: 80,
+            maxWidth: 80
+        },
+        {
+            field: 'stk_nm',
+            headerName: '주식 이름',
+            flex: 1.5,
+            minWidth: 180
+        },
+        {
+            field: 'flu_rt',
+            headerName: '등락률',
             flex: 0.5,
             minWidth: 100,
             renderCell: (params) => renderStatus(params.value as any),
         },
         {
-            field: 'eventCount',
-            headerName: '금액',
+            field: 'cur_prc',
+            headerName: '현재가',
             flex: 1,
             minWidth: 100,
             valueFormatter: (param: number) => {
-                return param.toLocaleString()
+                return Number(param).toLocaleString().replace(/^[+-]/, '')
             }
         },
         {
-            field: 'users',
-            headerName: '증감률',
+            field: 'trde_prica',
+            headerName: '거래대금 (백만)',
             flex: 1,
             minWidth: 100,
-            renderCell: (params) => renderStatus2(params.value as any),
+            valueFormatter: (param: number) => {
+                return Number(param).toLocaleString().replace(/^[+-]/, '')
+            }
         }
-    ];
-
-    const rows: GridRowsProp = [
-        {
-            id: 1,
-            pageTitle: 'SK하이닉스',
-            status: 4.2,
-            eventCount: 212000,
-            users: 4000
-        },
-        {
-            id: 2,
-            pageTitle: '삼성전자',
-            status: 3.3,
-            eventCount: 56100,
-            users: 300
-        },
-        {
-            id: 3,
-            pageTitle: '삼성물산',
-            status: 2.4,
-            eventCount: 154600,
-            users: 3700
-        },
-        {
-            id: 4,
-            pageTitle: '현대건설',
-            status: 2.0,
-            eventCount: 67600,
-            users: 6800
-        },
-        {
-            id: 5,
-            pageTitle: '현대차',
-            status: 1.8,
-            eventCount: 190800,
-            users: 5400
-        },
     ];
 
     return (
@@ -98,7 +111,7 @@ const StockList = () => {
                 columns={12}
                 sx={{ mb: (theme) => theme.spacing(2) }}
             >
-                <StockTable rows={rows} columns={columns} />
+                <StockTable rows={row} columns={columns} />
             </Grid>
         </Box>
     )
