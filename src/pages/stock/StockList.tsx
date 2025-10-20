@@ -6,8 +6,11 @@ import StockTable from "../../components/StockTable.tsx";
 import Chip from "@mui/material/Chip";
 import {useEffect, useState} from "react";
 import {fetchStockList} from "../../api/stock/StockApi.ts";
+import {Tab, Tabs } from "@mui/material";
+import * as React from "react";
 
 const StockList = () => {
+    const [value, setValue] = useState(0);
     const [row, setRow] = useState<GridRowsProp[]>([]);
 
     useEffect(() => {
@@ -24,12 +27,12 @@ const StockList = () => {
 
             console.log(data);
 
-            const { trde_prica_upper } = data.result;
+            const { stockList } = data.result;
 
-            const ranking = trde_prica_upper.map(item => {
+            const ranking = stockList.map(item => {
                 return {
                     id: item.stk_cd,
-                    rank: item.now_rank,
+                    rank: item.rank,
                     stk_nm: item.stk_nm,
                     flu_rt: item.flu_rt,
                     cur_prc: item.cur_prc,
@@ -100,6 +103,39 @@ const StockList = () => {
         }
     ];
 
+    function CustomTabPanel(props: TabPanelProps) {
+        const { children, value, index, ...other } = props;
+
+        return (
+            <div
+                role="tabpanel"
+                hidden={value !== index}
+                id={`simple-tabpanel-${index}`}
+                aria-labelledby={`simple-tab-${index}`}
+                {...other}
+            >
+                {value === index && <Box sx={{ p: 3 }}>{children}</Box>}
+            </div>
+        );
+    }
+
+    const handleChange = (_event: React.SyntheticEvent, newValue: number) => {
+        setValue(newValue);
+    };
+
+    interface TabPanelProps {
+        children?: React.ReactNode;
+        index: number;
+        value: number;
+    }
+
+    function a11yProps(index: number) {
+        return {
+            id: `simple-tab-${index}`,
+            'aria-controls': `simple-tabpanel-${index}`,
+        };
+    }
+
     return (
         <Box sx={{ width: '100%', maxWidth: { sm: '100%', md: '1700px' } }}>
             <Typography component="h2" variant="h6" sx={{ mb: 2 }}>
@@ -111,7 +147,24 @@ const StockList = () => {
                 columns={12}
                 sx={{ mb: (theme) => theme.spacing(2) }}
             >
-                <StockTable rows={row} columns={columns} />
+                <Box sx={{ width: '100%' }}>
+                    <Box sx={{ borderBottom: 1, borderColor: 'divider' }}>
+                        <Tabs value={value} onChange={handleChange} aria-label="basic tabs example">
+                            <Tab label="거래대금 상위" {...a11yProps(0)} />
+                            <Tab label="Item Two" {...a11yProps(1)} />
+                            <Tab label="Item Three" {...a11yProps(2)} />
+                        </Tabs>
+                    </Box>
+                    <CustomTabPanel value={value} index={0}>
+                        <StockTable rows={row} columns={columns} />
+                    </CustomTabPanel>
+                    <CustomTabPanel value={value} index={1}>
+                        Item Two
+                    </CustomTabPanel>
+                    <CustomTabPanel value={value} index={2}>
+                        Item Three
+                    </CustomTabPanel>
+                </Box>
             </Grid>
         </Box>
     )
