@@ -4,18 +4,100 @@ import Grid from "@mui/material/Grid";
 import {GridColDef, GridRowsProp} from "@mui/x-data-grid";
 import StockTable from "../../components/StockTable.tsx";
 import Chip from "@mui/material/Chip";
-import {useEffect, useState} from "react";
+import {useEffect, useRef, useState} from "react";
 import {fetchStockList} from "../../api/stock/StockApi.ts";
 import {Tab, Tabs } from "@mui/material";
 import * as React from "react";
+import {fetchTimeNow} from "../../api/time/TimeApi.ts";
+import {MarketType} from "../../type/timeType.ts";
 
 const StockList = () => {
     const [value, setValue] = useState(0);
     const [row, setRow] = useState<GridRowsProp[]>([]);
 
+    const chartTimer = useRef<number>(0);
+    const marketTimer = useRef<number>(0);
+
     useEffect(() => {
         stockList();
+
+        let chartTimeout: ReturnType<typeof setTimeout>;
+        let socketTimeout: ReturnType<typeof setTimeout>;
+        let interval: ReturnType<typeof setInterval>;
+        let socket: WebSocket;
+
+        (async () => {
+            const marketInfo = await timeNow();
+
+            const now = Date.now() + chartTimer.current;
+            const waitTime = 60_000 - (now % 60_000);
+
+            if (marketInfo.isMarketOpen) {
+                // await indexDetailStream(req);
+                // socket = openSocket();
+            } else {
+                socketTimeout = setTimeout(async () => {
+                    socket?.close();
+
+                    const again = await timeNow();
+                    if (again.isMarketOpen) {
+                        // await indexDetailStream(req);
+                        // socket = openSocket();
+                    }
+                }, marketTimer.current + 200);
+            }
+
+            chartTimeout = setTimeout(() => {
+                stockList();
+                interval = setInterval(() => {
+                    stockList();
+                }, (60 * 1000));
+            }, waitTime + 200);
+        })();
+
+        return () => {
+            socket?.close();
+            clearInterval(socketTimeout);
+            clearTimeout(chartTimeout);
+            clearInterval(interval);
+        }
     }, []);
+
+    const timeNow = async () => {
+        try {
+            const startTime = Date.now();
+            const data = await fetchTimeNow({
+                marketType: MarketType.STOCK
+            });
+
+            if(data.code !== "0000") {
+                throw new Error(data.msg);
+            }
+
+            const { time, isMarketOpen, startMarketTime, marketType } = data.result
+
+            if(marketType !== MarketType.STOCK) {
+                throw new Error(data.msg);
+            }
+
+            const endTime = Date.now();
+            const delayTime = endTime - startTime;
+
+            const revisionServerTime = time + delayTime / 2; // startTime과 endTime 사이에 API 응답을 받기 때문에 2를 나눠서 보정
+
+            chartTimer.current = revisionServerTime - endTime;
+
+            if(!isMarketOpen) {
+                marketTimer.current = startMarketTime - revisionServerTime;
+            }
+
+            return {
+                ...data.result
+            }
+        }catch (error) {
+            console.error(error);
+        }
+    }
 
     const stockList = async () => {
         try {
