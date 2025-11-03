@@ -10,16 +10,22 @@ import {Tab, Tabs } from "@mui/material";
 import * as React from "react";
 import {fetchTimeNow} from "../../api/time/TimeApi.ts";
 import {MarketType} from "../../type/timeType.ts";
+import {StockListReq} from "../../type/StockType.ts";
 
 const StockList = () => {
+    const [req, setReq] = useState<StockListReq>({
+        type: "0",
+    });
+
     const [value, setValue] = useState(0);
     const [row, setRow] = useState<GridRowsProp[]>([]);
+    const [columns, setColumns] = useState<GridColDef[]>([]);
 
     const chartTimer = useRef<number>(0);
     const marketTimer = useRef<number>(0);
 
     useEffect(() => {
-        stockList();
+        stockList(req);
 
         let chartTimeout: ReturnType<typeof setTimeout>;
         let socketTimeout: ReturnType<typeof setTimeout>;
@@ -61,7 +67,7 @@ const StockList = () => {
             clearTimeout(chartTimeout);
             clearInterval(interval);
         }
-    }, []);
+    }, [req]);
 
     const timeNow = async () => {
         try {
@@ -99,9 +105,9 @@ const StockList = () => {
         }
     }
 
-    const stockList = async () => {
+    const stockList = async (req: StockListReq) => {
         try {
-            const data = await fetchStockList();
+            const data = await fetchStockList(req);
 
             if (data.code !== "0000") {
                 throw new Error(data.msg);
@@ -122,6 +128,144 @@ const StockList = () => {
                 }
             });
 
+            let col;
+
+            switch (req.type) {
+                case "0": {
+                    col = [
+                        {
+                            field: 'rank',
+                            headerName: '순위',
+                            flex: 1,
+                            minWidth: 80,
+                            maxWidth: 80
+                        },
+                        {
+                            field: 'stk_nm',
+                            headerName: '주식 이름',
+                            flex: 1.5,
+                            minWidth: 180
+                        },
+                        {
+                            field: 'flu_rt',
+                            headerName: '등락률',
+                            flex: 0.5,
+                            minWidth: 100,
+                            renderCell: (params) => renderStatus(params.value as any),
+                        },
+                        {
+                            field: 'cur_prc',
+                            headerName: '현재가',
+                            flex: 1,
+                            minWidth: 100,
+                            valueFormatter: (param: number) => {
+                                return Number(param).toLocaleString().replace(/^[+-]/, '')
+                            }
+                        },
+                        {
+                            field: 'trde_prica',
+                            headerName: '거래대금 (백만)',
+                            flex: 1,
+                            minWidth: 100,
+                            valueFormatter: (param: number) => {
+                                return Number(param).toLocaleString().replace(/^[+-]/, '')
+                            }
+                        }
+                    ];
+
+                    break;
+                }
+                case "1": {
+                    col = [
+                        {
+                            field: 'rank',
+                            headerName: '순위',
+                            flex: 1,
+                            minWidth: 80,
+                            maxWidth: 80
+                        },
+                        {
+                            field: 'stk_nm',
+                            headerName: '주식 이름',
+                            flex: 1.5,
+                            minWidth: 180
+                        },
+                        {
+                            field: 'flu_rt',
+                            headerName: '등락률',
+                            flex: 0.5,
+                            minWidth: 100,
+                            renderCell: (params) => renderStatus(params.value as any),
+                        },
+                        {
+                            field: 'cur_prc',
+                            headerName: '현재가',
+                            flex: 1,
+                            minWidth: 100,
+                            valueFormatter: (param: number) => {
+                                return Number(param).toLocaleString().replace(/^[+-]/, '')
+                            }
+                        },
+                        {
+                            field: 'trde_prica',
+                            headerName: '거래량',
+                            flex: 1,
+                            minWidth: 100,
+                            valueFormatter: (param: number) => {
+                                return Number(param).toLocaleString().replace(/^[+-]/, '')
+                            }
+                        }
+                    ];
+
+                    break;
+                }
+                default: {
+                    col = [
+                        {
+                            field: 'rank',
+                            headerName: '순위',
+                            flex: 1,
+                            minWidth: 80,
+                            maxWidth: 80
+                        },
+                        {
+                            field: 'stk_nm',
+                            headerName: '주식 이름',
+                            flex: 1.5,
+                            minWidth: 180
+                        },
+                        {
+                            field: 'flu_rt',
+                            headerName: '등락률',
+                            flex: 0.5,
+                            minWidth: 100,
+                            renderCell: (params: string) => renderStatus(params.value as any),
+                        },
+                        {
+                            field: 'cur_prc',
+                            headerName: '현재가',
+                            flex: 1,
+                            minWidth: 100,
+                            valueFormatter: (param: number) => {
+                                return Number(param).toLocaleString().replace(/^[+-]/, '')
+                            }
+                        },
+                        {
+                            field: 'trde_prica',
+                            headerName: '거래량 급증률',
+                            flex: 1,
+                            minWidth: 100,
+                            valueFormatter: (param: string) => {
+                                return `${Number(param.replace(/^[+-]/, '')).toLocaleString()}%`
+                            }
+                        }
+                    ];
+
+                    break;
+                }
+            }
+
+            setColumns(col);
             setRow(ranking);
         } catch (error) {
             console.log(error);
@@ -144,46 +288,46 @@ const StockList = () => {
     //     )
     // }
 
-    const columns: GridColDef[] = [
-        {
-            field: 'rank',
-            headerName: '순위',
-            flex: 1,
-            minWidth: 80,
-            maxWidth: 80
-        },
-        {
-            field: 'stk_nm',
-            headerName: '주식 이름',
-            flex: 1.5,
-            minWidth: 180
-        },
-        {
-            field: 'flu_rt',
-            headerName: '등락률',
-            flex: 0.5,
-            minWidth: 100,
-            renderCell: (params) => renderStatus(params.value as any),
-        },
-        {
-            field: 'cur_prc',
-            headerName: '현재가',
-            flex: 1,
-            minWidth: 100,
-            valueFormatter: (param: number) => {
-                return Number(param).toLocaleString().replace(/^[+-]/, '')
-            }
-        },
-        {
-            field: 'trde_prica',
-            headerName: '거래대금 (백만)',
-            flex: 1,
-            minWidth: 100,
-            valueFormatter: (param: number) => {
-                return Number(param).toLocaleString().replace(/^[+-]/, '')
-            }
-        }
-    ];
+    // const columns: GridColDef[] = [
+    //     {
+    //         field: 'rank',
+    //         headerName: '순위',
+    //         flex: 1,
+    //         minWidth: 80,
+    //         maxWidth: 80
+    //     },
+    //     {
+    //         field: 'stk_nm',
+    //         headerName: '주식 이름',
+    //         flex: 1.5,
+    //         minWidth: 180
+    //     },
+    //     {
+    //         field: 'flu_rt',
+    //         headerName: '등락률',
+    //         flex: 0.5,
+    //         minWidth: 100,
+    //         renderCell: (params) => renderStatus(params.value as any),
+    //     },
+    //     {
+    //         field: 'cur_prc',
+    //         headerName: '현재가',
+    //         flex: 1,
+    //         minWidth: 100,
+    //         valueFormatter: (param: number) => {
+    //             return Number(param).toLocaleString().replace(/^[+-]/, '')
+    //         }
+    //     },
+    //     {
+    //         field: 'trde_prica',
+    //         headerName: '거래대금 (백만)',
+    //         flex: 1,
+    //         minWidth: 100,
+    //         valueFormatter: (param: number) => {
+    //             return Number(param).toLocaleString().replace(/^[+-]/, '')
+    //         }
+    //     }
+    // ];
 
     function CustomTabPanel(props: TabPanelProps) {
         const { children, value, index, ...other } = props;
@@ -203,6 +347,7 @@ const StockList = () => {
 
     const handleChange = (_event: React.SyntheticEvent, newValue: number) => {
         setValue(newValue);
+        setReq({type: `${newValue}`});
     };
 
     interface TabPanelProps {
@@ -233,18 +378,18 @@ const StockList = () => {
                     <Box sx={{ borderBottom: 1, borderColor: 'divider' }}>
                         <Tabs value={value} onChange={handleChange} aria-label="basic tabs example">
                             <Tab label="거래대금 상위" {...a11yProps(0)} />
-                            <Tab label="Item Two" {...a11yProps(1)} />
-                            <Tab label="Item Three" {...a11yProps(2)} />
+                            <Tab label="거래량 상위" {...a11yProps(1)} />
+                            <Tab label="거래량 급증률 상위" {...a11yProps(2)} />
                         </Tabs>
                     </Box>
                     <CustomTabPanel value={value} index={0}>
                         <StockTable rows={row} columns={columns} />
                     </CustomTabPanel>
                     <CustomTabPanel value={value} index={1}>
-                        Item Two
+                        <StockTable rows={row} columns={columns} />
                     </CustomTabPanel>
                     <CustomTabPanel value={value} index={2}>
-                        Item Three
+                        <StockTable rows={row} columns={columns} />
                     </CustomTabPanel>
                 </Box>
             </Grid>

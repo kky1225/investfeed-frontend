@@ -18,7 +18,7 @@ const StockTable = (
             initialState={{
                 pagination: { paginationModel: { pageSize: 20 } },
             }}
-            pageSizeOptions={[10, 20, 50]}
+            pageSizeOptions={[10, 20, 50, 100]}
             disableColumnResize
             density="compact"
             slotProps={{
