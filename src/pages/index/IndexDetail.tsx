@@ -16,7 +16,11 @@ import MenuItem from "@mui/material/MenuItem";
 import IndexDetailLineChart, {CustomIndexDetailLineChartProps} from "../../components/IndexDetailLineChart.tsx";
 import InvestorBarChart from "../../components/InvestorBarChart.tsx";
 import {fetchIndexDetail, fetchIndexDetailStream, fetchIndexListStream} from "../../api/index/IndexApi.ts";
-import {ChartType, indexDetailReq, indexDetailSteamReq} from "../../type/IndexType.ts";
+import {
+    IndexChartType,
+    IndexDetailReq,
+    IndexDetailSteamReq
+} from "../../type/IndexType.ts";
 import {GridColDef} from "@mui/x-data-grid";
 import RemoveIcon from "@mui/icons-material/Remove";
 import CheckIcon from "@mui/icons-material/Check";
@@ -53,9 +57,9 @@ const IndexDetail = () => {
 
     const chartTimer = useRef<number>(0);
     const marketTimer = useRef<number>(0);
-    const [req, setReq] = useState<indexDetailReq>({
-        inds_cd: id,
-        chart_type: ChartType.DAY
+    const [req, setReq] = useState<IndexDetailReq>({
+        inds_cd: id || "",
+        chart_type: IndexChartType.DAY
     });
 
     const [sectChartData, setSectChartData] = useState<CustomIndexDetailLineChartProps>({
@@ -159,7 +163,7 @@ const IndexDetail = () => {
         }
     }, [req]);
 
-    const indexDetail = async (req: indexDetailReq) => {
+    const indexDetail = async (req: IndexDetailReq) => {
         try {
             const data = await fetchIndexDetail(req);
 
@@ -178,11 +182,11 @@ const IndexDetail = () => {
             let lineData, barDataList;
 
             switch (req.chart_type) {
-                case ChartType.MINUTE_1:
-                case ChartType.MINUTE_3:
-                case ChartType.MINUTE_5:
-                case ChartType.MINUTE_10:
-                case ChartType.MINUTE_30: {
+                case IndexChartType.MINUTE_1:
+                case IndexChartType.MINUTE_3:
+                case IndexChartType.MINUTE_5:
+                case IndexChartType.MINUTE_10:
+                case IndexChartType.MINUTE_30: {
                     year = chartListRes.inds_min_pole_qry[0].cntr_tm.substring(0, 4);
                     month = chartListRes.inds_min_pole_qry[0].cntr_tm.substring(4, 6);
                     day = chartListRes.inds_min_pole_qry[0].cntr_tm.substring(6, 8);
@@ -198,7 +202,7 @@ const IndexDetail = () => {
 
                     break;
                 }
-                case ChartType.DAY: {
+                case IndexChartType.DAY: {
                     year = chartListRes.inds_dt_pole_qry[0].dt.substring(0, 4);
                     month = chartListRes.inds_dt_pole_qry[0].dt.substring(4, 6);
                     day = chartListRes.inds_dt_pole_qry[0].dt.substring(6, 8);
@@ -214,7 +218,7 @@ const IndexDetail = () => {
 
                     break;
                 }
-                case ChartType.WEEK: {
+                case IndexChartType.WEEK: {
                     year = chartListRes.inds_stk_pole_qry[0].dt.substring(0, 4);
                     month = chartListRes.inds_stk_pole_qry[0].dt.substring(4, 6);
                     day = chartListRes.inds_stk_pole_qry[0].dt.substring(6, 8);
@@ -230,7 +234,7 @@ const IndexDetail = () => {
 
                     break;
                 }
-                case ChartType.MONTH: {
+                case IndexChartType.MONTH: {
                     year = chartListRes.inds_mth_pole_qry[0].dt.substring(0, 4);
                     month = chartListRes.inds_mth_pole_qry[0].dt.substring(4, 6);
                     day = chartListRes.inds_mth_pole_qry[0].dt.substring(6, 8);
@@ -246,7 +250,7 @@ const IndexDetail = () => {
 
                     break;
                 }
-                case ChartType.YEAR: {
+                case IndexChartType.YEAR: {
                     year = chartListRes.inds_yr_pole_qry[0].dt.substring(0, 4);
                     month = chartListRes.inds_yr_pole_qry[0].dt.substring(4, 6);
                     day = chartListRes.inds_yr_pole_qry[0].dt.substring(6, 8);
@@ -313,7 +317,7 @@ const IndexDetail = () => {
             ]);
 
             const yearMin = sectPriceRes['52wk_lwst_pric'].replace(/^[+-]/, '');
-            const yearMax = sectPriceRes['52wk_hgst_pric'].replace(/^[+-]/, '')
+            const yearMax = sectPriceRes['52wk_hgst_pric'].replace(/^[+-]/, '');
 
             setYearRange([
                 {
@@ -346,7 +350,7 @@ const IndexDetail = () => {
             };
 
             setMessage(message);
-        }catch(error) {
+        } catch(error) {
             console.error(error);
         }
     }
@@ -387,7 +391,7 @@ const IndexDetail = () => {
         }
     }
 
-    const indexDetailStream = async (req: indexDetailSteamReq) => {
+    const indexDetailStream = async (req: IndexDetailSteamReq) => {
         try {
             const data = await fetchIndexDetailStream(req);
 
@@ -499,11 +503,9 @@ const IndexDetail = () => {
                 newAlignment = newAlignment + '_' + minute.current;
             }
 
-            console.log(newAlignment);
-
             setReq({
                 ...req,
-                chart_type: newAlignment as ChartType
+                chart_type: newAlignment as IndexChartType
             })
         }
     };
@@ -515,7 +517,7 @@ const IndexDetail = () => {
 
         setReq({
             ...req,
-            chart_type: value as ChartType
+            chart_type: value as IndexChartType
         })
     }
 
@@ -539,20 +541,29 @@ const IndexDetail = () => {
         let title: string;
         let icon: JSX.Element;
 
-        if(orgn > 0 && frgnr > 0) {
-            message = '기관과 외국인이 매수 중입니다.'
+        if (orgn == 0) {
+            message = '기관 관망, '
+        } else if (orgn > 0) {
+            message = '기관 매수, '
+        } else {
+            message = '기관 매도, '
+        }
+
+        if (frgnr == 0) {
+            message = message + '외국인 관망 중입니다.'
+        } else if (frgnr > 0) {
+            message = message + '외국인 매수 중입니다.'
+        } else {
+            message = message + '외국인 매도 중입니다.'
+        }
+
+        if (orgn > 0 && frgnr > 0) {
             title = `${name} 투자 양호`
             icon = <CheckIcon color="success" />;
-        }else if(orgn > 0 && frgnr < 0) {
-            message = '기관 매수, 외국인 매도 중입니다.'
+        } else if(orgn > 0 || frgnr > 0) {
             title = `${name} 투자 주의`
             icon = <PriorityHighIcon color="warning" />
-        }else if(orgn < 0 && frgnr > 0) {
-            message = '기관 매도, 외국인 매수 중입니다.'
-            title = `${name} 투자 주의`
-            icon = <PriorityHighIcon color="warning" />
-        }else {
-            message = '기관과 외국인이 매도 중입니다.'
+        } else {
             title = `${name} 투자 위험`
             icon = <DoNotDisturbIcon color="error" />
         }

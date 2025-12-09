@@ -43,7 +43,7 @@ const IndexBarChart = (
                 }
             ]}
             height={278}
-            margin={{ left: 10, right: 20, top: 20, bottom: 20 }}
+            margin={{ left: 20, right: 20, top: 20, bottom: 20 }}
             grid={{ horizontal: true }}
         />
     )

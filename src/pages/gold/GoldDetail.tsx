@@ -286,20 +286,21 @@ const GoldDetail = () => {
         let title: string;
         let icon: JSX.Element;
 
-        if(orgn >= 0 && frgnr >= 0) {
-            message = '기관과 외국인이 매수 중입니다.'
+        if (orgn == 0) {
+            message = '기관 관망 중입니다.'
+        } else if (orgn > 0) {
+            message = '기관 매수 중입니다.'
+        } else {
+            message = '기관 매도 중입니다.'
+        }
+
+        if (orgn > 0) {
             title = `${name} 투자 양호`
             icon = <CheckIcon color="success" />;
-        }else if(orgn >= 0 && frgnr <= 0) {
-            message = '기관 매수, 외국인 매도 중입니다.'
+        } else if(orgn == 0) {
             title = `${name} 투자 주의`
             icon = <PriorityHighIcon color="warning" />
-        }else if(orgn <= 0 && frgnr >= 0) {
-            message = '기관 매도, 외국인 매수 중입니다.'
-            title = `${name} 투자 주의`
-            icon = <PriorityHighIcon color="warning" />
-        }else {
-            message = '기관과 외국인이 매도 중입니다.'
+        } else {
             title = `${name} 투자 위험`
             icon = <DoNotDisturbIcon color="error" />
         }
