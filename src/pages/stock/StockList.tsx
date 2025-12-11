@@ -383,13 +383,13 @@ const StockList = () => {
                         </Tabs>
                     </Box>
                     <CustomTabPanel value={value} index={0}>
-                        <StockTable rows={row} columns={columns} />
+                        <StockTable rows={row} columns={columns} pageSize={100} />
                     </CustomTabPanel>
                     <CustomTabPanel value={value} index={1}>
-                        <StockTable rows={row} columns={columns} />
+                        <StockTable rows={row} columns={columns} pageSize={100} />
                     </CustomTabPanel>
                     <CustomTabPanel value={value} index={2}>
-                        <StockTable rows={row} columns={columns} />
+                        <StockTable rows={row} columns={columns} pageSize={100} />
                     </CustomTabPanel>
                 </Box>
             </Grid>

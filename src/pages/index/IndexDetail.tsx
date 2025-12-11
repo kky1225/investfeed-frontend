@@ -368,7 +368,7 @@ const IndexDetail = () => {
 
             const { time, isMarketOpen, startMarketTime, marketType } = data.result
 
-            if(marketType !== MarketType.INDEX) {
+            if (marketType !== MarketType.INDEX) {
                 throw new Error(data.msg);
             }
 
@@ -386,7 +386,7 @@ const IndexDetail = () => {
             return {
                 ...data.result
             }
-        }catch (error) {
+        } catch (error) {
             console.error(error);
         }
     }

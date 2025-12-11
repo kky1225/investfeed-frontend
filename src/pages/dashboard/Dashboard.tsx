@@ -376,20 +376,29 @@ export default function Dashboard() {
         let title: string;
         let icon: JSX.Element;
 
-        if(orgn > 0 && frgnr > 0) {
-            message = '기관과 외국인이 매수 중입니다.'
+        if (orgn == 0) {
+            message = '기관 관망, '
+        } else if (orgn > 0) {
+            message = '기관 매수, '
+        } else {
+            message = '기관 매도, '
+        }
+
+        if (frgnr == 0) {
+            message = message + '외국인 관망 중입니다.'
+        } else if (frgnr > 0) {
+            message = message + '외국인 매수 중입니다.'
+        } else {
+            message = message + '외국인 매도 중입니다.'
+        }
+
+        if (orgn > 0 && frgnr > 0) {
             title = `${name} 투자 양호`
             icon = <CheckIcon color="success" />;
-        }else if(orgn > 0 && frgnr < 0) {
-            message = '기관 매수, 외국인 매도 중입니다.'
+        } else if(orgn > 0 || frgnr > 0) {
             title = `${name} 투자 주의`
             icon = <PriorityHighIcon color="warning" />
-        }else if(orgn < 0 && frgnr > 0) {
-            message = '기관 매도, 외국인 매수 중입니다.'
-            title = `${name} 투자 주의`
-            icon = <PriorityHighIcon color="warning" />
-        }else {
-            message = '기관과 외국인이 매도 중입니다.'
+        } else {
             title = `${name} 투자 위험`
             icon = <DoNotDisturbIcon color="error" />
         }
@@ -568,7 +577,7 @@ export default function Dashboard() {
             </Grid>
             <Grid container spacing={2} columns={12}>
                 <Grid size={{ xs: 12, lg: 7 }}>
-                    <CustomDataTable rows={row} columns={columns} />
+                    <CustomDataTable rows={row} columns={columns} pageSize={20} />
                 </Grid>
                 <Grid size={{ xs: 12, lg: 5 }}>
                     <Stack gap={2} direction={{ xs: 'column', sm: 'row', lg: 'column' }}>

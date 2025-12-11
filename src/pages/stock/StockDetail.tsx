@@ -5,21 +5,29 @@ import CardContent from "@mui/material/CardContent";
 import Stack from "@mui/material/Stack";
 import Chip from "@mui/material/Chip";
 import Card from "@mui/material/Card";
-import InvestorLineChart, {CustomLineChartProps} from "../../components/InvestorLineChart.tsx";
-import { useState, MouseEvent } from "react";
-// import CandlestickChartIcon from '@mui/icons-material/CandlestickChart';
-// import StackedLineChartIcon from '@mui/icons-material/StackedLineChart';
+import {useState, MouseEvent, useRef, useEffect, ReactElement, JSX} from "react";
+import CandlestickChartIcon from '@mui/icons-material/CandlestickChart';
+import StackedLineChartIcon from '@mui/icons-material/StackedLineChart';
 import ToggleButton from '@mui/material/ToggleButton';
 import ToggleButtonGroup, {
     toggleButtonGroupClasses,
 } from '@mui/material/ToggleButtonGroup';
+import {Select, SelectChangeEvent, Slider} from "@mui/material";
 import {styled} from "@mui/material/styles";
-import {Select, SelectChangeEvent} from "@mui/material";
 import MenuItem from "@mui/material/MenuItem";
-import IndexDetailLineChart from "../../components/IndexDetailLineChart.tsx";
+import {useParams} from "react-router-dom";
+import {StockChartType, StockDetailReq} from "../../type/StockType.ts";
+import StockDetailLineChart, {CustomStockDetailLineChartProps} from "../../components/StockDetailLineChart.tsx";
+import {fetchStockDetail} from "../../api/stock/StockApi.ts";
 import InvestorBarChart from "../../components/InvestorBarChart.tsx";
+import RemoveIcon from "@mui/icons-material/Remove";
+import CheckIcon from "@mui/icons-material/Check";
+import PriorityHighIcon from "@mui/icons-material/PriorityHigh";
+import DoNotDisturbIcon from "@mui/icons-material/DoNotDisturb";
+import CustomDataTable from "../../components/CustomDataTable.tsx";
 import {GridColDef, GridRowsProp} from "@mui/x-data-grid";
-import OptionTable from "../../components/OptionTable.tsx";
+import {fetchTimeNow} from "../../api/time/TimeApi.ts";
+import {MarketType} from "../../type/timeType.ts";
 
 const StyledToggleButtonGroup = styled(ToggleButtonGroup)(({ theme }) => ({
     border: 'none',
@@ -38,245 +46,529 @@ const StyledToggleButtonGroup = styled(ToggleButtonGroup)(({ theme }) => ({
         },
 }));
 
-const IndexDetail = () => {
-    const data: CustomLineChartProps = {
+interface StockRangeProps {
+    value: number;
+    label: ReactElement;
+}
+
+const StockDetail = () => {
+    const { id } = useParams();
+    const [req, setReq] = useState<StockDetailReq>({
+        stk_cd: id || "",
+        chart_type: StockChartType.DAY
+    });
+
+    const chartTimer = useRef<number>(0);
+    const marketTimer = useRef<number>(0);
+
+    const [toggle, setToggle] = useState('DAY');
+    const [formats, setFormats] = useState('line');
+    const minute = useRef('1');
+
+    const [stockChartData, setStockChartData] = useState<CustomStockDetailLineChartProps>({
+        id: '-',
+        title: '-',
+        value: '-',
+        fluRt: '0',
+        openPric: 0,
+        interval: '-',
+        trend: 'neutral',
         seriesData: [
             {
-                id: 'direct',
+                id: '',
                 showMark: false,
                 curve: 'linear',
                 area: true,
                 stackOrder: 'ascending',
-                color: 'red',
-                data: [
-                    2644.4, 2634.4, 2604.7, 2601.2, 2600.3, 2612.4, 2603.4, 2591.5, 2594.8, 2591.2, 2589.9, 2593.4,
-                    2599.4, 2604.4, 2614.3, 2619.6, 2621.3, 2626.3, 2633.9, 2635.5, 2635.9, 2644.4, 2649.3,
-                    2653.5, 2655.7, 2661.4, 2666.6, 2669.1, 2670.4, 2673.4, 2680.8
+                color: 'grey',
+                data: []
+            }
+        ],
+        barDataList: [],
+        dateList: []
+    });
+
+    useEffect(() => {
+        stockDetail(req);
+
+        let chartTimeout: ReturnType<typeof setTimeout>;
+        let socketTimeout: ReturnType<typeof setTimeout>;
+        let interval: ReturnType<typeof setInterval>;
+        let socket: WebSocket;
+
+        (async() => {
+            const marketInfo = await timeNow();
+
+            const now = Date.now() + chartTimer.current;
+            const waitTime = 60_000 - (now % 60_000);
+
+            if (marketInfo.isMarketOpen) {
+
+            } else {
+
+            }
+
+            chartTimeout = setTimeout(() => {
+                stockDetail(req);
+                interval = setInterval(() => {
+                    stockDetail(req);
+                }, (60 * 1000));
+            }, waitTime + 200);
+        })();
+    }, [req])
+
+    const stockDetail = async (req: StockDetailReq) => {
+        try {
+            const data = await fetchStockDetail(req);
+
+            console.log(data);
+
+            const { stockInfo, stockChartList, stockInvestorList } = data.result;
+
+            let dateList;
+            let lineData, barDataList;
+
+            switch (req.chart_type) {
+                case StockChartType.MINUTE_1:
+                case StockChartType.MINUTE_3:
+                case StockChartType.MINUTE_5:
+                case StockChartType.MINUTE_10:
+                case StockChartType.MINUTE_30: {
+                    dateList = stockChartList.map((item: { dt: string }) => {
+                        return `${item.dt.slice(0, 4)}.${item.dt.slice(4, 6)}.${item.dt.slice(6, 8)} ${item.dt.slice(8, 10)}:${item.dt.slice(10, 12)}`
+                    }).reverse();
+
+                    lineData = stockChartList.map((item: { cur_prc: string }) => item.cur_prc.replace(/^[+-]/, '')).reverse();
+                    barDataList = stockChartList.map((item: { trde_qty: string }) => item.trde_qty).reverse();
+
+                    break;
+                }
+                case StockChartType.DAY:
+                case StockChartType.WEEK:
+                case StockChartType.MONTH:
+                case StockChartType.YEAR: {
+                    dateList = stockChartList.map((item: { dt: string }) => {
+                        return `${item.dt.slice(0, 4)}.${item.dt.slice(4, 6)}.${item.dt.slice(6, 8)}`
+                    }).reverse();
+
+                    lineData = stockChartList.map((item: { cur_prc: string }) => item.cur_prc).reverse();
+                    barDataList = stockChartList.map((item: { trde_qty: string }) => item.trde_qty.slice(0, 3)).reverse();
+
+                    break;
+                }
+            }
+
+            const year = stockInfo.tm.substring(0, 4);
+            const month = stockInfo.tm.substring(4, 6);
+            const day = stockInfo.tm.substring(6, 8);
+            const hour = stockInfo.tm.substring(8, 10);
+            const minute = stockInfo.tm.substring(10, 12);
+            let today;
+            if(Number(hour) >= 20 || Number(hour) < 8) {
+                today = `${year}.${month}.${day} 장마감`;
+            } else {
+                today = `${year}.${month}.${day} ${hour}:${minute}`;
+            }
+
+            setStockChartData({
+                id: stockInfo.stk_cd,
+                title: stockInfo.stk_nm,
+                value: Number(stockInfo.cur_prc.replace(/^[+-]/, '')).toLocaleString(),
+                fluRt: stockInfo.flu_rt,
+                openPric: parseFloat(stockInfo.open_pric),
+                interval: today,
+                trend: stockInfo.pre_sig === '5' ? 'down' : stockInfo.pre_sig === '2' ? 'up' : 'neutral',
+                seriesData: [
+                    {
+                        id: id,
+                        showMark: false,
+                        curve: 'linear',
+                        area: true,
+                        stackOrder: 'ascending',
+                        color: 'grey',
+                        data: lineData
+                    }
                 ],
-            },
-        ]
+                barDataList: barDataList,
+                dateList: dateList
+            });
+
+            setInfo({
+                trde_qty: Number(stockInfo.trde_qty),
+                trde_prica: Number(stockInfo.trde_prica.substring(0, 7)),
+                open_pric: Number(stockInfo.open_pric.replace(/^[+-]/, '')),
+                cur_prc: Number(stockInfo.cur_prc.replace(/^[+-]/, '')),
+                _250hgst: Number(stockInfo._250hgst.replace(/^[+-]/, '')),
+                _250lwst: Number(stockInfo._250lwst.replace(/^[+-]/, '')),
+                per: Number(stockInfo.per),
+                eps: Number(stockInfo.eps),
+                roe: Number(stockInfo.roe),
+                pbr: Number(stockInfo.pbr)
+            });
+
+            setBarData([
+                Number(stockInvestorList[0].ind_invsr.toLocaleString()),
+                Number(stockInvestorList[0].orgn.toLocaleString()),
+                Number(stockInvestorList[0].frgnr_invsr.toLocaleString())
+            ]);
+
+            const message = {
+                ...checkInvestor(
+                    stockInfo.stk_nm,
+                    stockInvestorList[0].orgn,
+                    stockInvestorList[0].frgnr_invsr
+                )
+            };
+
+            setMessage(message);
+
+            const dayMin = Number(stockInfo.low_pric.replace(/^[+-]/, ''));
+            const dayMax = Number(stockInfo.high_pric.replace(/^[+-]/, ''));
+
+            setDayRange([
+                {
+                    value: dayMin,
+                    label: <p>1일 최저가 <br />{dayMin.toLocaleString()}</p>
+                },
+                {
+                    value: dayMax,
+                    label: <p>1일 최고가 <br />{dayMax.toLocaleString()}</p>
+                }
+            ]);
+
+            const yearMin = Number(stockInfo._250lwst.replace(/^[+-]/, ''));
+            const yearMax = Number(stockInfo._250hgst.replace(/^[+-]/, ''));
+
+            setYearRange([
+                {
+                    value: yearMin,
+                    label: <p>52주 최저가 <br />{yearMin.toLocaleString()}</p>
+                },
+                {
+                    value: yearMax,
+                    label: <p>52주 최고가 <br />{yearMax.toLocaleString()}</p>
+                }
+            ]);
+
+            const investor = stockInvestorList.map((item: {
+                dt: string; ind_invsr: string; frgnr_invsr: string; orgn: string; fnnc_invt: string; insrnc: string; etc_fnnc: string; invtrt: string; samo_fund: string; penfnd_etc: string; bank: string; etc_corp: string; natfor: string;
+            }) => {
+                return {
+                    id: item.dt,
+                    dt: `${(item.dt).substring(0, 4)}-${(item.dt).substring(4, 6)}-${(item.dt).substring(6, 8)}`,
+                    ind_invsr: Number(item.ind_invsr),
+                    frgnr_invsr: Number(item.frgnr_invsr),
+                    orgn: Number(item.orgn),
+                    fnnc_invt: Number(item.fnnc_invt),
+                    insrnc: Number(item.insrnc),
+                    etc_fnnc: Number(item.etc_fnnc),
+                    invtrt: Number(item.invtrt),
+                    samo_fund: Number(item.samo_fund),
+                    penfnd_etc: Number(item.penfnd_etc),
+                    bank: Number(item.bank),
+                    etc_corp: Number(item.etc_corp),
+                    natfor: Number(item.natfor),
+                }
+            });
+
+            setRow(investor);
+        } catch(error) {
+            console.error(error);
+        }
     }
 
-    const data2: CustomLineChartProps = [
+    const timeNow = async () => {
+        try {
+            const startTime = Date.now();
+            const data = await fetchTimeNow({
+                marketType: MarketType.STOCK
+            });
+
+            if (data.code !== "0000") {
+                throw new Error(data.msg);
+            }
+
+            const { time, isMarketOpen, startMarketTime, marketType } = data.result;
+
+            if (marketType !== MarketType.STOCK) {
+                throw new Error(data.msg);
+            }
+
+            const endTime = Date.now();
+            const delayTime = endTime - startTime;
+
+            const revisionServerTime = time + delayTime / 2; // startTime과 endTime 사이에 API 응답을 받기 때문에 2를 나눠서 보정
+
+            chartTimer.current = revisionServerTime - endTime;
+
+            if(!isMarketOpen) {
+                marketTimer.current = startMarketTime - revisionServerTime;
+            }
+
+            return {
+                ...data.result
+            }
+        } catch (error) {
+            console.error(error);
+        }
+    }
+
+    interface StockInfoProps {
+        trde_qty: number;
+        trde_prica: number;
+        open_pric: number;
+        cur_prc: number;
+        _250hgst: number;
+        _250lwst: number;
+        per: number;
+        eps: number;
+        roe: number;
+        pbr: number;
+    }
+
+    const [info, setInfo] = useState<StockInfoProps>({
+        trde_qty: 0,
+        trde_prica: 0,
+        open_pric: 0,
+        cur_prc: 0,
+        _250hgst: 0,
+        _250lwst: 0,
+        per: 0,
+        eps: 0,
+        roe: 0,
+        pbr: 0
+    });
+
+    const [barData, setBarData] = useState<Array<number>>([0, 0, 0]);
+
+    interface MessageProps {
+        icon: JSX.Element,
+        title: string,
+        message: string
+    }
+    const [message, setMessage] = useState<MessageProps>({
+        icon: <RemoveIcon />,
+        title: '-',
+        message: '-'
+    });
+
+    const [dayRange, setDayRange] = useState<StockRangeProps[]>([
         {
-            id: 'direct',
-            label: '개인',
-            showMark: false,
-            curve: 'linear',
-            area: true,
-            stackOrder: 'ascending',
-            color: 'green',
-            data: [
-                -300, -900, -600, -1200, -1500, -1800, -2400, -2100, -2700, -3000, -1800, -3300,
-                -3600, -3900, -4200, -4500, -3900, -4800, -5100, -5400, -4800, -5700, -6000,
-                -6300, -6600, -6900, -7200, -7500, -7800, -8100, -8000
-            ],
+            value: 0.0,
+            label: <p>1일 최저가 <br />0</p>
         },
         {
-            id: 'referral',
-            label: '기관',
-            showMark: false,
-            curve: 'linear',
-            area: true,
-            stackOrder: 'ascending',
-            color: 'blue',
-            data: [
-                500, 900, 700, 1400, 1100, 1700, 2300, 2000, 2600, 2900, 2300, 3200,
-                3500, 3800, 4100, 4400, 2900, 4700, 5000, 5300, 5600, 5900, 6200,
-                6500, 5600, 6800, 7100, 7400, 7700, 8000, 7500
-            ],
+            value: 0.0,
+            label: <p>1일 최고가 <br />0</p>,
+        }
+    ]);
+
+    const [yearRange, setYearRange] = useState<StockRangeProps[]>([
+        {
+            value: 0,
+            label: <p>52주 최저가 <br />0</p>,
         },
         {
-            id: 'organic',
-            label: '외국인',
-            showMark: false,
-            curve: 'linear',
-            stackOrder: 'ascending',
-            color: 'red',
-            data: [
-                1000, 1500, 1200, 1700, 1300, 2000, 2400, 2200, 2600, 2800, 2500,
-                3000, 3400, 3700, 3200, 3900, 4100, 3500, 4300, 4500, 4000, 4700,
-                5000, 5200, 4800, 5400, 5600, 5900, 6100, 6300, 6800
-            ],
-            area: true,
+            value: 0,
+            label: <p>52주 최고가 <br />0</p>,
+        }
+    ]);
+
+    const [row, setRow] = useState<GridRowsProp[]>([]);
+    const columns: GridColDef[] = [
+        {
+            field: 'dt',
+            headerName: '날짜',
+            flex: 1,
+            minWidth: 100,
+            maxWidth: 120
         },
+        {
+            field: 'ind_invsr',
+            headerName: '개인',
+            flex: 1,
+            minWidth: 100,
+            renderCell: (params) => renderTrade(params.value as number),
+        },
+        {
+            field: 'frgnr_invsr',
+            headerName: '외국인',
+            flex: 1,
+            minWidth: 100,
+            renderCell: (params) => renderTrade(params.value as number),
+        },
+        {
+            field: 'orgn',
+            headerName: '기관계',
+            flex: 1,
+            minWidth: 100,
+            renderCell: (params) => renderTrade(params.value as number),
+        },
+        {
+            field: 'fnnc_invt',
+            headerName: '금융투자',
+            flex: 1,
+            minWidth: 100,
+            renderCell: (params) => renderTrade(params.value as number),
+        },
+        {
+            field: 'insrnc',
+            headerName: '보험',
+            flex: 1,
+            minWidth: 100,
+            renderCell: (params) => renderTrade(params.value as number),
+        },
+        {
+            field: 'etc_fnnc',
+            headerName: '기타금융',
+            flex: 1,
+            minWidth: 100,
+            renderCell: (params) => renderTrade(params.value as number),
+        },
+        {
+            field: 'invtrt',
+            headerName: '투신',
+            flex: 1,
+            minWidth: 100,
+            renderCell: (params) => renderTrade(params.value as number),
+        },
+        {
+            field: 'samo_fund',
+            headerName: '사모펀드',
+            flex: 1,
+            minWidth: 100,
+            renderCell: (params) => renderTrade(params.value as number),
+        },
+        {
+            field: 'penfnd_etc',
+            headerName: '연기금등',
+            flex: 1,
+            minWidth: 100,
+            renderCell: (params) => renderTrade(params.value as number),
+        },
+        {
+            field: 'bank',
+            headerName: '은행',
+            flex: 1,
+            minWidth: 100,
+            renderCell: (params) => renderTrade(params.value as number),
+        },
+        {
+            field: 'etc_corp',
+            headerName: '기타법인',
+            flex: 1,
+            minWidth: 100,
+            renderCell: (params) => renderTrade(params.value as number),
+        },
+        {
+            field: 'natfor',
+            headerName: '내외국인',
+            flex: 1,
+            minWidth: 100,
+            renderCell: (params) => renderTrade(params.value as number),
+        }
     ];
 
-    const [alignment, setAlignment] = useState('day');
-    // const [formats, setFormats] = useState('line');
-    const [minute, setMinute] = useState('1');
+    const labelColors = {
+        up: 'error' as const,
+        down: 'info' as const,
+        neutral: 'default' as const,
+    };
 
-    // const handleFormat = (
-    //     _event: MouseEvent<HTMLElement>,
-    //     newFormats: string,
-    // ) => {
-    //     if(newFormats !== null) {
-    //         setFormats(newFormats);
-    //     }
-    // };
+    const color = labelColors[stockChartData.trend];
+    const trendValues = { up: `${stockChartData.fluRt}%`, down: `${stockChartData.fluRt}%`, neutral: `${stockChartData.fluRt}%` };
 
     const handleAlignment = (
         _event: MouseEvent<HTMLElement>,
         newAlignment: string,
     ) => {
         if(newAlignment !== null) {
-            setAlignment(newAlignment);
+            setToggle(newAlignment);
+
+            if(newAlignment === 'MINUTE') {
+                newAlignment = newAlignment + '_' + minute.current;
+            }
+
+            setReq({
+                ...req,
+                chart_type: newAlignment as StockChartType
+            })
         }
     };
 
     function handleOptionChange(event: SelectChangeEvent) {
-        setMinute(event.target.value as string)
+        minute.current = event.target.value as string
+
+        const value = 'MINUTE_' + event.target.value;
+
+        setReq({
+            ...req,
+            chart_type: value as StockChartType
+        })
     }
 
-    const columns: GridColDef[] = [
-        {
-            field: 'day',
-            headerName: '날짜',
-            headerAlign: 'center',
-            align: 'center',
-            flex: 1,
-            minWidth: 80,
-        },
-        {
-            field: 'individual',
-            headerName: '개인',
-            headerAlign: 'center',
-            align: 'center',
-            flex: 1,
-            minWidth: 80
-
-        },
-        {
-            field: 'foreigner',
-            headerName: '외국인',
-            flex: 1,
-            headerAlign: 'center',
-            align: 'center',
-            minWidth: 80,
-        },
-        {
-            field: 'organize',
-            headerName: '기관',
-            flex: 1,
-            headerAlign: 'center',
-            align: 'center',
-            minWidth: 100,
+    const handleFormat = (
+        _event: MouseEvent<HTMLElement>,
+        newFormats: string,
+    ) => {
+        if(newFormats !== null) {
+            setFormats(newFormats);
         }
-    ];
+    };
 
-    const columns2: GridColDef[] = [
-        {
-            field: 'day',
-            headerName: '날짜',
-            headerAlign: 'center',
-            align: 'center',
-            flex: 1,
-            minWidth: 80,
-        },
-        {
-            field: 'organize1',
-            headerName: '금융투자',
-            flex: 1,
-            headerAlign: 'center',
-            align: 'center',
-            minWidth: 100,
-        },
-        {
-            field: 'organize2',
-            headerName: '보험',
-            flex: 1,
-            headerAlign: 'center',
-            align: 'center',
-            minWidth: 100,
-        },
-        {
-            field: 'organize3',
-            headerName: '기타금융',
-            flex: 1,
-            headerAlign: 'center',
-            align: 'center',
-            minWidth: 100,
-        },
-        {
-            field: 'organize4',
-            headerName: '투신',
-            flex: 1,
-            headerAlign: 'center',
-            align: 'center',
-            minWidth: 100,
-        },
-        {
-            field: 'organize5',
-            headerName: '사모펀드',
-            flex: 1,
-            headerAlign: 'center',
-            align: 'center',
-            minWidth: 100,
-        },
-        {
-            field: 'organize6',
-            headerName: '연기금등',
-            flex: 1,
-            headerAlign: 'center',
-            align: 'center',
-            minWidth: 100,
-        },
-        {
-            field: 'organize7',
-            headerName: '은행',
-            flex: 1,
-            headerAlign: 'center',
-            align: 'center',
-            minWidth: 100,
-        }
-    ];
+    function checkInvestor(name: string, orgn: number, frgnr: number): MessageProps {
+        let message: string;
+        let title: string;
+        let icon: JSX.Element;
 
-    const rows: GridRowsProp = [
-        {
-            id: 1,
-            day: '06-04',
-            individual: 6,
-            organize: 5,
-            foreigner: -1,
-        },
-        {
-            id: 2,
-            day: '06-03',
-            individual: 6,
-            organize: 5,
-            foreigner: -1,
+        if (orgn == 0) {
+            message = '기관 관망, '
+        } else if (orgn > 0) {
+            message = '기관 매수, '
+        } else {
+            message = '기관 매도, '
         }
-    ];
 
-    const rows2: GridRowsProp = [
-        {
-            id: 1,
-            day: '06-04',
-            organize1: 6,
-            organize2: 5,
-            organize3: -1,
-            organize4: 6,
-            organize5: 5,
-            organize6: -1,
-            organize7: -1,
-        },
-        {
-            id: 2,
-            day: '06-03',
-            organize1: 6,
-            organize2: 5,
-            organize3: -1,
-            organize4: 6,
-            organize5: 5,
-            organize6: -1,
-            organize7: -1,
+        if (frgnr == 0) {
+            message = message + '외국인 관망 중입니다.'
+        } else if (frgnr > 0) {
+            message = message + '외국인 매수 중입니다.'
+        } else {
+            message = message + '외국인 매도 중입니다.'
         }
-    ];
+
+        if (orgn > 0 && frgnr > 0) {
+            title = `${name} 투자 양호`
+            icon = <CheckIcon color="success" />;
+        } else if(orgn > 0 || frgnr > 0) {
+            title = `${name} 투자 주의`
+            icon = <PriorityHighIcon color="warning" />
+        } else {
+            title = `${name} 투자 위험`
+            icon = <DoNotDisturbIcon color="error" />
+        }
+
+        return {
+            message,
+            title,
+            icon,
+        }
+    }
+
+    function renderTrade(trade: number) {
+        const text = trade.toLocaleString()
+
+        return (
+            <span style={{color: trade == 0 ? 'black' : trade > 0 ? 'red' : 'blue'}}>
+                {trade > 0 ? `+${text}` : `${text}`}
+            </span>
+        )
+    }
 
     return (
         <Box sx={{ width: '100%', maxWidth: { sm: '100%', md: '1700px' } }}>
             <Typography component="h2" variant="h6" sx={{ mb: 2 }}>
-                코스피
+                주식 상세
             </Typography>
             <Grid
                 container
@@ -288,7 +580,7 @@ const IndexDetail = () => {
                     <Card variant="outlined" sx={{ width: '100%' }}>
                         <CardContent>
                             <Typography component="h2" variant="subtitle2" gutterBottom>
-                                코스피
+                                {stockChartData.title}
                             </Typography>
                             <Stack sx={{ justifyContent: 'space-between' }}>
                                 <Stack
@@ -300,16 +592,16 @@ const IndexDetail = () => {
                                     }}
                                 >
                                     <Typography variant="h4" component="p">
-                                        2,644.4
+                                        {stockChartData.value}
                                     </Typography>
-                                    <Chip size="small" color="error" label='+2.02%' />
+                                    <Chip size="small" color={color} label={trendValues[stockChartData.trend]} />
                                 </Stack>
                                 <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-                                    2025.05.26 08:30
+                                    {stockChartData.interval}
                                 </Typography>
                             </Stack>
                         </CardContent>
-                        <IndexDetailLineChart />
+                        <StockDetailLineChart {...stockChartData} />
                         <Box
                             display="flex"
                             justifyContent="space-between"
@@ -318,22 +610,22 @@ const IndexDetail = () => {
                         >
                             <StyledToggleButtonGroup
                                 size="small"
-                                value={alignment}
+                                value={toggle}
                                 exclusive
                                 onChange={handleAlignment}
                                 aria-label="text alignment"
                             >
                                 <ToggleButton
-                                    value="minute"
-                                    key="minute"
-                                    aria-label="minute"
+                                    value="MINUTE"
+                                    key="MINUTE"
+                                    aria-label="MINUTE"
                                     sx={{
                                         padding: 1
                                     }}
                                 >
                                     <Select
                                         size="small"
-                                        value={minute}
+                                        value={minute.current}
                                         onChange={handleOptionChange}
                                         variant="standard"
                                         disableUnderline
@@ -349,31 +641,29 @@ const IndexDetail = () => {
                                         <MenuItem value="1">1분</MenuItem>
                                         <MenuItem value="3">3분</MenuItem>
                                         <MenuItem value="5">5분</MenuItem>
-                                        <MenuItem value="15">15분</MenuItem>
                                         <MenuItem value="30">30분</MenuItem>
-                                        <MenuItem value="60">60분</MenuItem>
                                     </Select>
                                 </ToggleButton>
-                                <ToggleButton value="day" key="day" aria-label="day">일</ToggleButton>
-                                <ToggleButton value="week" key="week" aria-label="week">주</ToggleButton>
-                                <ToggleButton value="month" key="month" aria-label="month">월</ToggleButton>
-                                <ToggleButton value="year" key="year" aria-label="year">년</ToggleButton>
+                                <ToggleButton value="DAY" key="DAY" aria-label="DAY">일</ToggleButton>
+                                <ToggleButton value="WEEK" key="WEEK" aria-label="WEEK">주</ToggleButton>
+                                <ToggleButton value="MONTH" key="MONTH" aria-label="MONTH">월</ToggleButton>
+                                <ToggleButton value="YEAR" key="YEAR" aria-label="YEAR">년</ToggleButton>
                             </StyledToggleButtonGroup>
 
-                            {/*<StyledToggleButtonGroup*/}
-                            {/*    size="small"*/}
-                            {/*    value={formats}*/}
-                            {/*    exclusive*/}
-                            {/*    onChange={handleFormat}*/}
-                            {/*    aria-label="text formatting"*/}
-                            {/*>*/}
-                            {/*    <ToggleButton value="candle" key="candle" aria-label="candle" disabled>*/}
-                            {/*        <CandlestickChartIcon />*/}
-                            {/*    </ToggleButton>*/}
-                            {/*    <ToggleButton value="line" key="line" aria-label="line">*/}
-                            {/*        <StackedLineChartIcon />*/}
-                            {/*    </ToggleButton>*/}
-                            {/*</StyledToggleButtonGroup>*/}
+                            <StyledToggleButtonGroup
+                                size="small"
+                                value={formats}
+                                exclusive
+                                onChange={handleFormat}
+                                aria-label="text formatting"
+                            >
+                                <ToggleButton value="candle" key="candle" aria-label="candle" disabled>
+                                    <CandlestickChartIcon />
+                                </ToggleButton>
+                                <ToggleButton value="line" key="line" aria-label="line">
+                                    <StackedLineChartIcon />
+                                </ToggleButton>
+                            </StyledToggleButtonGroup>
                         </Box>
                     </Card>
                 </Grid>
@@ -398,17 +688,17 @@ const IndexDetail = () => {
                                 </Grid>
                                 <Grid size={{xs: 12, md: 3}}>
                                     <Typography component="h3" variant="subtitle2" gutterBottom>
-                                        3억 2,031만주
+                                        {info.trde_qty.toLocaleString()}
                                     </Typography>
                                 </Grid>
                                 <Grid size={{xs: 12, md: 3}}>
                                     <Typography component="h2" variant="subtitle2" gutterBottom>
-                                        거래대금
+                                        거래대금 (백만원)
                                     </Typography>
                                 </Grid>
                                 <Grid size={{xs: 12, md: 3}}>
                                     <Typography component="h3" variant="subtitle2" gutterBottom>
-                                        9,031억원
+                                        {info.trde_prica.toLocaleString()}
                                     </Typography>
                                 </Grid>
                                 <Grid size={{xs: 12, md: 3}}>
@@ -418,143 +708,77 @@ const IndexDetail = () => {
                                 </Grid>
                                 <Grid size={{xs: 12, md: 3}}>
                                     <Typography component="h3" variant="subtitle2" gutterBottom>
-                                        2,644.4
+                                        {info.open_pric.toLocaleString()}
                                     </Typography>
                                 </Grid>
                                 <Grid size={{xs: 12, md: 3}}>
                                     <Typography component="h2" variant="subtitle2" gutterBottom>
-                                        종가
+                                        현재가
                                     </Typography>
                                 </Grid>
                                 <Grid size={{xs: 12, md: 3}}>
                                     <Typography component="h3" variant="subtitle2" gutterBottom>
-                                        2,680.4
-                                    </Typography>
-                                </Grid>
-
-                                <Grid size={{xs: 12, md: 3}}>
-                                    <Typography component="h2" variant="subtitle2" gutterBottom>
-                                        시가총액
-                                    </Typography>
-                                </Grid>
-                                <Grid size={{xs: 12, md: 3}}>
-                                    <Typography component="h3" variant="subtitle2" gutterBottom>
-                                        2,720.4
+                                        {info.cur_prc.toLocaleString()}
                                     </Typography>
                                 </Grid>
                                 <Grid size={{xs: 12, md: 3}}>
                                     <Typography component="h2" variant="subtitle2" gutterBottom>
-                                        시가총액비중
+                                        52주 최저가
                                     </Typography>
                                 </Grid>
                                 <Grid size={{xs: 12, md: 3}}>
                                     <Typography component="h3" variant="subtitle2" gutterBottom>
-                                        2,289.4
-                                    </Typography>
-                                </Grid>
-
-                                <Grid size={{xs: 12, md: 3}}>
-                                    <Typography component="h2" variant="subtitle2" gutterBottom>
-                                        외인소진률
-                                    </Typography>
-                                </Grid>
-                                <Grid size={{xs: 12, md: 3}}>
-                                    <Typography component="h3" variant="subtitle2" gutterBottom>
-                                        2,720.4
+                                        {info._250lwst.toLocaleString()}
                                     </Typography>
                                 </Grid>
                                 <Grid size={{xs: 12, md: 3}}>
                                     <Typography component="h2" variant="subtitle2" gutterBottom>
-                                        PER
+                                        52주 최고가
                                     </Typography>
                                 </Grid>
                                 <Grid size={{xs: 12, md: 3}}>
                                     <Typography component="h3" variant="subtitle2" gutterBottom>
-                                        2,289.4
-                                    </Typography>
-                                </Grid>
-
-                                <Grid size={{xs: 12, md: 3}}>
-                                    <Typography component="h2" variant="subtitle2" gutterBottom>
-                                        EPS
-                                    </Typography>
-                                </Grid>
-                                <Grid size={{xs: 12, md: 3}}>
-                                    <Typography component="h3" variant="subtitle2" gutterBottom>
-                                        2,720.4
+                                        {info._250hgst.toLocaleString()}
                                     </Typography>
                                 </Grid>
                                 <Grid size={{xs: 12, md: 3}}>
                                     <Typography component="h2" variant="subtitle2" gutterBottom>
-                                        ROE
+                                        per
                                     </Typography>
                                 </Grid>
                                 <Grid size={{xs: 12, md: 3}}>
                                     <Typography component="h3" variant="subtitle2" gutterBottom>
-                                        2,289.4
-                                    </Typography>
-                                </Grid>
-
-                                <Grid size={{xs: 12, md: 3}}>
-                                    <Typography component="h2" variant="subtitle2" gutterBottom>
-                                        매출액
-                                    </Typography>
-                                </Grid>
-                                <Grid size={{xs: 12, md: 3}}>
-                                    <Typography component="h3" variant="subtitle2" gutterBottom>
-                                        2,720.4
+                                        {info.per.toLocaleString()}
                                     </Typography>
                                 </Grid>
                                 <Grid size={{xs: 12, md: 3}}>
                                     <Typography component="h2" variant="subtitle2" gutterBottom>
-                                        영업이익
+                                        eps
                                     </Typography>
                                 </Grid>
                                 <Grid size={{xs: 12, md: 3}}>
                                     <Typography component="h3" variant="subtitle2" gutterBottom>
-                                        2,289.4
-                                    </Typography>
-                                </Grid>
-
-                                <Grid size={{xs: 12, md: 3}}>
-                                    <Typography component="h2" variant="subtitle2" gutterBottom>
-                                        당기순이익
-                                    </Typography>
-                                </Grid>
-                                <Grid size={{xs: 12, md: 3}}>
-                                    <Typography component="h3" variant="subtitle2" gutterBottom>
-                                        2,720.4
+                                        {info.eps.toLocaleString()}
                                     </Typography>
                                 </Grid>
                                 <Grid size={{xs: 12, md: 3}}>
                                     <Typography component="h2" variant="subtitle2" gutterBottom>
-                                        영업이익
+                                        roe
                                     </Typography>
                                 </Grid>
                                 <Grid size={{xs: 12, md: 3}}>
                                     <Typography component="h3" variant="subtitle2" gutterBottom>
-                                        2,289.4
-                                    </Typography>
-                                </Grid>
-
-                                <Grid size={{xs: 12, md: 3}}>
-                                    <Typography component="h2" variant="subtitle2" gutterBottom>
-                                        250일 최고가
-                                    </Typography>
-                                </Grid>
-                                <Grid size={{xs: 12, md: 3}}>
-                                    <Typography component="h3" variant="subtitle2" gutterBottom>
-                                        2,289.4
+                                        {info.roe.toLocaleString()}
                                     </Typography>
                                 </Grid>
                                 <Grid size={{xs: 12, md: 3}}>
                                     <Typography component="h2" variant="subtitle2" gutterBottom>
-                                        250일 최저가
+                                        pbr
                                     </Typography>
                                 </Grid>
                                 <Grid size={{xs: 12, md: 3}}>
                                     <Typography component="h3" variant="subtitle2" gutterBottom>
-                                        2,289.4
+                                        {info.pbr.toLocaleString()}
                                     </Typography>
                                 </Grid>
                             </Grid>
@@ -563,21 +787,58 @@ const IndexDetail = () => {
                 </Grid>
                 <Grid size={{ xs: 12, md: 4 }}>
                     <Typography component="h2" variant="h6" sx={{ mb: 2 }}>
-                        당일 투자자별 순매수(억)
+                        당일 투자자별 순매수(주)
                     </Typography>
                     <Card variant="outlined" sx={{ width: '100%' }}>
                         <CardContent>
-                            <InvestorBarChart />
+                            <InvestorBarChart data={barData} />
                         </CardContent>
                     </Card>
                 </Grid>
-                <Grid size={{ xs: 12, md: 8 }}>
+                <Grid size={{ xs: 12, md: 4 }}>
                     <Typography component="h2" variant="h6" sx={{ mb: 2 }}>
-                        시간별 투자자별 순매수(억)
+                        요약
                     </Typography>
                     <Card variant="outlined" sx={{ width: '100%' }}>
+                        {message.icon}
                         <CardContent>
-                            <InvestorLineChart seriesData={data2} />
+                            <Typography gutterBottom variant="h5" component="div">
+                                {message.title}
+                            </Typography>
+                            <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+                                {message.message}
+                            </Typography>
+                        </CardContent>
+                    </Card>
+                </Grid>
+                <Grid size={{ xs: 12, md: 4 }}>
+                    <Typography component="h2" variant="h6" sx={{ mb: 2 }}>
+                        일별 시세
+                    </Typography>
+                    <Card variant="outlined" sx={{ width: '100%', overflow: 'visible' }}>
+                        <CardContent sx={{ overflow: 'visible', px: 5, height: 100 }}>
+                            <Slider
+                                aria-label="Custom marks"
+                                track={false}
+                                value={Number(info.cur_prc)}
+                                valueLabelDisplay="auto"
+                                disabled
+                                max={dayRange[1].value}
+                                min={dayRange[0].value}
+                                marks={dayRange}
+                            />
+                        </CardContent>
+                        <CardContent sx={{ overflow: 'visible', px: 5, height: 100 }}>
+                            <Slider
+                                aria-label="Custom marks"
+                                track={false}
+                                value={Number(info.cur_prc)}
+                                valueLabelDisplay="auto"
+                                disabled
+                                max={yearRange[1].value}
+                                min={yearRange[0].value}
+                                marks={yearRange}
+                            />
                         </CardContent>
                     </Card>
                 </Grid>
@@ -585,18 +846,11 @@ const IndexDetail = () => {
                     <Typography component="h2" variant="h6" sx={{ mb: 2 }}>
                         일별 투자자별 순매수
                     </Typography>
-                    <Grid container spacing={2}>
-                        <Grid size={{ xs: 12, md: 4 }}>
-                            <OptionTable rows={rows} columns={columns} />
-                        </Grid>
-                        <Grid size={{ xs: 12, md: 8 }}>
-                            <OptionTable rows={rows2} columns={columns2} />
-                        </Grid>
-                    </Grid>
+                    <CustomDataTable rows={row} columns={columns} pageSize={20} />
                 </Grid>
             </Grid>
         </Box>
     )
 }
 
-export default IndexDetail;
+export default StockDetail;

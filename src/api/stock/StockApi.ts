@@ -1,7 +1,12 @@
 import api from "../../axios.ts";
-import {StockListReq} from "../../type/StockType.ts";
+import {StockDetailReq, StockListReq} from "../../type/StockType.ts";
 
 export const fetchStockList = async (req: StockListReq) => {
     const res = await api.get(`/stock/list`, {params: req});
+    return res.data;
+}
+
+export const fetchStockDetail = async (req: StockDetailReq) => {
+    const res = await api.get(`/stock/detail`, {params: req});
     return res.data;
 }

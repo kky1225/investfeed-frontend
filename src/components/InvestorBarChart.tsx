@@ -2,7 +2,7 @@ import { BarChart } from "@mui/x-charts"
 import {useTheme} from "@mui/material/styles";
 
 export type IndexBarChartProps = {
-    data: string[]
+    data: number[]
 };
 
 const IndexBarChart = (

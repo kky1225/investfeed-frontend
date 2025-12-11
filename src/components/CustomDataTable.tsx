@@ -2,7 +2,8 @@ import {DataGrid} from "@mui/x-data-grid";
 
 interface CustomDataTableProps {
     rows: any,
-    columns: any
+    columns: any,
+    pageSize: number,
 }
 
 const CustomDataTable = (
