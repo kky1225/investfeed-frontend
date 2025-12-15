@@ -18,3 +18,7 @@ export enum StockChartType {
     MONTH = "MONTH",
     YEAR = "YEAR"
 }
+
+export interface StockStreamReq {
+    items: Array<string>
+}

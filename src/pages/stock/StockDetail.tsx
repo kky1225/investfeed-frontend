@@ -16,9 +16,9 @@ import {Select, SelectChangeEvent, Slider} from "@mui/material";
 import {styled} from "@mui/material/styles";
 import MenuItem from "@mui/material/MenuItem";
 import {useParams} from "react-router-dom";
-import {StockChartType, StockDetailReq} from "../../type/StockType.ts";
+import {StockChartType, StockDetailReq, StockStreamReq} from "../../type/StockType.ts";
 import StockDetailLineChart, {CustomStockDetailLineChartProps} from "../../components/StockDetailLineChart.tsx";
-import {fetchStockDetail} from "../../api/stock/StockApi.ts";
+import {fetchStockDetail, fetchStockStream} from "../../api/stock/StockApi.ts";
 import InvestorBarChart from "../../components/InvestorBarChart.tsx";
 import RemoveIcon from "@mui/icons-material/Remove";
 import CheckIcon from "@mui/icons-material/Check";
@@ -89,23 +89,35 @@ const StockDetail = () => {
     });
 
     useEffect(() => {
-        stockDetail(req);
-
         let chartTimeout: ReturnType<typeof setTimeout>;
         let socketTimeout: ReturnType<typeof setTimeout>;
         let interval: ReturnType<typeof setInterval>;
         let socket: WebSocket;
 
         (async() => {
+            const items = await stockDetail(req);
+            const stockStreamReq: StockStreamReq = {
+                items: items,
+            }
+
             const marketInfo = await timeNow();
 
             const now = Date.now() + chartTimer.current;
             const waitTime = 60_000 - (now % 60_000);
 
             if (marketInfo.isMarketOpen) {
-
+                await stockStream(stockStreamReq);
+                socket = openSocket();
             } else {
+                socketTimeout = setTimeout(async () => {
+                    socket?.close();
 
+                    const again = await timeNow();
+                    if (again.isMarketOpen) {
+                        await stockStream(stockStreamReq);
+                        socket = openSocket();
+                    }
+                }, marketTimer.current + 200);
             }
 
             chartTimeout = setTimeout(() => {
@@ -115,9 +127,16 @@ const StockDetail = () => {
                 }, (60 * 1000));
             }, waitTime + 200);
         })();
+
+        return () => {
+            socket?.close();
+            clearInterval(socketTimeout);
+            clearTimeout(chartTimeout);
+            clearInterval(interval);
+        }
     }, [req])
 
-    const stockDetail = async (req: StockDetailReq) => {
+    const stockDetail = async (req: StockDetailReq): Promise<Array<string>> => {
         try {
             const data = await fetchStockDetail(req);
 
@@ -272,8 +291,12 @@ const StockDetail = () => {
             });
 
             setRow(investor);
+
+            return [stockInfo.stk_cd];
         } catch(error) {
             console.error(error);
+
+            return [];
         }
     }
 
@@ -311,6 +334,34 @@ const StockDetail = () => {
         } catch (error) {
             console.error(error);
         }
+    }
+
+    const stockStream = async (req: StockStreamReq) => {
+        try {
+            const data = await fetchStockStream(req);
+
+            if (data.code !== "0000") {
+                throw new Error(data.msg);
+            }
+
+            console.log(data);
+        } catch (error) {
+            console.log(error);
+        }
+    }
+
+    const openSocket = () => {
+        const socket = new WebSocket("ws://localhost:8080/ws");
+        socket.onmessage = (event) => {
+            const data = JSON.parse(event.data);
+            console.log(data);
+
+            // if (data.trnm === "REAL" && Array.isArray(data.data)) {
+            //
+            // }
+        };
+
+        return socket;
     }
 
     interface StockInfoProps {
@@ -682,102 +733,102 @@ const StockDetail = () => {
                         <CardContent>
                             <Grid container spacing={2}>
                                 <Grid size={{xs: 12, md: 3}}>
-                                    <Typography component="h2" variant="subtitle2" gutterBottom>
+                                    <Typography variant="subtitle2" gutterBottom fontWeight={600}>
                                         거래량
                                     </Typography>
                                 </Grid>
                                 <Grid size={{xs: 12, md: 3}}>
-                                    <Typography component="h3" variant="subtitle2" gutterBottom>
+                                    <Typography variant="subtitle2" gutterBottom>
                                         {info.trde_qty.toLocaleString()}
                                     </Typography>
                                 </Grid>
                                 <Grid size={{xs: 12, md: 3}}>
-                                    <Typography component="h2" variant="subtitle2" gutterBottom>
+                                    <Typography variant="subtitle2" gutterBottom fontWeight={600}>
                                         거래대금 (백만원)
                                     </Typography>
                                 </Grid>
                                 <Grid size={{xs: 12, md: 3}}>
-                                    <Typography component="h3" variant="subtitle2" gutterBottom>
+                                    <Typography variant="subtitle2" gutterBottom>
                                         {info.trde_prica.toLocaleString()}
                                     </Typography>
                                 </Grid>
                                 <Grid size={{xs: 12, md: 3}}>
-                                    <Typography component="h2" variant="subtitle2" gutterBottom>
+                                    <Typography variant="subtitle2" gutterBottom fontWeight={600}>
                                         시가
                                     </Typography>
                                 </Grid>
                                 <Grid size={{xs: 12, md: 3}}>
-                                    <Typography component="h3" variant="subtitle2" gutterBottom>
+                                    <Typography variant="subtitle2" gutterBottom>
                                         {info.open_pric.toLocaleString()}
                                     </Typography>
                                 </Grid>
                                 <Grid size={{xs: 12, md: 3}}>
-                                    <Typography component="h2" variant="subtitle2" gutterBottom>
+                                    <Typography variant="subtitle2" gutterBottom fontWeight={600}>
                                         현재가
                                     </Typography>
                                 </Grid>
                                 <Grid size={{xs: 12, md: 3}}>
-                                    <Typography component="h3" variant="subtitle2" gutterBottom>
+                                    <Typography variant="subtitle2" gutterBottom>
                                         {info.cur_prc.toLocaleString()}
                                     </Typography>
                                 </Grid>
                                 <Grid size={{xs: 12, md: 3}}>
-                                    <Typography component="h2" variant="subtitle2" gutterBottom>
+                                    <Typography variant="subtitle2" gutterBottom fontWeight={600}>
                                         52주 최저가
                                     </Typography>
                                 </Grid>
                                 <Grid size={{xs: 12, md: 3}}>
-                                    <Typography component="h3" variant="subtitle2" gutterBottom>
+                                    <Typography variant="subtitle2" gutterBottom>
                                         {info._250lwst.toLocaleString()}
                                     </Typography>
                                 </Grid>
                                 <Grid size={{xs: 12, md: 3}}>
-                                    <Typography component="h2" variant="subtitle2" gutterBottom>
+                                    <Typography variant="subtitle2" gutterBottom fontWeight={600}>
                                         52주 최고가
                                     </Typography>
                                 </Grid>
                                 <Grid size={{xs: 12, md: 3}}>
-                                    <Typography component="h3" variant="subtitle2" gutterBottom>
+                                    <Typography variant="subtitle2" gutterBottom>
                                         {info._250hgst.toLocaleString()}
                                     </Typography>
                                 </Grid>
                                 <Grid size={{xs: 12, md: 3}}>
-                                    <Typography component="h2" variant="subtitle2" gutterBottom>
+                                    <Typography variant="subtitle2" gutterBottom fontWeight={600}>
                                         per
                                     </Typography>
                                 </Grid>
                                 <Grid size={{xs: 12, md: 3}}>
-                                    <Typography component="h3" variant="subtitle2" gutterBottom>
+                                    <Typography variant="subtitle2" gutterBottom>
                                         {info.per.toLocaleString()}
                                     </Typography>
                                 </Grid>
                                 <Grid size={{xs: 12, md: 3}}>
-                                    <Typography component="h2" variant="subtitle2" gutterBottom>
+                                    <Typography variant="subtitle2" gutterBottom fontWeight={600}>
                                         eps
                                     </Typography>
                                 </Grid>
                                 <Grid size={{xs: 12, md: 3}}>
-                                    <Typography component="h3" variant="subtitle2" gutterBottom>
+                                    <Typography variant="subtitle2" gutterBottom>
                                         {info.eps.toLocaleString()}
                                     </Typography>
                                 </Grid>
                                 <Grid size={{xs: 12, md: 3}}>
-                                    <Typography component="h2" variant="subtitle2" gutterBottom>
+                                    <Typography variant="subtitle2" gutterBottom fontWeight={600}>
                                         roe
                                     </Typography>
                                 </Grid>
                                 <Grid size={{xs: 12, md: 3}}>
-                                    <Typography component="h3" variant="subtitle2" gutterBottom>
+                                    <Typography variant="subtitle2" gutterBottom>
                                         {info.roe.toLocaleString()}
                                     </Typography>
                                 </Grid>
                                 <Grid size={{xs: 12, md: 3}}>
-                                    <Typography component="h2" variant="subtitle2" gutterBottom>
+                                    <Typography variant="subtitle2" gutterBottom fontWeight={600}>
                                         pbr
                                     </Typography>
                                 </Grid>
                                 <Grid size={{xs: 12, md: 3}}>
-                                    <Typography component="h3" variant="subtitle2" gutterBottom>
+                                    <Typography variant="subtitle2" gutterBottom>
                                         {info.pbr.toLocaleString()}
                                     </Typography>
                                 </Grid>
