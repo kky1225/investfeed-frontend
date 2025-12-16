@@ -16,7 +16,13 @@ import {Select, SelectChangeEvent, Slider} from "@mui/material";
 import {styled} from "@mui/material/styles";
 import MenuItem from "@mui/material/MenuItem";
 import {useParams} from "react-router-dom";
-import {StockChartType, StockDetailReq, StockStreamReq} from "../../type/StockType.ts";
+import {
+    StockChartType,
+    StockDetailReq,
+    StockStream,
+    StockStreamReq,
+    StockStreamRes,
+} from "../../type/StockType.ts";
 import StockDetailLineChart, {CustomStockDetailLineChartProps} from "../../components/StockDetailLineChart.tsx";
 import {fetchStockDetail, fetchStockStream} from "../../api/stock/StockApi.ts";
 import InvestorBarChart from "../../components/InvestorBarChart.tsx";
@@ -343,8 +349,6 @@ const StockDetail = () => {
             if (data.code !== "0000") {
                 throw new Error(data.msg);
             }
-
-            console.log(data);
         } catch (error) {
             console.log(error);
         }
@@ -354,11 +358,29 @@ const StockDetail = () => {
         const socket = new WebSocket("ws://localhost:8080/ws");
         socket.onmessage = (event) => {
             const data = JSON.parse(event.data);
-            console.log(data);
 
-            // if (data.trnm === "REAL" && Array.isArray(data.data)) {
-            //
-            // }
+            if (data.trnm === "REAL" && Array.isArray(data.data)) {
+                const stockList = data.data.map((res: StockStreamRes) => {
+                    const values = res.values;
+                    return {
+                        code: res.item,
+                        value: values["10"],
+                        fluRt: values["12"],
+                        trend: values["25"],
+                    };
+                });
+
+                stockList.forEach((stock: StockStream) => {
+                    if(stock.code === req.stk_cd) {
+                        setStockChartData({
+                            ...stockChartData,
+                            value: stock.value.replace(/^[+-]/, ''),
+                            fluRt: stock.fluRt,
+                            trend: stock.trend === '5' ? 'down' : stock.trend === '2' ? 'up' : 'neutral',
+                        });
+                    }
+                })
+            }
         };
 
         return socket;

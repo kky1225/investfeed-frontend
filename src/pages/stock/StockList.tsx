@@ -1,16 +1,23 @@
 import Typography from "@mui/material/Typography";
 import Box from "@mui/material/Box";
 import Grid from "@mui/material/Grid";
-import {GridColDef, GridRowsProp} from "@mui/x-data-grid";
+import {GridColDef} from "@mui/x-data-grid";
 import StockTable from "../../components/StockTable.tsx";
 import Chip from "@mui/material/Chip";
 import {useEffect, useRef, useState} from "react";
-import {fetchStockList} from "../../api/stock/StockApi.ts";
+import {fetchStockList, fetchStockStream} from "../../api/stock/StockApi.ts";
 import {Tab, Tabs } from "@mui/material";
 import * as React from "react";
 import {fetchTimeNow} from "../../api/time/TimeApi.ts";
 import {MarketType} from "../../type/timeType.ts";
-import {StockListReq} from "../../type/StockType.ts";
+import {
+    StockGridRow,
+    StockListItem,
+    StockListReq,
+    StockStream,
+    StockStreamReq,
+    StockStreamRes
+} from "../../type/StockType.ts";
 
 const StockList = () => {
     const [req, setReq] = useState<StockListReq>({
@@ -18,45 +25,48 @@ const StockList = () => {
     });
 
     const [value, setValue] = useState(0);
-    const [row, setRow] = useState<GridRowsProp[]>([]);
+    const [row, setRow] = useState<StockGridRow[]>([]);
     const [columns, setColumns] = useState<GridColDef[]>([]);
 
     const chartTimer = useRef<number>(0);
     const marketTimer = useRef<number>(0);
 
     useEffect(() => {
-        stockList(req);
-
         let chartTimeout: ReturnType<typeof setTimeout>;
         let socketTimeout: ReturnType<typeof setTimeout>;
         let interval: ReturnType<typeof setInterval>;
         let socket: WebSocket;
 
         (async () => {
+            const items = await stockList(req);
+            const stockStreamReq: StockStreamReq = {
+                items: items,
+            }
+
             const marketInfo = await timeNow();
 
             const now = Date.now() + chartTimer.current;
             const waitTime = 60_000 - (now % 60_000);
 
             if (marketInfo.isMarketOpen) {
-                // await indexDetailStream(req);
-                // socket = openSocket();
+                await fetchStockStream(stockStreamReq);
+                socket = openSocket();
             } else {
                 socketTimeout = setTimeout(async () => {
                     socket?.close();
 
                     const again = await timeNow();
                     if (again.isMarketOpen) {
-                        // await indexDetailStream(req);
-                        // socket = openSocket();
+                        await fetchStockStream(stockStreamReq);
+                        socket = openSocket();
                     }
                 }, marketTimer.current + 200);
             }
 
             chartTimeout = setTimeout(() => {
-                stockList();
+                stockList(req);
                 interval = setInterval(() => {
-                    stockList();
+                    stockList(req);
                 }, (60 * 1000));
             }, waitTime + 200);
         })();
@@ -117,18 +127,18 @@ const StockList = () => {
 
             const { stockList } = data.result;
 
-            const ranking = stockList.map(item => {
+            const ranking = stockList.map((stock: StockListItem) => {
                 return {
-                    id: item.stk_cd,
-                    rank: item.rank,
-                    stk_nm: item.stk_nm,
-                    flu_rt: item.flu_rt,
-                    cur_prc: item.cur_prc,
-                    trde_prica: item.trde_prica,
+                    id: stock.stk_cd,
+                    rank: stock.rank,
+                    stk_nm: stock.stk_nm,
+                    flu_rt: stock.flu_rt,
+                    cur_prc: stock.cur_prc,
+                    trde_prica: stock.trde_prica,
                 }
             });
 
-            let col;
+            let col: GridColDef[];
 
             switch (req.type) {
                 case "0": {
@@ -151,7 +161,7 @@ const StockList = () => {
                             headerName: '등락률',
                             flex: 0.5,
                             minWidth: 100,
-                            renderCell: (params) => renderStatus(params.value as any),
+                            renderCell: (params) => renderStatus(params.value as number),
                         },
                         {
                             field: 'cur_prc',
@@ -195,7 +205,7 @@ const StockList = () => {
                             headerName: '등락률',
                             flex: 0.5,
                             minWidth: 100,
-                            renderCell: (params) => renderStatus(params.value as any),
+                            renderCell: (params) => renderStatus(params.value as number),
                         },
                         {
                             field: 'cur_prc',
@@ -239,7 +249,7 @@ const StockList = () => {
                             headerName: '등락률',
                             flex: 0.5,
                             minWidth: 100,
-                            renderCell: (params: string) => renderStatus(params.value as any),
+                            renderCell: (params) => renderStatus(params.value as number),
                         },
                         {
                             field: 'cur_prc',
@@ -267,9 +277,45 @@ const StockList = () => {
 
             setColumns(col);
             setRow(ranking);
+
+            return stockList.map((row: StockListItem) => {
+                return row.stk_cd
+            });
         } catch (error) {
             console.log(error);
         }
+    }
+
+    const openSocket = () => {
+        const socket = new WebSocket("ws://localhost:8080/ws");
+        socket.onmessage = (event) => {
+            const data = JSON.parse(event.data);
+
+            if (data.trnm === "REAL" && Array.isArray(data.data)) {
+                const stockList = data.data.map((res: StockStreamRes) => {
+                    const values = res.values;
+                    return {
+                        code: res.item,
+                        value: values["10"],
+                        fluRt: values["12"],
+                        trend: values["25"],
+                    };
+                });
+
+                row.map((item: StockGridRow) => {
+                    const newData = stockList.find((stock: StockStream) => stock.code === item.id);
+
+                    return {
+                        ...item,
+                        value: newData.value.replace(/^[+-]/, ''),
+                        fluRt: newData.data,
+                        trend: newData.data
+                    }
+                });
+            }
+        };
+
+        return socket;
     }
 
     function renderStatus(status: number) {
@@ -277,57 +323,6 @@ const StockList = () => {
 
         return <Chip label={status > 0 ? `${status}%` : `${status}%`} color={colors} />;
     }
-
-    // function renderStatus2(status: number) {
-    //     const text = status.toLocaleString()
-    //
-    //     return (
-    //         <span style={{color: status > 0 ? 'red' : 'blue'}}>
-    //             {status > 0 ? `+${text}` : `${text}`}
-    //         </span>
-    //     )
-    // }
-
-    // const columns: GridColDef[] = [
-    //     {
-    //         field: 'rank',
-    //         headerName: '순위',
-    //         flex: 1,
-    //         minWidth: 80,
-    //         maxWidth: 80
-    //     },
-    //     {
-    //         field: 'stk_nm',
-    //         headerName: '주식 이름',
-    //         flex: 1.5,
-    //         minWidth: 180
-    //     },
-    //     {
-    //         field: 'flu_rt',
-    //         headerName: '등락률',
-    //         flex: 0.5,
-    //         minWidth: 100,
-    //         renderCell: (params) => renderStatus(params.value as any),
-    //     },
-    //     {
-    //         field: 'cur_prc',
-    //         headerName: '현재가',
-    //         flex: 1,
-    //         minWidth: 100,
-    //         valueFormatter: (param: number) => {
-    //             return Number(param).toLocaleString().replace(/^[+-]/, '')
-    //         }
-    //     },
-    //     {
-    //         field: 'trde_prica',
-    //         headerName: '거래대금 (백만)',
-    //         flex: 1,
-    //         minWidth: 100,
-    //         valueFormatter: (param: number) => {
-    //             return Number(param).toLocaleString().replace(/^[+-]/, '')
-    //         }
-    //     }
-    // ];
 
     function CustomTabPanel(props: TabPanelProps) {
         const { children, value, index, ...other } = props;

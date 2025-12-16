@@ -12,6 +12,6 @@ export const fetchStockDetail = async (req: StockDetailReq) => {
 }
 
 export const fetchStockStream = async (req: StockStreamReq) => {
-    const res = await api.post(`/stock/detail/stream`, req);
+    const res = await api.post(`/stock/stream`, req);
     return res.data;
 }
