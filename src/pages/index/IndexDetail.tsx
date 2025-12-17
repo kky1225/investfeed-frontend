@@ -418,11 +418,11 @@ const IndexDetail = () => {
                     const values = entry.values;
                     item = entry.item;
                     return {
-                        code: entry.item, // ex: "001"
-                        value: values["10"], // 현재가
-                        change: values["11"], // 전일 대비
-                        fluRt: values["12"],   // 등락률
-                        trend: values["25"],   // 등락기호
+                        code: entry.item,
+                        value: values["10"],
+                        change: values["11"],
+                        fluRt: values["12"],
+                        trend: values["25"]
                     };
                 });
 

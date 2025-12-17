@@ -17,6 +17,7 @@ export interface CustomStockDetailLineChartProps {
     openPric: number,
     interval: string,
     trend: 'up' | 'down' | 'neutral',
+    nxtEnable: string,
     seriesData: MakeOptional<LineSeriesType, 'type'>[],
     barDataList: number[],
     dateList: string[]

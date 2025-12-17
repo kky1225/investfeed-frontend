@@ -31,10 +31,13 @@ const StockList = () => {
     const chartTimer = useRef<number>(0);
     const marketTimer = useRef<number>(0);
 
+    const stockBufferMap = useRef<Map<string, StockStream>>(new Map());
+
     useEffect(() => {
         let chartTimeout: ReturnType<typeof setTimeout>;
         let socketTimeout: ReturnType<typeof setTimeout>;
         let interval: ReturnType<typeof setInterval>;
+        let displayInterval: ReturnType<typeof setInterval>;
         let socket: WebSocket;
 
         (async () => {
@@ -43,22 +46,60 @@ const StockList = () => {
                 items: items,
             }
 
+            const updateDisplay = () => {
+                if (displayInterval) {
+                    return;
+                }
+
+                displayInterval = setInterval(() => {
+                    if (stockBufferMap.current.size === 0) {
+                        return;
+                    }
+
+                    setRow((oldRow) => {
+                        const isUpdated = oldRow.some(item => stockBufferMap.current.has(item.id));
+                        if (!isUpdated) {
+                            return oldRow;
+                        }
+
+                        return oldRow.map((item) => {
+                            const newRow = stockBufferMap.current.get(item.id);
+                            if (newRow) {
+                                return {
+                                    ...item,
+                                    cur_prc: newRow.value,
+                                    flu_rt: newRow.fluRt,
+                                    trend: newRow.trend,
+                                };
+                            }
+                            return item;
+                        });
+                    });
+
+                    stockBufferMap.current.clear();
+                }, 500);
+            }
+
+            const connectSocket = async (req: StockStreamReq) => {
+                await fetchStockStream(req);
+                socket = openSocket();
+                updateDisplay();
+            };
+
             const marketInfo = await timeNow();
 
             const now = Date.now() + chartTimer.current;
             const waitTime = 60_000 - (now % 60_000);
 
             if (marketInfo.isMarketOpen) {
-                await fetchStockStream(stockStreamReq);
-                socket = openSocket();
+                await connectSocket(stockStreamReq);
             } else {
                 socketTimeout = setTimeout(async () => {
                     socket?.close();
 
                     const again = await timeNow();
                     if (again.isMarketOpen) {
-                        await fetchStockStream(stockStreamReq);
-                        socket = openSocket();
+                        await connectSocket(stockStreamReq);
                     }
                 }, marketTimer.current + 200);
             }
@@ -76,6 +117,7 @@ const StockList = () => {
             clearInterval(socketTimeout);
             clearTimeout(chartTimeout);
             clearInterval(interval);
+            clearInterval(displayInterval);
         }
     }, [req]);
 
@@ -292,25 +334,15 @@ const StockList = () => {
             const data = JSON.parse(event.data);
 
             if (data.trnm === "REAL" && Array.isArray(data.data)) {
-                const stockList = data.data.map((res: StockStreamRes) => {
+                data.data.forEach((res: StockStreamRes) => {
                     const values = res.values;
-                    return {
+
+                    stockBufferMap.current.set(res.item, {
                         code: res.item,
-                        value: values["10"],
-                        fluRt: values["12"],
-                        trend: values["25"],
-                    };
-                });
-
-                row.map((item: StockGridRow) => {
-                    const newData = stockList.find((stock: StockStream) => stock.code === item.id);
-
-                    return {
-                        ...item,
-                        value: newData.value.replace(/^[+-]/, ''),
-                        fluRt: newData.data,
-                        trend: newData.data
-                    }
+                        value: String(values["10"]).replace(/^[+-]/, ''),
+                        fluRt: String(values["12"]),
+                        trend: String(values["25"])
+                    });
                 });
             }
         };

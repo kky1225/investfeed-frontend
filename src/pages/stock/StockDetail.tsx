@@ -8,11 +8,12 @@ import Card from "@mui/material/Card";
 import {useState, MouseEvent, useRef, useEffect, ReactElement, JSX} from "react";
 import CandlestickChartIcon from '@mui/icons-material/CandlestickChart';
 import StackedLineChartIcon from '@mui/icons-material/StackedLineChart';
+import HelpIcon from '@mui/icons-material/Help';
 import ToggleButton from '@mui/material/ToggleButton';
 import ToggleButtonGroup, {
     toggleButtonGroupClasses,
 } from '@mui/material/ToggleButtonGroup';
-import {Select, SelectChangeEvent, Slider} from "@mui/material";
+import {Select, SelectChangeEvent, Slider, Tooltip} from "@mui/material";
 import {styled} from "@mui/material/styles";
 import MenuItem from "@mui/material/MenuItem";
 import {useParams} from "react-router-dom";
@@ -79,6 +80,7 @@ const StockDetail = () => {
         openPric: 0,
         interval: '-',
         trend: 'neutral',
+        nxtEnable: 'Y',
         seriesData: [
             {
                 id: '',
@@ -203,6 +205,7 @@ const StockDetail = () => {
                 openPric: parseFloat(stockInfo.open_pric),
                 interval: today,
                 trend: stockInfo.pre_sig === '5' ? 'down' : stockInfo.pre_sig === '2' ? 'up' : 'neutral',
+                nxtEnable: stockInfo.nxtEnable,
                 seriesData: [
                     {
                         id: id,
@@ -233,15 +236,15 @@ const StockDetail = () => {
 
             setBarData([
                 Number(stockInvestorList[0].ind_invsr.toLocaleString()),
-                Number(stockInvestorList[0].orgn.toLocaleString()),
-                Number(stockInvestorList[0].frgnr_invsr.toLocaleString())
+                Number(stockInvestorList[0].frgnr_invsr.toLocaleString()),
+                Number(stockInvestorList[0].orgn.toLocaleString())
             ]);
 
             const message = {
                 ...checkInvestor(
                     stockInfo.stk_nm,
-                    stockInvestorList[0].orgn,
-                    stockInvestorList[0].frgnr_invsr
+                    stockInvestorList[0].frgnr_invsr,
+                    stockInvestorList[0].orgn
                 )
             };
 
@@ -595,19 +598,19 @@ const StockDetail = () => {
         let icon: JSX.Element;
 
         if (orgn == 0) {
-            message = '기관 관망, '
+            message = '외국인 관망, '
         } else if (orgn > 0) {
-            message = '기관 매수, '
+            message = '외국인 매수, '
         } else {
-            message = '기관 매도, '
+            message = '외국인 매도, '
         }
 
         if (frgnr == 0) {
-            message = message + '외국인 관망 중입니다.'
+            message = message + '기관 관망 중입니다.'
         } else if (frgnr > 0) {
-            message = message + '외국인 매수 중입니다.'
+            message = message + '기관 매수 중입니다.'
         } else {
-            message = message + '외국인 매도 중입니다.'
+            message = message + '기관 매도 중입니다.'
         }
 
         if (orgn > 0 && frgnr > 0) {
@@ -652,9 +655,19 @@ const StockDetail = () => {
                 <Grid size={{ xs: 12, md: 12 }}>
                     <Card variant="outlined" sx={{ width: '100%' }}>
                         <CardContent>
-                            <Typography component="h2" variant="subtitle2" gutterBottom>
-                                {stockChartData.title}
-                            </Typography>
+                            <Box sx={{ display: 'flex', justifyContent: 'space-between'}}>
+                                <Typography component="h2" variant="subtitle2" gutterBottom>
+                                    {stockChartData.title}
+                                </Typography>
+                                {stockChartData.nxtEnable === 'Y' &&
+                                    <Typography component="h2" variant="subtitle2" gutterBottom>
+                                        NXT
+                                        <Tooltip title="넥스트 트레이드는 오전 8시부터 오후 8시까지 거래할 수 있는 대체 거래소입니다.">
+                                            <HelpIcon sx={{ fontSize: 'inherit', verticalAlign: 'middle' }} />
+                                        </Tooltip>
+                                    </Typography>
+                                }
+                            </Box>
                             <Stack sx={{ justifyContent: 'space-between' }}>
                                 <Stack
                                     direction="row"

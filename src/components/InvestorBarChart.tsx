@@ -24,7 +24,7 @@ const IndexBarChart = (
                 [
                     {
                         scaleType: 'band',
-                        data: ['개인', '기관', '외국인'],
+                        data: ['개인', '외국인', '기관'],
                         categoryGapRatio: 0.6,
                     },
                 ]
