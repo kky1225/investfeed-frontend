@@ -356,32 +356,10 @@ const StockList = () => {
         return <Chip label={status > 0 ? `${status}%` : `${status}%`} color={colors} />;
     }
 
-    function CustomTabPanel(props: TabPanelProps) {
-        const { children, value, index, ...other } = props;
-
-        return (
-            <div
-                role="tabpanel"
-                hidden={value !== index}
-                id={`simple-tabpanel-${index}`}
-                aria-labelledby={`simple-tab-${index}`}
-                {...other}
-            >
-                {value === index && <Box sx={{ p: 3 }}>{children}</Box>}
-            </div>
-        );
-    }
-
     const handleChange = (_event: React.SyntheticEvent, newValue: number) => {
         setValue(newValue);
         setReq({type: `${newValue}`});
     };
-
-    interface TabPanelProps {
-        children?: React.ReactNode;
-        index: number;
-        value: number;
-    }
 
     function a11yProps(index: number) {
         return {
@@ -409,15 +387,7 @@ const StockList = () => {
                             <Tab label="거래량 급증률 상위" {...a11yProps(2)} />
                         </Tabs>
                     </Box>
-                    <CustomTabPanel value={value} index={0}>
-                        <StockTable rows={row} columns={columns} pageSize={100} />
-                    </CustomTabPanel>
-                    <CustomTabPanel value={value} index={1}>
-                        <StockTable rows={row} columns={columns} pageSize={100} />
-                    </CustomTabPanel>
-                    <CustomTabPanel value={value} index={2}>
-                        <StockTable rows={row} columns={columns} pageSize={100} />
-                    </CustomTabPanel>
+                    <StockTable rows={row} columns={columns} pageSize={100} />
                 </Box>
             </Grid>
         </Box>

@@ -375,14 +375,14 @@ const StockDetail = () => {
 
                 stockList.forEach((stock: StockStream) => {
                     if(stock.code === req.stk_cd) {
-                        setStockChartData({
-                            ...stockChartData,
-                            value: stock.value.replace(/^[+-]/, ''),
+                        setStockChartData((old) => ({
+                            ...old,
+                            value: Number(stock.value.replace(/^[+-]/, '')).toLocaleString(),
                             fluRt: stock.fluRt,
                             trend: stock.trend === '5' ? 'down' : stock.trend === '2' ? 'up' : 'neutral',
-                        });
+                        }));
                     }
-                })
+                });
             }
         };
 
