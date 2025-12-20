@@ -12,6 +12,7 @@ import {useTheme} from "@mui/material/styles";
 export interface CustomStockDetailLineChartProps {
     id: string,
     title: string,
+    orderWarning: string,
     value: string,
     fluRt: string,
     openPric: number,

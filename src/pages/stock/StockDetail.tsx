@@ -9,6 +9,7 @@ import {useState, MouseEvent, useRef, useEffect, ReactElement, JSX} from "react"
 import CandlestickChartIcon from '@mui/icons-material/CandlestickChart';
 import StackedLineChartIcon from '@mui/icons-material/StackedLineChart';
 import HelpIcon from '@mui/icons-material/Help';
+import ErrorIcon from '@mui/icons-material/Error';
 import ToggleButton from '@mui/material/ToggleButton';
 import ToggleButtonGroup, {
     toggleButtonGroupClasses,
@@ -75,6 +76,7 @@ const StockDetail = () => {
     const [stockChartData, setStockChartData] = useState<CustomStockDetailLineChartProps>({
         id: '-',
         title: '-',
+        orderWarning: "0",
         value: '-',
         fluRt: '0',
         openPric: 0,
@@ -200,6 +202,7 @@ const StockDetail = () => {
             setStockChartData({
                 id: stockInfo.stk_cd,
                 title: stockInfo.stk_nm,
+                orderWarning: stockInfo.orderWarning,
                 value: Number(stockInfo.cur_prc.replace(/^[+-]/, '')).toLocaleString(),
                 fluRt: stockInfo.flu_rt,
                 openPric: parseFloat(stockInfo.open_pric),
@@ -641,6 +644,29 @@ const StockDetail = () => {
         )
     }
 
+    function orderWarningMsg(type: string): string {
+        let message = "";
+        switch (type) {
+            case "1":
+                message = "ETF 투자주의 요망";
+                break;
+            case "2":
+                message = "정리매매 종목 지정";
+                break;
+            case "3":
+                message = "단기과열 종목 지정";
+                break;
+            case "4":
+                message = "투자위험 종목 지정";
+                break;
+            case "5":
+                message = "투자경고 종목 지정";
+                break;
+        }
+
+        return message;
+    }
+
     return (
         <Box sx={{ width: '100%', maxWidth: { sm: '100%', md: '1700px' } }}>
             <Typography component="h2" variant="h6" sx={{ mb: 2 }}>
@@ -658,12 +684,17 @@ const StockDetail = () => {
                             <Box sx={{ display: 'flex', justifyContent: 'space-between'}}>
                                 <Typography component="h2" variant="subtitle2" gutterBottom>
                                     {stockChartData.title}
+                                    {stockChartData.orderWarning !== '0' &&
+                                        <Tooltip title={orderWarningMsg(stockChartData.orderWarning)} placement="right">
+                                            <ErrorIcon color="error" sx={{ fontSize: 'inherit', verticalAlign: 'middle', ml: "1px", mb: "3px" }} />
+                                        </Tooltip>
+                                    }
                                 </Typography>
                                 {stockChartData.nxtEnable === 'Y' &&
                                     <Typography component="h2" variant="subtitle2" gutterBottom>
                                         NXT
                                         <Tooltip title="넥스트 트레이드는 오전 8시부터 오후 8시까지 거래할 수 있는 대체 거래소입니다.">
-                                            <HelpIcon sx={{ fontSize: 'inherit', verticalAlign: 'middle' }} />
+                                            <HelpIcon sx={{ fontSize: 'inherit', verticalAlign: 'middle', ml: "1px", mb: "3px" }} />
                                         </Tooltip>
                                     </Typography>
                                 }
@@ -871,31 +902,32 @@ const StockDetail = () => {
                         </CardContent>
                     </Card>
                 </Grid>
-                <Grid size={{ xs: 12, md: 4 }}>
+                <Grid size={{ xs: 12, md: 8 }}>
                     <Typography component="h2" variant="h6" sx={{ mb: 2 }}>
                         당일 투자자별 순매수(주)
                     </Typography>
-                    <Card variant="outlined" sx={{ width: '100%' }}>
-                        <CardContent>
-                            <InvestorBarChart data={barData} />
-                        </CardContent>
-                    </Card>
-                </Grid>
-                <Grid size={{ xs: 12, md: 4 }}>
-                    <Typography component="h2" variant="h6" sx={{ mb: 2 }}>
-                        요약
-                    </Typography>
-                    <Card variant="outlined" sx={{ width: '100%' }}>
-                        {message.icon}
-                        <CardContent>
-                            <Typography gutterBottom variant="h5" component="div">
-                                {message.title}
-                            </Typography>
-                            <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-                                {message.message}
-                            </Typography>
-                        </CardContent>
-                    </Card>
+                    <Grid container spacing={2}>
+                        <Grid size={{ xs: 12, md: 6 }}>
+                            <Card variant="outlined" sx={{ width: '100%' }}>
+                                <CardContent>
+                                    <InvestorBarChart data={barData} />
+                                </CardContent>
+                            </Card>
+                        </Grid>
+                        <Grid size={{ xs: 12, md: 6 }}>
+                            <Card variant="outlined" sx={{ width: '100%' }}>
+                                {message.icon}
+                                <CardContent>
+                                    <Typography gutterBottom variant="h5" component="div">
+                                        {message.title}
+                                    </Typography>
+                                    <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+                                        {message.message}
+                                    </Typography>
+                                </CardContent>
+                            </Card>
+                        </Grid>
+                    </Grid>
                 </Grid>
                 <Grid size={{ xs: 12, md: 4 }}>
                     <Typography component="h2" variant="h6" sx={{ mb: 2 }}>
