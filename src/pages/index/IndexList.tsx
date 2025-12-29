@@ -212,17 +212,15 @@ const IndexList = () => {
             console.log(data);
 
             const {
-                kospiPriceRes, kospiChartMinuteListRes,
-                kosdacPriceRes, kosdacChartMinuteListRes,
-                kospi200PriceRes, kospi200ChartMinuteListRes,
+                indexList,
                 goldPriceRes, goldChartMinuteListRes
             } = data.result;
 
-            const year = kospiChartMinuteListRes.inds_min_pole_qry[0].cntr_tm.substring(0, 4);
-            const month = kospiChartMinuteListRes.inds_min_pole_qry[0].cntr_tm.substring(4, 6);
-            const day = kospiChartMinuteListRes.inds_min_pole_qry[0].cntr_tm.substring(6, 8);
-            const minute = kospiPriceRes.inds_cur_prc_tm[0].tm_n.substring(0, 2);
-            const second = kospiPriceRes.inds_cur_prc_tm[0].tm_n.substring(2, 4);
+            const year = indexList[0].chartMinuteList[0].cntrTm.substring(0, 4);
+            const month = indexList[0].chartMinuteList[0].cntrTm.substring(4, 6);
+            const day = indexList[0].chartMinuteList[0].cntrTm.substring(6, 8);
+            const minute = indexList[0].tmN.substring(0, 2);
+            const second = indexList[0].tmN.substring(2, 4);
 
             let today;
 
@@ -234,16 +232,16 @@ const IndexList = () => {
                 today = `${year}.${month}.${day} ${minute}:${second}`;
             }
 
-            const kospiDateList = kospiChartMinuteListRes.inds_min_pole_qry.map(item => {
-                return `${item.cntr_tm.slice(0, 4)}.${item.cntr_tm.slice(4, 6)}.${item.cntr_tm.slice(6, 8)} ${item.cntr_tm.slice(8, 10)}:${item.cntr_tm.slice(10, 12)}`
+            const kospiDateList = indexList[0].chartMinuteList.map(item => {
+                return `${item.cntrTm.slice(0, 4)}.${item.cntrTm.slice(4, 6)}.${item.cntrTm.slice(6, 8)} ${item.cntrTm.slice(8, 10)}:${item.cntrTm.slice(10, 12)}`
             }).reverse();
 
-            const kospi200DateList = kospi200ChartMinuteListRes.inds_min_pole_qry.map(item => {
-                return `${item.cntr_tm.slice(0, 4)}.${item.cntr_tm.slice(4, 6)}.${item.cntr_tm.slice(6, 8)} ${item.cntr_tm.slice(8, 10)}:${item.cntr_tm.slice(10, 12)}`
+            const kospi200DateList = indexList[1].chartMinuteList.map(item => {
+                return `${item.cntrTm.slice(0, 4)}.${item.cntrTm.slice(4, 6)}.${item.cntrTm.slice(6, 8)} ${item.cntrTm.slice(8, 10)}:${item.cntrTm.slice(10, 12)}`
             }).reverse();
 
-            const kosdacDateList = kosdacChartMinuteListRes.inds_min_pole_qry.map(item => {
-                return `${item.cntr_tm.slice(0, 4)}.${item.cntr_tm.slice(4, 6)}.${item.cntr_tm.slice(6, 8)} ${item.cntr_tm.slice(8, 10)}:${item.cntr_tm.slice(10, 12)}`
+            const kosdacDateList = indexList[2].chartMinuteList.map(item => {
+                return `${item.cntrTm.slice(0, 4)}.${item.cntrTm.slice(4, 6)}.${item.cntrTm.slice(6, 8)} ${item.cntrTm.slice(8, 10)}:${item.cntrTm.slice(10, 12)}`
             }).reverse();
 
             const goldDateList = goldChartMinuteListRes.gds_min_chart_qry.map(item => {
@@ -251,66 +249,66 @@ const IndexList = () => {
             }).reverse();
 
             setKospiChartData({
-                id: kospiChartMinuteListRes.inds_cd,
+                id: indexList[0].indsCd,
                 title: '종합(KOSPI)',
-                value: kospiPriceRes.cur_prc.replace(/^[+-]/, ''),
-                fluRt: kospiPriceRes.flu_rt,
-                openPric: parseFloat(kospiPriceRes.open_pric.replace(/^[+-]/, '')),
+                value: indexList[0].curPrc.replace(/^[+-]/, ''),
+                fluRt: indexList[0].fluRt,
+                openPric: parseFloat(indexList[0].openPric.replace(/^[+-]/, '')),
                 interval: today,
-                trend: kospiPriceRes.pred_pre_sig === '5' ? 'down' : kospiPriceRes.pred_pre_sig === '2' ? 'up' : 'neutral',
+                trend: indexList[0].predPreSig === '5' ? 'down' : indexList[0].predPreSig === '2' ? 'up' : 'neutral',
                 seriesData: [
                     {
-                        id: kospiChartMinuteListRes.inds_cd,
+                        id: indexList[0].indsCd,
                         showMark: false,
                         curve: 'linear',
                         area: true,
                         stackOrder: 'ascending',
-                        color: kospiPriceRes.pred_pre_sig === '2' ? 'red' : 'blue',
-                        data: kospiChartMinuteListRes.inds_min_pole_qry.map(item => parsePrice(item.cur_prc.replace(/^[+-]/, ''))).reverse(),
+                        color: indexList[0].predPreSig === '2' ? 'red' : 'blue',
+                        data: indexList[0].chartMinuteList.map(item => parsePrice(item.curPrc.replace(/^[+-]/, ''))).reverse(),
                     }
                 ],
                 dateList: kospiDateList
             });
 
             setKosdacChartData({
-                id: kosdacChartMinuteListRes.inds_cd,
+                id: indexList[1].indsCd,
                 title: '종합(KOSDAQ)',
-                value: kosdacPriceRes.cur_prc.replace(/^[+-]/, ''),
-                fluRt: kosdacPriceRes.flu_rt,
-                openPric: parseFloat(kosdacPriceRes.open_pric.replace(/^[+-]/, '')),
+                value: indexList[1].curPrc.replace(/^[+-]/, ''),
+                fluRt: indexList[1].fluRt,
+                openPric: parseFloat(indexList[1].openPric.replace(/^[+-]/, '')),
                 interval: today,
-                trend: kosdacPriceRes.pred_pre_sig === '5' ? 'down' : kosdacPriceRes.pred_pre_sig === '2' ? 'up' : 'neutral',
+                trend: indexList[1].predPreSig === '5' ? 'down' : indexList[1].predPreSig === '2' ? 'up' : 'neutral',
                 seriesData: [
                     {
-                        id: kosdacChartMinuteListRes.inds_cd,
+                        id: indexList[1].indsCd,
                         showMark: false,
                         curve: 'linear',
                         area: true,
                         stackOrder: 'ascending',
-                        color: kosdacPriceRes.pred_pre_sig === '2' ? 'red' : 'blue',
-                        data: kosdacChartMinuteListRes.inds_min_pole_qry.map(item => parsePrice(item.cur_prc.replace(/^[+-]/, ''))).reverse(),
+                        color: indexList[1].predPreSig === '2' ? 'red' : 'blue',
+                        data: indexList[1].chartMinuteList.map(item => parsePrice(item.curPrc.replace(/^[+-]/, ''))).reverse(),
                     }
                 ],
                 dateList: kosdacDateList
             });
 
             setKospi200ChartData({
-                id: kospi200ChartMinuteListRes.inds_cd,
+                id: indexList[2].indsCd,
                 title: 'KOSPI 200',
-                value: kospi200PriceRes.cur_prc.replace(/^[+-]/, ''),
-                fluRt: kospi200PriceRes.flu_rt,
-                openPric: parseFloat(kospi200PriceRes.open_pric.replace(/^[+-]/, '')),
+                value: indexList[2].curPrc.replace(/^[+-]/, ''),
+                fluRt: indexList[2].fluRt,
+                openPric: parseFloat(indexList[2].openPric.replace(/^[+-]/, '')),
                 interval: today,
-                trend: kospi200PriceRes.pred_pre_sig === '5' ? 'down' : kospi200PriceRes.pred_pre_sig === '2' ? 'up' : 'neutral',
+                trend: indexList[2].predPreSig === '5' ? 'down' : indexList[2].predPreSig === '2' ? 'up' : 'neutral',
                 seriesData: [
                     {
-                        id: kospi200ChartMinuteListRes.inds_cd,
+                        id: indexList[2].indsCd,
                         showMark: false,
                         curve: 'linear',
                         area: true,
                         stackOrder: 'ascending',
-                        color: kospi200PriceRes.pred_pre_sig === '2' ? 'red' : 'blue',
-                        data: kospi200ChartMinuteListRes.inds_min_pole_qry.map(item => parsePrice(item.cur_prc.replace(/^[+-]/, ''))).reverse(),
+                        color: indexList[2].predPreSig === '2' ? 'red' : 'blue',
+                        data: indexList[2].chartMinuteList.map(item => parsePrice(item.curPrc.replace(/^[+-]/, ''))).reverse(),
                     }
                 ],
                 dateList: kospi200DateList
