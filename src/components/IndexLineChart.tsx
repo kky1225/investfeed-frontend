@@ -10,7 +10,7 @@ import {areaElementClasses} from "@mui/x-charts/LineChart";
 import {CardActionArea} from "@mui/material";
 import {useNavigate} from "react-router-dom";
 
-export interface CustomLineChartProps {
+export interface IndexLineChartProps {
     id: string,
     title: string,
     value: string,
@@ -23,7 +23,7 @@ export interface CustomLineChartProps {
 }
 
 const IndexLineChart = (
-    { id, title, value, fluRt, openPric, interval, trend, seriesData, dateList }: CustomLineChartProps,
+    { id, title, value, fluRt, openPric, interval, trend, seriesData, dateList }: IndexLineChartProps,
 ) => {
     const theme = useTheme();
 
@@ -99,12 +99,12 @@ const IndexLineChart = (
                             tickLabelStyle: {
                                 display: 'none'
                             },
-                            tickInterval: (_index: any, i: number) => i % 5 === 0 //i % 30 === 0,
+                            tickInterval: (i: number) => i % 5 === 0 //i % 30 === 0,
                         },
                     ]}
                     yAxis={[
                         {
-                            valueFormatter: (value: any) => value.toLocaleString(),
+                            valueFormatter: (value: number) => value.toLocaleString(),
                             width: 60,
                             min: minY,
                             max: maxY,

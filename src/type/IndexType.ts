@@ -18,3 +18,35 @@ export enum IndexChartType {
     MONTH = "MONTH",
     YEAR = "YEAR"
 }
+
+export interface IndexListItem {
+    indsCd: string,
+    indsNm: string,
+    curPrc: string,
+    predPreSig: string,
+    fluRt: string,
+    trdeQty: string,
+    trdePrica: string,
+    openPric: string,
+    tmN: string,
+    chartMinuteList: Array<ChartMinute>
+}
+
+export interface ChartMinute {
+    curPrc: string,
+    cntrTm: string,
+}
+
+export interface IndexStreamRes {
+    type: string,
+    name: string,
+    item: string,
+    values: Array<IndexStream>
+}
+
+export interface IndexStream {
+    code: string,
+    value: string,
+    fluRt: string,
+    trend: string,
+}

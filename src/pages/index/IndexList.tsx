@@ -1,24 +1,19 @@
 import Box from "@mui/material/Box";
 import Grid from "@mui/material/Grid";
 import Typography from "@mui/material/Typography";
-import Card from "@mui/material/Card";
-import CardContent from "@mui/material/CardContent";
-import Stack from "@mui/material/Stack";
-import Chip from "@mui/material/Chip";
-import IndexLineChart from "../../components/IndexLineChart.tsx";
-import type { CustomLineChartProps } from '../../components/IndexLineChart.tsx';
-import OptionTable from "../../components/OptionTable.tsx";
-import {GridColDef, GridRowsProp} from "@mui/x-data-grid";
+import IndexLineChart, {IndexLineChartProps} from "../../components/IndexLineChart.tsx";
 import {fetchIndexList, fetchIndexListStream} from "../../api/index/IndexApi.ts";
 import {useEffect, useRef, useState} from "react";
 import {fetchTimeNow} from "../../api/time/TimeApi.ts";
 import {MarketType} from "../../type/timeType.ts";
 import GoldLineChart from "../../components/GoldLineChart.tsx";
+import {ChartMinute, IndexListItem, IndexStream, IndexStreamRes} from "../../type/IndexType.ts";
 
 const IndexList = () => {
     const chartTimer = useRef<number>(0);
     const marketTimer = useRef<number>(0);
-    const [kospiChartData, setKospiChartData] = useState<CustomLineChartProps>({
+
+    const DEFAULT_INDEX_DATA: IndexLineChartProps = {
         id: '-',
         title: '-',
         value: '-',
@@ -28,7 +23,7 @@ const IndexList = () => {
         trend: 'neutral',
         seriesData: [
             {
-                id: 'KOSPI',
+                id: '-',
                 showMark: false,
                 curve: 'linear',
                 area: true,
@@ -38,53 +33,17 @@ const IndexList = () => {
             }
         ],
         dateList: []
-    });
+    }
 
-    const [kosdacChartData, setKosdacChartData] = useState<CustomLineChartProps>({
-        id: '-',
-        title: '-',
-        value: '-',
-        fluRt: '0',
-        openPric: 0,
-        interval: '-',
-        trend: 'neutral',
-        seriesData: [
-            {
-                id: 'KOSDAC',
-                showMark: false,
-                curve: 'linear',
-                area: true,
-                stackOrder: 'ascending',
-                color: 'grey',
-                data: []
-            }
-        ],
-        dateList: []
-    });
+    const [indexDataList, setIndexDataList] = useState<IndexLineChartProps[]>(
+        Array.from({ length: 3}, () => ({
+            ...DEFAULT_INDEX_DATA,
+            seriesData: DEFAULT_INDEX_DATA.seriesData.map(s => ({...s})),
+            dateList: [...DEFAULT_INDEX_DATA.dateList]
+        }))
+    );
 
-    const [kospi200ChartData, setKospi200ChartData] = useState<CustomLineChartProps>({
-        id: '-',
-        title: '-',
-        value: '-',
-        fluRt: '0',
-        openPric: 0,
-        interval: '-',
-        trend: 'neutral',
-        seriesData: [
-            {
-                id: 'KOSPI 200',
-                showMark: false,
-                curve: 'linear',
-                area: true,
-                stackOrder: 'ascending',
-                color: 'grey',
-                data: []
-            }
-        ],
-        dateList: []
-    });
-
-    const [goldChartData, setGoldChartData] = useState<CustomLineChartProps>({
+    const [goldChartData, setGoldChartData] = useState<IndexLineChartProps>({
         id: '-',
         title: '-',
         value: '-',
@@ -232,87 +191,37 @@ const IndexList = () => {
                 today = `${year}.${month}.${day} ${minute}:${second}`;
             }
 
-            const kospiDateList = indexList[0].chartMinuteList.map(item => {
-                return `${item.cntrTm.slice(0, 4)}.${item.cntrTm.slice(4, 6)}.${item.cntrTm.slice(6, 8)} ${item.cntrTm.slice(8, 10)}:${item.cntrTm.slice(10, 12)}`
-            }).reverse();
+            const newIndexDataList: IndexLineChartProps[] = indexList.map((indexItem: IndexListItem) => {
+                const newDateList = indexItem.chartMinuteList.map((chart: ChartMinute) => indexDateFormat(chart.cntrTm)).reverse();
 
-            const kospi200DateList = indexList[1].chartMinuteList.map(item => {
-                return `${item.cntrTm.slice(0, 4)}.${item.cntrTm.slice(4, 6)}.${item.cntrTm.slice(6, 8)} ${item.cntrTm.slice(8, 10)}:${item.cntrTm.slice(10, 12)}`
-            }).reverse();
+                return {
+                    id: indexItem.indsCd,
+                    title: indexItem.indsNm,
+                    value: indexItem.curPrc.replace(/^[+-]/, ''),
+                    fluRt: indexItem.fluRt,
+                    openPric: parseFloat(indexItem.openPric.replace(/^[+-]/, '')),
+                    interval: today,
+                    trend: indexItem.predPreSig === '5' ? 'down' : indexItem.predPreSig === '2' ? 'up' : 'neutral',
+                    seriesData: [
+                        {
+                            id: indexItem.indsCd,
+                            showMark: false,
+                            curve: 'linear',
+                            area: true,
+                            stackOrder: 'ascending',
+                            color: indexItem.predPreSig === '2' ? 'red' : 'blue',
+                            data: indexItem.chartMinuteList.map(item => parsePrice(item.curPrc.replace(/^[+-]/, ''))).reverse(),
+                        }
+                    ],
+                    dateList: newDateList
+                };
+            });
 
-            const kosdacDateList = indexList[2].chartMinuteList.map(item => {
-                return `${item.cntrTm.slice(0, 4)}.${item.cntrTm.slice(4, 6)}.${item.cntrTm.slice(6, 8)} ${item.cntrTm.slice(8, 10)}:${item.cntrTm.slice(10, 12)}`
-            }).reverse();
+            setIndexDataList(newIndexDataList);
 
             const goldDateList = goldChartMinuteListRes.gds_min_chart_qry.map(item => {
                 return `${item.cntr_tm.slice(0, 4)}.${item.cntr_tm.slice(4, 6)}.${item.cntr_tm.slice(6, 8)} ${item.cntr_tm.slice(8, 10)}:${item.cntr_tm.slice(10, 12)}`
             }).reverse();
-
-            setKospiChartData({
-                id: indexList[0].indsCd,
-                title: '종합(KOSPI)',
-                value: indexList[0].curPrc.replace(/^[+-]/, ''),
-                fluRt: indexList[0].fluRt,
-                openPric: parseFloat(indexList[0].openPric.replace(/^[+-]/, '')),
-                interval: today,
-                trend: indexList[0].predPreSig === '5' ? 'down' : indexList[0].predPreSig === '2' ? 'up' : 'neutral',
-                seriesData: [
-                    {
-                        id: indexList[0].indsCd,
-                        showMark: false,
-                        curve: 'linear',
-                        area: true,
-                        stackOrder: 'ascending',
-                        color: indexList[0].predPreSig === '2' ? 'red' : 'blue',
-                        data: indexList[0].chartMinuteList.map(item => parsePrice(item.curPrc.replace(/^[+-]/, ''))).reverse(),
-                    }
-                ],
-                dateList: kospiDateList
-            });
-
-            setKosdacChartData({
-                id: indexList[1].indsCd,
-                title: '종합(KOSDAQ)',
-                value: indexList[1].curPrc.replace(/^[+-]/, ''),
-                fluRt: indexList[1].fluRt,
-                openPric: parseFloat(indexList[1].openPric.replace(/^[+-]/, '')),
-                interval: today,
-                trend: indexList[1].predPreSig === '5' ? 'down' : indexList[1].predPreSig === '2' ? 'up' : 'neutral',
-                seriesData: [
-                    {
-                        id: indexList[1].indsCd,
-                        showMark: false,
-                        curve: 'linear',
-                        area: true,
-                        stackOrder: 'ascending',
-                        color: indexList[1].predPreSig === '2' ? 'red' : 'blue',
-                        data: indexList[1].chartMinuteList.map(item => parsePrice(item.curPrc.replace(/^[+-]/, ''))).reverse(),
-                    }
-                ],
-                dateList: kosdacDateList
-            });
-
-            setKospi200ChartData({
-                id: indexList[2].indsCd,
-                title: 'KOSPI 200',
-                value: indexList[2].curPrc.replace(/^[+-]/, ''),
-                fluRt: indexList[2].fluRt,
-                openPric: parseFloat(indexList[2].openPric.replace(/^[+-]/, '')),
-                interval: today,
-                trend: indexList[2].predPreSig === '5' ? 'down' : indexList[2].predPreSig === '2' ? 'up' : 'neutral',
-                seriesData: [
-                    {
-                        id: indexList[2].indsCd,
-                        showMark: false,
-                        curve: 'linear',
-                        area: true,
-                        stackOrder: 'ascending',
-                        color: indexList[2].predPreSig === '2' ? 'red' : 'blue',
-                        data: indexList[2].chartMinuteList.map(item => parsePrice(item.curPrc.replace(/^[+-]/, ''))).reverse(),
-                    }
-                ],
-                dateList: kospi200DateList
-            });
 
             const goldPrice = Number(goldPriceRes.pred_close_pric) + Number(goldPriceRes.pred_pre)
 
@@ -349,7 +258,7 @@ const IndexList = () => {
             const data = JSON.parse(event.data);
 
             if (data.trnm === "REAL" && Array.isArray(data.data)) {
-                const indexList = data.data.map((entry) => {
+                const indexList = data.data.map((entry: IndexStreamRes) => {
                     const values = entry.values;
                     return {
                         code: entry.item, // ex: "001"
@@ -360,44 +269,21 @@ const IndexList = () => {
                     };
                 });
 
-                indexList.forEach((data) => {
-                    switch(data.code) {
-                        case "001": {
-                            setKospiChartData((prev) => ({
-                                ...prev,
-                                value: data.value.replace(/^[+-]/, ''),
-                                fluRt: data.fluRt,
-                                trend: data.trend === '5' ? 'down' : data.trend === '2' ? 'up' : 'neutral',
-                            }));
+                setIndexDataList((prevList) => {
+                    return prevList.map((item) => {
+                        const newData = indexList.find((data: IndexStream) => data.code === item.id);
 
-                            break;
+                        if (newData) {
+                            return {
+                                ...item,
+                                value: newData.value.replace(/^[+-]/, ''),
+                                fluRt: newData.fluRt,
+                                trend: newData.trend === '5' ? 'down' : newData.trend === '2' ? 'up' : 'neutral',
+                            };
                         }
-                        case "101":
-                            setKosdacChartData((prev) => ({
-                                ...prev,
-                                value: data.value.replace(/^[+-]/, ''),
-                                fluRt: data.fluRt,
-                                trend: data.trend === '5' ? 'down' : data.trend === '2' ? 'up' : 'neutral',
-                            }));
 
-                            break;
-                        case "201":
-                            setKospi200ChartData((prev) => ({
-                                ...prev,
-                                value: data.value.replace(/^[+-]/, ''),
-                                fluRt: data.fluRt,
-                                trend: data.trend === '5' ? 'down' : data.trend === '2' ? 'up' : 'neutral',
-                            }));
-
-                            break;
-                        case "M04020000":
-                            setGoldChartData((prev) => ({
-                                ...prev,
-                                value: data.value.replace(/^[+-]/, ''),
-                                fluRt: data.fluRt,
-                                trend: data.trend === '5' ? 'down' : data.trend === '2' ? 'up' : 'neutral',
-                            }));
-                    }
+                        return item;
+                    });
                 });
             }
         };
@@ -405,70 +291,14 @@ const IndexList = () => {
         return socket;
     }
 
+    const indexDateFormat = (cntrTm: string) => {
+        return `${cntrTm.slice(0, 4)}.${cntrTm.slice(4, 6)}.${cntrTm.slice(6, 8)} ${cntrTm.slice(8, 10)}:${cntrTm.slice(10, 12)}`;
+    }
+
     const parsePrice = (raw: string)  => {
         if (!raw) return null;
         return (parseInt(raw, 10) / 100).toFixed(2);
     }
-
-    const columns: GridColDef[] = [
-        {
-            field: 'type',
-            headerName: '구분',
-            headerAlign: 'center',
-            align: 'center',
-            flex: 1,
-            minWidth: 80,
-        },
-        {
-            field: 'sell',
-            headerName: '매도',
-            headerAlign: 'center',
-            align: 'center',
-            flex: 1,
-            minWidth: 80
-
-        },
-        {
-            field: 'buy',
-            headerName: '매수',
-            flex: 1,
-            headerAlign: 'center',
-            align: 'center',
-            minWidth: 80,
-        },
-        {
-            field: 'buy2',
-            headerName: '순매수',
-            flex: 1,
-            headerAlign: 'center',
-            align: 'center',
-            minWidth: 100,
-        }
-    ];
-
-    const rows: GridRowsProp = [
-        {
-            id: 1,
-            type: '기관',
-            sell: 6,
-            buy: 5,
-            buy2: -1,
-        },
-        {
-            id: 2,
-            type: '외국인',
-            sell: 212,
-            buy: 212,
-            buy2: 0,
-        },
-        {
-            id: 3,
-            type: '개인',
-            sell: 72,
-            buy: 74,
-            buy2: 2,
-        }
-    ];
 
     return (
         <Box sx={{ width: '100%', maxWidth: { sm: '100%', md: '1700px' } }}>
@@ -481,15 +311,14 @@ const IndexList = () => {
                 columns={12}
                 sx={{ mb: (theme) => theme.spacing(2) }}
             >
-                <Grid size={{ xs: 12, md: 6 }}>
-                    <IndexLineChart {...kospiChartData} />
-                </Grid>
-                <Grid size={{ xs: 12, md: 6 }}>
-                    <IndexLineChart {...kosdacChartData} />
-                </Grid>
-                <Grid size={{ xs: 12, md: 6 }}>
-                    <IndexLineChart {...kospi200ChartData} />
-                </Grid>
+                {
+                    indexDataList.map((value, index) => (
+                        <Grid key={index} size={{ xs: 12, md: 6 }}>
+                            <IndexLineChart {...value} />
+                        </Grid>
+                    ))
+                }
+
                 <Grid size={{ xs: 12, md: 6 }}>
                     <GoldLineChart {...goldChartData} />
                 </Grid>
