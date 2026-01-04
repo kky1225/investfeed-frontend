@@ -167,8 +167,8 @@ const StockDetail = () => {
                         return `${item.dt.slice(0, 4)}.${item.dt.slice(4, 6)}.${item.dt.slice(6, 8)} ${item.dt.slice(8, 10)}:${item.dt.slice(10, 12)}`
                     }).reverse();
 
-                    lineData = stockChartList.map((item: { cur_prc: string }) => item.cur_prc.replace(/^[+-]/, '')).reverse();
-                    barDataList = stockChartList.map((item: { trde_qty: string }) => item.trde_qty).reverse();
+                    lineData = stockChartList.map((item: { curPrc: string }) => item.curPrc.replace(/^[+-]/, '')).reverse();
+                    barDataList = stockChartList.map((item: { trdeQty: string }) => item.trdeQty).reverse();
 
                     break;
                 }
@@ -180,8 +180,8 @@ const StockDetail = () => {
                         return `${item.dt.slice(0, 4)}.${item.dt.slice(4, 6)}.${item.dt.slice(6, 8)}`
                     }).reverse();
 
-                    lineData = stockChartList.map((item: { cur_prc: string }) => item.cur_prc).reverse();
-                    barDataList = stockChartList.map((item: { trde_qty: string }) => item.trde_qty.slice(0, 3)).reverse();
+                    lineData = stockChartList.map((item: { curPrc: string }) => item.curPrc).reverse();
+                    barDataList = stockChartList.map((item: { trdeQty: string }) => item.trdeQty.slice(0, 3)).reverse();
 
                     break;
                 }
@@ -193,6 +193,7 @@ const StockDetail = () => {
             const hour = stockInfo.tm.substring(8, 10);
             const minute = stockInfo.tm.substring(10, 12);
             let today;
+
             if(Number(hour) >= 20 || Number(hour) < 8) {
                 today = `${year}.${month}.${day} 장마감`;
             } else {
@@ -225,10 +226,10 @@ const StockDetail = () => {
             });
 
             setInfo({
-                trde_qty: Number(stockInfo.trde_qty),
-                trde_prica: Number(stockInfo.trde_prica.substring(0, 7)),
-                open_pric: Number(stockInfo.open_pric.replace(/^[+-]/, '')),
-                cur_prc: Number(stockInfo.cur_prc.replace(/^[+-]/, '')),
+                trdeQty: Number(stockInfo.trde_qty),
+                trdePrica: Number(stockInfo.trde_prica.substring(0, 7)),
+                openPric: Number(stockInfo.open_pric.replace(/^[+-]/, '')),
+                curPrc: Number(stockInfo.cur_prc.replace(/^[+-]/, '')),
                 _250hgst: Number(stockInfo._250hgst.replace(/^[+-]/, '')),
                 _250lwst: Number(stockInfo._250lwst.replace(/^[+-]/, '')),
                 per: Number(stockInfo.per),
@@ -393,12 +394,12 @@ const StockDetail = () => {
     }
 
     interface StockInfoProps {
-        trde_qty: number;
-        trde_prica: number;
-        open_pric: number;
-        cur_prc: number;
-        _250hgst: number;
+        trdeQty: number;
+        trdePrica: number;
+        openPric: number;
+        curPrc: number;
         _250lwst: number;
+        _250hgst: number;
         per: number;
         eps: number;
         roe: number;
@@ -406,10 +407,10 @@ const StockDetail = () => {
     }
 
     const [info, setInfo] = useState<StockInfoProps>({
-        trde_qty: 0,
-        trde_prica: 0,
-        open_pric: 0,
-        cur_prc: 0,
+        trdeQty: 0,
+        trdePrica: 0,
+        openPric: 0,
+        curPrc: 0,
         _250hgst: 0,
         _250lwst: 0,
         per: 0,
@@ -425,6 +426,7 @@ const StockDetail = () => {
         title: string,
         message: string
     }
+
     const [message, setMessage] = useState<MessageProps>({
         icon: <RemoveIcon />,
         title: '-',
@@ -616,7 +618,10 @@ const StockDetail = () => {
             message = message + '기관 매도 중입니다.'
         }
 
-        if (orgn > 0 && frgnr > 0) {
+        if (orgn == 0 && frgnr == 0) {
+            title = `${name} 투자 중립`
+            icon = <RemoveIcon />
+        } else if (orgn > 0 && frgnr > 0) {
             title = `${name} 투자 양호`
             icon = <CheckIcon color="success" />;
         } else if(orgn > 0 || frgnr > 0) {
@@ -805,7 +810,7 @@ const StockDetail = () => {
                                 </Grid>
                                 <Grid size={{xs: 12, md: 3}}>
                                     <Typography variant="subtitle2" gutterBottom>
-                                        {info.trde_qty.toLocaleString()}
+                                        {info.trdeQty.toLocaleString()}
                                     </Typography>
                                 </Grid>
                                 <Grid size={{xs: 12, md: 3}}>
@@ -815,7 +820,7 @@ const StockDetail = () => {
                                 </Grid>
                                 <Grid size={{xs: 12, md: 3}}>
                                     <Typography variant="subtitle2" gutterBottom>
-                                        {info.trde_prica.toLocaleString()}
+                                        {info.trdePrica.toLocaleString()}
                                     </Typography>
                                 </Grid>
                                 <Grid size={{xs: 12, md: 3}}>
@@ -825,7 +830,7 @@ const StockDetail = () => {
                                 </Grid>
                                 <Grid size={{xs: 12, md: 3}}>
                                     <Typography variant="subtitle2" gutterBottom>
-                                        {info.open_pric.toLocaleString()}
+                                        {info.openPric.toLocaleString()}
                                     </Typography>
                                 </Grid>
                                 <Grid size={{xs: 12, md: 3}}>
@@ -835,7 +840,7 @@ const StockDetail = () => {
                                 </Grid>
                                 <Grid size={{xs: 12, md: 3}}>
                                     <Typography variant="subtitle2" gutterBottom>
-                                        {info.cur_prc.toLocaleString()}
+                                        {info.curPrc.toLocaleString()}
                                     </Typography>
                                 </Grid>
                                 <Grid size={{xs: 12, md: 3}}>
@@ -938,7 +943,7 @@ const StockDetail = () => {
                             <Slider
                                 aria-label="Custom marks"
                                 track={false}
-                                value={Number(info.cur_prc)}
+                                value={info.curPrc}
                                 valueLabelDisplay="auto"
                                 disabled
                                 max={dayRange[1].value}
@@ -950,7 +955,7 @@ const StockDetail = () => {
                             <Slider
                                 aria-label="Custom marks"
                                 track={false}
-                                value={Number(info.cur_prc)}
+                                value={info.curPrc}
                                 valueLabelDisplay="auto"
                                 disabled
                                 max={yearRange[1].value}

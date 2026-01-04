@@ -15,13 +15,12 @@ import {Select, SelectChangeEvent, Slider} from "@mui/material";
 import MenuItem from "@mui/material/MenuItem";
 import IndexDetailLineChart, {CustomIndexDetailLineChartProps} from "../../components/IndexDetailLineChart.tsx";
 import InvestorBarChart from "../../components/InvestorBarChart.tsx";
-import {fetchIndexDetail, fetchIndexDetailStream, fetchIndexListStream} from "../../api/index/IndexApi.ts";
+import {fetchIndexDetail, fetchIndexDetailStream} from "../../api/index/IndexApi.ts";
 import {
     IndexChartType,
     IndexDetailReq,
-    IndexDetailSteamReq
+    IndexDetailSteamReq, IndexStream, IndexStreamRes
 } from "../../type/IndexType.ts";
-import {GridColDef} from "@mui/x-data-grid";
 import RemoveIcon from "@mui/icons-material/Remove";
 import CheckIcon from "@mui/icons-material/Check";
 import PriorityHighIcon from "@mui/icons-material/PriorityHigh";
@@ -87,13 +86,22 @@ const IndexDetail = () => {
 
     const [barData, setBarData] = useState<Array<number>>([0, 0, 0]);
 
-    const [info, setInfo] = useState<object>({
-        trde_qty: 0,
-        trde_prica: 0,
-        open_pric: 0,
-        cur_prc: 0,
-        _52wk_lwst_pric: 0,
-        _52wk_hgst_pric: 0
+    interface StockInfoProps {
+        trdeQty: number;
+        trdePrica: number;
+        openPric: number;
+        curPrc: number;
+        _250lwst: number;
+        _250hgst: number;
+    }
+
+    const [info, setInfo] = useState<StockInfoProps>({
+        trdeQty: 0,
+        trdePrica: 0,
+        openPric: 0,
+        curPrc: 0,
+        _250lwst: 0,
+        _250hgst: 0
     });
 
     const [dayRange, setDayRange] = useState<IndexRangeProps[]>([
@@ -174,10 +182,9 @@ const IndexDetail = () => {
             console.log(data);
 
             const {
-                sectPriceRes, chartListRes, sectInvestor
+                indexInfo, chartList
             } = data.result;
 
-            let year, month, day, minute, second;
             let dateList;
             let lineData, barDataList;
 
@@ -187,114 +194,60 @@ const IndexDetail = () => {
                 case IndexChartType.MINUTE_5:
                 case IndexChartType.MINUTE_10:
                 case IndexChartType.MINUTE_30: {
-                    year = chartListRes.inds_min_pole_qry[0].cntr_tm.substring(0, 4);
-                    month = chartListRes.inds_min_pole_qry[0].cntr_tm.substring(4, 6);
-                    day = chartListRes.inds_min_pole_qry[0].cntr_tm.substring(6, 8);
-                    minute = sectPriceRes.inds_cur_prc_tm[0].tm_n.substring(0, 2);
-                    second = sectPriceRes.inds_cur_prc_tm[0].tm_n.substring(2, 4);
-
-                    dateList = chartListRes.inds_min_pole_qry.map(item => {
-                        return `${item.cntr_tm.slice(0, 4)}.${item.cntr_tm.slice(4, 6)}.${item.cntr_tm.slice(6, 8)} ${item.cntr_tm.slice(8, 10)}:${item.cntr_tm.slice(10, 12)}`
+                    dateList = chartList.map((item: {dt: string}) => {
+                        return `${item.dt.slice(0, 4)}.${item.dt.slice(4, 6)}.${item.dt.slice(6, 8)} ${item.dt.slice(8, 10)}:${item.dt.slice(10, 12)}`
                     }).reverse();
 
-                    lineData = chartListRes.inds_min_pole_qry.map(item => parsePrice(item.cur_prc.replace(/^[+-]/, ''))).reverse();
-                    barDataList = chartListRes.inds_min_pole_qry.map(item => item.trde_qty).reverse();
+                    lineData = chartList.map((item: { curPrc: string }) => parsePrice(item.curPrc.replace(/^[+-]/, ''))).reverse();
+                    barDataList = chartList.map((item: { trdeQty: string }) => item.trdeQty).reverse();
 
                     break;
                 }
-                case IndexChartType.DAY: {
-                    year = chartListRes.inds_dt_pole_qry[0].dt.substring(0, 4);
-                    month = chartListRes.inds_dt_pole_qry[0].dt.substring(4, 6);
-                    day = chartListRes.inds_dt_pole_qry[0].dt.substring(6, 8);
-                    minute = sectPriceRes.inds_cur_prc_tm[0].tm_n.substring(0, 2);
-                    second = sectPriceRes.inds_cur_prc_tm[0].tm_n.substring(2, 4);
-
-                    dateList = chartListRes.inds_dt_pole_qry.map(item => {
-                        return `${item.dt.slice(0, 4)}.${item.dt.slice(4, 6)}.${item.dt.slice(6, 8)}`
-                    }).reverse();
-
-                    lineData = chartListRes.inds_dt_pole_qry.map(item => parsePrice(item.cur_prc)).reverse();
-                    barDataList = chartListRes.inds_dt_pole_qry.map(item => item.trde_qty.slice(0, 3)).reverse();
-
-                    break;
-                }
-                case IndexChartType.WEEK: {
-                    year = chartListRes.inds_stk_pole_qry[0].dt.substring(0, 4);
-                    month = chartListRes.inds_stk_pole_qry[0].dt.substring(4, 6);
-                    day = chartListRes.inds_stk_pole_qry[0].dt.substring(6, 8);
-                    minute = sectPriceRes.inds_cur_prc_tm[0].tm_n.substring(0, 2);
-                    second = sectPriceRes.inds_cur_prc_tm[0].tm_n.substring(2, 4);
-
-                    dateList = chartListRes.inds_stk_pole_qry.map(item => {
-                        return `${item.dt.slice(0, 4)}.${item.dt.slice(4, 6)}.${item.dt.slice(6, 8)}`
-                    }).reverse();
-
-                    lineData = chartListRes.inds_stk_pole_qry.map(item => parsePrice(item.cur_prc)).reverse();
-                    barDataList = chartListRes.inds_stk_pole_qry.map(item => item.trde_qty.slice(0, 3)).reverse();
-
-                    break;
-                }
-                case IndexChartType.MONTH: {
-                    year = chartListRes.inds_mth_pole_qry[0].dt.substring(0, 4);
-                    month = chartListRes.inds_mth_pole_qry[0].dt.substring(4, 6);
-                    day = chartListRes.inds_mth_pole_qry[0].dt.substring(6, 8);
-                    minute = sectPriceRes.inds_cur_prc_tm[0].tm_n.substring(0, 2);
-                    second = sectPriceRes.inds_cur_prc_tm[0].tm_n.substring(2, 4);
-
-                    dateList = chartListRes.inds_mth_pole_qry.map(item => {
-                        return `${item.dt.slice(0, 4)}.${item.dt.slice(4, 6)}.${item.dt.slice(6, 8)}`
-                    }).reverse();
-
-                    lineData = chartListRes.inds_mth_pole_qry.map(item => parsePrice(item.cur_prc)).reverse();
-                    barDataList = chartListRes.inds_mth_pole_qry.map(item => item.trde_qty.slice(0, 3)).reverse();
-
-                    break;
-                }
+                case IndexChartType.DAY:
+                case IndexChartType.WEEK:
+                case IndexChartType.MONTH:
                 case IndexChartType.YEAR: {
-                    year = chartListRes.inds_yr_pole_qry[0].dt.substring(0, 4);
-                    month = chartListRes.inds_yr_pole_qry[0].dt.substring(4, 6);
-                    day = chartListRes.inds_yr_pole_qry[0].dt.substring(6, 8);
-                    minute = sectPriceRes.inds_cur_prc_tm[0].tm_n.substring(0, 2);
-                    second = sectPriceRes.inds_cur_prc_tm[0].tm_n.substring(2, 4);
-
-                    dateList = chartListRes.inds_yr_pole_qry.map(item => {
+                    dateList = chartList.map((item: {dt: string}) => {
                         return `${item.dt.slice(0, 4)}.${item.dt.slice(4, 6)}.${item.dt.slice(6, 8)}`
                     }).reverse();
 
-                    lineData = chartListRes.inds_yr_pole_qry.map(item => parsePrice(item.cur_prc)).reverse();
-                    barDataList = chartListRes.inds_yr_pole_qry.map(item => item.trde_qty.slice(0, 3)).reverse();
+                    lineData = chartList.map((item: { curPrc: string }) => parsePrice(item.curPrc)).reverse();
+                    barDataList = chartList.map((item: { trdeQty: string }) => item.trdeQty.slice(0, 3)).reverse();
 
                     break;
                 }
             }
 
-            let id = chartListRes.inds_cd;
-            let title = id === '201' ? 'KOSPI 200' : sectInvestor.inds_netprps.find(it => it.inds_cd == id).inds_nm
+            const year = chartList[0].dt.substring(0, 4);
+            const month = chartList[0].dt.substring(4, 6);
+            const day = chartList[0].dt.substring(6, 8);
+            const hour = indexInfo.tmN.substring(0, 2);
+            const minute = indexInfo.tmN.substring(2, 4);
 
             let today;
 
-            if(minute === '88' && second === '88') {
+            if((Number(hour) >= 15 && Number(minute) >= 30) || Number(hour) < 9) {
                 today = `${year}.${month}.${day} 장마감`;
-            }else {
-                today = `${year}.${month}.${day} ${minute}:${second}`;
+            } else {
+                today = `${year}.${month}.${day} ${hour}:${minute}`;
             }
 
             setSectChartData({
-                id: id,
-                title: title,
-                value: sectPriceRes.cur_prc.replace(/^[+-]/, ''),
-                fluRt: sectPriceRes.flu_rt,
-                openPric: parseFloat(sectPriceRes.open_pric.replace(/^[+-]/, '')),
+                id: chartList.indsCd,
+                title: indexInfo.indsNm,
+                value: Number(indexInfo.curPrc.replace(/^[+-]/, '')).toLocaleString(),
+                fluRt: indexInfo.fluRt,
+                openPric: parseFloat(indexInfo.openPric.replace(/^[+-]/, '')),
                 interval: today,
-                trend: sectPriceRes.pred_pre_sig === '5' ? 'down' : sectPriceRes.pred_pre_sig === '2' ? 'up' : 'neutral',
+                trend: indexInfo.predPreSig === '5' ? 'down' : indexInfo.predPreSig === '2' ? 'up' : 'neutral',
                 seriesData: [
                     {
-                        id: id,
+                        id: chartList.indsCd,
                         showMark: false,
                         curve: 'linear',
                         area: true,
                         stackOrder: 'ascending',
-                        color: sectPriceRes.pred_pre_sig === '2' ? 'red' : 'blue',
+                        color: indexInfo.predPreSig === '2' ? 'red' : 'blue',
                         data: lineData,
                     }
                 ],
@@ -302,8 +255,8 @@ const IndexDetail = () => {
                 dateList: dateList
             });
 
-            const dayMin = sectPriceRes['low_pric'].replace(/^[+-]/, '');
-            const dayMax = sectPriceRes['high_pric'].replace(/^[+-]/, '')
+            const dayMin = indexInfo.lowPric.replace(/^[+-]/, '');
+            const dayMax = indexInfo.highPric.replace(/^[+-]/, '')
 
             setDayRange([
                 {
@@ -316,8 +269,8 @@ const IndexDetail = () => {
                 }
             ]);
 
-            const yearMin = sectPriceRes['52wk_lwst_pric'].replace(/^[+-]/, '');
-            const yearMax = sectPriceRes['52wk_hgst_pric'].replace(/^[+-]/, '');
+            const yearMin = indexInfo['_250lwst'].replace(/^[+-]/, '');
+            const yearMax = indexInfo['_250hgst'].replace(/^[+-]/, '');
 
             setYearRange([
                 {
@@ -331,21 +284,21 @@ const IndexDetail = () => {
             ]);
 
             setInfo({
-                trde_qty: `${sectPriceRes.trde_qty.substring(0, 1)}억 ${sectPriceRes.trde_qty.substring(1, 5)}만주`,
-                trde_prica: `${Number(sectPriceRes.trde_prica).toLocaleString()}`,
-                open_pric: parseFloat(sectPriceRes.open_pric.replace(/^[+-]/, '')),
-                cur_prc: sectPriceRes.cur_prc.replace(/^[+-]/, ''),
-                _52wk_lwst_pric: yearMin,
-                _52wk_hgst_pric: yearMax
-            })
+                trdeQty: Number(indexInfo.trdeQty),
+                trdePrica: Number(indexInfo.trdePrica),
+                openPric: Number(indexInfo.trdePrica.replace(/^[+-]/, '')),
+                curPrc: Number(indexInfo.curPrc.replace(/^[+-]/, '')),
+                _250lwst: Number(indexInfo._250lwst.replace(/^[+-]/, '')),
+                _250hgst: Number(indexInfo._250hgst.replace(/^[+-]/, ''))
+            });
 
-            setBarData([sectInvestor.inds_netprps[0].ind_netprps, sectInvestor.inds_netprps[0].orgn_netprps, sectInvestor.inds_netprps[0].frgnr_netprps])
+            setBarData([indexInfo.indNetprps, indexInfo.frgnrNetprps, indexInfo.orgnNetprps])
 
-            let message = {
+            const message = {
                 ...checkInvestor(
-                    title,
-                    sectInvestor.inds_netprps[0].orgn_netprps,
-                    sectInvestor.inds_netprps[0].frgnr_netprps
+                    indexInfo.indsNm,
+                    indexInfo.frgnrNetprps,
+                    indexInfo.orgnNetprps
                 )
             };
 
@@ -412,13 +365,10 @@ const IndexDetail = () => {
             const data = JSON.parse(event.data);
 
             if (data.trnm === "REAL" && Array.isArray(data.data)) {
-                let item;
-
-                const indexList = data.data.map((entry) => {
-                    const values = entry.values;
-                    item = entry.item;
+                const indexList = data.data.map((res: IndexStreamRes) => {
+                    const values = res.values;
                     return {
-                        code: entry.item,
+                        code: res.item,
                         value: values["10"],
                         change: values["11"],
                         fluRt: values["12"],
@@ -426,8 +376,8 @@ const IndexDetail = () => {
                     };
                 });
 
-                indexList.forEach((data) => {
-                    if(item === req.inds_cd) {
+                indexList.forEach((index: IndexStream) => {
+                    if(index.code === req.inds_cd) {
                         setSectChartData((prev) => ({
                             ...prev,
                             value: data.value.replace(/^[+-]/, ''),
@@ -450,38 +400,6 @@ const IndexDetail = () => {
     const [toggle, setToggle] = useState('DAY');
     const [formats, setFormats] = useState('line');
     const minute = useRef('1');
-
-    const columns: GridColDef[] = [
-        {
-            field: 'rank',
-            headerName: '날짜',
-            flex: 1,
-            minWidth: 80,
-            maxWidth: 80
-        },
-        { field: 'stkNm', headerName: '종가', flex: 1, minWidth: 150 },
-        {
-            field: 'pridStkpcFluRt',
-            headerName: '상승',
-            flex: 1,
-            minWidth: 100,
-            renderCell: (params) => renderStatus(params.value as any),
-        },
-        {
-            field: 'pridStkpcFluRt',
-            headerName: '상승률',
-            flex: 1,
-            minWidth: 100,
-            renderCell: (params) => renderStatus(params.value as any),
-        },
-        {
-            field: 'nettrdeAmt',
-            headerName: '합계 순매수',
-            flex: 1,
-            minWidth: 100,
-            valueFormatter: (value: any) => `${value.slice(0, -2).toLocaleString()}억`,
-        }
-    ];
 
     const handleFormat = (
         _event: MouseEvent<HTMLElement>,
@@ -530,13 +448,19 @@ const IndexDetail = () => {
     const color = labelColors[sectChartData.trend];
     const trendValues = { up: `${sectChartData.fluRt}%`, down: `${sectChartData.fluRt}%`, neutral: `${sectChartData.fluRt}%` };
 
-    const [message, setMessage] = useState<object>({
+    interface MessageProps {
+        icon: JSX.Element,
+        title: string,
+        message: string
+    }
+
+    const [message, setMessage] = useState<MessageProps>({
         icon: <RemoveIcon />,
         title: '-',
         message: '-'
     });
 
-    function checkInvestor(name: string, orgn: number, frgnr: number): object {
+    function checkInvestor(name: string, orgn: number, frgnr: number): MessageProps {
         let message: string;
         let title: string;
         let icon: JSX.Element;
@@ -557,7 +481,10 @@ const IndexDetail = () => {
             message = message + '외국인 매도 중입니다.'
         }
 
-        if (orgn > 0 && frgnr > 0) {
+        if (orgn == 0 && frgnr == 0) {
+            title = `${name} 투자 중립`
+            icon = <RemoveIcon />
+        } else if (orgn > 0 && frgnr > 0) {
             title = `${name} 투자 양호`
             icon = <CheckIcon color="success" />;
         } else if(orgn > 0 || frgnr > 0) {
@@ -692,94 +619,95 @@ const IndexDetail = () => {
                         <CardContent>
                             <Grid container spacing={2}>
                                 <Grid size={{xs: 12, md: 3}}>
-                                    <Typography component="h2" variant="subtitle2" gutterBottom>
-                                        거래량
+                                    <Typography component="h2" variant="subtitle2" gutterBottom fontWeight={600}>
+                                        거래량 (천주)
                                     </Typography>
                                 </Grid>
                                 <Grid size={{xs: 12, md: 3}}>
                                     <Typography component="h3" variant="subtitle2" gutterBottom>
-                                        {info.trde_qty}
+                                        {info.trdeQty.toLocaleString()}
                                     </Typography>
                                 </Grid>
                                 <Grid size={{xs: 12, md: 3}}>
-                                    <Typography component="h2" variant="subtitle2" gutterBottom>
+                                    <Typography component="h2" variant="subtitle2" gutterBottom fontWeight={600}>
                                         거래대금 (백만원)
                                     </Typography>
                                 </Grid>
                                 <Grid size={{xs: 12, md: 3}}>
                                     <Typography component="h3" variant="subtitle2" gutterBottom>
-                                        {info.trde_prica}
+                                        {info.trdePrica.toLocaleString()}
                                     </Typography>
                                 </Grid>
                                 <Grid size={{xs: 12, md: 3}}>
-                                    <Typography component="h2" variant="subtitle2" gutterBottom>
+                                    <Typography component="h2" variant="subtitle2" gutterBottom fontWeight={600}>
                                         시가
                                     </Typography>
                                 </Grid>
                                 <Grid size={{xs: 12, md: 3}}>
                                     <Typography component="h3" variant="subtitle2" gutterBottom>
-                                        {info.open_pric}
+                                        {info.openPric.toLocaleString()}
                                     </Typography>
                                 </Grid>
                                 <Grid size={{xs: 12, md: 3}}>
-                                    <Typography component="h2" variant="subtitle2" gutterBottom>
+                                    <Typography component="h2" variant="subtitle2" gutterBottom fontWeight={600}>
                                         현재가
                                     </Typography>
                                 </Grid>
                                 <Grid size={{xs: 12, md: 3}}>
                                     <Typography component="h3" variant="subtitle2" gutterBottom>
-                                        {info.cur_prc}
+                                        {info.curPrc.toLocaleString()}
                                     </Typography>
                                 </Grid>
                                 <Grid size={{xs: 12, md: 3}}>
-                                    <Typography component="h2" variant="subtitle2" gutterBottom>
+                                    <Typography component="h2" variant="subtitle2" gutterBottom fontWeight={600}>
                                         52주 최저가
                                     </Typography>
                                 </Grid>
                                 <Grid size={{xs: 12, md: 3}}>
                                     <Typography component="h3" variant="subtitle2" gutterBottom>
-                                        {info._52wk_lwst_pric}
+                                        {info._250lwst.toLocaleString()}
                                     </Typography>
                                 </Grid>
                                 <Grid size={{xs: 12, md: 3}}>
-                                    <Typography component="h2" variant="subtitle2" gutterBottom>
+                                    <Typography component="h2" variant="subtitle2" gutterBottom fontWeight={600}>
                                         52주 최고가
                                     </Typography>
                                 </Grid>
                                 <Grid size={{xs: 12, md: 3}}>
                                     <Typography component="h3" variant="subtitle2" gutterBottom>
-                                        {info._52wk_hgst_pric}
+                                        {info._250hgst.toLocaleString()}
                                     </Typography>
                                 </Grid>
                             </Grid>
                         </CardContent>
                     </Card>
                 </Grid>
-                <Grid size={{ xs: 12, md: 4 }}>
+                <Grid size={{ xs: 12, md: 8 }}>
                     <Typography component="h2" variant="h6" sx={{ mb: 2 }}>
-                        당일 투자자별 순매수(억)
+                        당일 투자자별 순매수(주)
                     </Typography>
-                    <Card variant="outlined" sx={{ width: '100%' }}>
-                        <CardContent>
-                            <InvestorBarChart data={barData} />
-                        </CardContent>
-                    </Card>
-                </Grid>
-                <Grid size={{ xs: 12, md: 4 }}>
-                    <Typography component="h2" variant="h6" sx={{ mb: 2 }}>
-                        요약
-                    </Typography>
-                    <Card variant="outlined" sx={{ width: '100%' }}>
-                        {message.icon}
-                        <CardContent>
-                            <Typography gutterBottom variant="h5" component="div">
-                                {message.title}
-                            </Typography>
-                            <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-                                {message.message}
-                            </Typography>
-                        </CardContent>
-                    </Card>
+                    <Grid container spacing={2}>
+                        <Grid size={{ xs: 12, md: 6 }}>
+                            <Card variant="outlined" sx={{ width: '100%' }}>
+                                <CardContent>
+                                    <InvestorBarChart data={barData} />
+                                </CardContent>
+                            </Card>
+                        </Grid>
+                        <Grid size={{ xs: 12, md: 6 }}>
+                            <Card variant="outlined" sx={{ width: '100%' }}>
+                                {message.icon}
+                                <CardContent>
+                                    <Typography gutterBottom variant="h5" component="div">
+                                        {message.title}
+                                    </Typography>
+                                    <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+                                        {message.message}
+                                    </Typography>
+                                </CardContent>
+                            </Card>
+                        </Grid>
+                    </Grid>
                 </Grid>
                 <Grid size={{ xs: 12, md: 4 }}>
                     <Typography component="h2" variant="h6" sx={{ mb: 2 }}>
@@ -790,7 +718,7 @@ const IndexDetail = () => {
                             <Slider
                                 aria-label="Custom marks"
                                 track={false}
-                                value={parseFloat(info.cur_prc)}
+                                value={info.curPrc}
                                 valueLabelDisplay="auto"
                                 disabled
                                 max={dayRange[1].value}
@@ -802,7 +730,7 @@ const IndexDetail = () => {
                             <Slider
                                 aria-label="Custom marks"
                                 track={false}
-                                value={parseFloat(info.cur_prc)}
+                                value={info.curPrc}
                                 valueLabelDisplay="auto"
                                 disabled
                                 max={yearRange[1].value}
