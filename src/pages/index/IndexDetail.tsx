@@ -380,9 +380,9 @@ const IndexDetail = () => {
                     if(index.code === req.inds_cd) {
                         setSectChartData((prev) => ({
                             ...prev,
-                            value: data.value.replace(/^[+-]/, ''),
-                            fluRt: data.fluRt,
-                            trend: data.trend === '5' ? 'down' : data.trend === '2' ? 'up' : 'neutral',
+                            value: index.value.replace(/^[+-]/, ''),
+                            fluRt: index.fluRt,
+                            trend: index.trend === '5' ? 'down' : index.trend === '2' ? 'up' : 'neutral',
                         }));
                     }
                 });
