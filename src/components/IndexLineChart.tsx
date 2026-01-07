@@ -50,7 +50,7 @@ const IndexLineChart = (
     const trendValues = { up: `${fluRt}%`, down: `${fluRt}%`, neutral: `${fluRt}%` };
 
     const onClick = (id: string) => {
-        navigate(`/index/${id}`);
+        navigate(`/index/detail/${id}`);
     }
 
     return (

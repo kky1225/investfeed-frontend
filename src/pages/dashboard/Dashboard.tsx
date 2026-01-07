@@ -441,7 +441,7 @@ export default function Dashboard() {
     }
 
     const onClick = () => {
-        navigate('/index');
+        navigate('/index/list');
     }
 
     const columns: GridColDef[] = [

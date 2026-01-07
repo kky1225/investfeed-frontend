@@ -8,10 +8,10 @@ import IndexList from "./pages/index/IndexList.tsx";
 import IndexDetail from "./pages/index/IndexDetail.tsx";
 import StockDetail from "./pages/stock/StockDetail.tsx";
 import StockList from "./pages/stock/StockList.tsx";
-import GoldDetail from "./pages/gold/GoldDetail.tsx";
+import CommodityDetail from "./pages/commodity/CommodityDetail.tsx";
+import CommodityList from "./pages/commodity/CommodityList.tsx";
 
 function App() {
-
     return (
         <>
             <Routes>
@@ -20,12 +20,13 @@ function App() {
                 <Route element={<MainLayout />} >
                     <Route path="/" Component={Dashboard} />
                     <Route path="/interest" Component={Interest} />
-                    <Route path="/index" Component={IndexList} />
-                    <Route path="/index/:id" Component={IndexDetail} />
-                    <Route path="/gold/:id" Component={GoldDetail} />
+                    <Route path="/index/list" Component={IndexList} />
+                    <Route path="/index/detail/:id" Component={IndexDetail} />
+                    <Route path="/commodity/list" Component={CommodityList} />
+                    <Route path="/commodity/detail/:id" Component={CommodityDetail} />
 
-                    <Route path="/stock" Component={StockList} />
-                    <Route path="/stock/:id" Component={StockDetail} />
+                    <Route path="/stock/list/:type" Component={StockList} />
+                    <Route path="/stock/detail/:id" Component={StockDetail} />
                 </Route>
             </Routes>
         </>

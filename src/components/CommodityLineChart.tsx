@@ -10,7 +10,7 @@ import {areaElementClasses} from "@mui/x-charts/LineChart";
 import {CardActionArea} from "@mui/material";
 import {useNavigate} from "react-router-dom";
 
-export interface CustomLineChartProps {
+export interface CommodityLineChartProps {
     id: string,
     title: string,
     value: string,
@@ -22,8 +22,8 @@ export interface CustomLineChartProps {
     dateList: string[]
 }
 
-const IndexLineChart = (
-    { id, title, value, fluRt, openPric, interval, trend, seriesData, dateList }: CustomLineChartProps,
+const CommodityLineChart = (
+    { id, title, value, fluRt, openPric, interval, trend, seriesData, dateList }: CommodityLineChartProps,
 ) => {
     const theme = useTheme();
 
@@ -50,7 +50,7 @@ const IndexLineChart = (
     const trendValues = { up: `${fluRt}%`, down: `${fluRt}%`, neutral: `${fluRt}%` };
 
     const onClick = (id: string) => {
-        navigate(`/gold/${id}`);
+        navigate(`/commodity/detail/${id}`);
     }
 
     return (
@@ -99,12 +99,12 @@ const IndexLineChart = (
                             tickLabelStyle: {
                                 display: 'none'
                             },
-                            tickInterval: (_index: any, i: number) => i % 5 === 0 //i % 30 === 0,
+                            tickInterval: (i: number) => i % 5 === 0 //i % 30 === 0,
                         },
                     ]}
                     yAxis={[
                         {
-                            valueFormatter: (value: any) => value.toLocaleString(),
+                            valueFormatter: (value: number) => value.toLocaleString(),
                             width: 60,
                             min: minY,
                             max: maxY,
@@ -136,4 +136,4 @@ const IndexLineChart = (
     )
 }
 
-export default IndexLineChart;
+export default CommodityLineChart;

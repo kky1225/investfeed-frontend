@@ -13,7 +13,7 @@ const StockTable = (
     const navigate = useNavigate();
 
     const onClick = (params: any) => {
-        navigate(`/stock/${params.row.id}`);
+        navigate(`/stock/detail/${params.row.id}`);
     }
 
     return (

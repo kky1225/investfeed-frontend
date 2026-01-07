@@ -11,14 +11,16 @@ import ShowChartIcon from '@mui/icons-material/ShowChart';
 import SettingsRoundedIcon from '@mui/icons-material/SettingsRounded';
 import InfoRoundedIcon from '@mui/icons-material/InfoRounded';
 import HelpRoundedIcon from '@mui/icons-material/HelpRounded';
+import DiamondIcon from '@mui/icons-material/Diamond';
 import {useLocation, useNavigate} from "react-router-dom";
 
 const mainListItems = [
     { id: 1, text: '대시보드', icon: <HomeRoundedIcon />, url: '/' },
-    { id: 2, text: '주요 지수', icon: <AnalyticsRoundedIcon />, url: '/index' },
-    { id: 3, text: '주식', icon: <ShowChartIcon />, url: '/stock' },
-    { id: 4, text: '관심 종목', icon: <PeopleRoundedIcon />, url: '/favorite' },
-    { id: 5, text: '보유 주식', icon: <PeopleRoundedIcon />, url: '/holding' },
+    { id: 2, text: '주요 지수', icon: <AnalyticsRoundedIcon />, url: '/index/list' },
+    { id: 3, text: '주식', icon: <ShowChartIcon />, url: '/stock/list/0' },
+    { id: 2, text: '원자재', icon: <DiamondIcon />, url: '/commodity/list' },
+    { id: 4, text: '관심 종목', icon: <PeopleRoundedIcon />, url: '/favorite/list' },
+    { id: 5, text: '보유 주식', icon: <PeopleRoundedIcon />, url: '/holding/list' },
 ];
 
 const secondaryListItems = [

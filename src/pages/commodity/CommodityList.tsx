@@ -1,18 +1,18 @@
 import Box from "@mui/material/Box";
 import Grid from "@mui/material/Grid";
 import Typography from "@mui/material/Typography";
-import IndexLineChart, {IndexLineChartProps} from "../../components/IndexLineChart.tsx";
-import {fetchIndexList, fetchIndexListStream} from "../../api/index/IndexApi.ts";
 import {useEffect, useRef, useState} from "react";
 import {fetchTimeNow} from "../../api/time/TimeApi.ts";
 import {MarketType} from "../../type/timeType.ts";
-import {ChartMinute, IndexListItem, IndexStream, IndexStreamRes} from "../../type/IndexType.ts";
+import CommodityLineChart, {CommodityLineChartProps} from "../../components/CommodityLineChart.tsx";
+import {fetchCommodityList, fetchCommodityListStream} from "../../api/commodity/CommodityApi.ts";
+import {ChartMinute, CommodityListItem, CommodityStream, CommodityStreamRes} from "../../type/CommodityType.ts";
 
-const IndexList = () => {
+const CommodityList = () => {
     const chartTimer = useRef<number>(0);
     const marketTimer = useRef<number>(0);
 
-    const DEFAULT_INDEX_DATA: IndexLineChartProps = {
+    const DEFAULT_COMMODITY_DATA: CommodityLineChartProps = {
         id: '-',
         title: '-',
         value: '-',
@@ -22,7 +22,7 @@ const IndexList = () => {
         trend: 'neutral',
         seriesData: [
             {
-                id: '-',
+                id: '',
                 showMark: false,
                 curve: 'linear',
                 area: true,
@@ -34,16 +34,16 @@ const IndexList = () => {
         dateList: []
     }
 
-    const [indexDataList, setIndexDataList] = useState<IndexLineChartProps[]>(
-        Array.from({ length: 3}, () => ({
-            ...DEFAULT_INDEX_DATA,
-            seriesData: DEFAULT_INDEX_DATA.seriesData.map(s => ({...s})),
-            dateList: [...DEFAULT_INDEX_DATA.dateList]
+    const [commodityDataList, setCommodityDataList] = useState<CommodityLineChartProps[]>(
+        Array.from({ length: 2}, () => ({
+            ...DEFAULT_COMMODITY_DATA,
+            seriesData: DEFAULT_COMMODITY_DATA.seriesData.map(s => ({...s})),
+            dateList: [...DEFAULT_COMMODITY_DATA.dateList]
         }))
     );
 
     useEffect(() => {
-        indexList();
+        commodityList();
 
         let chartTimeout: ReturnType<typeof setTimeout>;
         let socketTimeout: ReturnType<typeof setTimeout>;
@@ -57,7 +57,7 @@ const IndexList = () => {
             const waitTime = 60_000 - (now % 60_000);
 
             if(marketInfo.isMarketOpen) {
-                await indexListStream();
+                await commodityListStream();
                 socket = openSocket();
             } else {
                 socketTimeout = setTimeout(async () => {
@@ -65,16 +65,16 @@ const IndexList = () => {
 
                     const again = await timeNow();
                     if (again.isMarketOpen) {
-                        await indexListStream();
+                        await commodityListStream();
                         socket = openSocket();
                     }
                 }, marketTimer.current + 200);
             }
 
             chartTimeout = setTimeout(() => {
-                indexList();
+                commodityList();
                 interval = setInterval(() => {
-                    indexList();
+                    commodityList();
                 }, (60 * 1000));
             }, waitTime + 200);
         })();
@@ -91,7 +91,7 @@ const IndexList = () => {
         try {
             const startTime = Date.now();
             const data = await fetchTimeNow({
-                marketType: MarketType.INDEX
+                marketType: MarketType.COMMODITY
             });
 
             if(data.code !== "0000") {
@@ -100,7 +100,7 @@ const IndexList = () => {
 
             const { time, isMarketOpen, startMarketTime, marketType } = data.result
 
-            if(marketType !== MarketType.INDEX) {
+            if(marketType !== MarketType.COMMODITY) {
                 throw new Error(data.msg);
             }
 
@@ -123,9 +123,9 @@ const IndexList = () => {
         }
     }
 
-    const indexListStream = async () => {
+    const commodityListStream = async () => {
         try {
-            const data = await fetchIndexListStream();
+            const data = await fetchCommodityListStream();
 
             console.log(data);
 
@@ -137,9 +137,9 @@ const IndexList = () => {
         }
     }
 
-    const indexList = async () => {
+    const commodityList = async () => {
         try {
-            const data = await fetchIndexList();
+            const data = await fetchCommodityList();
 
             if(data.code !== "0000") {
                 throw new Error(data.msg);
@@ -148,52 +148,49 @@ const IndexList = () => {
             console.log(data);
 
             const {
-                indexList
+                commodityList
             } = data.result;
 
-            const year = indexList[0].chartMinuteList[0].cntrTm.substring(0, 4);
-            const month = indexList[0].chartMinuteList[0].cntrTm.substring(4, 6);
-            const day = indexList[0].chartMinuteList[0].cntrTm.substring(6, 8);
-            const minute = indexList[0].tm.substring(0, 2);
-            const second = indexList[0].tm.substring(2, 4);
+            const year = commodityList[0].chartMinuteList[0].cntrTm.substring(0, 4);
+            const month = commodityList[0].chartMinuteList[0].cntrTm.substring(4, 6);
+            const day = commodityList[0].chartMinuteList[0].cntrTm.substring(6, 8);
+            const hour = commodityList[0].tm.substring(0, 2);
+            const minute = commodityList[0].tm.substring(2, 4);
 
             let today;
-
-            if(minute === '88' && second === '88' || minute === '99' && second === '99') {
+            if(Number(hour) >= 20 || Number(hour) < 8) {
                 today = `${year}.${month}.${day} 장마감`;
-            } else if(minute === '' || second === '') {
-                today = `${year}.${month}.${day}`;
             } else {
-                today = `${year}.${month}.${day} ${minute}:${second}`;
+                today = `${year}.${month}.${day} ${hour}:${minute}`;
             }
 
-            const newIndexDataList: IndexLineChartProps[] = indexList.map((indexItem: IndexListItem) => {
-                const newDateList = indexItem.chartMinuteList.map((chart: ChartMinute) => indexDateFormat(chart.cntrTm)).reverse();
+            const newCommodityDataList: CommodityLineChartProps[] = commodityList.map((commodityItem: CommodityListItem) => {
+                const newDateList = commodityItem.chartMinuteList.map((chart: ChartMinute) => commodityDateFormat(chart.cntrTm)).reverse();
 
                 return {
-                    id: indexItem.indsCd,
-                    title: indexItem.indsNm,
-                    value: indexItem.curPrc.replace(/^[+-]/, ''),
-                    fluRt: indexItem.fluRt,
-                    openPric: parseFloat(indexItem.openPric.replace(/^[+-]/, '')),
+                    id: commodityItem.stkCd,
+                    title: commodityItem.stkNm,
+                    value: Number(commodityItem.curPrc.replace(/^[+-]/, '')).toLocaleString(),
+                    fluRt: commodityItem.fluRt,
+                    openPric: parseFloat(commodityItem.openPric.replace(/^[+-]/, '')),
                     interval: today,
-                    trend: indexItem.predPreSig === '5' ? 'down' : indexItem.predPreSig === '2' ? 'up' : 'neutral',
+                    trend: commodityItem.predPreSig === '5' ? 'down' : commodityItem.predPreSig === '2' ? 'up' : 'neutral',
                     seriesData: [
                         {
-                            id: indexItem.indsCd,
+                            id: commodityItem.stkCd,
                             showMark: false,
                             curve: 'linear',
                             area: true,
                             stackOrder: 'ascending',
-                            color: indexItem.predPreSig === '2' ? 'red' : 'blue',
-                            data: indexItem.chartMinuteList.map(item => parsePrice(item.curPrc.replace(/^[+-]/, ''))).reverse(),
+                            color: commodityItem.predPreSig === '2' ? 'red' : 'blue',
+                            data: commodityItem.chartMinuteList.map(item => parsePrice(item.curPrc.replace(/^[+-]/, ''))).reverse(),
                         }
                     ],
                     dateList: newDateList
                 };
             });
 
-            setIndexDataList(newIndexDataList);
+            setCommodityDataList(newCommodityDataList);
         }catch (error) {
             console.error(error);
         }
@@ -206,7 +203,7 @@ const IndexList = () => {
             const data = JSON.parse(event.data);
 
             if (data.trnm === "REAL" && Array.isArray(data.data)) {
-                const indexList = data.data.map((entry: IndexStreamRes) => {
+                const commodityList = data.data.map((entry: CommodityStreamRes) => {
                     const values = entry.values;
                     return {
                         code: entry.item, // ex: "001"
@@ -217,9 +214,9 @@ const IndexList = () => {
                     };
                 });
 
-                setIndexDataList((prevList) => {
+                setCommodityDataList((prevList) => {
                     return prevList.map((item) => {
-                        const newData = indexList.find((data: IndexStream) => data.code === item.id);
+                        const newData = commodityList.find((data: CommodityStream) => data.code === item.id);
 
                         if (newData) {
                             return {
@@ -239,13 +236,13 @@ const IndexList = () => {
         return socket;
     }
 
-    const indexDateFormat = (cntrTm: string) => {
+    const commodityDateFormat = (cntrTm: string) => {
         return `${cntrTm.slice(0, 4)}.${cntrTm.slice(4, 6)}.${cntrTm.slice(6, 8)} ${cntrTm.slice(8, 10)}:${cntrTm.slice(10, 12)}`;
     }
 
     const parsePrice = (raw: string)  => {
         if (!raw) return null;
-        return (parseInt(raw, 10) / 100).toFixed(2);
+        return parseInt(raw);
     }
 
     return (
@@ -260,62 +257,15 @@ const IndexList = () => {
                 sx={{ mb: (theme) => theme.spacing(2) }}
             >
                 {
-                    indexDataList.map((value, index) => (
+                    commodityDataList.map((value, index) => (
                         <Grid key={index} size={{ xs: 12, md: 6 }}>
-                            <IndexLineChart {...value} />
+                            <CommodityLineChart {...value} />
                         </Grid>
                     ))
                 }
-                {/*<Grid size={{ xs: 12, md: 6 }}>*/}
-                {/*    <Card variant="outlined" sx={{ width: '100%', mb: 1}}>*/}
-                {/*        <CardContent>*/}
-                {/*            <Typography component="h2" variant="subtitle2" gutterBottom>*/}
-                {/*                코스피200 옵션*/}
-                {/*            </Typography>*/}
-                {/*            <Stack sx={{ justifyContent: 'space-between' }}>*/}
-                {/*                <OptionTable rows={rows} columns={columns} />*/}
-                {/*            </Stack>*/}
-                {/*        </CardContent>*/}
-                {/*    </Card>*/}
-                {/*    <Stack*/}
-                {/*        direction="row"*/}
-                {/*        sx={{*/}
-                {/*            alignContent: { xs: 'center', sm: 'flex-start' },*/}
-                {/*            alignItems: 'center',*/}
-                {/*            gap: 1,*/}
-                {/*        }}*/}
-                {/*    >*/}
-                {/*        <Card variant="outlined" sx={{ width: '100%' }}>*/}
-                {/*            <CardContent>*/}
-                {/*                <Typography component="h2" variant="subtitle2" gutterBottom>*/}
-                {/*                    코스피200 위클리 옵션(월)*/}
-                {/*                </Typography>*/}
-                {/*                <Stack sx={{ justifyContent: 'space-between' }}>*/}
-                {/*                    <OptionTable rows={rows} columns={columns} />*/}
-                {/*                </Stack>*/}
-                {/*            </CardContent>*/}
-                {/*        </Card>*/}
-                {/*        <Card variant="outlined" sx={{ width: '100%' }}>*/}
-                {/*            <CardContent>*/}
-                {/*                <Typography component="h2" variant="subtitle2" gutterBottom>*/}
-                {/*                    코스피200 위클리 콜옵션(목)*/}
-                {/*                </Typography>*/}
-                {/*                <Stack sx={{ justifyContent: 'space-between' }}>*/}
-                {/*                    <OptionTable rows={rows} columns={columns} />*/}
-                {/*                </Stack>*/}
-                {/*            </CardContent>*/}
-                {/*        </Card>*/}
-                {/*    </Stack>*/}
-                {/*</Grid>*/}
-                {/*<Grid size={{ xs: 12, md: 6 }}>*/}
-                {/*    <IndexLineChart {...kospiChartData} />*/}
-                {/*</Grid>*/}
-                {/*<Grid size={{ xs: 12, md: 6 }}>*/}
-                {/*    <IndexLineChart {...kospiChartData} />*/}
-                {/*</Grid>*/}
             </Grid>
         </Box>
     )
 }
 
-export default IndexList
+export default CommodityList

@@ -18,13 +18,17 @@ import {
     StockStreamReq,
     StockStreamRes
 } from "../../type/StockType.ts";
+import {useNavigate, useParams} from "react-router-dom";
 
 const StockList = () => {
+    const navigate = useNavigate();
+    const { type } = useParams();
+
     const [req, setReq] = useState<StockListReq>({
-        type: "0",
+        type: type || "0",
     });
 
-    const [value, setValue] = useState(0);
+    const [value, setValue] = useState(Number(type) || 0);
     const [row, setRow] = useState<StockGridRow[]>([]);
     const [columns, setColumns] = useState<GridColDef[]>([]);
 
@@ -358,7 +362,8 @@ const StockList = () => {
 
     const handleChange = (_event: React.SyntheticEvent, newValue: number) => {
         setValue(newValue);
-        setReq({type: `${newValue}`});
+        setReq({type: String(newValue)});
+        navigate(`/stock/list/${newValue}`);
     };
 
     function a11yProps(index: number) {

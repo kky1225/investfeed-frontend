@@ -3,5 +3,5 @@ export interface TimeNowReq {
 }
 
 export enum MarketType {
-    INDEX = "INDEX", STOCK = "STOCK",
+    INDEX = "INDEX", STOCK = "STOCK", COMMODITY = "COMMODITY",
 }
