@@ -221,7 +221,7 @@ const CommodityList = () => {
                         if (newData) {
                             return {
                                 ...item,
-                                value: newData.value.replace(/^[+-]/, ''),
+                                value: Number(newData.value.replace(/^[+-]/, '')).toLocaleString(),
                                 fluRt: newData.fluRt,
                                 trend: newData.trend === '5' ? 'down' : newData.trend === '2' ? 'up' : 'neutral',
                             };
