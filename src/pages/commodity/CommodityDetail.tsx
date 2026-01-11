@@ -1,39 +1,34 @@
-import Box from "@mui/material/Box";
+import {JSX, MouseEvent, ReactElement, useEffect, useRef, useState} from "react";
+import {useParams} from "react-router-dom";
+import {Box, Select, SelectChangeEvent, Slider, Tooltip} from "@mui/material";
 import Typography from "@mui/material/Typography";
 import Grid from "@mui/material/Grid";
-import CardContent from "@mui/material/CardContent";
-import Stack from "@mui/material/Stack";
-import Chip from "@mui/material/Chip";
 import Card from "@mui/material/Card";
-import {useState, MouseEvent, useRef, useEffect, ReactElement, JSX} from "react";
-import CandlestickChartIcon from '@mui/icons-material/CandlestickChart';
-import StackedLineChartIcon from '@mui/icons-material/StackedLineChart';
-import HelpIcon from '@mui/icons-material/Help';
-import ErrorIcon from '@mui/icons-material/Error';
-import ToggleButton from '@mui/material/ToggleButton';
-import ToggleButtonGroup, {
-    toggleButtonGroupClasses,
-} from '@mui/material/ToggleButtonGroup';
-import {Select, SelectChangeEvent, Slider, Tooltip} from "@mui/material";
-import {styled} from "@mui/material/styles";
-import MenuItem from "@mui/material/MenuItem";
-import {useParams} from "react-router-dom";
-import {
-    StockChartType,
-    StockDetailReq,
-    StockStream,
-    StockStreamReq,
-    StockStreamRes,
-} from "../../type/StockType.ts";
-import StockDetailLineChart, {CustomStockDetailLineChartProps} from "../../components/StockDetailLineChart.tsx";
-import {fetchStockDetail, fetchStockStream} from "../../api/stock/StockApi.ts";
-import InvestorBarChart from "../../components/InvestorBarChart.tsx";
-import RemoveIcon from "@mui/icons-material/Remove";
+import CardContent from "@mui/material/CardContent";
 import CheckIcon from "@mui/icons-material/Check";
 import PriorityHighIcon from "@mui/icons-material/PriorityHigh";
+import RemoveIcon from "@mui/icons-material/Remove";
 import DoNotDisturbIcon from "@mui/icons-material/DoNotDisturb";
-import CustomDataTable from "../../components/CustomDataTable.tsx";
-import {GridColDef, GridRowsProp} from "@mui/x-data-grid";
+import Stack from "@mui/material/Stack";
+import Chip from "@mui/material/Chip";
+import ToggleButton from "@mui/material/ToggleButton";
+import MenuItem from "@mui/material/MenuItem";
+import {styled} from "@mui/material/styles";
+import ToggleButtonGroup, {toggleButtonGroupClasses} from "@mui/material/ToggleButtonGroup";
+import CandlestickChartIcon from "@mui/icons-material/CandlestickChart";
+import StackedLineChartIcon from "@mui/icons-material/StackedLineChart";
+import InvestorBarChart from "../../components/InvestorBarChart.tsx";
+import {
+    CommodityChart,
+    CommodityChartType,
+    CommodityDetailReq, CommodityDetailSteamReq,
+    CommodityStream,
+    CommodityStreamRes
+} from "../../type/CommodityType.ts";
+import {fetchCommodityDetail, fetchCommodityDetailStream} from "../../api/commodity/CommodityApi.ts";
+import ErrorIcon from "@mui/icons-material/Error";
+import HelpIcon from "@mui/icons-material/Help";
+import CommodityDetailLineChart, {CommodityDetailLineChartProps} from "../../components/CommodityDetailLineChart.tsx";
 import {fetchTimeNow} from "../../api/time/TimeApi.ts";
 import {MarketType} from "../../type/timeType.ts";
 
@@ -54,26 +49,22 @@ const StyledToggleButtonGroup = styled(ToggleButtonGroup)(({ theme }) => ({
         },
 }));
 
-interface StockRangeProps {
+interface CommodityRangeProps {
     value: number;
     label: ReactElement;
 }
 
-const StockDetail = () => {
+const CommodityDetail = () => {
     const { id } = useParams();
-    const [req, setReq] = useState<StockDetailReq>({
-        stk_cd: id || "",
-        chart_type: StockChartType.DAY
-    });
 
     const chartTimer = useRef<number>(0);
     const marketTimer = useRef<number>(0);
+    const [req, setReq] = useState<CommodityDetailReq>({
+        stkCd: id ?? "",
+        chartType: CommodityChartType.DAY
+    });
 
-    const [toggle, setToggle] = useState('DAY');
-    const [formats, setFormats] = useState('line');
-    const minute = useRef('1');
-
-    const [stockChartData, setStockChartData] = useState<CustomStockDetailLineChartProps>({
+    const [commodityChartData, setCommodityChartData] = useState<CommodityDetailLineChartProps>({
         id: '-',
         title: '-',
         orderWarning: "0",
@@ -98,25 +89,83 @@ const StockDetail = () => {
         dateList: []
     });
 
+    const [dayRange, setDayRange] = useState<CommodityRangeProps[]>([
+        {
+            value: 0,
+            label: <p>1일 최저가 <br />0</p>
+        },
+        {
+            value: 0,
+            label: <p>1일 최고가 <br />0</p>,
+        }
+    ]);
+
+    const [yearRange, setYearRange] = useState<CommodityRangeProps[]>([
+        {
+            value: 0,
+            label: <p>52주 최저가 <br />0</p>,
+        },
+        {
+            value: 0,
+            label: <p>52주 최고가 <br />0</p>,
+        }
+    ]);
+
+    interface CommodityInfoProps {
+        trdeQty: number;
+        trdePrica: number;
+        openPric: number;
+        curPrc: number;
+        _250lwst: number;
+        _250hgst: number;
+    }
+
+    const [info, setInfo] = useState<CommodityInfoProps>({
+        trdeQty: 0,
+        trdePrica: 0,
+        openPric: 0,
+        curPrc: 0,
+        _250hgst: 0,
+        _250lwst: 0,
+    });
+
+    const [barData, setBarData] = useState<Array<number>>([0, 0, 0]);
+
+    const [message, setMessage] = useState<MessageProps>({
+        icon: <RemoveIcon />,
+        title: '-',
+        message: '-'
+    });
+
+    const [toggle, setToggle] = useState('DAY');
+    const [formats, setFormats] = useState('line');
+    const minute = useRef('1');
+
+    const labelColors = {
+        up: 'error' as const,
+        down: 'info' as const,
+        neutral: 'default' as const,
+    };
+
+    const color = labelColors[commodityChartData.trend];
+    const trendValues = { up: `${commodityChartData.fluRt}%`, down: `${commodityChartData.fluRt}%`, neutral: `${commodityChartData.fluRt}%` };
+
     useEffect(() => {
+        commodityDetail(req);
+
         let chartTimeout: ReturnType<typeof setTimeout>;
         let socketTimeout: ReturnType<typeof setTimeout>;
         let interval: ReturnType<typeof setInterval>;
         let socket: WebSocket;
 
-        (async() => {
-            const items = await stockDetail(req);
-            const stockStreamReq: StockStreamReq = {
-                items: items,
-            }
-
+        (async () => {
             const marketInfo = await timeNow();
 
             const now = Date.now() + chartTimer.current;
             const waitTime = 60_000 - (now % 60_000);
 
             if (marketInfo.isMarketOpen) {
-                await stockStream(stockStreamReq);
+                await commodityDetailStream(req);
                 socket = openSocket();
             } else {
                 socketTimeout = setTimeout(async () => {
@@ -124,16 +173,16 @@ const StockDetail = () => {
 
                     const again = await timeNow();
                     if (again.isMarketOpen) {
-                        await stockStream(stockStreamReq);
+                        await commodityDetailStream(req);
                         socket = openSocket();
                     }
                 }, marketTimer.current + 200);
             }
 
             chartTimeout = setTimeout(() => {
-                stockDetail(req);
+                commodityDetail(req);
                 interval = setInterval(() => {
-                    stockDetail(req);
+                    commodityDetail(req);
                 }, (60 * 1000));
             }, waitTime + 200);
         })();
@@ -144,72 +193,77 @@ const StockDetail = () => {
             clearTimeout(chartTimeout);
             clearInterval(interval);
         }
-    }, [req])
+    }, [req]);
 
-    const stockDetail = async (req: StockDetailReq): Promise<Array<string>> => {
+    const commodityDetail = async (req: CommodityDetailReq) => {
         try {
-            const data = await fetchStockDetail(req);
+            const data = await fetchCommodityDetail(req);
+
+            if (data.code !== "0000") {
+                throw new Error(data.msg);
+            }
 
             console.log(data);
 
-            const { stockInfo, stockChartList, stockInvestorList } = data.result;
+            const {
+                commodityInfo, commodityChartList
+            } = data.result;
 
             let dateList;
             let lineData, barDataList;
 
-            switch (req.chart_type) {
-                case StockChartType.MINUTE_1:
-                case StockChartType.MINUTE_3:
-                case StockChartType.MINUTE_5:
-                case StockChartType.MINUTE_10:
-                case StockChartType.MINUTE_30: {
-                    dateList = stockChartList.map((item: { dt: string }) => {
+            switch (req.chartType) {
+                case CommodityChartType.MINUTE_1:
+                case CommodityChartType.MINUTE_3:
+                case CommodityChartType.MINUTE_5:
+                case CommodityChartType.MINUTE_10:
+                case CommodityChartType.MINUTE_30: {
+                    dateList = commodityChartList.map((item: CommodityChart) => {
                         return `${item.dt.slice(0, 4)}.${item.dt.slice(4, 6)}.${item.dt.slice(6, 8)} ${item.dt.slice(8, 10)}:${item.dt.slice(10, 12)}`
                     }).reverse();
 
-                    lineData = stockChartList.map((item: { curPrc: string }) => item.curPrc.replace(/^[+-]/, '')).reverse();
-                    barDataList = stockChartList.map((item: { trdeQty: string }) => item.trdeQty).reverse();
+                    lineData = commodityChartList.map((item: CommodityChart) => item.curPrc.replace(/^[+-]/, '')).reverse();
+                    barDataList = commodityChartList.map((item: CommodityChart) => item.trdeQty).reverse();
 
                     break;
                 }
-                case StockChartType.DAY:
-                case StockChartType.WEEK:
-                case StockChartType.MONTH:
-                case StockChartType.YEAR: {
-                    dateList = stockChartList.map((item: { dt: string }) => {
+                case CommodityChartType.DAY:
+                case CommodityChartType.WEEK:
+                case CommodityChartType.MONTH: {
+                    dateList = commodityChartList.map((item: CommodityChart) => {
                         return `${item.dt.slice(0, 4)}.${item.dt.slice(4, 6)}.${item.dt.slice(6, 8)}`
                     }).reverse();
 
-                    lineData = stockChartList.map((item: { curPrc: string }) => item.curPrc).reverse();
-                    barDataList = stockChartList.map((item: { trdeQty: string }) => item.trdeQty).reverse();
+                    lineData = commodityChartList.map((item: CommodityChart) => item.curPrc).reverse();
+                    barDataList = commodityChartList.map((item: CommodityChart) => item.trdeQty.slice(0, 3)).reverse();
 
                     break;
                 }
             }
 
-            const year = stockInfo.tm.substring(0, 4);
-            const month = stockInfo.tm.substring(4, 6);
-            const day = stockInfo.tm.substring(6, 8);
-            const hour = stockInfo.tm.substring(8, 10);
-            const minute = stockInfo.tm.substring(10, 12);
-            let today;
+            const year = commodityInfo.tm.substring(0, 4);
+            const month = commodityInfo.tm.substring(4, 6);
+            const day = commodityInfo.tm.substring(6, 8);
+            const hour = commodityInfo.tm.substring(8, 10);
+            const minute = commodityInfo.tm.substring(10, 12);
 
+            let today;
             if(Number(hour) >= 20 || Number(hour) < 8) {
                 today = `${year}.${month}.${day} 장마감`;
             } else {
                 today = `${year}.${month}.${day} ${hour}:${minute}`;
             }
 
-            setStockChartData({
-                id: stockInfo.stk_cd,
-                title: stockInfo.stk_nm,
-                orderWarning: stockInfo.orderWarning,
-                value: Number(stockInfo.cur_prc.replace(/^[+-]/, '')).toLocaleString(),
-                fluRt: stockInfo.flu_rt,
-                openPric: parseFloat(stockInfo.open_pric),
+            setCommodityChartData({
+                id: commodityInfo.stkCd,
+                title: commodityInfo.stkNm,
+                orderWarning: commodityInfo.orderWarning,
+                value: Number(commodityInfo.curPrc.replace(/^[+-]/, '')).toLocaleString(),
+                fluRt: commodityInfo.fluRt,
+                openPric: parseFloat(commodityInfo.openPric.replace(/^[+-]/, '')),
                 interval: today,
-                trend: stockInfo.pre_sig === '5' ? 'down' : stockInfo.pre_sig === '2' ? 'up' : 'neutral',
-                nxtEnable: stockInfo.nxtEnable,
+                trend: commodityInfo.predPreSig === '5' ? 'down' : commodityInfo.predPreSig === '2' ? 'up' : 'neutral',
+                nxtEnable: commodityInfo.nxtEnable,
                 seriesData: [
                     {
                         id: id,
@@ -217,59 +271,30 @@ const StockDetail = () => {
                         curve: 'linear',
                         area: true,
                         stackOrder: 'ascending',
-                        color: 'grey',
-                        data: lineData
+                        color: commodityInfo.predPreSig === '2' ? 'red' : 'blue',
+                        data: lineData,
                     }
                 ],
                 barDataList: barDataList,
                 dateList: dateList
             });
 
-            setInfo({
-                trdeQty: Number(stockInfo.trde_qty),
-                trdePrica: Number(stockInfo.trde_prica.substring(0, 7)),
-                openPric: Number(stockInfo.open_pric.replace(/^[+-]/, '')),
-                curPrc: Number(stockInfo.cur_prc.replace(/^[+-]/, '')),
-                _250hgst: Number(stockInfo._250hgst.replace(/^[+-]/, '')),
-                _250lwst: Number(stockInfo._250lwst.replace(/^[+-]/, '')),
-                per: Number(stockInfo.per),
-                eps: Number(stockInfo.eps),
-                roe: Number(stockInfo.roe),
-                pbr: Number(stockInfo.pbr)
-            });
-
-            setBarData([
-                Number(stockInvestorList[0].ind_invsr.toLocaleString()),
-                Number(stockInvestorList[0].frgnr_invsr.toLocaleString()),
-                Number(stockInvestorList[0].orgn.toLocaleString())
-            ]);
-
-            const message = {
-                ...checkInvestor(
-                    stockInfo.stk_nm,
-                    stockInvestorList[0].frgnr_invsr,
-                    stockInvestorList[0].orgn
-                )
-            };
-
-            setMessage(message);
-
-            const dayMin = Number(stockInfo.low_pric.replace(/^[+-]/, ''));
-            const dayMax = Number(stockInfo.high_pric.replace(/^[+-]/, ''));
+            const dayMin = commodityInfo['lowPric'].replace(/^[+-]/, '');
+            const dayMax = commodityInfo['highPric'].replace(/^[+-]/, '')
 
             setDayRange([
                 {
-                    value: dayMin,
-                    label: <p>1일 최저가 <br />{dayMin.toLocaleString()}</p>
+                    value: Number(dayMin),
+                    label: <p>1일 최저가 <br />{Number(dayMin).toLocaleString()}</p>
                 },
                 {
-                    value: dayMax,
-                    label: <p>1일 최고가 <br />{dayMax.toLocaleString()}</p>
+                    value: Number(dayMax),
+                    label: <p>1일 최고가 <br />{Number(dayMax).toLocaleString()}</p>
                 }
             ]);
 
-            const yearMin = Number(stockInfo._250lwst.replace(/^[+-]/, ''));
-            const yearMax = Number(stockInfo._250hgst.replace(/^[+-]/, ''));
+            const yearMin = Number(commodityInfo._250lwst.replace(/^[+-]/, ''));
+            const yearMax = Number(commodityInfo._250hgst.replace(/^[+-]/, ''));
 
             setYearRange([
                 {
@@ -282,34 +307,28 @@ const StockDetail = () => {
                 }
             ]);
 
-            const investor = stockInvestorList.map((item: {
-                dt: string; ind_invsr: string; frgnr_invsr: string; orgn: string; fnnc_invt: string; insrnc: string; etc_fnnc: string; invtrt: string; samo_fund: string; penfnd_etc: string; bank: string; etc_corp: string; natfor: string;
-            }) => {
-                return {
-                    id: item.dt,
-                    dt: `${(item.dt).substring(0, 4)}-${(item.dt).substring(4, 6)}-${(item.dt).substring(6, 8)}`,
-                    ind_invsr: Number(item.ind_invsr),
-                    frgnr_invsr: Number(item.frgnr_invsr),
-                    orgn: Number(item.orgn),
-                    fnnc_invt: Number(item.fnnc_invt),
-                    insrnc: Number(item.insrnc),
-                    etc_fnnc: Number(item.etc_fnnc),
-                    invtrt: Number(item.invtrt),
-                    samo_fund: Number(item.samo_fund),
-                    penfnd_etc: Number(item.penfnd_etc),
-                    bank: Number(item.bank),
-                    etc_corp: Number(item.etc_corp),
-                    natfor: Number(item.natfor),
-                }
+            setInfo({
+                trdeQty: Number(commodityInfo.trdeQty),
+                trdePrica: Number(commodityInfo.trdePrica),
+                openPric: Number(commodityInfo.openPric.replace(/^[+-]/, '')),
+                curPrc: Number(commodityInfo.curPrc.replace(/^[+-]/, '')),
+                _250hgst: Number(commodityInfo._250hgst.replace(/^[+-]/, '')),
+                _250lwst: Number(commodityInfo._250lwst.replace(/^[+-]/, '')),
             });
 
-            setRow(investor);
+            setBarData([commodityInfo.indNetprps, commodityInfo.frgnrNetprps, commodityInfo.orgnNetprps])
 
-            return [stockInfo.stk_cd];
-        } catch(error) {
-            console.error(error);
+            const message = {
+                ...checkInvestor(
+                    commodityInfo.stkNm,
+                    commodityInfo.frgnrNetprps,
+                    commodityInfo.orgnNetprps
+                )
+            };
 
-            return [];
+            setMessage(message);
+        } catch (err) {
+            console.error(err);
         }
     }
 
@@ -317,16 +336,16 @@ const StockDetail = () => {
         try {
             const startTime = Date.now();
             const data = await fetchTimeNow({
-                marketType: MarketType.STOCK
+                marketType: MarketType.COMMODITY
             });
 
-            if (data.code !== "0000") {
+            if(data.code !== "0000") {
                 throw new Error(data.msg);
             }
 
-            const { time, isMarketOpen, startMarketTime, marketType } = data.result;
+            const { time, isMarketOpen, startMarketTime, marketType } = data.result
 
-            if (marketType !== MarketType.STOCK) {
+            if (marketType !== MarketType.COMMODITY) {
                 throw new Error(data.msg);
             }
 
@@ -349,9 +368,11 @@ const StockDetail = () => {
         }
     }
 
-    const stockStream = async (req: StockStreamReq) => {
+    const commodityDetailStream = async (req: CommodityDetailSteamReq) => {
         try {
-            const data = await fetchStockStream(req);
+            const data = await fetchCommodityDetailStream(req);
+
+            console.log(data);
 
             if (data.code !== "0000") {
                 throw new Error(data.msg);
@@ -363,239 +384,43 @@ const StockDetail = () => {
 
     const openSocket = () => {
         const socket = new WebSocket("ws://localhost:8080/ws");
+
         socket.onmessage = (event) => {
             const data = JSON.parse(event.data);
 
             if (data.trnm === "REAL" && Array.isArray(data.data)) {
-                const stockList = data.data.map((res: StockStreamRes) => {
+                const commodityList = data.data.map((res: CommodityStreamRes) => {
                     const values = res.values;
                     return {
                         code: res.item,
                         value: values["10"],
+                        change: values["11"],
                         fluRt: values["12"],
-                        trend: values["25"],
+                        trend: values["25"]
                     };
                 });
 
-                stockList.forEach((stock: StockStream) => {
-                    if(stock.code === req.stk_cd) {
-                        setStockChartData((old) => ({
-                            ...old,
-                            value: Number(stock.value.replace(/^[+-]/, '')).toLocaleString(),
-                            fluRt: stock.fluRt,
-                            trend: stock.trend === '5' ? 'down' : stock.trend === '2' ? 'up' : 'neutral',
+                commodityList.forEach((commodity: CommodityStream) => {
+                    if(commodity.code === req.stkCd) {
+                        setCommodityChartData((prev) => ({
+                            ...prev,
+                            value: commodity.value.replace(/^[+-]/, ''),
+                            fluRt: commodity.fluRt,
+                            trend: commodity.trend === '5' ? 'down' : commodity.trend === '2' ? 'up' : 'neutral',
                         }));
                     }
                 });
             }
-        };
+        }
 
         return socket;
     }
-
-    interface StockInfoProps {
-        trdeQty: number;
-        trdePrica: number;
-        openPric: number;
-        curPrc: number;
-        _250lwst: number;
-        _250hgst: number;
-        per: number;
-        eps: number;
-        roe: number;
-        pbr: number;
-    }
-
-    const [info, setInfo] = useState<StockInfoProps>({
-        trdeQty: 0,
-        trdePrica: 0,
-        openPric: 0,
-        curPrc: 0,
-        _250hgst: 0,
-        _250lwst: 0,
-        per: 0,
-        eps: 0,
-        roe: 0,
-        pbr: 0
-    });
-
-    const [barData, setBarData] = useState<Array<number>>([0, 0, 0]);
 
     interface MessageProps {
         icon: JSX.Element,
         title: string,
         message: string
     }
-
-    const [message, setMessage] = useState<MessageProps>({
-        icon: <RemoveIcon />,
-        title: '-',
-        message: '-'
-    });
-
-    const [dayRange, setDayRange] = useState<StockRangeProps[]>([
-        {
-            value: 0.0,
-            label: <p>1일 최저가 <br />0</p>
-        },
-        {
-            value: 0.0,
-            label: <p>1일 최고가 <br />0</p>,
-        }
-    ]);
-
-    const [yearRange, setYearRange] = useState<StockRangeProps[]>([
-        {
-            value: 0,
-            label: <p>52주 최저가 <br />0</p>,
-        },
-        {
-            value: 0,
-            label: <p>52주 최고가 <br />0</p>,
-        }
-    ]);
-
-    const [row, setRow] = useState<GridRowsProp[]>([]);
-    const columns: GridColDef[] = [
-        {
-            field: 'dt',
-            headerName: '날짜',
-            flex: 1,
-            minWidth: 100,
-            maxWidth: 120
-        },
-        {
-            field: 'ind_invsr',
-            headerName: '개인',
-            flex: 1,
-            minWidth: 100,
-            renderCell: (params) => renderTrade(params.value as number),
-        },
-        {
-            field: 'frgnr_invsr',
-            headerName: '외국인',
-            flex: 1,
-            minWidth: 100,
-            renderCell: (params) => renderTrade(params.value as number),
-        },
-        {
-            field: 'orgn',
-            headerName: '기관계',
-            flex: 1,
-            minWidth: 100,
-            renderCell: (params) => renderTrade(params.value as number),
-        },
-        {
-            field: 'fnnc_invt',
-            headerName: '금융투자',
-            flex: 1,
-            minWidth: 100,
-            renderCell: (params) => renderTrade(params.value as number),
-        },
-        {
-            field: 'insrnc',
-            headerName: '보험',
-            flex: 1,
-            minWidth: 100,
-            renderCell: (params) => renderTrade(params.value as number),
-        },
-        {
-            field: 'etc_fnnc',
-            headerName: '기타금융',
-            flex: 1,
-            minWidth: 100,
-            renderCell: (params) => renderTrade(params.value as number),
-        },
-        {
-            field: 'invtrt',
-            headerName: '투신',
-            flex: 1,
-            minWidth: 100,
-            renderCell: (params) => renderTrade(params.value as number),
-        },
-        {
-            field: 'samo_fund',
-            headerName: '사모펀드',
-            flex: 1,
-            minWidth: 100,
-            renderCell: (params) => renderTrade(params.value as number),
-        },
-        {
-            field: 'penfnd_etc',
-            headerName: '연기금등',
-            flex: 1,
-            minWidth: 100,
-            renderCell: (params) => renderTrade(params.value as number),
-        },
-        {
-            field: 'bank',
-            headerName: '은행',
-            flex: 1,
-            minWidth: 100,
-            renderCell: (params) => renderTrade(params.value as number),
-        },
-        {
-            field: 'etc_corp',
-            headerName: '기타법인',
-            flex: 1,
-            minWidth: 100,
-            renderCell: (params) => renderTrade(params.value as number),
-        },
-        {
-            field: 'natfor',
-            headerName: '내외국인',
-            flex: 1,
-            minWidth: 100,
-            renderCell: (params) => renderTrade(params.value as number),
-        }
-    ];
-
-    const labelColors = {
-        up: 'error' as const,
-        down: 'info' as const,
-        neutral: 'default' as const,
-    };
-
-    const color = labelColors[stockChartData.trend];
-    const trendValues = { up: `${stockChartData.fluRt}%`, down: `${stockChartData.fluRt}%`, neutral: `${stockChartData.fluRt}%` };
-
-    const handleAlignment = (
-        _event: MouseEvent<HTMLElement>,
-        newAlignment: string,
-    ) => {
-        if(newAlignment !== null) {
-            setToggle(newAlignment);
-
-            if(newAlignment === 'MINUTE') {
-                newAlignment = newAlignment + '_' + minute.current;
-            }
-
-            setReq({
-                ...req,
-                chart_type: newAlignment as StockChartType
-            })
-        }
-    };
-
-    function handleOptionChange(event: SelectChangeEvent) {
-        minute.current = event.target.value as string
-
-        const value = 'MINUTE_' + event.target.value;
-
-        setReq({
-            ...req,
-            chart_type: value as StockChartType
-        })
-    }
-
-    const handleFormat = (
-        _event: MouseEvent<HTMLElement>,
-        newFormats: string,
-    ) => {
-        if(newFormats !== null) {
-            setFormats(newFormats);
-        }
-    };
 
     function checkInvestor(name: string, orgn: number, frgnr: number): MessageProps {
         let message: string;
@@ -639,15 +464,45 @@ const StockDetail = () => {
         }
     }
 
-    function renderTrade(trade: number) {
-        const text = trade.toLocaleString()
+    const handleAlignment = (
+        _event: MouseEvent<HTMLElement>,
+        newAlignment: string,
+    ) => {
+        if(newAlignment !== null) {
+            setToggle(newAlignment);
 
-        return (
-            <span style={{color: trade == 0 ? 'black' : trade > 0 ? 'red' : 'blue'}}>
-                {trade > 0 ? `+${text}` : `${text}`}
-            </span>
-        )
+            if(newAlignment === 'MINUTE') {
+                newAlignment = newAlignment + '_' + minute.current;
+            }
+
+            console.log(newAlignment);
+
+            setReq({
+                ...req,
+                chartType: newAlignment as CommodityChartType
+            })
+        }
+    };
+
+    function handleOptionChange(event: SelectChangeEvent) {
+        minute.current = event.target.value as string
+
+        const value = 'MINUTE_' + event.target.value;
+
+        setReq({
+            ...req,
+            chartType: value as CommodityChartType
+        })
     }
+
+    const handleFormat = (
+        _event: MouseEvent<HTMLElement>,
+        newFormats: string,
+    ) => {
+        if(newFormats !== null) {
+            setFormats(newFormats);
+        }
+    };
 
     function orderWarningMsg(type: string): string {
         let message = "";
@@ -675,7 +530,7 @@ const StockDetail = () => {
     return (
         <Box sx={{ width: '100%', maxWidth: { sm: '100%', md: '1700px' } }}>
             <Typography component="h2" variant="h6" sx={{ mb: 2 }}>
-                주식 상세
+                원자재 상세
             </Typography>
             <Grid
                 container
@@ -688,14 +543,14 @@ const StockDetail = () => {
                         <CardContent>
                             <Box sx={{ display: 'flex', justifyContent: 'space-between'}}>
                                 <Typography component="h2" variant="subtitle2" gutterBottom>
-                                    {stockChartData.title}
-                                    {stockChartData.orderWarning !== '0' &&
-                                        <Tooltip title={orderWarningMsg(stockChartData.orderWarning)} placement="right">
+                                    {commodityChartData.title}
+                                    {commodityChartData.orderWarning !== '0' &&
+                                        <Tooltip title={orderWarningMsg(commodityChartData.orderWarning)} placement="right">
                                             <ErrorIcon color="error" sx={{ fontSize: 'inherit', verticalAlign: 'middle', ml: "1px", mb: "3px" }} />
                                         </Tooltip>
                                     }
                                 </Typography>
-                                {stockChartData.nxtEnable === 'Y' &&
+                                {commodityChartData.nxtEnable === 'Y' &&
                                     <Typography component="h2" variant="subtitle2" gutterBottom>
                                         NXT
                                         <Tooltip title="넥스트 트레이드는 오전 8시부터 오후 8시까지 거래할 수 있는 대체 거래소입니다.">
@@ -714,16 +569,16 @@ const StockDetail = () => {
                                     }}
                                 >
                                     <Typography variant="h4" component="p">
-                                        {stockChartData.value}
+                                        {commodityChartData.value}
                                     </Typography>
-                                    <Chip size="small" color={color} label={trendValues[stockChartData.trend]} />
+                                    <Chip size="small" color={color} label={trendValues[commodityChartData.trend]} />
                                 </Stack>
                                 <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-                                    {stockChartData.interval}
+                                    {commodityChartData.interval}
                                 </Typography>
                             </Stack>
                         </CardContent>
-                        <StockDetailLineChart {...stockChartData} />
+                        <CommodityDetailLineChart {...commodityChartData} />
                         <Box
                             display="flex"
                             justifyContent="space-between"
@@ -769,7 +624,6 @@ const StockDetail = () => {
                                 <ToggleButton value="DAY" key="DAY" aria-label="DAY">일</ToggleButton>
                                 <ToggleButton value="WEEK" key="WEEK" aria-label="WEEK">주</ToggleButton>
                                 <ToggleButton value="MONTH" key="MONTH" aria-label="MONTH">월</ToggleButton>
-                                <ToggleButton value="YEAR" key="YEAR" aria-label="YEAR">년</ToggleButton>
                             </StyledToggleButtonGroup>
 
                             <StyledToggleButtonGroup
@@ -863,46 +717,6 @@ const StockDetail = () => {
                                         {info._250hgst.toLocaleString()}
                                     </Typography>
                                 </Grid>
-                                <Grid size={{xs: 12, md: 3}}>
-                                    <Typography variant="subtitle2" gutterBottom fontWeight={600}>
-                                        per
-                                    </Typography>
-                                </Grid>
-                                <Grid size={{xs: 12, md: 3}}>
-                                    <Typography variant="subtitle2" gutterBottom>
-                                        {info.per.toLocaleString()}
-                                    </Typography>
-                                </Grid>
-                                <Grid size={{xs: 12, md: 3}}>
-                                    <Typography variant="subtitle2" gutterBottom fontWeight={600}>
-                                        eps
-                                    </Typography>
-                                </Grid>
-                                <Grid size={{xs: 12, md: 3}}>
-                                    <Typography variant="subtitle2" gutterBottom>
-                                        {info.eps.toLocaleString()}
-                                    </Typography>
-                                </Grid>
-                                <Grid size={{xs: 12, md: 3}}>
-                                    <Typography variant="subtitle2" gutterBottom fontWeight={600}>
-                                        roe
-                                    </Typography>
-                                </Grid>
-                                <Grid size={{xs: 12, md: 3}}>
-                                    <Typography variant="subtitle2" gutterBottom>
-                                        {info.roe.toLocaleString()}
-                                    </Typography>
-                                </Grid>
-                                <Grid size={{xs: 12, md: 3}}>
-                                    <Typography variant="subtitle2" gutterBottom fontWeight={600}>
-                                        pbr
-                                    </Typography>
-                                </Grid>
-                                <Grid size={{xs: 12, md: 3}}>
-                                    <Typography variant="subtitle2" gutterBottom>
-                                        {info.pbr.toLocaleString()}
-                                    </Typography>
-                                </Grid>
                             </Grid>
                         </CardContent>
                     </Card>
@@ -965,15 +779,9 @@ const StockDetail = () => {
                         </CardContent>
                     </Card>
                 </Grid>
-                <Grid size={{ xs: 12, md: 12 }}>
-                    <Typography component="h2" variant="h6" sx={{ mb: 2 }}>
-                        일별 투자자별 순매수
-                    </Typography>
-                    <CustomDataTable rows={row} columns={columns} pageSize={20} />
-                </Grid>
             </Grid>
         </Box>
     )
 }
 
-export default StockDetail;
+export default CommodityDetail;

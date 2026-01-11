@@ -1,5 +1,5 @@
 import api from "../../axios.ts";
-import {indexDetailReq, indexDetailSteamReq} from "../../type/IndexType.ts";
+import {CommodityDetailReq, CommodityDetailSteamReq} from "../../type/CommodityType.ts";
 
 export const fetchCommodityList = async () => {
     const res = await api.get(`/commodity/list`);
@@ -11,12 +11,12 @@ export const fetchCommodityListStream = async () => {
     return res.data
 }
 
-export const fetchCommodityDetail = async (req: indexDetailReq) => {
+export const fetchCommodityDetail = async (req: CommodityDetailReq) => {
     const res = await api.get(`/commodity/detail`, {params: req});
     return res.data
 }
 
-export const fetchCommodityDetailStream = async (req: indexDetailSteamReq) => {
+export const fetchCommodityDetailStream = async (req: CommodityDetailSteamReq) => {
     const res = await api.get(`/commodity/detail/stream`, {params: req});
     return res.data
 }

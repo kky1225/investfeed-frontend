@@ -24,7 +24,7 @@ export interface CustomStockDetailLineChartProps {
     dateList: string[]
 }
 
-const IndexDetailLineChart = (
+const StockDetailLineChart = (
     { trend, seriesData, barDataList, dateList }: CustomStockDetailLineChartProps,
 ) => {
     const theme = useTheme();
@@ -63,19 +63,12 @@ const IndexDetailLineChart = (
                     tickLabelStyle: {
                         display: 'none'
                     },
-                    tickInterval: (_index: any, i: number) => i % 5 === 0,
-                },
-                {
-                    id: 'x-bar',
-                    scaleType: 'band',
-                    categoryGapRatio: 0.5,
-                    data: dateList,
+                    tickInterval: (_index: number, i: number) => i % 5 === 0,
                 },
             ]}
             yAxis={[
                 {
                     id: 'y-line',
-                    valueFormatter: (value: any) => value.toLocaleString(),
                     min: lineMinY,
                     max: lineMaxY,
                     position: 'left',
@@ -83,7 +76,6 @@ const IndexDetailLineChart = (
                 },
                 {
                     id: 'y-bar',
-                    valueFormatter: (value: any) => value.toLocaleString(),
                     min: 0,
                     max: barMaxY,
                     width: 60,
@@ -103,13 +95,12 @@ const IndexDetailLineChart = (
                     yAxisId: 'y-line'
                 },
                 {
-                    type: 'bar',
                     id: 'bar',
+                    type: 'bar',
+                    color: 'skyblue',
                     data: barDataList || [],
-                    stack: 'B',
-                    xAxisId: 'x-bar',
+                    xAxisId: 'x-line',
                     yAxisId: 'y-bar',
-                    color: 'skyblue'
                 }
             ]}
             sx={{
@@ -131,6 +122,7 @@ const IndexDetailLineChart = (
         >
             <ChartsXAxis axisId="x-line" />
             <ChartsYAxis axisId="y-line" />
+            <ChartsYAxis axisId="y-bar" />
 
             <LinePlot />
             <BarPlot />
@@ -143,4 +135,4 @@ const IndexDetailLineChart = (
     )
 }
 
-export default IndexDetailLineChart;
+export default StockDetailLineChart;
