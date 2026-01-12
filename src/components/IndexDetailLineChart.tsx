@@ -46,12 +46,12 @@ const IndexDetailLineChart = (
 
     const color = labelColors[trend];
 
-    const barMaxY = Math.max(...barDataList) * 10;
+    const barMaxY = Math.max(...barDataList) * 5;
 
     return (
         <ChartContainer
             colors={colorPalette}
-            margin={{ left:10, right: 20, top: 20, bottom: 20 }}
+            margin={{ left:10, right: 10, top: 20, bottom: 20 }}
             xAxis={[
                 {
                     id: 'x-line',
@@ -61,19 +61,12 @@ const IndexDetailLineChart = (
                     tickLabelStyle: {
                         display: 'none'
                     },
-                    tickInterval: (_index: any, i: number) => i % 5 === 0,
-                },
-                {
-                    id: 'x-bar',
-                    scaleType: 'band',
-                    categoryGapRatio: 0.5,
-                    data: dateList,
-                },
+                    tickInterval: (_index: number, i: number) => i % 5 === 0,
+                }
             ]}
             yAxis={[
                 {
                     id: 'y-line',
-                    valueFormatter: (value: any) => value.toLocaleString(),
                     min: lineMinY,
                     max: lineMaxY,
                     position: 'left',
@@ -81,7 +74,6 @@ const IndexDetailLineChart = (
                 },
                 {
                     id: 'y-bar',
-                    valueFormatter: (value: any) => value.toLocaleString(),
                     min: 0,
                     max: barMaxY,
                     width: 60,
@@ -105,21 +97,13 @@ const IndexDetailLineChart = (
                     id: 'bar',
                     data: barDataList || [],
                     stack: 'B',
-                    xAxisId: 'x-bar',
+                    xAxisId: 'x-line',
                     yAxisId: 'y-bar',
-                    color: 'skyblue'
+                    color: 'skyblue',
+                    valueFormatter: (value: number | null) => value === null ? "" : value.toLocaleString()
                 }
             ]}
             sx={{
-                '& .MuiAreaElement-series-organic': {
-                    fill: "url('#organic')",
-                },
-                '& .MuiAreaElement-series-referral': {
-                    fill: "url('#referral')",
-                },
-                '& .MuiAreaElement-series-direct': {
-                    fill: "url('#direct')",
-                },
                 height: {
                     xs: 250,
                     sm: 250,
@@ -130,8 +114,8 @@ const IndexDetailLineChart = (
             <ChartsXAxis axisId="x-line" />
             <ChartsYAxis axisId="y-line" />
 
-            <LinePlot />
             <BarPlot />
+            <LinePlot />
 
             <ChartsTooltip />
             <ChartsAxisHighlight x="line" />

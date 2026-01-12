@@ -223,7 +223,7 @@ const CommodityDetail = () => {
                     }).reverse();
 
                     lineData = commodityChartList.map((item: CommodityChart) => item.curPrc.replace(/^[+-]/, '')).reverse();
-                    barDataList = commodityChartList.map((item: CommodityChart) => item.trdeQty).reverse();
+                    barDataList = commodityChartList.map((item: CommodityChart) => Number(item.trdeQty)).reverse();
 
                     break;
                 }
@@ -235,7 +235,7 @@ const CommodityDetail = () => {
                     }).reverse();
 
                     lineData = commodityChartList.map((item: CommodityChart) => item.curPrc).reverse();
-                    barDataList = commodityChartList.map((item: CommodityChart) => item.trdeQty.slice(0, 3)).reverse();
+                    barDataList = commodityChartList.map((item: CommodityChart) => Number(item.trdeQty)).reverse();
 
                     break;
                 }

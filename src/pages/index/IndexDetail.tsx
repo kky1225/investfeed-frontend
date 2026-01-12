@@ -199,7 +199,7 @@ const IndexDetail = () => {
                     }).reverse();
 
                     lineData = chartList.map((item: { curPrc: string }) => parsePrice(item.curPrc.replace(/^[+-]/, ''))).reverse();
-                    barDataList = chartList.map((item: { trdeQty: string }) => item.trdeQty).reverse();
+                    barDataList = chartList.map((item: { trdeQty: string }) => Number(item.trdeQty)).reverse();
 
                     break;
                 }
@@ -212,7 +212,7 @@ const IndexDetail = () => {
                     }).reverse();
 
                     lineData = chartList.map((item: { curPrc: string }) => parsePrice(item.curPrc)).reverse();
-                    barDataList = chartList.map((item: { trdeQty: string }) => item.trdeQty.slice(0, 3)).reverse();
+                    barDataList = chartList.map((item: { trdeQty: string }) => Number(item.trdeQty)).reverse();
 
                     break;
                 }

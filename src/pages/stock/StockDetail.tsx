@@ -168,7 +168,7 @@ const StockDetail = () => {
                     }).reverse();
 
                     lineData = stockChartList.map((item: { curPrc: string }) => item.curPrc.replace(/^[+-]/, '')).reverse();
-                    barDataList = stockChartList.map((item: { trdeQty: string }) => item.trdeQty).reverse();
+                    barDataList = stockChartList.map((item: { trdeQty: string }) => Number(item.trdeQty)).reverse();
 
                     break;
                 }
@@ -181,7 +181,7 @@ const StockDetail = () => {
                     }).reverse();
 
                     lineData = stockChartList.map((item: { curPrc: string }) => item.curPrc).reverse();
-                    barDataList = stockChartList.map((item: { trdeQty: string }) => item.trdeQty).reverse();
+                    barDataList = stockChartList.map((item: { trdeQty: string }) => Number(item.trdeQty)).reverse();
 
                     break;
                 }

@@ -48,12 +48,12 @@ const StockDetailLineChart = (
 
     const color = labelColors[trend];
 
-    const barMaxY = Math.max(...barDataList) * 10;
+    const barMaxY = Math.max(...barDataList) * 5;
 
     return (
         <ChartContainer
             colors={colorPalette}
-            margin={{ left:10, right: 20, top: 20, bottom: 20 }}
+            margin={{ left: 10, right: 10, top: 20, bottom: 20 }}
             xAxis={[
                 {
                     id: 'x-line',
@@ -101,18 +101,10 @@ const StockDetailLineChart = (
                     data: barDataList || [],
                     xAxisId: 'x-line',
                     yAxisId: 'y-bar',
+                    valueFormatter: (value: number | null) => value === null ? "" : value.toLocaleString()
                 }
             ]}
             sx={{
-                '& .MuiAreaElement-series-organic': {
-                    fill: "url('#organic')",
-                },
-                '& .MuiAreaElement-series-referral': {
-                    fill: "url('#referral')",
-                },
-                '& .MuiAreaElement-series-direct': {
-                    fill: "url('#direct')",
-                },
                 height: {
                     xs: 250,
                     sm: 250,
@@ -122,10 +114,9 @@ const StockDetailLineChart = (
         >
             <ChartsXAxis axisId="x-line" />
             <ChartsYAxis axisId="y-line" />
-            <ChartsYAxis axisId="y-bar" />
 
-            <LinePlot />
             <BarPlot />
+            <LinePlot />
 
             <ChartsTooltip />
             <ChartsAxisHighlight x="line" />
