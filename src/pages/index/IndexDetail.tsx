@@ -292,14 +292,10 @@ const IndexDetail = () => {
                 _250hgst: Number(indexInfo._250hgst.replace(/^[+-]/, ''))
             });
 
-            setBarData([indexInfo.indNetprps, indexInfo.frgnrNetprps, indexInfo.orgnNetprps])
+            setBarData([Number(indexInfo.indNetprps), Number(indexInfo.frgnrNetprps), Number(indexInfo.orgnNetprps)])
 
             const message = {
-                ...checkInvestor(
-                    indexInfo.indsNm,
-                    indexInfo.frgnrNetprps,
-                    indexInfo.orgnNetprps
-                )
+                ...checkInvestor(indexInfo.indsNm, Number(indexInfo.frgnrNetprps), Number(indexInfo.orgnNetprps))
             };
 
             setMessage(message);
