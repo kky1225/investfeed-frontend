@@ -12,35 +12,7 @@ const CommodityList = () => {
     const chartTimer = useRef<number>(0);
     const marketTimer = useRef<number>(0);
 
-    const DEFAULT_COMMODITY_DATA: CommodityLineChartProps = {
-        id: '-',
-        title: '-',
-        value: '-',
-        fluRt: '0',
-        openPric: 0,
-        interval: '-',
-        trend: 'neutral',
-        seriesData: [
-            {
-                id: '',
-                showMark: false,
-                curve: 'linear',
-                area: true,
-                stackOrder: 'ascending',
-                color: 'grey',
-                data: []
-            }
-        ],
-        dateList: []
-    }
-
-    const [commodityDataList, setCommodityDataList] = useState<CommodityLineChartProps[]>(
-        Array.from({ length: 2}, () => ({
-            ...DEFAULT_COMMODITY_DATA,
-            seriesData: DEFAULT_COMMODITY_DATA.seriesData.map(s => ({...s})),
-            dateList: [...DEFAULT_COMMODITY_DATA.dateList]
-        }))
-    );
+    const [commodityDataList, setCommodityDataList] = useState<CommodityLineChartProps[]>([]);
 
     useEffect(() => {
         commodityList();

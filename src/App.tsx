@@ -10,6 +10,7 @@ import StockDetail from "./pages/stock/StockDetail.tsx";
 import StockList from "./pages/stock/StockList.tsx";
 import CommodityDetail from "./pages/commodity/CommodityDetail.tsx";
 import CommodityList from "./pages/commodity/CommodityList.tsx";
+import SectList from "./pages/sect/SectList.tsx";
 
 function App() {
     return (
@@ -27,6 +28,8 @@ function App() {
 
                     <Route path="/stock/list/:type" Component={StockList} />
                     <Route path="/stock/detail/:id" Component={StockDetail} />
+
+                    <Route path="/sect/list/:indsCd" Component={SectList} />
                 </Route>
             </Routes>
         </>

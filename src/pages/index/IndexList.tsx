@@ -12,35 +12,7 @@ const IndexList = () => {
     const chartTimer = useRef<number>(0);
     const marketTimer = useRef<number>(0);
 
-    const DEFAULT_INDEX_DATA: IndexLineChartProps = {
-        id: '-',
-        title: '-',
-        value: '-',
-        fluRt: '0',
-        openPric: 0,
-        interval: '-',
-        trend: 'neutral',
-        seriesData: [
-            {
-                id: '-',
-                showMark: false,
-                curve: 'linear',
-                area: true,
-                stackOrder: 'ascending',
-                color: 'grey',
-                data: []
-            }
-        ],
-        dateList: []
-    }
-
-    const [indexDataList, setIndexDataList] = useState<IndexLineChartProps[]>(
-        Array.from({ length: 3}, () => ({
-            ...DEFAULT_INDEX_DATA,
-            seriesData: DEFAULT_INDEX_DATA.seriesData.map(s => ({...s})),
-            dateList: [...DEFAULT_INDEX_DATA.dateList]
-        }))
-    );
+    const [indexDataList, setIndexDataList] = useState<IndexLineChartProps[]>([]);
 
     useEffect(() => {
         indexList();

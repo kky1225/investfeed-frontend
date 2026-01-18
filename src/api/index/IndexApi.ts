@@ -1,5 +1,5 @@
 import api from "../../axios.ts";
-import {indexDetailReq, indexDetailSteamReq} from "../../type/IndexType.ts";
+import {IndexDetailReq, IndexDetailSteamReq} from "../../type/IndexType.ts";
 
 export const fetchIndexList = async () => {
     const res = await api.get(`/index/list`);
@@ -11,12 +11,12 @@ export const fetchIndexListStream = async () => {
     return res.data
 }
 
-export const fetchIndexDetail = async (req: indexDetailReq) => {
+export const fetchIndexDetail = async (req: IndexDetailReq) => {
     const res = await api.get(`/index/detail`, {params: req});
     return res.data
 }
 
-export const fetchIndexDetailStream = async (req: indexDetailSteamReq) => {
+export const fetchIndexDetailStream = async (req: IndexDetailSteamReq) => {
     const res = await api.get(`/index/detail/stream`, {params: req});
     return res.data
 }

@@ -1,20 +1,20 @@
 import {DataGrid, GridColDef} from "@mui/x-data-grid";
 import {useNavigate} from "react-router-dom";
-import {StockGridRow} from "../type/StockType.ts";
+import {SectGridRow} from "../type/SectType.ts";
 
-interface StockTableProps {
-    rows: StockGridRow[],
+interface SectTableProps {
+    rows: SectGridRow[],
     columns: GridColDef[],
     pageSize: number,
 }
 
-const StockTable = (
-    { rows, columns, pageSize }: StockTableProps
+const SectTable = (
+    { rows, columns, pageSize }: SectTableProps
 ) => {
     const navigate = useNavigate();
 
     const onClick = (params: { row: { id: string } }) => {
-        navigate(`/stock/detail/${params.row.id}`);
+        navigate(`/sect/detail/${params.row.id}`);
     }
 
     return (
@@ -61,4 +61,4 @@ const StockTable = (
     )
 }
 
-export default StockTable;
+export default SectTable;
