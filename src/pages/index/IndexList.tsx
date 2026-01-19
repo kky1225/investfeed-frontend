@@ -104,7 +104,7 @@ const IndexList = () => {
             if (data.code !== "0000") {
                 throw new Error(data.msg);
             }
-        }catch (error) {
+        } catch (error) {
             console.error(error);
         }
     }
