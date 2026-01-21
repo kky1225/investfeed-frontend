@@ -404,7 +404,7 @@ const CommodityDetail = () => {
                     if(commodity.code === req.stkCd) {
                         setCommodityChartData((prev) => ({
                             ...prev,
-                            value: commodity.value.replace(/^[+-]/, ''),
+                            value: commodity.value.replace(/^[+-]/, '').toLocaleString(),
                             fluRt: commodity.fluRt,
                             trend: commodity.trend === '5' ? 'down' : commodity.trend === '2' ? 'up' : 'neutral',
                         }));
