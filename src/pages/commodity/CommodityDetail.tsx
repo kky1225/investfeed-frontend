@@ -262,7 +262,7 @@ const CommodityDetail = () => {
                 fluRt: commodityInfo.fluRt,
                 openPric: parseFloat(commodityInfo.openPric.replace(/^[+-]/, '')),
                 interval: today,
-                trend: commodityInfo.predPreSig === '5' ? 'down' : commodityInfo.predPreSig === '2' ? 'up' : 'neutral',
+                trend: trendColor(commodityInfo.predPreSig),
                 nxtEnable: commodityInfo.nxtEnable,
                 seriesData: [
                     {
@@ -271,7 +271,7 @@ const CommodityDetail = () => {
                         curve: 'linear',
                         area: true,
                         stackOrder: 'ascending',
-                        color: commodityInfo.predPreSig === '2' ? 'red' : 'blue',
+                        color: chartColor(commodityInfo.predPreSig),
                         data: lineData,
                     }
                 ],
@@ -406,7 +406,7 @@ const CommodityDetail = () => {
                             ...prev,
                             value: commodity.value.replace(/^[+-]/, '').toLocaleString(),
                             fluRt: commodity.fluRt,
-                            trend: commodity.trend === '5' ? 'down' : commodity.trend === '2' ? 'up' : 'neutral',
+                            trend: trendColor(commodity.trend)
                         }));
                     }
                 });
@@ -414,6 +414,14 @@ const CommodityDetail = () => {
         }
 
         return socket;
+    }
+
+    const trendColor = (value: string) => {
+        return ["1", "2"].includes(value) ? 'up' : ["4", "5"].includes(value) ? 'down' : 'neutral';
+    }
+
+    const chartColor = (value: string) => {
+        return ["1", "2"].includes(value) ? 'red' : ["4", "5"].includes(value) ? 'blue' : 'grey';
     }
 
     interface MessageProps {

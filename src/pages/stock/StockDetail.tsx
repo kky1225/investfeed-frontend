@@ -62,8 +62,8 @@ interface StockRangeProps {
 const StockDetail = () => {
     const { id } = useParams();
     const [req, setReq] = useState<StockDetailReq>({
-        stk_cd: id || "",
-        chart_type: StockChartType.DAY
+        stkCd: id || "",
+        chartType: StockChartType.DAY
     });
 
     const chartTimer = useRef<number>(0);
@@ -157,7 +157,7 @@ const StockDetail = () => {
             let dateList;
             let lineData, barDataList;
 
-            switch (req.chart_type) {
+            switch (req.chartType) {
                 case StockChartType.MINUTE_1:
                 case StockChartType.MINUTE_3:
                 case StockChartType.MINUTE_5:
@@ -201,14 +201,14 @@ const StockDetail = () => {
             }
 
             setStockChartData({
-                id: stockInfo.stk_cd,
-                title: stockInfo.stk_nm,
+                id: stockInfo.stkCd,
+                title: stockInfo.stkNm,
                 orderWarning: stockInfo.orderWarning,
-                value: Number(stockInfo.cur_prc.replace(/^[+-]/, '')).toLocaleString(),
-                fluRt: stockInfo.flu_rt,
-                openPric: parseFloat(stockInfo.open_pric),
+                value: Number(stockInfo.curPrc.replace(/^[+-]/, '')).toLocaleString(),
+                fluRt: stockInfo.fluRt,
+                openPric: parseFloat(stockInfo.openPric),
                 interval: today,
-                trend: stockInfo.pre_sig === '5' ? 'down' : stockInfo.pre_sig === '2' ? 'up' : 'neutral',
+                trend: trendColor(stockInfo.preSig),
                 nxtEnable: stockInfo.nxtEnable,
                 seriesData: [
                     {
@@ -226,10 +226,15 @@ const StockDetail = () => {
             });
 
             setInfo({
-                trdeQty: Number(stockInfo.trde_qty),
-                trdePrica: Number(stockInfo.trde_prica.substring(0, 7)),
-                openPric: Number(stockInfo.open_pric.replace(/^[+-]/, '')),
-                curPrc: Number(stockInfo.cur_prc.replace(/^[+-]/, '')),
+                marketName: stockInfo.marketCode === '0' ? '코스피' : '코스닥',
+                upName: stockInfo.upName,
+                trdeQty: Number(stockInfo.trdeQty),
+                trdePrica: Number(stockInfo.trdePrica.substring(0, 7)),
+                openPric: Number(stockInfo.openPric.replace(/^[+-]/, '')),
+                curPrc: Number(stockInfo.curPrc.replace(/^[+-]/, '')),
+                mac: Number(stockInfo.mac.replace(/^[+-]/, '')),
+                macWght: Number(stockInfo.macWght.replace(/^[+-]/, '')),
+                forExhRt: Number(stockInfo.forExhRt.replace(/^[+-]/, '')),
                 _250hgst: Number(stockInfo._250hgst.replace(/^[+-]/, '')),
                 _250lwst: Number(stockInfo._250lwst.replace(/^[+-]/, '')),
                 per: Number(stockInfo.per),
@@ -239,23 +244,23 @@ const StockDetail = () => {
             });
 
             setBarData([
-                Number(stockInvestorList[0].ind_invsr.toLocaleString()),
-                Number(stockInvestorList[0].frgnr_invsr.toLocaleString()),
+                Number(stockInvestorList[0].indInvsr.toLocaleString()),
+                Number(stockInvestorList[0].frgnrInvsr.toLocaleString()),
                 Number(stockInvestorList[0].orgn.toLocaleString())
             ]);
 
             const message = {
                 ...checkInvestor(
-                    stockInfo.stk_nm,
-                    stockInvestorList[0].frgnr_invsr,
+                    stockInfo.stkNm,
+                    stockInvestorList[0].frgnrInvsr,
                     stockInvestorList[0].orgn
                 )
             };
 
             setMessage(message);
 
-            const dayMin = Number(stockInfo.low_pric.replace(/^[+-]/, ''));
-            const dayMax = Number(stockInfo.high_pric.replace(/^[+-]/, ''));
+            const dayMin = Number(stockInfo.lowPric.replace(/^[+-]/, ''));
+            const dayMax = Number(stockInfo.highPric.replace(/^[+-]/, ''));
 
             setDayRange([
                 {
@@ -283,29 +288,29 @@ const StockDetail = () => {
             ]);
 
             const investor = stockInvestorList.map((item: {
-                dt: string; ind_invsr: string; frgnr_invsr: string; orgn: string; fnnc_invt: string; insrnc: string; etc_fnnc: string; invtrt: string; samo_fund: string; penfnd_etc: string; bank: string; etc_corp: string; natfor: string;
+                dt: string; indInvsr: string; frgnrInvsr: string; orgn: string; fnncInvt: string; insrnc: string; etcFnnc: string; invtrt: string; samoFund: string; penfndEtc: string; bank: string; etcCorp: string; natfor: string;
             }) => {
                 return {
                     id: item.dt,
                     dt: `${(item.dt).substring(0, 4)}-${(item.dt).substring(4, 6)}-${(item.dt).substring(6, 8)}`,
-                    ind_invsr: Number(item.ind_invsr),
-                    frgnr_invsr: Number(item.frgnr_invsr),
+                    indInvsr: Number(item.indInvsr),
+                    frgnrInvsr: Number(item.frgnrInvsr),
                     orgn: Number(item.orgn),
-                    fnnc_invt: Number(item.fnnc_invt),
+                    fnncInvt: Number(item.fnncInvt),
                     insrnc: Number(item.insrnc),
-                    etc_fnnc: Number(item.etc_fnnc),
+                    etcFnnc: Number(item.etcFnnc),
                     invtrt: Number(item.invtrt),
-                    samo_fund: Number(item.samo_fund),
-                    penfnd_etc: Number(item.penfnd_etc),
+                    samoFund: Number(item.samoFund),
+                    penfndEtc: Number(item.penfndEtc),
                     bank: Number(item.bank),
-                    etc_corp: Number(item.etc_corp),
+                    etcCorp: Number(item.etcCorp),
                     natfor: Number(item.natfor),
                 }
             });
 
             setRow(investor);
 
-            return [stockInfo.stk_cd];
+            return [stockInfo.stkCd];
         } catch(error) {
             console.error(error);
 
@@ -378,12 +383,12 @@ const StockDetail = () => {
                 });
 
                 stockList.forEach((stock: StockStream) => {
-                    if(stock.code === req.stk_cd) {
+                    if(stock.code === req.stkCd) {
                         setStockChartData((old) => ({
                             ...old,
                             value: Number(stock.value.replace(/^[+-]/, '')).toLocaleString(),
                             fluRt: stock.fluRt,
-                            trend: stock.trend === '5' ? 'down' : stock.trend === '2' ? 'up' : 'neutral',
+                            trend: trendColor(stock.trend),
                         }));
                     }
                 });
@@ -393,11 +398,20 @@ const StockDetail = () => {
         return socket;
     }
 
+    const trendColor = (value: string) => {
+        return ["1", "2"].includes(value) ? 'up' : ["4", "5"].includes(value) ? 'down' : 'neutral';
+    }
+
     interface StockInfoProps {
+        marketName: string;
+        upName: string;
         trdeQty: number;
         trdePrica: number;
         openPric: number;
         curPrc: number;
+        mac: number;
+        macWght: number;
+        forExhRt: number;
         _250lwst: number;
         _250hgst: number;
         per: number;
@@ -407,10 +421,15 @@ const StockDetail = () => {
     }
 
     const [info, setInfo] = useState<StockInfoProps>({
+        marketName: "",
+        upName: "",
         trdeQty: 0,
         trdePrica: 0,
         openPric: 0,
         curPrc: 0,
+        mac: 0,
+        macWght: 0,
+        forExhRt: 0,
         _250hgst: 0,
         _250lwst: 0,
         per: 0,
@@ -465,14 +484,14 @@ const StockDetail = () => {
             maxWidth: 120
         },
         {
-            field: 'ind_invsr',
+            field: 'indInvsr',
             headerName: '개인',
             flex: 1,
             minWidth: 100,
             renderCell: (params) => renderTrade(params.value as number),
         },
         {
-            field: 'frgnr_invsr',
+            field: 'frgnrInvsr',
             headerName: '외국인',
             flex: 1,
             minWidth: 100,
@@ -486,7 +505,7 @@ const StockDetail = () => {
             renderCell: (params) => renderTrade(params.value as number),
         },
         {
-            field: 'fnnc_invt',
+            field: 'fnncInvt',
             headerName: '금융투자',
             flex: 1,
             minWidth: 100,
@@ -500,7 +519,7 @@ const StockDetail = () => {
             renderCell: (params) => renderTrade(params.value as number),
         },
         {
-            field: 'etc_fnnc',
+            field: 'etcFnnc',
             headerName: '기타금융',
             flex: 1,
             minWidth: 100,
@@ -514,14 +533,14 @@ const StockDetail = () => {
             renderCell: (params) => renderTrade(params.value as number),
         },
         {
-            field: 'samo_fund',
+            field: 'samoFund',
             headerName: '사모펀드',
             flex: 1,
             minWidth: 100,
             renderCell: (params) => renderTrade(params.value as number),
         },
         {
-            field: 'penfnd_etc',
+            field: 'penfndEtc',
             headerName: '연기금등',
             flex: 1,
             minWidth: 100,
@@ -535,7 +554,7 @@ const StockDetail = () => {
             renderCell: (params) => renderTrade(params.value as number),
         },
         {
-            field: 'etc_corp',
+            field: 'etcCorp',
             headerName: '기타법인',
             flex: 1,
             minWidth: 100,
@@ -572,7 +591,7 @@ const StockDetail = () => {
 
             setReq({
                 ...req,
-                chart_type: newAlignment as StockChartType
+                chartType: newAlignment as StockChartType
             })
         }
     };
@@ -584,7 +603,7 @@ const StockDetail = () => {
 
         setReq({
             ...req,
-            chart_type: value as StockChartType
+            chartType: value as StockChartType
         })
     }
 
@@ -805,6 +824,26 @@ const StockDetail = () => {
                             <Grid container spacing={2}>
                                 <Grid size={{xs: 12, md: 3}}>
                                     <Typography variant="subtitle2" gutterBottom fontWeight={600}>
+                                        시장명
+                                    </Typography>
+                                </Grid>
+                                <Grid size={{xs: 12, md: 3}}>
+                                    <Typography variant="subtitle2" gutterBottom>
+                                        {info.marketName}
+                                    </Typography>
+                                </Grid>
+                                <Grid size={{xs: 12, md: 3}}>
+                                    <Typography variant="subtitle2" gutterBottom fontWeight={600}>
+                                        업종명
+                                    </Typography>
+                                </Grid>
+                                <Grid size={{xs: 12, md: 3}}>
+                                    <Typography variant="subtitle2" gutterBottom>
+                                        {info.upName}
+                                    </Typography>
+                                </Grid>
+                                <Grid size={{xs: 12, md: 3}}>
+                                    <Typography variant="subtitle2" gutterBottom fontWeight={600}>
                                         거래량
                                     </Typography>
                                 </Grid>
@@ -841,6 +880,26 @@ const StockDetail = () => {
                                 <Grid size={{xs: 12, md: 3}}>
                                     <Typography variant="subtitle2" gutterBottom>
                                         {info.curPrc.toLocaleString()}
+                                    </Typography>
+                                </Grid>
+                                <Grid size={{xs: 12, md: 3}}>
+                                    <Typography variant="subtitle2" gutterBottom fontWeight={600}>
+                                        시가총액 (억)
+                                    </Typography>
+                                </Grid>
+                                <Grid size={{xs: 12, md: 3}}>
+                                    <Typography variant="subtitle2" gutterBottom>
+                                        {info.mac.toLocaleString()}
+                                    </Typography>
+                                </Grid>
+                                <Grid size={{xs: 12, md: 3}}>
+                                    <Typography variant="subtitle2" gutterBottom fontWeight={600}>
+                                        외인 소진률
+                                    </Typography>
+                                </Grid>
+                                <Grid size={{xs: 12, md: 3}}>
+                                    <Typography variant="subtitle2" gutterBottom>
+                                        {`${info.forExhRt.toLocaleString()}%`}
                                     </Typography>
                                 </Grid>
                                 <Grid size={{xs: 12, md: 3}}>

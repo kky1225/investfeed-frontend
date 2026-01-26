@@ -121,7 +121,7 @@ const SectList = () => {
                     title: sect.stkNm,
                     value: sect.curPrc.replace(/^[+-]/, ''),
                     fluRt: sect.fluRt,
-                    trend: sect.preSig === '5' ? 'down' : sect.preSig === '2' ? 'up' : 'neutral'
+                    trend: trendColor(sect.preSig)
                 }
             });
 
@@ -176,7 +176,7 @@ const SectList = () => {
                                 ...item,
                                 value: newData.value.replace(/^[+-]/, ''),
                                 fluRt: newData.fluRt,
-                                trend: newData.trend === '5' ? 'down' : newData.trend === '2' ? 'up' : 'neutral',
+                                trend: trendColor(newData.trend),
                             };
                         }
 
@@ -187,6 +187,10 @@ const SectList = () => {
         };
 
         return socket;
+    }
+
+    const trendColor = (value: string) => {
+        return ["1", "2"].includes(value) ? 'up' : ["4", "5"].includes(value) ? 'down' : 'neutral';
     }
 
     const handleChange = (_event: React.SyntheticEvent, index: number) => {

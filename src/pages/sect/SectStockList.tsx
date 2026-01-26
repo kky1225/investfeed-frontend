@@ -111,7 +111,7 @@ const SectStockList = () => {
                                     ...item,
                                     cur_prc: newRow.value,
                                     flu_rt: newRow.fluRt,
-                                    trend: newRow.trend,
+                                    trend: trendColor(newRow.trend),
                                 };
                             }
                             return item;
@@ -252,6 +252,10 @@ const SectStockList = () => {
         };
 
         return socket;
+    }
+
+    const trendColor = (value: string) => {
+        return ["1", "2"].includes(value) ? 'up' : ["4", "5"].includes(value) ? 'down' : 'neutral';
     }
 
     function renderStatus(status: number) {

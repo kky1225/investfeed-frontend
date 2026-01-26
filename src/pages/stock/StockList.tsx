@@ -175,12 +175,12 @@ const StockList = () => {
 
             const ranking = stockList.map((stock: StockListItem) => {
                 return {
-                    id: stock.stk_cd,
+                    id: stock.stkCd,
                     rank: stock.rank,
-                    stk_nm: stock.stk_nm,
-                    flu_rt: stock.flu_rt,
-                    cur_prc: stock.cur_prc,
-                    trde_prica: stock.trde_prica,
+                    stkNm: stock.stkNm,
+                    fluRt: stock.fluRt,
+                    curPrc: stock.curPrc,
+                    trdePrica: stock.trdePrica,
                 }
             });
 
@@ -197,20 +197,20 @@ const StockList = () => {
                             maxWidth: 80
                         },
                         {
-                            field: 'stk_nm',
+                            field: 'stkNm',
                             headerName: '주식 이름',
                             flex: 1.5,
                             minWidth: 180
                         },
                         {
-                            field: 'flu_rt',
+                            field: 'fluRt',
                             headerName: '등락률',
                             flex: 0.5,
                             minWidth: 100,
                             renderCell: (params) => renderStatus(params.value as number),
                         },
                         {
-                            field: 'cur_prc',
+                            field: 'curPrc',
                             headerName: '현재가',
                             flex: 1,
                             minWidth: 100,
@@ -219,7 +219,7 @@ const StockList = () => {
                             }
                         },
                         {
-                            field: 'trde_prica',
+                            field: 'trdePrica',
                             headerName: '거래대금 (백만)',
                             flex: 1,
                             minWidth: 100,
@@ -241,20 +241,20 @@ const StockList = () => {
                             maxWidth: 80
                         },
                         {
-                            field: 'stk_nm',
+                            field: 'stkNm',
                             headerName: '주식 이름',
                             flex: 1.5,
                             minWidth: 180
                         },
                         {
-                            field: 'flu_rt',
+                            field: 'fluRt',
                             headerName: '등락률',
                             flex: 0.5,
                             minWidth: 100,
                             renderCell: (params) => renderStatus(params.value as number),
                         },
                         {
-                            field: 'cur_prc',
+                            field: 'curPrc',
                             headerName: '현재가',
                             flex: 1,
                             minWidth: 100,
@@ -263,7 +263,7 @@ const StockList = () => {
                             }
                         },
                         {
-                            field: 'trde_prica',
+                            field: 'trdePrica',
                             headerName: '거래량',
                             flex: 1,
                             minWidth: 100,
@@ -285,20 +285,20 @@ const StockList = () => {
                             maxWidth: 80
                         },
                         {
-                            field: 'stk_nm',
+                            field: 'stkNm',
                             headerName: '주식 이름',
                             flex: 1.5,
                             minWidth: 180
                         },
                         {
-                            field: 'flu_rt',
+                            field: 'fluRt',
                             headerName: '등락률',
                             flex: 0.5,
                             minWidth: 100,
                             renderCell: (params) => renderStatus(params.value as number),
                         },
                         {
-                            field: 'cur_prc',
+                            field: 'curPrc',
                             headerName: '현재가',
                             flex: 1,
                             minWidth: 100,
@@ -307,7 +307,7 @@ const StockList = () => {
                             }
                         },
                         {
-                            field: 'trde_prica',
+                            field: 'trdePrica',
                             headerName: '거래량 급증률',
                             flex: 1,
                             minWidth: 100,
@@ -325,7 +325,7 @@ const StockList = () => {
             setRow(ranking);
 
             return stockList.map((row: StockListItem) => {
-                return row.stk_cd
+                return row.stkCd
             });
         } catch (error) {
             console.log(error);

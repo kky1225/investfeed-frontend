@@ -9,26 +9,26 @@ export interface StockListRes {
 }
 
 export interface StockListItem {
-    stk_cd: string,
+    stkCd: string,
     rank: string,
-    stk_nm: string,
-    flu_rt: string,
-    cur_prc: string,
-    trde_prica: string,
+    stkNm: string,
+    fluRt: string,
+    curPrc: string,
+    trdePrica: string,
 }
 
 export interface StockGridRow {
     id: string;
     rank: string;
-    stk_nm: string;
-    flu_rt: string;
-    cur_prc: string;
-    trde_prica: string;
+    stkNm: string;
+    fluRt: string;
+    curPrc: string;
+    trdePrica: string;
 }
 
 export interface StockDetailReq {
-    stk_cd: string, // 거래소별 종목코드(KRX:039490,NXT:039490_NX,SOR:039490_AL)
-    chart_type: StockChartType
+    stkCd: string, // 거래소별 종목코드(KRX:039490,NXT:039490_NX,SOR:039490_AL)
+    chartType: StockChartType
 }
 
 export enum StockChartType {

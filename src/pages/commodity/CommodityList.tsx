@@ -146,7 +146,7 @@ const CommodityList = () => {
                     fluRt: commodityItem.fluRt,
                     openPric: parseFloat(commodityItem.openPric.replace(/^[+-]/, '')),
                     interval: today,
-                    trend: commodityItem.predPreSig === '5' ? 'down' : commodityItem.predPreSig === '2' ? 'up' : 'neutral',
+                    trend: trendColor(commodityItem.predPreSig),
                     seriesData: [
                         {
                             id: commodityItem.stkCd,
@@ -154,7 +154,7 @@ const CommodityList = () => {
                             curve: 'linear',
                             area: true,
                             stackOrder: 'ascending',
-                            color: commodityItem.predPreSig === '2' ? 'red' : 'blue',
+                            color: chartColor(commodityItem.predPreSig),
                             data: commodityItem.chartMinuteList.map(item => parsePrice(item.curPrc.replace(/^[+-]/, ''))).reverse(),
                         }
                     ],
@@ -195,7 +195,7 @@ const CommodityList = () => {
                                 ...item,
                                 value: Number(newData.value.replace(/^[+-]/, '')).toLocaleString(),
                                 fluRt: newData.fluRt,
-                                trend: newData.trend === '5' ? 'down' : newData.trend === '2' ? 'up' : 'neutral',
+                                trend: trendColor(newData.trend)
                             };
                         }
 
@@ -206,6 +206,14 @@ const CommodityList = () => {
         };
 
         return socket;
+    }
+
+    const trendColor = (value: string) => {
+        return ["1", "2"].includes(value) ? 'up' : ["4", "5"].includes(value) ? 'down' : 'neutral';
+    }
+
+    const chartColor = (value: string) => {
+        return ["1", "2"].includes(value) ? 'red' : ["4", "5"].includes(value) ? 'blue' : 'grey';
     }
 
     const commodityDateFormat = (cntrTm: string) => {

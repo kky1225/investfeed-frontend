@@ -149,7 +149,7 @@ const IndexList = () => {
                     fluRt: indexItem.fluRt,
                     openPric: parseFloat(indexItem.openPric.replace(/^[+-]/, '')),
                     interval: today,
-                    trend: indexItem.predPreSig === '5' ? 'down' : indexItem.predPreSig === '2' ? 'up' : 'neutral',
+                    trend: trendColor(indexItem.predPreSig),
                     seriesData: [
                         {
                             id: indexItem.indsCd,
@@ -157,7 +157,7 @@ const IndexList = () => {
                             curve: 'linear',
                             area: true,
                             stackOrder: 'ascending',
-                            color: indexItem.predPreSig === '2' ? 'red' : 'blue',
+                            color: chartColor(indexItem.predPreSig),
                             data: indexItem.chartMinuteList.map(item => parsePrice(item.curPrc.replace(/^[+-]/, ''))).reverse(),
                         }
                     ],
@@ -198,7 +198,7 @@ const IndexList = () => {
                                 ...item,
                                 value: newData.value.replace(/^[+-]/, ''),
                                 fluRt: newData.fluRt,
-                                trend: newData.trend === '5' ? 'down' : newData.trend === '2' ? 'up' : 'neutral',
+                                trend: trendColor(newData.trend)
                             };
                         }
 
@@ -209,6 +209,14 @@ const IndexList = () => {
         };
 
         return socket;
+    }
+
+    const trendColor = (value: string) => {
+        return ["1", "2"].includes(value) ? 'up' : ["4", "5"].includes(value) ? 'down' : 'neutral';
+    }
+
+    const chartColor = (value: string) => {
+        return ["1", "2"].includes(value) ? 'red' : ["4", "5"].includes(value) ? 'blue' : 'grey';
     }
 
     const indexDateFormat = (cntrTm: string) => {
