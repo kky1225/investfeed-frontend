@@ -4,6 +4,7 @@ import ListItemButton from '@mui/material/ListItemButton';
 import ListItemIcon from '@mui/material/ListItemIcon';
 import ListItemText from '@mui/material/ListItemText';
 import Stack from '@mui/material/Stack';
+import DashboardIcon from '@mui/icons-material/Dashboard';
 import HomeRoundedIcon from '@mui/icons-material/HomeRounded';
 import AnalyticsRoundedIcon from '@mui/icons-material/AnalyticsRounded';
 import PeopleRoundedIcon from '@mui/icons-material/PeopleRounded';
@@ -16,9 +17,10 @@ import GroupIcon from '@mui/icons-material/Group';
 import {useLocation, useNavigate} from "react-router-dom";
 
 const mainListItems = [
-    { id: 1, text: '대시보드', icon: <HomeRoundedIcon />, url: '/' },
+    { id: 1, text: '대시보드', icon: <DashboardIcon />, url: '/' },
     { id: 2, text: '주요 지수', icon: <AnalyticsRoundedIcon />, url: '/index/list' },
-    { id: 3, text: '업종 지수', icon: <GroupIcon />, url: '/sect/list/001' },
+    { id: 3, text: '업종', icon: <HomeRoundedIcon />, url: '/sect/list/001' },
+    { id: 3, text: '테마', icon: <GroupIcon />, url: '/theme/list' },
     { id: 3, text: '주식', icon: <ShowChartIcon />, url: '/stock/list/0' },
     { id: 2, text: '원자재', icon: <DiamondIcon />, url: '/commodity/list' },
     { id: 4, text: '관심 종목', icon: <PeopleRoundedIcon />, url: '/favorite/list' },

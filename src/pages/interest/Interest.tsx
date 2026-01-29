@@ -14,9 +14,9 @@ const Interest = () => {
     const [group, setGroup] = useState(0);
 
     function renderStatus(status: number) {
-        const colors = status > 0 ? 'error' : 'info';
+        const colors = status == 0 ? 'default' : status > 0 ? 'error': 'info';
 
-        return <Chip label={status > 0 ? `+${status}%` : `${status}%`} color={colors} />;
+        return <Chip label={status > 0 ? `${status}%` : `${status}%`} color={colors} />;
     }
 
     function renderStatus2(status: number) {

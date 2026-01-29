@@ -12,6 +12,7 @@ import CommodityDetail from "./pages/commodity/CommodityDetail.tsx";
 import CommodityList from "./pages/commodity/CommodityList.tsx";
 import SectList from "./pages/sect/SectList.tsx";
 import SectStockList from "./pages/sect/SectStockList.tsx";
+import ThemeList from "./pages/theme/ThemeList.tsx";
 
 function App() {
     return (
@@ -32,6 +33,8 @@ function App() {
 
                     <Route path="/sect/list/:indsCd" Component={SectList} />
                     <Route path="/sect/:indsCd/list" Component={SectStockList} />
+
+                    <Route path="/theme/list" Component={ThemeList} />
                 </Route>
             </Routes>
         </>

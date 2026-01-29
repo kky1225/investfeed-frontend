@@ -215,7 +215,7 @@ export default function Dashboard() {
     const isSmallScreen = useMediaQuery(theme.breakpoints.down('sm'));
 
     function renderStatus(status: number) {
-        const colors = status > 0 ? 'error' : 'info';
+        const colors = status == 0 ? 'default' : status > 0 ? 'error': 'info';
 
         return <Chip label={status > 0 ? `${status}%` : `${status}%`} color={colors} />;
     }

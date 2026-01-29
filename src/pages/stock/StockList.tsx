@@ -71,8 +71,8 @@ const StockList = () => {
                             if (newRow) {
                                 return {
                                     ...item,
-                                    cur_prc: newRow.value,
-                                    flu_rt: newRow.fluRt,
+                                    curPrc: newRow.value,
+                                    fluRt: newRow.fluRt,
                                     trend: newRow.trend,
                                 };
                             }
@@ -355,7 +355,7 @@ const StockList = () => {
     }
 
     function renderStatus(status: number) {
-        const colors = status > 0 ? 'error' : 'info';
+        const colors = status == 0 ? 'default' : status > 0 ? 'error': 'info';
 
         return <Chip label={status > 0 ? `${status}%` : `${status}%`} color={colors} />;
     }

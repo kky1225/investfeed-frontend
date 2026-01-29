@@ -20,7 +20,7 @@ import SectStockTableProps from "../../components/SectStockTable.tsx";
 const SectStockList = () => {
     const { indsCd } = useParams();
 
-    const [req, setReq] = useState<SectStockListReq>({
+    const [req] = useState<SectStockListReq>({
         indsCd: indsCd || "001",
         mrktTp: "0"
     });
@@ -259,7 +259,7 @@ const SectStockList = () => {
     }
 
     function renderStatus(status: number) {
-        const colors = status > 0 ? 'error' : 'info';
+        const colors = status == 0 ? 'default' : status > 0 ? 'error': 'info';
 
         return <Chip label={status > 0 ? `${status}%` : `${status}%`} color={colors} />;
     }
