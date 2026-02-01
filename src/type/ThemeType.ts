@@ -37,3 +37,23 @@ export interface ThemeStockListItem {
     accTrdeQty: string,
     dtPrftRtN: string,
 }
+
+export interface ThemeStockGridRow {
+    id: string,
+    stkNm: string,
+    curPrc: string,
+    fluRt: string,
+    accTrdeQty: string,
+    dtPrftRtN: string
+}
+
+export interface ThemeStockListStreamReq {
+    items: Array<string>
+}
+
+export interface ThemeStockListStream {
+    code: string,
+    value: string,
+    fluRt: string,
+    trend: string,
+}
