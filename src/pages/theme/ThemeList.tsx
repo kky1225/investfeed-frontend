@@ -2,8 +2,6 @@ import {Box, InputLabel, Select, SelectChangeEvent} from "@mui/material";
 import Typography from "@mui/material/Typography";
 import Grid from "@mui/material/Grid";
 import {useEffect, useRef, useState} from "react";
-import {fetchTimeNow} from "../../api/time/TimeApi.ts";
-import {MarketType} from "../../type/timeType.ts";
 import {ThemeListItem, ThemeListReq} from "../../type/ThemeType.ts";
 import {fetchThemeList} from "../../api/theme/ThemeApi.ts";
 import ThemeTable, {ThemeGridRow} from "../../components/ThemeTable.tsx";
@@ -50,39 +48,16 @@ const ThemeList = () => {
     ];
 
     const chartTimer = useRef<number>(0);
-    const marketTimer = useRef<number>(0);
 
     useEffect(() => {
         let chartTimeout: ReturnType<typeof setTimeout>;
-        let socketTimeout: ReturnType<typeof setTimeout>;
         let interval: ReturnType<typeof setInterval>;
-        let socket: WebSocket;
 
         (async () => {
-            const items = await themeList(req);
-            // const sectListStreamReq: SectListStreamReq = {
-            //     items: items
-            // }
-
-            const marketInfo = await timeNow();
+            await themeList(req);
 
             const now = Date.now() + chartTimer.current;
             const waitTime = 60_000 - (now % 60_000);
-
-            if(marketInfo.isMarketOpen) {
-                // await sectListStream(sectListStreamReq);
-                // socket = openSocket();
-            } else {
-                socketTimeout = setTimeout(async () => {
-                    socket?.close();
-
-                    const again = await timeNow();
-                    if (again.isMarketOpen) {
-                        // await sectListStream(sectListStreamReq);
-                        // socket = openSocket();
-                    }
-                }, marketTimer.current + 200);
-            }
 
             chartTimeout = setTimeout(() => {
                 themeList(req);
@@ -93,48 +68,10 @@ const ThemeList = () => {
         })();
 
         return () => {
-            socket?.close();
-            clearInterval(socketTimeout);
             clearTimeout(chartTimeout);
             clearInterval(interval);
         }
     }, [req]);
-
-    const timeNow = async () => {
-        try {
-            const startTime = Date.now();
-            const data = await fetchTimeNow({
-                marketType: MarketType.INDEX
-            });
-
-            if(data.code !== "0000") {
-                throw new Error(data.msg);
-            }
-
-            const { time, isMarketOpen, startMarketTime, marketType } = data.result
-
-            if(marketType !== MarketType.INDEX) {
-                throw new Error(data.msg);
-            }
-
-            const endTime = Date.now();
-            const delayTime = endTime - startTime;
-
-            const revisionServerTime = time + delayTime / 2; // startTime과 endTime 사이에 API 응답을 받기 때문에 2를 나눠서 보정
-
-            chartTimer.current = revisionServerTime - endTime;
-
-            if(!isMarketOpen) {
-                marketTimer.current = startMarketTime - revisionServerTime;
-            }
-
-            return {
-                ...data.result
-            }
-        }catch (error) {
-            console.error(error);
-        }
-    }
 
     const themeList = async (req: ThemeListReq) => {
         try {
@@ -156,68 +93,10 @@ const ThemeList = () => {
             });
 
             setRow(newRowData);
-
-            return themeList.map((row: ThemeListItem) => {
-                return row.themaGrpCd;
-            });
         } catch (error) {
             console.error(error);
         }
     }
-
-    // const sectListStream = async (req: SectListStreamReq) => {
-    //     try {
-    //         const data = await fetchSectListStream(req);
-    //
-    //         console.log(data);
-    //
-    //         if (data.code !== "0000") {
-    //             throw new Error(data.msg);
-    //         }
-    //     } catch (error) {
-    //         console.error(error);
-    //     }
-    // }
-
-    // const openSocket = () => {
-    //     const socket = new WebSocket("ws://localhost:8080/ws");
-    //
-    //     socket.onmessage = (event) => {
-    //         const data = JSON.parse(event.data);
-    //
-    //         if (data.trnm === "REAL" && Array.isArray(data.data)) {
-    //             const sectList = data.data.map((entry: SectListStreamRes) => {
-    //                 const values = entry.values;
-    //                 return {
-    //                     code: entry.item, // ex: "001"
-    //                     value: values["10"], // 현재가
-    //                     change: values["11"], // 전일 대비
-    //                     fluRt: values["12"],   // 등락률
-    //                     trend: values["25"],   // 등락기호
-    //                 };
-    //             });
-    //
-    //             setSectDataList((prevList) => {
-    //                 return prevList.map((item) => {
-    //                     const newData = sectList.find((data: SectListStream) => data.code === item.id);
-    //
-    //                     if (newData) {
-    //                         return {
-    //                             ...item,
-    //                             value: newData.value.replace(/^[+-]/, ''),
-    //                             fluRt: newData.fluRt,
-    //                             trend: trendColor(newData.trend),
-    //                         };
-    //                     }
-    //
-    //                     return item;
-    //                 });
-    //             });
-    //         }
-    //     };
-    //
-    //     return socket;
-    // }
 
     function renderStatus(status: number) {
         const colors = status == 0 ? 'default' : status > 0 ? 'error': 'info';

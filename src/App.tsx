@@ -14,6 +14,7 @@ import SectList from "./pages/sect/SectList.tsx";
 import SectStockList from "./pages/sect/SectStockList.tsx";
 import ThemeList from "./pages/theme/ThemeList.tsx";
 import ThemeStockList from "./pages/theme/ThemeStockList.tsx";
+import InvestorList from "./pages/investor/InvestorList.tsx";
 
 function App() {
     return (
@@ -37,6 +38,8 @@ function App() {
 
                     <Route path="/theme/list" Component={ThemeList} />
                     <Route path="/theme/:themaGrpCd/list" Component={ThemeStockList} />
+
+                    <Route path="/investor/:orgnTp/list/:trdeTp" Component={InvestorList} />
                 </Route>
             </Routes>
         </>
