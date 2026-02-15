@@ -25,12 +25,13 @@ const mainListItems = [
     { id: 3, text: '업종', icon: <HomeRoundedIcon />, url: '/sect/list/001' },
     { id: 4, text: '테마', icon: <GroupIcon />, url: '/theme/list' },
     { id: 5, text: '주식', icon: <ShowChartIcon />, url: '/stock/list/0' },
-    { id: 6, text: '투자자별', icon: <GroupIcon />,
-        children: [
-            { id: 10, text: '장중 매매 순위', url: '/investor/6/list/1', icon: <GroupIcon /> },
-            { id: 11, text: '장마감 후 매매 순위', url: '/investor/7/list/1', icon: <GroupIcon /> },
-        ]
-    },
+    // { id: 6, text: '투자자별', icon: <GroupIcon />,
+    //     children: [
+    //         { id: 10, text: '장중 매매 순위', url: '/investor/6/list/1', icon: <GroupIcon /> },
+    //         { id: 11, text: '장마감 후 매매 순위', url: '/investor/7/list/1', icon: <GroupIcon /> },
+    //     ]
+    // },
+    { id: 6, text: '투자자별', icon: <GroupIcon />, url: '/investor/6/list/1' },
     { id: 7, text: '원자재', icon: <DiamondIcon />, url: '/commodity/list' },
     { id: 8, text: '관심 종목', icon: <PeopleRoundedIcon />, url: '/favorite/list' },
     { id: 9, text: '보유 주식', icon: <PeopleRoundedIcon />, url: '/holding/list' },

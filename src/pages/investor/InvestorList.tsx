@@ -14,6 +14,7 @@ import {StockGridRow, StockStream, StockStreamReq, StockStreamRes} from "../../t
 import {useNavigate, useParams} from "react-router-dom";
 import {InvestorListItem, InvestorListReq} from "../../type/InvestorType.ts";
 import {fetchInvestorList} from "../../api/investor/InvestorApi.ts";
+import CustomChip from "../../components/CustomChip.tsx";
 
 const InvestorList = () => {
     const navigate = useNavigate();
@@ -27,7 +28,48 @@ const InvestorList = () => {
     const [value, setValue] = useState(orgnTp === "6" ? 0 : 1);
     const [tradeValue, setTradeValue] = useState(trdeTp === "1" ? 0 : 1);
     const [row, setRow] = useState<StockGridRow[]>([]);
-    const [columns, setColumns] = useState<GridColDef[]>([]);
+
+    const columns = [
+        {
+            field: 'rank',
+            headerName: '순위',
+            flex: 1,
+            minWidth: 80,
+            maxWidth: 80
+        },
+        {
+            field: 'stkNm',
+            headerName: '주식 이름',
+            flex: 1.5,
+            minWidth: 180
+        },
+        {
+            field: 'fluRt',
+            headerName: '등락률',
+            flex: 0.5,
+            minWidth: 100,
+            renderCell: (params: {value: number}) => CustomChip(params.value as number),
+        },
+        {
+            field: 'curPrc',
+            headerName: '현재가',
+            flex: 1,
+            minWidth: 100,
+            valueFormatter: (param: string) => {
+                return Number(param).toLocaleString().replace(/^[+-]/, '')
+            }
+        },
+        {
+            field: 'netprpsAmt',
+            headerName: '거래대금',
+            flex: 0.5,
+            minWidth: 100,
+            valueFormatter: (param: string) => {
+                //return `${(Number(param) / 10).toFixed(1).toLocaleString().replace(/^[+-]/, '')}억`
+                return `${(Number(param.slice(0, -1)) / 10).toFixed(1)}억`
+            }
+        }
+    ];
 
     const chartTimer = useRef<number>(0);
     const marketTimer = useRef<number>(0);
@@ -170,42 +212,18 @@ const InvestorList = () => {
 
             const { investorList } = data.result;
 
-            // const ranking = stockInvestorList.map((investor: InvestorListItem, index: number) => {
-            //     return {
-            //         id: investor.forNetprpsStkCd,
-            //         rank: index + 1,
-            //         forNetprpsStkNm: investor.forNetprpsStkNm,
-            //         forNetprpsAmt: investor.forNetprpsAmt,
-            //     }
-            // });
-
-            const col = [
-                {
-                    field: 'rank',
-                    headerName: '순위',
-                    flex: 1,
-                    minWidth: 80,
-                    maxWidth: 80
-                },
-                {
-                    field: 'forNetprpsStkNm',
-                    headerName: '주식 이름',
-                    flex: 1.5,
-                    minWidth: 180
-                },
-                {
-                    field: 'forNetprpsAmt',
-                    headerName: '거래대금',
-                    flex: 0.5,
-                    minWidth: 100,
-                    valueFormatter: (param: number) => {
-                        return `${(Number(param) / 10).toFixed(1).toLocaleString().replace(/^[+-]/, '')}억`
-                    }
+            const ranking = investorList.map((investor: InvestorListItem, index: number) => {
+                return {
+                    id: investor.stkCd,
+                    rank: index + 1,
+                    stkNm: investor.stkNm,
+                    fluRt: investor.fluRt,
+                    curPrc: investor.curPrc,
+                    netprpsAmt: investor.netprpsAmt,
                 }
-            ];
+            });
 
-            setColumns(col);
-            // setRow(ranking);
+            setRow(ranking);
 
             // return stockList.map((row: StockListItem) => {
             //     return row.stkCd

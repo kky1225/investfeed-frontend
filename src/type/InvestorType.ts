@@ -8,9 +8,13 @@ export interface InvestorListRes {
 }
 
 export interface InvestorListItem {
-    stkCd: string, // 종목코
+    stkCd: string, // 종목코드
     stkNm: string, // 종목명
-    selQty: string, // 매도량
-    buyQty: string, // 매수량
-    netslmt: string, // 순매도
+    curPrc: string, // 현재가
+    preSig: string, // 대비기호
+    predPre: string, // 전일대비
+    fluRt: string, // 등락율
+    accTrdeQty: string, // 누적거래량
+    netprpsAmt: string, // 순매수금액
+    netprpsQty: string, // 순매수수량
 }
