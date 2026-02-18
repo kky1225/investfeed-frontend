@@ -5,11 +5,12 @@ import {StockGridRow} from "../type/StockType.ts";
 interface StockTableProps {
     rows: StockGridRow[],
     columns: GridColDef[],
+    loading: boolean,
     pageSize: number,
 }
 
 const StockTable = (
-    { rows, columns, pageSize }: StockTableProps
+    { rows, columns, loading, pageSize }: StockTableProps
 ) => {
     const navigate = useNavigate();
 
@@ -57,6 +58,7 @@ const StockTable = (
                     },
                 },
             }}
+            loading={loading}
         />
     )
 }

@@ -28,6 +28,7 @@ const InvestorList = () => {
     const [value, setValue] = useState(orgnTp === "6" ? 0 : 1);
     const [tradeValue, setTradeValue] = useState(trdeTp === "1" ? 0 : 1);
     const [row, setRow] = useState<StockGridRow[]>([]);
+    const [loading, setLoading] = useState(false);
 
     const columns = [
         {
@@ -202,6 +203,8 @@ const InvestorList = () => {
 
     const investorList = async (req: InvestorListReq) => {
         try {
+            setLoading(true);
+
             const data = await fetchInvestorList(req);
 
             if (data.code !== "0000") {
@@ -222,6 +225,8 @@ const InvestorList = () => {
                     netprpsAmt: investor.netprpsAmt,
                 }
             });
+
+            setLoading(false);
 
             setRow(ranking);
 
@@ -322,7 +327,7 @@ const InvestorList = () => {
                             <Tab label="순매도" {...a11yProps(1)} />
                         </Tabs>
                     </Box>
-                    <StockTable rows={row} columns={columns} pageSize={100} />
+                    <StockTable rows={row} columns={columns} loading={loading} pageSize={100} />
                 </Box>
             </Grid>
         </Box>
