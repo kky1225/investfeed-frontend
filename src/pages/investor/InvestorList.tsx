@@ -1,19 +1,16 @@
 import Typography from "@mui/material/Typography";
 import Box from "@mui/material/Box";
 import Grid from "@mui/material/Grid";
-import {GridColDef} from "@mui/x-data-grid";
 import StockTable from "../../components/StockTable.tsx";
-import Chip from "@mui/material/Chip";
 import * as React from "react";
 import {useEffect, useRef, useState} from "react";
-import {fetchStockStream} from "../../api/stock/StockApi.ts";
 import {Tab, Tabs} from "@mui/material";
 import {fetchTimeNow} from "../../api/time/TimeApi.ts";
 import {MarketType} from "../../type/timeType.ts";
-import {StockGridRow, StockStream, StockStreamReq, StockStreamRes} from "../../type/StockType.ts";
+import {StockGridRow, StockStream, StockStreamRes} from "../../type/StockType.ts";
 import {useNavigate, useParams} from "react-router-dom";
-import {InvestorListItem, InvestorListReq} from "../../type/InvestorType.ts";
-import {fetchInvestorList} from "../../api/investor/InvestorApi.ts";
+import {InvestorListItem, InvestorListReq, InvestorStreamReq} from "../../type/InvestorType.ts";
+import {fetchInvestorList, fetchInvestorStream} from "../../api/investor/InvestorApi.ts";
 import CustomChip from "../../components/CustomChip.tsx";
 
 const InvestorList = () => {
@@ -66,8 +63,12 @@ const InvestorList = () => {
             flex: 0.5,
             minWidth: 100,
             valueFormatter: (param: string) => {
-                //return `${(Number(param) / 10).toFixed(1).toLocaleString().replace(/^[+-]/, '')}억`
-                return `${(Number(param.slice(0, -1)) / 10).toFixed(1)}억`
+                const value = Math.abs(Number(param.slice(0, -1)) / 10);
+                const formatted = value.toLocaleString('ko-KR', {
+                    minimumFractionDigits: 1,
+                    maximumFractionDigits: 1
+                });
+                return `${formatted}억`;
             }
         }
     ];
@@ -86,9 +87,9 @@ const InvestorList = () => {
 
         (async () => {
             const items = await investorList(req);
-            // const stockStreamReq: StockStreamReq = {
-            //     items: items,
-            // }
+            const investorStreamReq: InvestorStreamReq = {
+                items: items,
+            }
 
             const updateDisplay = () => {
                 if (displayInterval) {
@@ -124,8 +125,8 @@ const InvestorList = () => {
                 }, 500);
             }
 
-            const connectSocket = async (req: StockStreamReq) => {
-                await fetchStockStream(req);
+            const connectSocket = async (req: InvestorStreamReq) => {
+                await fetchInvestorStream(req);
                 socket = openSocket();
                 updateDisplay();
             };
@@ -136,14 +137,14 @@ const InvestorList = () => {
             const waitTime = 60_000 - (now % 60_000);
 
             if (marketInfo.isMarketOpen) {
-                // await connectSocket(stockStreamReq);
+                await connectSocket(investorStreamReq);
             } else {
                 socketTimeout = setTimeout(async () => {
                     socket?.close();
 
                     const again = await timeNow();
                     if (again.isMarketOpen) {
-                        // await connectSocket(stockStreamReq);
+                        await connectSocket(investorStreamReq);
                     }
                 }, marketTimer.current + 200);
             }
@@ -230,9 +231,9 @@ const InvestorList = () => {
 
             setRow(ranking);
 
-            // return stockList.map((row: StockListItem) => {
-            //     return row.stkCd
-            // });
+            return investorList.map((row: InvestorListItem) => {
+                return row.stkCd
+            });
         } catch (error) {
             console.log(error);
         }

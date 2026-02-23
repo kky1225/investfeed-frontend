@@ -18,3 +18,21 @@ export interface InvestorListItem {
     netprpsAmt: string, // 순매수금액
     netprpsQty: string, // 순매수수량
 }
+
+export interface InvestorStreamReq {
+    items: Array<string>
+}
+
+export interface InvestorStreamRes {
+    type: string,
+    name: string,
+    item: string,
+    values: Array<InvestorStream>
+}
+
+export interface InvestorStream {
+    code: string,
+    value: string,
+    fluRt: string,
+    trend: string,
+}
