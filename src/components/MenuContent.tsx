@@ -14,6 +14,7 @@ import InfoRoundedIcon from '@mui/icons-material/InfoRounded';
 import HelpRoundedIcon from '@mui/icons-material/HelpRounded';
 import DiamondIcon from '@mui/icons-material/Diamond';
 import GroupIcon from '@mui/icons-material/Group';
+import RecommendIcon from '@mui/icons-material/Recommend';
 import {useLocation, useNavigate} from "react-router-dom";
 import {Fragment, useState} from "react";
 import { Collapse } from "@mui/material";
@@ -32,11 +33,12 @@ const mainListItems = [
             { id: 5, text: '테마', icon: <GroupIcon />, url: '/theme/list' },
             { id: 6, text: '순위', icon: <ShowChartIcon />, url: '/stock/list/0' },
             { id: 7, text: '투자자별', icon: <GroupIcon />, url: '/investor/6/list/1' },
-            { id: 8, text: '관심 종목', icon: <PeopleRoundedIcon />, url: '/favorite/list' },
-            { id: 9, text: '보유 주식', icon: <PeopleRoundedIcon />, url: '/holding/list' },
+            { id: 8, text: '추천', icon: <RecommendIcon />, url: '/recommend/list' },
+            { id: 9, text: '관심 종목', icon: <PeopleRoundedIcon />, url: '/favorite/list' },
+            { id: 10, text: '보유 주식', icon: <PeopleRoundedIcon />, url: '/holding/list' },
         ]
     },
-    { id: 10, text: '원자재', icon: <DiamondIcon />, url: '/commodity/list' },
+    { id: 11, text: '원자재', icon: <DiamondIcon />, url: '/commodity/list' },
 
 
     // { id: 6, text: '투자자별', icon: <GroupIcon />,
