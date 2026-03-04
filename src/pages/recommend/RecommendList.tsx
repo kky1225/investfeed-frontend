@@ -2,15 +2,16 @@ import {Box} from "@mui/material";
 import Typography from "@mui/material/Typography";
 import Grid from "@mui/material/Grid";
 import {useEffect, useRef, useState} from "react";
-import {useNavigate, useParams} from "react-router-dom";
-import * as React from "react";
-import {SectListItem, SectListReq, SectListStream, SectListStreamReq, SectListStreamRes} from "../../type/SectType.ts";
 import {fetchTimeNow} from "../../api/time/TimeApi.ts";
 import {MarketType} from "../../type/timeType.ts";
-import {fetchSectList, fetchSectListStream} from "../../api/sect/SectApi.ts";
-import SectCard, {SectCardProps} from "../../components/SectCard.tsx";
-import {fetchRecommendList} from "../../api/recommend/RecommendApi.ts";
-import {RecommendListItem} from "../../type/RecommendType.ts";
+import {SectCardProps} from "../../components/SectCard.tsx";
+import {fetchRecommendList, fetchRecommendListStream} from "../../api/recommend/RecommendApi.ts";
+import {
+    RecommendListItem,
+    RecommendListStream,
+    RecommendListStreamReq,
+    RecommendListStreamRes
+} from "../../type/RecommendType.ts";
 import RecommendCard from "../../components/RecommendCard.tsx";
 
 const RecommendList = () => {
@@ -27,8 +28,8 @@ const RecommendList = () => {
         let socket: WebSocket;
 
         (async () => {
-            const items = await recommendList();
-            const sectListStreamReq: SectListStreamReq = {
+            const items = await recommendList() || [];
+            const recommendListStreamReq: RecommendListStreamReq = {
                 items: items
             }
 
@@ -38,16 +39,16 @@ const RecommendList = () => {
             const waitTime = 60_000 - (now % 60_000);
 
             if(marketInfo.isMarketOpen) {
-                // await sectListStream(sectListStreamReq);
-                // socket = openSocket();
+                await recommendListStream(recommendListStreamReq);
+                socket = openSocket();
             } else {
                 socketTimeout = setTimeout(async () => {
-                    // socket?.close();
+                    socket?.close();
 
                     const again = await timeNow();
                     if (again.isMarketOpen) {
-                        // await sectListStream(sectListStreamReq);
-                        // socket = openSocket();
+                        await recommendListStream(recommendListStreamReq);
+                        socket = openSocket();
                     }
                 }, marketTimer.current + 200);
             }
@@ -135,7 +136,7 @@ const RecommendList = () => {
             setAvoidDataList(newAvoidDataList);
             setRecommendDataList(newRecommendDataList);
 
-            return recommendList.map((row: RecommendListItem) => {
+            return [...recommendList, ...avoidList].map((row: RecommendListItem) => {
                 return row.stkCd;
             });
         } catch (error) {
@@ -143,9 +144,9 @@ const RecommendList = () => {
         }
     }
 
-    const sectListStream = async (req: SectListStreamReq) => {
+    const recommendListStream = async (req: RecommendListStreamReq) => {
         try {
-            const data = await fetchSectListStream(req);
+            const data = await fetchRecommendListStream(req);
 
             console.log(data);
 
@@ -160,39 +161,39 @@ const RecommendList = () => {
     const openSocket = () => {
         const socket = new WebSocket("ws://localhost:8080/ws");
 
-        // socket.onmessage = (event) => {
-        //     const data = JSON.parse(event.data);
-        //
-        //     if (data.trnm === "REAL" && Array.isArray(data.data)) {
-        //         const sectList = data.data.map((entry: SectListStreamRes) => {
-        //             const values = entry.values;
-        //             return {
-        //                 code: entry.item, // ex: "001"
-        //                 value: values["10"], // 현재가
-        //                 change: values["11"], // 전일 대비
-        //                 fluRt: values["12"],   // 등락률
-        //                 trend: values["25"],   // 등락기호
-        //             };
-        //         });
-        //
-        //         setSectDataList((prevList) => {
-        //             return prevList.map((item) => {
-        //                 const newData = sectList.find((data: SectListStream) => data.code === item.id);
-        //
-        //                 if (newData) {
-        //                     return {
-        //                         ...item,
-        //                         value: newData.value.replace(/^[+-]/, ''),
-        //                         fluRt: newData.fluRt,
-        //                         trend: trendColor(newData.trend),
-        //                     };
-        //                 }
-        //
-        //                 return item;
-        //             });
-        //         });
-        //     }
-        // };
+        socket.onmessage = (event) => {
+            const data = JSON.parse(event.data);
+
+            if (data.trnm === "REAL" && Array.isArray(data.data)) {
+                const recommendList = data.data.map((entry: RecommendListStreamRes) => {
+                    const values = entry.values;
+                    return {
+                        code: entry.item, // ex: "001"
+                        value: values["10"], // 현재가
+                        change: values["11"], // 전일 대비
+                        fluRt: values["12"],   // 등락률
+                        trend: values["25"],   // 등락기호
+                    };
+                });
+
+                setRecommendDataList((prevList) => {
+                    return prevList.map((item) => {
+                        const newData = recommendList.find((data: RecommendListStream) => data.code === item.id);
+
+                        if (newData) {
+                            return {
+                                ...item,
+                                value: newData.value.replace(/^[+-]/, ''),
+                                fluRt: newData.fluRt,
+                                trend: trendColor(newData.trend),
+                            };
+                        }
+
+                        return item;
+                    });
+                });
+            }
+        };
 
         return socket;
     }

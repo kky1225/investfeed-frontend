@@ -10,3 +10,21 @@ export interface RecommendListItem {
     curPrc: string, // 현재가
     preSig: string, // 대비기호
 }
+
+export interface RecommendListStreamReq {
+    items: Array<string>
+}
+
+export interface RecommendListStreamRes {
+    type: string,
+    name: string,
+    item: string,
+    values: Array<RecommendListStream>
+}
+
+export interface RecommendListStream {
+    code: string,
+    value: string,
+    fluRt: string,
+    trend: string,
+}
