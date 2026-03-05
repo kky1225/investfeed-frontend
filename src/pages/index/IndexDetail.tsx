@@ -28,6 +28,7 @@ import DoNotDisturbIcon from "@mui/icons-material/DoNotDisturb";
 import {useParams} from "react-router-dom";
 import {fetchTimeNow} from "../../api/time/TimeApi.ts";
 import {MarketType} from "../../type/timeType.ts";
+import ProgramBarChart from "../../components/ProgramBarChart.tsx";
 
 const StyledToggleButtonGroup = styled(ToggleButtonGroup)(({ theme }) => ({
     border: 'none',
@@ -84,7 +85,8 @@ const IndexDetail = () => {
         dateList: []
     });
 
-    const [barData, setBarData] = useState<Array<number>>([0, 0, 0]);
+    const [indexBarData, setIndexBarData] = useState<Array<number>>([0, 0, 0]);
+    const [programBarData, setProgramBarData] = useState<Array<number>>([0, 0, 0]);
 
     interface StockInfoProps {
         trdeQty: number;
@@ -292,13 +294,19 @@ const IndexDetail = () => {
                 _250hgst: Number(indexInfo._250hgst.replace(/^[+-]/, ''))
             });
 
-            setBarData([Number(indexInfo.indNetprps), Number(indexInfo.frgnrNetprps), Number(indexInfo.orgnNetprps)])
+            setIndexBarData([Number(indexInfo.indNetprps), Number(indexInfo.frgnrNetprps), Number(indexInfo.orgnNetprps)])
+            setProgramBarData([Number(indexInfo.dfrtTrdeNetprps), Number(indexInfo.ndiffproTrdeNetprps), Number(indexInfo.allNetprps)])
 
-            const message = {
+            const indexMessage = {
                 ...checkInvestor(indexInfo.indsNm, Number(indexInfo.frgnrNetprps), Number(indexInfo.orgnNetprps))
             };
 
-            setMessage(message);
+            const programMessage = {
+                ...checkProgram(indexInfo.indsNm, Number(indexInfo.dfrtTrdeNetprps), Number(indexInfo.ndiffproTrdeNetprps))
+            };
+
+            setIndexMessage(indexMessage);
+            setProgramMessage(programMessage);
         } catch(error) {
             console.error(error);
         }
@@ -458,40 +466,88 @@ const IndexDetail = () => {
         message: string
     }
 
-    const [message, setMessage] = useState<MessageProps>({
+    const [indexMessage, setIndexMessage] = useState<MessageProps>({
         icon: <RemoveIcon />,
         title: '-',
         message: '-'
     });
 
-    function checkInvestor(name: string, orgn: number, frgnr: number): MessageProps {
+    const [programMessage, setProgramMessage] = useState<MessageProps>({
+        icon: <RemoveIcon />,
+        title: '-',
+        message: '-'
+    });
+
+    function checkInvestor(name: string, frgnr: number, orgn: number): MessageProps {
         let message: string;
         let title: string;
         let icon: JSX.Element;
 
-        if (orgn == 0) {
-            message = '기관 관망, '
-        } else if (orgn > 0) {
-            message = '기관 매수, '
-        } else {
-            message = '기관 매도, '
-        }
-
         if (frgnr == 0) {
-            message = message + '외국인 관망 중입니다.'
+            message = '외국인 관망, '
         } else if (frgnr > 0) {
-            message = message + '외국인 매수 중입니다.'
+            message = '외국인 매수, '
         } else {
-            message = message + '외국인 매도 중입니다.'
+            message = '외국인 매도, '
         }
 
-        if (orgn == 0 && frgnr == 0) {
+        if (orgn == 0) {
+            message = message + '기관 관망 중입니다.'
+        } else if (orgn > 0) {
+            message = message + '기관 매수 중입니다.'
+        } else {
+            message = message + '기관 매도 중입니다.'
+        }
+
+        if (frgnr == 0 && orgn == 0) {
             title = `${name} 투자 중립`
             icon = <RemoveIcon />
-        } else if (orgn > 0 && frgnr > 0) {
+        } else if (frgnr > 0 && orgn > 0) {
             title = `${name} 투자 양호`
             icon = <CheckIcon color="success" />;
-        } else if(orgn > 0 || frgnr > 0) {
+        } else if(frgnr > 0 || orgn > 0) {
+            title = `${name} 투자 주의`
+            icon = <PriorityHighIcon color="warning" />
+        } else {
+            title = `${name} 투자 위험`
+            icon = <DoNotDisturbIcon color="error" />
+        }
+
+        return {
+            message,
+            title,
+            icon,
+        }
+    }
+
+    function checkProgram(name: string, dfrtTrdeNetprps: number, ndiffproTrdeNetprps: number): MessageProps {
+        let message: string;
+        let title: string;
+        let icon: JSX.Element;
+
+        if (dfrtTrdeNetprps == 0) {
+            message = '프로그램 차익 관망, '
+        } else if (dfrtTrdeNetprps > 0) {
+            message = '프로그램 차익 매수, '
+        } else {
+            message = '프로그램 차익 매도, '
+        }
+
+        if (ndiffproTrdeNetprps == 0) {
+            message = message + '비차익 관망 중입니다.'
+        } else if (ndiffproTrdeNetprps > 0) {
+            message = message + '비차익 매수 중입니다.'
+        } else {
+            message = message + '비차익 매도 중입니다.'
+        }
+
+        if (dfrtTrdeNetprps == 0 && ndiffproTrdeNetprps == 0) {
+            title = `${name} 투자 중립`
+            icon = <RemoveIcon />
+        } else if (dfrtTrdeNetprps > 0 && ndiffproTrdeNetprps > 0) {
+            title = `${name} 투자 양호`
+            icon = <CheckIcon color="success" />;
+        } else if(dfrtTrdeNetprps > 0 || ndiffproTrdeNetprps > 0) {
             title = `${name} 투자 주의`
             icon = <PriorityHighIcon color="warning" />
         } else {
@@ -688,25 +744,47 @@ const IndexDetail = () => {
                 </Grid>
                 <Grid size={{ xs: 12, md: 8 }}>
                     <Typography component="h2" variant="h6" sx={{ mb: 2 }}>
-                        당일 투자자별 순매수(주)
+                        당일 투자자별 순매수(억)
                     </Typography>
                     <Grid container spacing={2}>
                         <Grid size={{ xs: 12, md: 6 }}>
                             <Card variant="outlined" sx={{ width: '100%' }}>
                                 <CardContent>
-                                    <InvestorBarChart data={barData} />
+                                    <InvestorBarChart data={indexBarData} />
                                 </CardContent>
                             </Card>
                         </Grid>
                         <Grid size={{ xs: 12, md: 6 }}>
                             <Card variant="outlined" sx={{ width: '100%' }}>
-                                {message.icon}
+                                <CardContent>
+                                    <ProgramBarChart data={programBarData} />
+                                </CardContent>
+                            </Card>
+                        </Grid>
+                    </Grid>
+                    <Grid container spacing={2} sx={{ mt: 1 }}>
+                        <Grid size={{ xs: 12, md: 6 }}>
+                            <Card variant="outlined" sx={{ width: '100%' }}>
+                                {indexMessage.icon}
                                 <CardContent>
                                     <Typography gutterBottom variant="h5" component="div">
-                                        {message.title}
+                                        {indexMessage.title}
                                     </Typography>
                                     <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-                                        {message.message}
+                                        {indexMessage.message}
+                                    </Typography>
+                                </CardContent>
+                            </Card>
+                        </Grid>
+                        <Grid size={{ xs: 12, md: 6 }}>
+                            <Card variant="outlined" sx={{ width: '100%' }}>
+                                {programMessage.icon}
+                                <CardContent>
+                                    <Typography gutterBottom variant="h5" component="div">
+                                        {programMessage.title}
+                                    </Typography>
+                                    <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+                                        {programMessage.message}
                                     </Typography>
                                 </CardContent>
                             </Card>
