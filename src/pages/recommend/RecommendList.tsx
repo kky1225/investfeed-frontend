@@ -183,7 +183,7 @@ const RecommendList = () => {
                         if (newData) {
                             return {
                                 ...item,
-                                value: newData.value.replace(/^[+-]/, ''),
+                                value: Number(newData.value.replace(/^[+-]/, '')).toLocaleString(),
                                 fluRt: newData.fluRt,
                                 trend: trendColor(newData.trend),
                             };

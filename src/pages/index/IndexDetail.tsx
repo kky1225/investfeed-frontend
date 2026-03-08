@@ -295,7 +295,13 @@ const IndexDetail = () => {
             });
 
             setIndexBarData([Number(indexInfo.indNetprps), Number(indexInfo.frgnrNetprps), Number(indexInfo.orgnNetprps)])
-            setProgramBarData([Number(indexInfo.dfrtTrdeNetprps), Number(indexInfo.ndiffproTrdeNetprps), Number(indexInfo.allNetprps)])
+            setProgramBarData(
+                [
+                    Math.round(Number(indexInfo.dfrtTrdeNetprps) / 100),
+                    Math.round(Number(indexInfo.ndiffproTrdeNetprps) / 100),
+                    Math.round(Number(indexInfo.allNetprps) / 100)
+                ]
+            );
 
             const indexMessage = {
                 ...checkInvestor(indexInfo.indsNm, Number(indexInfo.frgnrNetprps), Number(indexInfo.orgnNetprps))
