@@ -11,7 +11,7 @@ import {StockGridRow, StockStream, StockStreamRes} from "../../type/StockType.ts
 import {useNavigate, useParams} from "react-router-dom";
 import {InvestorListItem, InvestorListReq, InvestorStreamReq} from "../../type/InvestorType.ts";
 import {fetchInvestorList, fetchInvestorStream} from "../../api/investor/InvestorApi.ts";
-import CustomChip from "../../components/CustomChip.tsx";
+import {renderChip, renderInfo, renderTradePricaColor} from "../../components/CustomRender.tsx";
 
 const InvestorList = () => {
     const navigate = useNavigate();
@@ -46,30 +46,21 @@ const InvestorList = () => {
             headerName: '등락률',
             flex: 0.5,
             minWidth: 100,
-            renderCell: (params: {value: number}) => CustomChip(params.value as number),
+            renderCell: (params: {value: number}) => renderChip(params.value as number),
         },
         {
             field: 'curPrc',
             headerName: '현재가',
             flex: 1,
             minWidth: 100,
-            valueFormatter: (param: string) => {
-                return Number(param).toLocaleString().replace(/^[+-]/, '')
-            }
+            renderCell: (params: {value: string}) => renderInfo(Number(params.value)),
         },
         {
             field: 'netprpsAmt',
             headerName: '거래대금',
             flex: 0.5,
             minWidth: 100,
-            valueFormatter: (param: string) => {
-                const value = Math.abs(Number(param.slice(0, -1)) / 10);
-                const formatted = value.toLocaleString('ko-KR', {
-                    minimumFractionDigits: 1,
-                    maximumFractionDigits: 1
-                });
-                return `${formatted}억`;
-            }
+            renderCell: (params: {value: string}) => renderTradePricaColor(params.value as string),
         }
     ];
 

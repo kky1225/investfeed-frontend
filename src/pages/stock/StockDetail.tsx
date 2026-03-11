@@ -40,6 +40,7 @@ import {LineSeriesType} from "@mui/x-charts";
 import { MakeOptional } from '@mui/x-internals/types';
 import InvestorLineChart from "../../components/InvestorLineChart.tsx";
 import * as React from "react";
+import {renderInfo, renderPercent, renderTradeColor} from "../../components/CustomRender.tsx";
 
 const StyledToggleButtonGroup = styled(ToggleButtonGroup)(({ theme }) => ({
     border: 'none',
@@ -190,7 +191,7 @@ const StockDetail = () => {
 
             console.log(data);
 
-            const { stockInfo, stockChartList, stockInvestorChartList, stockInvestorList, stockProgramList } = data.result;
+            const { stockInfo, stockChartList, stockInvestorChartList, stockInvestorList, stockProgramList, stockShortSellingList } = data.result;
 
             let dateList;
             let lineData, barDataList;
@@ -361,29 +362,6 @@ const StockDetail = () => {
             setInvestorChartData(investorChartData);
             setInvestorDateData(stockInvestorChartList.map(item => { return item.tm}));
 
-            const investor = stockInvestorList.map((item: {
-                dt: string; indInvsr: string; frgnrInvsr: string; orgn: string; fnncInvt: string; insrnc: string; etcFnnc: string; invtrt: string; samoFund: string; penfndEtc: string; bank: string; etcCorp: string; natfor: string;
-            }) => {
-                return {
-                    id: item.dt,
-                    dt: `${(item.dt).substring(0, 4)}-${(item.dt).substring(4, 6)}-${(item.dt).substring(6, 8)}`,
-                    indInvsr: Number(item.indInvsr),
-                    frgnrInvsr: Number(item.frgnrInvsr),
-                    orgn: Number(item.orgn),
-                    fnncInvt: Number(item.fnncInvt),
-                    insrnc: Number(item.insrnc),
-                    etcFnnc: Number(item.etcFnnc),
-                    invtrt: Number(item.invtrt),
-                    samoFund: Number(item.samoFund),
-                    penfndEtc: Number(item.penfndEtc),
-                    bank: Number(item.bank),
-                    etcCorp: Number(item.etcCorp),
-                    natfor: Number(item.natfor),
-                }
-            });
-
-            setRow(investor);
-
             const investorColumns: GridColDef[] = [
                 {
                     field: 'dt',
@@ -397,84 +375,84 @@ const StockDetail = () => {
                     headerName: '개인',
                     flex: 1,
                     minWidth: 100,
-                    renderCell: (params) => renderTrade(params.value as number),
+                    renderCell: (params) => renderTradeColor(params.value as number),
                 },
                 {
                     field: 'frgnrInvsr',
                     headerName: '외국인',
                     flex: 1,
                     minWidth: 100,
-                    renderCell: (params) => renderTrade(params.value as number),
+                    renderCell: (params) => renderTradeColor(params.value as number),
                 },
                 {
                     field: 'orgn',
                     headerName: '기관계',
                     flex: 1,
                     minWidth: 100,
-                    renderCell: (params) => renderTrade(params.value as number),
+                    renderCell: (params) => renderTradeColor(params.value as number),
                 },
                 {
                     field: 'fnncInvt',
                     headerName: '금융투자',
                     flex: 1,
                     minWidth: 100,
-                    renderCell: (params) => renderTrade(params.value as number),
+                    renderCell: (params) => renderTradeColor(params.value as number),
                 },
                 {
                     field: 'insrnc',
                     headerName: '보험',
                     flex: 1,
                     minWidth: 100,
-                    renderCell: (params) => renderTrade(params.value as number),
+                    renderCell: (params) => renderTradeColor(params.value as number),
                 },
                 {
                     field: 'etcFnnc',
                     headerName: '기타금융',
                     flex: 1,
                     minWidth: 100,
-                    renderCell: (params) => renderTrade(params.value as number),
+                    renderCell: (params) => renderTradeColor(params.value as number),
                 },
                 {
                     field: 'invtrt',
                     headerName: '투신',
                     flex: 1,
                     minWidth: 100,
-                    renderCell: (params) => renderTrade(params.value as number),
+                    renderCell: (params) => renderTradeColor(params.value as number),
                 },
                 {
                     field: 'samoFund',
                     headerName: '사모펀드',
                     flex: 1,
                     minWidth: 100,
-                    renderCell: (params) => renderTrade(params.value as number),
+                    renderCell: (params) => renderTradeColor(params.value as number),
                 },
                 {
                     field: 'penfndEtc',
                     headerName: '연기금등',
                     flex: 1,
                     minWidth: 100,
-                    renderCell: (params) => renderTrade(params.value as number),
+                    renderCell: (params) => renderTradeColor(params.value as number),
                 },
                 {
                     field: 'bank',
                     headerName: '은행',
                     flex: 1,
                     minWidth: 100,
-                    renderCell: (params) => renderTrade(params.value as number),
+                    renderCell: (params) => renderTradeColor(params.value as number),
                 },
                 {
                     field: 'etcCorp',
                     headerName: '기타법인',
                     flex: 1,
                     minWidth: 100,
-                    renderCell: (params) => renderTrade(params.value as number),
+                    renderCell: (params) => renderTradeColor(params.value as number),
                 },
                 {
                     field: 'natfor',
                     headerName: '내외국인',
                     flex: 1,
                     minWidth: 100,
-                    renderCell: (params) => renderTrade(params.value as number),
+                    renderCell: (params) => renderTradeColor(params.value as number),
                 }
             ];
 
@@ -512,28 +490,28 @@ const StockDetail = () => {
                     headerName: '프로그램 순매수 수량',
                     flex: 1,
                     minWidth: 100,
-                    renderCell: (params) => renderTrade(params.value as number),
+                    renderCell: (params) => renderTradeColor(params.value as number),
                 },
                 {
                     field: 'prmBuyQty',
                     headerName: '프로그램 매수 수량',
                     flex: 1,
                     minWidth: 100,
-                    renderCell: (params) => renderTrade(params.value as number),
+                    renderCell: (params) => renderTradeColor(params.value as number),
                 },
                 {
                     field: 'prmSellQty',
                     headerName: '프로그램 매도 수량',
                     flex: 1,
                     minWidth: 100,
-                    renderCell: (params) => renderTrade(params.value as number),
+                    renderCell: (params) => renderTradeColor(params.value as number),
                 },
                 {
                     field: 'prmNetprpsQtyIrds',
                     headerName: '프로그램 순매수 수량 증감',
                     flex: 1,
                     minWidth: 100,
-                    renderCell: (params) => renderTrade(params.value as number),
+                    renderCell: (params) => renderTradeColor(params.value as number),
                 },
             ];
 
@@ -550,6 +528,65 @@ const StockDetail = () => {
                 }
             });
 
+            const shortSellingColumns: GridColDef[] = [
+                {
+                    field: 'dt',
+                    headerName: '날짜',
+                    flex: 1,
+                    minWidth: 100,
+                    maxWidth: 120
+                },
+                {
+                    field: 'shrtsTrdePrica',
+                    headerName: '공매도 거래 대금',
+                    flex: 1,
+                    minWidth: 100,
+                    renderCell: (params) => renderInfo(params.value as number),
+                },
+                {
+                    field: 'shrtsQty',
+                    headerName: '공매도 수량',
+                    flex: 1,
+                    minWidth: 100,
+                    renderCell: (params) => renderInfo(params.value as number),
+                },
+                {
+                    field: 'trdeQty',
+                    headerName: '거래량',
+                    flex: 1,
+                    minWidth: 100,
+                    renderCell: (params) => renderInfo(params.value as number),
+                },
+                {
+                    field: 'trdeWght',
+                    headerName: '매매비중',
+                    flex: 1,
+                    minWidth: 100,
+                    renderCell: (params) => renderPercent(params.value as number),
+                },
+                {
+                    field: 'shrtsAvgPric',
+                    headerName: '공매도 평균가',
+                    flex: 1,
+                    minWidth: 100,
+                    renderCell: (params) => renderInfo(params.value as number),
+                },
+            ];
+
+            const shortSellingRow = stockShortSellingList.map((item: {
+                dt: string; shrtsTrdePrica: string; shrtsQty: string; trdeQty: string; trdeWght: string; shrtsAvgPric: string
+            }) => {
+                return {
+                    id: item.dt,
+                    dt: `${(item.dt).substring(0, 4)}-${(item.dt).substring(4, 6)}-${(item.dt).substring(6, 8)}`,
+                    shrtsTrdePrica: Number(item.shrtsTrdePrica),
+                    shrtsQty: Number(item.shrtsQty),
+                    trdeQty: Number(item.trdeQty),
+                    trdeWght: Number(item.trdeWght),
+                    shrtsAvgPric: Number(item.shrtsAvgPric),
+                }
+            });
+
             setTabData({
                 investor: {
                     col: investorColumns,
@@ -558,6 +595,10 @@ const StockDetail = () => {
                 program: {
                     col: programColumns,
                     row: programRow
+                },
+                shortSelling: {
+                    col: shortSellingColumns,
+                    row: shortSellingRow
                 }
             });
 
@@ -741,102 +782,6 @@ const StockDetail = () => {
         }
     });
 
-    const columns: GridColDef[] = [
-        {
-            field: 'dt',
-            headerName: '날짜',
-            flex: 1,
-            minWidth: 100,
-            maxWidth: 120
-        },
-        {
-            field: 'indInvsr',
-            headerName: '개인',
-            flex: 1,
-            minWidth: 100,
-            renderCell: (params) => renderTrade(params.value as number),
-        },
-        {
-            field: 'frgnrInvsr',
-            headerName: '외국인',
-            flex: 1,
-            minWidth: 100,
-            renderCell: (params) => renderTrade(params.value as number),
-        },
-        {
-            field: 'orgn',
-            headerName: '기관계',
-            flex: 1,
-            minWidth: 100,
-            renderCell: (params) => renderTrade(params.value as number),
-        },
-        {
-            field: 'fnncInvt',
-            headerName: '금융투자',
-            flex: 1,
-            minWidth: 100,
-            renderCell: (params) => renderTrade(params.value as number),
-        },
-        {
-            field: 'insrnc',
-            headerName: '보험',
-            flex: 1,
-            minWidth: 100,
-            renderCell: (params) => renderTrade(params.value as number),
-        },
-        {
-            field: 'etcFnnc',
-            headerName: '기타금융',
-            flex: 1,
-            minWidth: 100,
-            renderCell: (params) => renderTrade(params.value as number),
-        },
-        {
-            field: 'invtrt',
-            headerName: '투신',
-            flex: 1,
-            minWidth: 100,
-            renderCell: (params) => renderTrade(params.value as number),
-        },
-        {
-            field: 'samoFund',
-            headerName: '사모펀드',
-            flex: 1,
-            minWidth: 100,
-            renderCell: (params) => renderTrade(params.value as number),
-        },
-        {
-            field: 'penfndEtc',
-            headerName: '연기금등',
-            flex: 1,
-            minWidth: 100,
-            renderCell: (params) => renderTrade(params.value as number),
-        },
-        {
-            field: 'bank',
-            headerName: '은행',
-            flex: 1,
-            minWidth: 100,
-            renderCell: (params) => renderTrade(params.value as number),
-        },
-        {
-            field: 'etcCorp',
-            headerName: '기타법인',
-            flex: 1,
-            minWidth: 100,
-            renderCell: (params) => renderTrade(params.value as number),
-        },
-        {
-            field: 'natfor',
-            headerName: '내외국인',
-            flex: 1,
-            minWidth: 100,
-            renderCell: (params) => renderTrade(params.value as number),
-        }
-    ];
-
-    const [row, setRow] = useState<GridRowsProp[]>([]);
-
     const labelColors = {
         up: 'error' as const,
         down: 'info' as const,
@@ -924,16 +869,6 @@ const StockDetail = () => {
             title,
             icon,
         }
-    }
-
-    function renderTrade(trade: number) {
-        const text = trade.toLocaleString()
-
-        return (
-            <span style={{color: trade == 0 ? 'black' : trade > 0 ? 'red' : 'blue'}}>
-                {trade > 0 ? `+${text}` : `${text}`}
-            </span>
-        )
     }
 
     function orderWarningMsg(type: string): string {
@@ -1300,7 +1235,7 @@ const StockDetail = () => {
                 </Grid>
                 <Grid size={{ xs: 12, md: 12 }}>
                     <Typography component="h2" variant="h6" sx={{ mb: 2 }}>
-                        시간별 투자자별 순매수(주)
+                        장중 투자자별 순매수(주)
                     </Typography>
                     <Card variant="outlined" sx={{ width: '100%' }}>
                         <CardContent>
@@ -1310,13 +1245,13 @@ const StockDetail = () => {
                 </Grid>
                 <Grid size={{ xs: 12, md: 12 }}>
                     <Typography component="h2" variant="h6" sx={{ mb: 2 }}>
-                        일별 투자자별 순매수
+                        일별 거래 추이
                     </Typography>
                     <Box sx={{ borderBottom: 1, borderColor: 'divider' }}>
                         <Tabs value={tabValue} onChange={handleChange} aria-label="basic tabs example">
                             <Tab label="투자자별" value='investor' />
                             <Tab label="프로그램" value='program' />
-                            <Tab label="공매도" value='shortSelleing' />
+                            <Tab label="공매도" value='shortSelling' />
                         </Tabs>
                     </Box>
                     <CustomDataTable rows={tabData[tabValue].row} columns={tabData[tabValue].col} pageSize={20} />

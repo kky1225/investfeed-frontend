@@ -60,7 +60,7 @@ const RecommendCard = (
                             }}
                         >
                             <Typography variant="h4" component="p">
-                                {value}
+                                {Number(value).toLocaleString()}
                             </Typography>
                             <Chip size="small" color={color} label={trendValues[trend]} />
                         </Stack>
