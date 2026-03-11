@@ -29,6 +29,9 @@ import {useParams} from "react-router-dom";
 import {fetchTimeNow} from "../../api/time/TimeApi.ts";
 import {MarketType} from "../../type/timeType.ts";
 import ProgramBarChart from "../../components/ProgramBarChart.tsx";
+import {LineSeriesType} from "@mui/x-charts";
+import { MakeOptional } from '@mui/x-internals/types';
+import ProgramLineChart from "../../components/ProgramLineChart.tsx";
 
 const StyledToggleButtonGroup = styled(ToggleButtonGroup)(({ theme }) => ({
     border: 'none',
@@ -184,7 +187,7 @@ const IndexDetail = () => {
             console.log(data);
 
             const {
-                indexInfo, chartList
+                indexInfo, chartList, programChartList
             } = data.result;
 
             let dateList;
@@ -313,6 +316,42 @@ const IndexDetail = () => {
 
             setIndexMessage(indexMessage);
             setProgramMessage(programMessage);
+
+            const programChartData: MakeOptional<LineSeriesType, 'type'>[] = [
+                {
+                    id: 'direct',
+                    label: '차익',
+                    showMark: false,
+                    curve: 'linear',
+                    area: true,
+                    stackOrder: 'ascending',
+                    color: 'green',
+                    data: programChartList.map(item => { return Math.round(Number(item.dfrtTrdeNetprps) / 100)})
+                },
+                {
+                    id: 'referral',
+                    label: '비차익',
+                    showMark: false,
+                    curve: 'linear',
+                    area: true,
+                    stackOrder: 'ascending',
+                    color: 'blue',
+                    data: programChartList.map(item => { return Math.round(Number(item.ndiffproTrdeNetprps) / 100)}),
+                },
+                {
+                    id: 'organic',
+                    label: '전체',
+                    showMark: false,
+                    curve: 'linear',
+                    stackOrder: 'ascending',
+                    color: 'red',
+                    data: programChartList.map(item => { return Math.round(Number(item.allNetprps) / 100)}),
+                    area: true,
+                }
+            ];
+
+            setProgramChartData(programChartData);
+            setProgramDateData(programChartList.map(item => { return item.cntrTm}))
         } catch(error) {
             console.error(error);
         }
@@ -567,6 +606,40 @@ const IndexDetail = () => {
             icon,
         }
     }
+
+    const [programChartData, setProgramChartData] = useState<MakeOptional<LineSeriesType, 'type'>[]>([
+        {
+            id: 'direct',
+            label: '차익',
+            showMark: false,
+            curve: 'linear',
+            area: true,
+            stackOrder: 'ascending',
+            color: 'green',
+            data: [],
+        },
+        {
+            id: 'referral',
+            label: '비차익',
+            showMark: false,
+            curve: 'linear',
+            area: true,
+            stackOrder: 'ascending',
+            color: 'blue',
+            data: [],
+        },
+        {
+            id: 'organic',
+            label: '전체',
+            showMark: false,
+            curve: 'linear',
+            stackOrder: 'ascending',
+            color: 'red',
+            data: [],
+            area: true,
+        }
+    ]);
+    const [programDateData, setProgramDateData] = useState<string[]>([]);
 
     return (
         <Box sx={{ width: '100%', maxWidth: { sm: '100%', md: '1700px' } }}>
@@ -825,6 +898,16 @@ const IndexDetail = () => {
                                 min={yearRange[0].value}
                                 marks={yearRange}
                             />
+                        </CardContent>
+                    </Card>
+                </Grid>
+                <Grid size={{ xs: 12, md: 12 }}>
+                    <Typography component="h2" variant="h6" sx={{ mb: 2 }}>
+                        시간별 프로그램 순매수(억)
+                    </Typography>
+                    <Card variant="outlined" sx={{ width: '100%' }}>
+                        <CardContent>
+                            <ProgramLineChart seriesData={programChartData} date={programDateData} />
                         </CardContent>
                     </Card>
                 </Grid>

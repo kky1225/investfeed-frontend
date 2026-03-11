@@ -7,8 +7,8 @@ export interface CustomLineChartProps {
     date: string[],
 }
 
-const InvestorLineChart = (
-    { seriesData, date }: CustomLineChartProps,
+const ProgoramLineChart = (
+    { seriesData, date }: CustomLineChartProps
 ) => {
     const theme = useTheme();
 
@@ -36,6 +36,7 @@ const InvestorLineChart = (
                 {
                     scaleType: 'point',
                     data: date,
+                    tickInterval: (_index: any, i: number) => i % 60 === 0,
                     valueFormatter: (value: string) => `${value.substring(0, 2)}:${value.substring(2, 4)}`
                 },
             ]}
@@ -68,4 +69,4 @@ const InvestorLineChart = (
     )
 }
 
-export default InvestorLineChart;
+export default ProgoramLineChart;

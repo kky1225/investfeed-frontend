@@ -14,7 +14,7 @@ import ToggleButton from '@mui/material/ToggleButton';
 import ToggleButtonGroup, {
     toggleButtonGroupClasses,
 } from '@mui/material/ToggleButtonGroup';
-import {Select, SelectChangeEvent, Slider, Tooltip} from "@mui/material";
+import {Select, SelectChangeEvent, Slider, Tab, Tabs, Tooltip} from "@mui/material";
 import {styled} from "@mui/material/styles";
 import MenuItem from "@mui/material/MenuItem";
 import {useParams} from "react-router-dom";
@@ -36,6 +36,10 @@ import CustomDataTable from "../../components/CustomDataTable.tsx";
 import {GridColDef, GridRowsProp} from "@mui/x-data-grid";
 import {fetchTimeNow} from "../../api/time/TimeApi.ts";
 import {MarketType} from "../../type/timeType.ts";
+import {LineSeriesType} from "@mui/x-charts";
+import { MakeOptional } from '@mui/x-internals/types';
+import InvestorLineChart from "../../components/InvestorLineChart.tsx";
+import * as React from "react";
 
 const StyledToggleButtonGroup = styled(ToggleButtonGroup)(({ theme }) => ({
     border: 'none',
@@ -98,6 +102,40 @@ const StockDetail = () => {
         dateList: []
     });
 
+    const [investorChartData, setInvestorChartData] = useState<MakeOptional<LineSeriesType, 'type'>[]>([
+        {
+            id: 'direct',
+            label: '외국인',
+            showMark: false,
+            curve: 'linear',
+            area: true,
+            stackOrder: 'ascending',
+            color: 'green',
+            data: [],
+        },
+        {
+            id: 'referral',
+            label: '기관',
+            showMark: false,
+            curve: 'linear',
+            area: true,
+            stackOrder: 'ascending',
+            color: 'blue',
+            data: [],
+        },
+        {
+            id: 'organic',
+            label: '연기금',
+            showMark: false,
+            curve: 'linear',
+            stackOrder: 'ascending',
+            color: 'red',
+            data: [],
+            area: true,
+        }
+    ]);
+    const [investorDateData, setInvestorDateData] = useState<string[]>([]);
+
     useEffect(() => {
         let chartTimeout: ReturnType<typeof setTimeout>;
         let socketTimeout: ReturnType<typeof setTimeout>;
@@ -152,7 +190,7 @@ const StockDetail = () => {
 
             console.log(data);
 
-            const { stockInfo, stockChartList, stockInvestorList } = data.result;
+            const { stockInfo, stockChartList, stockInvestorChartList, stockInvestorList, stockProgramList } = data.result;
 
             let dateList;
             let lineData, barDataList;
@@ -287,8 +325,44 @@ const StockDetail = () => {
                 }
             ]);
 
+            const investorChartData: MakeOptional<LineSeriesType, 'type'>[] = [
+                {
+                    id: 'direct',
+                    label: '외국인',
+                    showMark: false,
+                    curve: 'linear',
+                    area: true,
+                    stackOrder: 'ascending',
+                    color: 'green',
+                    data: stockInvestorChartList.map(item => { return Number(item.frgnrInvsr)})
+                },
+                {
+                    id: 'referral',
+                    label: '기관',
+                    showMark: false,
+                    curve: 'linear',
+                    area: true,
+                    stackOrder: 'ascending',
+                    color: 'blue',
+                    data: stockInvestorChartList.map(item => { return Number(item.orgn)}),
+                },
+                {
+                    id: 'organic',
+                    label: '연기금',
+                    showMark: false,
+                    curve: 'linear',
+                    stackOrder: 'ascending',
+                    color: 'red',
+                    data: stockInvestorChartList.map(item => { return Number(item.penfnd_etc)}),
+                    area: true,
+                }
+            ];
+
+            setInvestorChartData(investorChartData);
+            setInvestorDateData(stockInvestorChartList.map(item => { return item.tm}));
+
             const investor = stockInvestorList.map((item: {
-                dt: string; indInvsr: string; frgnrInvsr: string; orgn: string; fnncInvt: string; insrnc: string; etcFnnc: string; invtrt: string; samoFund: string; penfndEtc: string; bank: string; etcCorp: string; natfor: string; program: string
+                dt: string; indInvsr: string; frgnrInvsr: string; orgn: string; fnncInvt: string; insrnc: string; etcFnnc: string; invtrt: string; samoFund: string; penfndEtc: string; bank: string; etcCorp: string; natfor: string;
             }) => {
                 return {
                     id: item.dt,
@@ -305,11 +379,187 @@ const StockDetail = () => {
                     bank: Number(item.bank),
                     etcCorp: Number(item.etcCorp),
                     natfor: Number(item.natfor),
-                    program: Number(item.program)
                 }
             });
 
             setRow(investor);
+
+            const investorColumns: GridColDef[] = [
+                {
+                    field: 'dt',
+                    headerName: '날짜',
+                    flex: 1,
+                    minWidth: 100,
+                    maxWidth: 120
+                },
+                {
+                    field: 'indInvsr',
+                    headerName: '개인',
+                    flex: 1,
+                    minWidth: 100,
+                    renderCell: (params) => renderTrade(params.value as number),
+                },
+                {
+                    field: 'frgnrInvsr',
+                    headerName: '외국인',
+                    flex: 1,
+                    minWidth: 100,
+                    renderCell: (params) => renderTrade(params.value as number),
+                },
+                {
+                    field: 'orgn',
+                    headerName: '기관계',
+                    flex: 1,
+                    minWidth: 100,
+                    renderCell: (params) => renderTrade(params.value as number),
+                },
+                {
+                    field: 'fnncInvt',
+                    headerName: '금융투자',
+                    flex: 1,
+                    minWidth: 100,
+                    renderCell: (params) => renderTrade(params.value as number),
+                },
+                {
+                    field: 'insrnc',
+                    headerName: '보험',
+                    flex: 1,
+                    minWidth: 100,
+                    renderCell: (params) => renderTrade(params.value as number),
+                },
+                {
+                    field: 'etcFnnc',
+                    headerName: '기타금융',
+                    flex: 1,
+                    minWidth: 100,
+                    renderCell: (params) => renderTrade(params.value as number),
+                },
+                {
+                    field: 'invtrt',
+                    headerName: '투신',
+                    flex: 1,
+                    minWidth: 100,
+                    renderCell: (params) => renderTrade(params.value as number),
+                },
+                {
+                    field: 'samoFund',
+                    headerName: '사모펀드',
+                    flex: 1,
+                    minWidth: 100,
+                    renderCell: (params) => renderTrade(params.value as number),
+                },
+                {
+                    field: 'penfndEtc',
+                    headerName: '연기금등',
+                    flex: 1,
+                    minWidth: 100,
+                    renderCell: (params) => renderTrade(params.value as number),
+                },
+                {
+                    field: 'bank',
+                    headerName: '은행',
+                    flex: 1,
+                    minWidth: 100,
+                    renderCell: (params) => renderTrade(params.value as number),
+                },
+                {
+                    field: 'etcCorp',
+                    headerName: '기타법인',
+                    flex: 1,
+                    minWidth: 100,
+                    renderCell: (params) => renderTrade(params.value as number),
+                },
+                {
+                    field: 'natfor',
+                    headerName: '내외국인',
+                    flex: 1,
+                    minWidth: 100,
+                    renderCell: (params) => renderTrade(params.value as number),
+                }
+            ];
+
+            const investorRow = stockInvestorList.map((item: {
+                dt: string; indInvsr: string; frgnrInvsr: string; orgn: string; fnncInvt: string; insrnc: string; etcFnnc: string; invtrt: string; samoFund: string; penfndEtc: string; bank: string; etcCorp: string; natfor: string;
+            }) => {
+                return {
+                    id: item.dt,
+                    dt: `${(item.dt).substring(0, 4)}-${(item.dt).substring(4, 6)}-${(item.dt).substring(6, 8)}`,
+                    indInvsr: Number(item.indInvsr),
+                    frgnrInvsr: Number(item.frgnrInvsr),
+                    orgn: Number(item.orgn),
+                    fnncInvt: Number(item.fnncInvt),
+                    insrnc: Number(item.insrnc),
+                    etcFnnc: Number(item.etcFnnc),
+                    invtrt: Number(item.invtrt),
+                    samoFund: Number(item.samoFund),
+                    penfndEtc: Number(item.penfndEtc),
+                    bank: Number(item.bank),
+                    etcCorp: Number(item.etcCorp),
+                    natfor: Number(item.natfor),
+                }
+            });
+
+            const programColumns: GridColDef[] = [
+                {
+                    field: 'dt',
+                    headerName: '날짜',
+                    flex: 1,
+                    minWidth: 100,
+                    maxWidth: 120
+                },
+                {
+                    field: 'prmNetprpsQty',
+                    headerName: '프로그램 순매수 수량',
+                    flex: 1,
+                    minWidth: 100,
+                    renderCell: (params) => renderTrade(params.value as number),
+                },
+                {
+                    field: 'prmBuyQty',
+                    headerName: '프로그램 매수 수량',
+                    flex: 1,
+                    minWidth: 100,
+                    renderCell: (params) => renderTrade(params.value as number),
+                },
+                {
+                    field: 'prmSellQty',
+                    headerName: '프로그램 매도 수량',
+                    flex: 1,
+                    minWidth: 100,
+                    renderCell: (params) => renderTrade(params.value as number),
+                },
+                {
+                    field: 'prmNetprpsQtyIrds',
+                    headerName: '프로그램 순매수 수량 증감',
+                    flex: 1,
+                    minWidth: 100,
+                    renderCell: (params) => renderTrade(params.value as number),
+                },
+            ];
+
+            const programRow = stockProgramList.map((item: {
+                dt: string; prmSellQty: string; prmBuyQty: string; prmNetprpsQty: string; prmNetprpsQtyIrds: string;
+            }) => {
+                return {
+                    id: item.dt,
+                    dt: `${(item.dt).substring(0, 4)}-${(item.dt).substring(4, 6)}-${(item.dt).substring(6, 8)}`,
+                    prmSellQty: Number(item.prmSellQty),
+                    prmBuyQty: Number(item.prmBuyQty),
+                    prmNetprpsQty: Number(item.prmNetprpsQty),
+                    prmNetprpsQtyIrds: Number(item.prmNetprpsQtyIrds),
+                }
+            });
+
+            setTabData({
+                investor: {
+                    col: investorColumns,
+                    row: investorRow
+                },
+                program: {
+                    col: programColumns,
+                    row: programRow
+                }
+            });
 
             return [stockInfo.stkCd];
         } catch(error) {
@@ -475,7 +725,22 @@ const StockDetail = () => {
         }
     ]);
 
-    const [row, setRow] = useState<GridRowsProp[]>([]);
+    const [tabValue, setTabValue] = useState<'investor' | 'program' | 'shortSelling'>('investor');
+    const [tabData, setTabData] = useState({
+        investor: {
+            col: [],
+            row: []
+        },
+        program: {
+            col: [],
+            row: []
+        },
+        shortSelling: {
+            col: [],
+            row: []
+        }
+    });
+
     const columns: GridColDef[] = [
         {
             field: 'dt',
@@ -567,15 +832,10 @@ const StockDetail = () => {
             flex: 1,
             minWidth: 100,
             renderCell: (params) => renderTrade(params.value as number),
-        },
-        {
-            field: 'program',
-            headerName: '프로그램',
-            flex: 1,
-            minWidth: 100,
-            renderCell: (params) => renderTrade(params.value as number),
         }
     ];
+
+    const [row, setRow] = useState<GridRowsProp[]>([]);
 
     const labelColors = {
         up: 'error' as const,
@@ -698,6 +958,12 @@ const StockDetail = () => {
 
         return message;
     }
+
+    const handleChange = (_event: React.SyntheticEvent, newValue: string) => {
+        if (newValue === 'investor' || newValue === 'program' || newValue === 'shortSelling') {
+            setTabValue(newValue);
+        }
+    };
 
     return (
         <Box sx={{ width: '100%', maxWidth: { sm: '100%', md: '1700px' } }}>
@@ -1034,9 +1300,26 @@ const StockDetail = () => {
                 </Grid>
                 <Grid size={{ xs: 12, md: 12 }}>
                     <Typography component="h2" variant="h6" sx={{ mb: 2 }}>
+                        시간별 투자자별 순매수(주)
+                    </Typography>
+                    <Card variant="outlined" sx={{ width: '100%' }}>
+                        <CardContent>
+                            <InvestorLineChart seriesData={investorChartData} date={investorDateData} />
+                        </CardContent>
+                    </Card>
+                </Grid>
+                <Grid size={{ xs: 12, md: 12 }}>
+                    <Typography component="h2" variant="h6" sx={{ mb: 2 }}>
                         일별 투자자별 순매수
                     </Typography>
-                    <CustomDataTable rows={row} columns={columns} pageSize={20} />
+                    <Box sx={{ borderBottom: 1, borderColor: 'divider' }}>
+                        <Tabs value={tabValue} onChange={handleChange} aria-label="basic tabs example">
+                            <Tab label="투자자별" value='investor' />
+                            <Tab label="프로그램" value='program' />
+                            <Tab label="공매도" value='shortSelleing' />
+                        </Tabs>
+                    </Box>
+                    <CustomDataTable rows={tabData[tabValue].row} columns={tabData[tabValue].col} pageSize={20} />
                 </Grid>
             </Grid>
         </Box>
