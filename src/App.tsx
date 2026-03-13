@@ -1,6 +1,7 @@
 import './App.css'
 import {Route, Routes} from "react-router-dom";
 import Login from "./pages/auth/Login.tsx";
+import Signup from "./pages/auth/Signup.tsx";
 import Dashboard from "./pages/dashboard/Dashboard.tsx";
 import MainLayout from "./layout/MainLayout.tsx";
 import Interest from "./pages/interest/Interest.tsx";
@@ -16,33 +17,37 @@ import ThemeList from "./pages/theme/ThemeList.tsx";
 import ThemeStockList from "./pages/theme/ThemeStockList.tsx";
 import InvestorList from "./pages/investor/InvestorList.tsx";
 import RecommendList from "./pages/recommend/RecommendList.tsx";
+import ProtectedRoute from "./components/ProtectedRoute.tsx";
 
 function App() {
     return (
         <>
             <Routes>
                 <Route path="/login" Component={Login} />
+                <Route path="/signup" Component={Signup} />
 
-                <Route element={<MainLayout />} >
-                    <Route path="/" Component={Dashboard} />
-                    <Route path="/interest" Component={Interest} />
-                    <Route path="/index/list" Component={IndexList} />
-                    <Route path="/index/detail/:id" Component={IndexDetail} />
-                    <Route path="/commodity/list" Component={CommodityList} />
-                    <Route path="/commodity/detail/:id" Component={CommodityDetail} />
+                <Route element={<ProtectedRoute />}>
+                    <Route element={<MainLayout />}>
+                        <Route path="/" Component={Dashboard} />
+                        <Route path="/interest" Component={Interest} />
+                        <Route path="/index/list" Component={IndexList} />
+                        <Route path="/index/detail/:id" Component={IndexDetail} />
+                        <Route path="/commodity/list" Component={CommodityList} />
+                        <Route path="/commodity/detail/:id" Component={CommodityDetail} />
 
-                    <Route path="/stock/list/:type" Component={StockList} />
-                    <Route path="/stock/detail/:id" Component={StockDetail} />
+                        <Route path="/stock/list/:type" Component={StockList} />
+                        <Route path="/stock/detail/:id" Component={StockDetail} />
 
-                    <Route path="/sect/list/:indsCd" Component={SectList} />
-                    <Route path="/sect/:indsCd/list" Component={SectStockList} />
+                        <Route path="/sect/list/:indsCd" Component={SectList} />
+                        <Route path="/sect/:indsCd/list" Component={SectStockList} />
 
-                    <Route path="/theme/list" Component={ThemeList} />
-                    <Route path="/theme/:themaGrpCd/list" Component={ThemeStockList} />
+                        <Route path="/theme/list" Component={ThemeList} />
+                        <Route path="/theme/:themaGrpCd/list" Component={ThemeStockList} />
 
-                    <Route path="/investor/:orgnTp/list/:trdeTp" Component={InvestorList} />
+                        <Route path="/investor/:orgnTp/list/:trdeTp" Component={InvestorList} />
 
-                    <Route path="/recommend/list" Component={RecommendList} />
+                        <Route path="/recommend/list" Component={RecommendList} />
+                    </Route>
                 </Route>
             </Routes>
         </>

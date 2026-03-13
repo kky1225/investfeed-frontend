@@ -7,16 +7,19 @@ import Typography from '@mui/material/Typography';
 import Menu from '@mui/material/Menu';
 import MenuContent from './MenuContent';
 import CardAlert from './CardAlert';
-import {MouseEvent, useState} from "react";
+import { MouseEvent, useState } from "react";
 import MuiMenuItem from "@mui/material/MenuItem";
 import MenuButton from "./MenuButton.tsx";
 import LogoutRoundedIcon from '@mui/icons-material/LogoutRounded';
 import MoreVertRoundedIcon from '@mui/icons-material/MoreVertRounded';
-import ListItemIcon, {listItemIconClasses} from "@mui/material/ListItemIcon";
-import Divider, {dividerClasses} from "@mui/material/Divider";
+import ListItemIcon, { listItemIconClasses } from "@mui/material/ListItemIcon";
+import Divider, { dividerClasses } from "@mui/material/Divider";
 import { ListItemText } from '@mui/material';
-import {listClasses} from "@mui/material/List";
-import {paperClasses} from "@mui/material/Paper";
+import { listClasses } from "@mui/material/List";
+import { paperClasses } from "@mui/material/Paper";
+import { useAuth } from '../context/AuthContext';
+import { logout } from '../api/auth/AuthApi';
+import { useNavigate } from 'react-router-dom';
 
 const drawerWidth = 240;
 
@@ -38,12 +41,31 @@ const MenuItem = styled(MuiMenuItem)({
 export default function SideMenu() {
     const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
     const open = Boolean(anchorEl);
+    const { user, clearAuth } = useAuth();
+    const navigate = useNavigate();
+
     const handleClick = (event: MouseEvent<HTMLElement>) => {
         setAnchorEl(event.currentTarget);
     };
     const handleClose = () => {
         setAnchorEl(null);
     };
+
+    const handleLogout = async () => {
+        handleClose();
+        try {
+            await logout();
+        } catch {
+            // 서버 오류여도 로컬 상태는 초기화
+        } finally {
+            clearAuth();
+            navigate('/login');
+        }
+    };
+
+    const displayName = user?.nickname ?? user?.loginId ?? '';
+    const displayEmail = user?.email ?? '';
+    const initials = displayName.charAt(0).toUpperCase();
 
     return (
         <Drawer
@@ -78,17 +100,19 @@ export default function SideMenu() {
             >
                 <Avatar
                     sizes="small"
-                    alt="Riley Carter"
-                    src="/static/images/avatar/7.jpg"
                     sx={{ width: 36, height: 36 }}
-                />
+                >
+                    {initials}
+                </Avatar>
                 <Box sx={{ mr: 'auto' }}>
                     <Typography variant="body2" sx={{ fontWeight: 500, lineHeight: '16px' }}>
-                        Riley Carter
+                        {displayName}
                     </Typography>
-                    <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-                        riley@email.com
-                    </Typography>
+                    {displayEmail && (
+                        <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+                            {displayEmail}
+                        </Typography>
+                    )}
                 </Box>
                 <MenuButton
                     aria-label="Open menu"
@@ -117,14 +141,9 @@ export default function SideMenu() {
                         },
                     }}
                 >
-                    <MenuItem onClick={handleClose}>Profile</MenuItem>
-                    <MenuItem onClick={handleClose}>My account</MenuItem>
-                    <Divider />
-                    <MenuItem onClick={handleClose}>Add another account</MenuItem>
-                    <MenuItem onClick={handleClose}>Settings</MenuItem>
                     <Divider />
                     <MenuItem
-                        onClick={handleClose}
+                        onClick={handleLogout}
                         sx={{
                             [`& .${listItemIconClasses.root}`]: {
                                 ml: 'auto',

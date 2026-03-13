@@ -1,8 +1,6 @@
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
-import Checkbox from '@mui/material/Checkbox';
 import CssBaseline from '@mui/material/CssBaseline';
-import FormControlLabel from '@mui/material/FormControlLabel';
 import Divider from '@mui/material/Divider';
 import FormLabel from '@mui/material/FormLabel';
 import FormControl from '@mui/material/FormControl';
@@ -11,12 +9,15 @@ import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 import Stack from '@mui/material/Stack';
 import MuiCard from '@mui/material/Card';
+import Alert from '@mui/material/Alert';
 import { styled } from '@mui/material/styles';
-//import ForgotPassword from './components/ForgotPassword';
 
 import ColorModeSelect from "../../components/ColorModeSelect.tsx";
 import AppTheme from "../../components/AppTheme.tsx";
-import {FormEvent, useState} from "react";
+import { useState } from "react";
+import { useNavigate, Link as RouterLink } from "react-router-dom";
+import { useAuth } from "../../context/AuthContext.tsx";
+import { login } from "../../api/auth/AuthApi.ts";
 
 const Card = styled(MuiCard)(({ theme }) => ({
     display: 'flex',
@@ -61,57 +62,52 @@ const SignInContainer = styled(Stack)(({ theme }) => ({
 }));
 
 export default function Login(props: { disableCustomTheme?: boolean }) {
-    const [emailError, setEmailError] = useState(false);
-    const [emailErrorMessage, setEmailErrorMessage] = useState('');
-    const [passwordError, setPasswordError] = useState(false);
-    const [passwordErrorMessage, setPasswordErrorMessage] = useState('');
-    // const [open, setOpen] = useState(false);
+    const [loginId, setLoginId] = useState('');
+    const [password, setPassword] = useState('');
+    const [loginIdError, setLoginIdError] = useState('');
+    const [passwordError, setPasswordError] = useState('');
+    const [errorMessage, setErrorMessage] = useState('');
+    const [loading, setLoading] = useState(false);
 
-    const handleClickOpen = () => {
-        // setOpen(true);
+    const { setAuth } = useAuth();
+    const navigate = useNavigate();
+
+    const validate = () => {
+        let valid = true;
+        if (!loginId.trim()) {
+            setLoginIdError('아이디를 입력해주세요.');
+            valid = false;
+        } else {
+            setLoginIdError('');
+        }
+        if (!password || password.length < 4) {
+            setPasswordError('비밀번호를 4자 이상 입력해주세요.');
+            valid = false;
+        } else {
+            setPasswordError('');
+        }
+        return valid;
     };
 
-    // const handleClose = () => {
-    //     setOpen(false);
-    // };
+    const handleSubmit = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!validate()) return;
 
-    const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
-        if (emailError || passwordError) {
-            event.preventDefault();
-            return;
+        setLoading(true);
+        setErrorMessage('');
+        try {
+            const res = await login({ loginId, password });
+            if (res.result?.accessToken) {
+                // loginId를 user 정보로 저장 (nickname/email은 별도 API가 있으면 추후 확장)
+                setAuth({ loginId, nickname: loginId, email: '' }, res.result.accessToken);
+                navigate('/');
+            }
+        } catch (err: unknown) {
+            const axiosErr = err as { response?: { data?: { message?: string } } };
+            setErrorMessage(axiosErr.response?.data?.message ?? '로그인에 실패했습니다.');
+        } finally {
+            setLoading(false);
         }
-        const data = new FormData(event.currentTarget);
-        console.log({
-            email: data.get('email'),
-            password: data.get('password'),
-        });
-    };
-
-    const validateInputs = () => {
-        const userId = document.getElementById('userId') as HTMLInputElement;
-        const password = document.getElementById('password') as HTMLInputElement;
-
-        let isValid = true;
-
-        if (!userId.value || !/\S+@\S+\.\S+/.test(userId.value)) {
-            setEmailError(true);
-            setEmailErrorMessage('아이디를 입력해주세요.');
-            isValid = false;
-        } else {
-            setEmailError(false);
-            setEmailErrorMessage('');
-        }
-
-        if (!password.value || password.value.length < 6) {
-            setPasswordError(true);
-            setPasswordErrorMessage('비밀번호를 입력해주세요.');
-            isValid = false;
-        } else {
-            setPasswordError(false);
-            setPasswordErrorMessage('');
-        }
-
-        return isValid;
     };
 
     return (
@@ -120,7 +116,9 @@ export default function Login(props: { disableCustomTheme?: boolean }) {
             <SignInContainer direction="column" justifyContent="space-between">
                 <ColorModeSelect sx={{ position: 'fixed', top: '1rem', right: '1rem' }} />
                 <Card variant="outlined">
-                    InvestFeed
+                    <Typography variant="h5" sx={{ fontWeight: 700, letterSpacing: 1 }}>
+                        InvestFeed
+                    </Typography>
                     <Typography
                         component="h1"
                         variant="h4"
@@ -128,6 +126,7 @@ export default function Login(props: { disableCustomTheme?: boolean }) {
                     >
                         Sign in
                     </Typography>
+                    {errorMessage && <Alert severity="error">{errorMessage}</Alert>}
                     <Box
                         component="form"
                         onSubmit={handleSubmit}
@@ -140,71 +139,54 @@ export default function Login(props: { disableCustomTheme?: boolean }) {
                         }}
                     >
                         <FormControl>
-                            <FormLabel htmlFor="userId">아이디</FormLabel>
+                            <FormLabel htmlFor="loginId">아이디</FormLabel>
                             <TextField
-                                error={emailError}
-                                helperText={emailErrorMessage}
+                                error={!!loginIdError}
+                                helperText={loginIdError}
                                 type="text"
-                                id="userId"
-                                name="userId"
+                                id="loginId"
+                                name="loginId"
                                 placeholder="아이디"
-                                autoComplete="userId"
+                                autoComplete="username"
                                 autoFocus
                                 required
                                 fullWidth
                                 variant="outlined"
-                                color={emailError ? 'error' : 'primary'}
+                                value={loginId}
+                                onChange={(e) => setLoginId(e.target.value)}
                             />
                         </FormControl>
                         <FormControl>
                             <FormLabel htmlFor="password">비밀번호</FormLabel>
                             <TextField
-                                error={passwordError}
-                                helperText={passwordErrorMessage}
+                                error={!!passwordError}
+                                helperText={passwordError}
                                 type="password"
                                 id="password"
                                 name="password"
                                 placeholder="비밀번호"
-                                autoComplete="password"
-                                autoFocus
+                                autoComplete="current-password"
                                 required
                                 fullWidth
                                 variant="outlined"
-                                color={passwordError ? 'error' : 'primary'}
+                                value={password}
+                                onChange={(e) => setPassword(e.target.value)}
                             />
                         </FormControl>
-                        <FormControlLabel
-                            control={<Checkbox value="remember" color="primary" />}
-                            label="Remember me"
-                        />
-                        {/*<ForgotPassword open={open} handleClose={handleClose} />*/}
                         <Button
                             type="submit"
                             fullWidth
                             variant="contained"
-                            onClick={validateInputs}
+                            disabled={loading}
                         >
-                            Sign in
+                            {loading ? '로그인 중...' : 'Sign in'}
                         </Button>
-                        <Link
-                            component="button"
-                            type="button"
-                            onClick={handleClickOpen}
-                            variant="body2"
-                            sx={{ alignSelf: 'center' }}
-                        >
-                            Forgot your password?
-                        </Link>
                     </Box>
                     <Divider>or</Divider>
                     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
                         <Typography sx={{ textAlign: 'center' }}>
-                            Don&apos;t have an account?{' '}
-                            <Link
-                                href="/material-ui/getting-started/templates/sign-in/"
-                                variant="body2"
-                                sx={{ alignSelf: 'center' }}
-                            >
+                            계정이 없으신가요?{' '}
+                            <Link component={RouterLink} to="/signup" variant="body2">
                                 Sign up
                             </Link>
                         </Typography>

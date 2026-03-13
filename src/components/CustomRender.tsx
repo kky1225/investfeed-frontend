@@ -4,26 +4,10 @@ export function renderTradeColor(trade: number) {
     const text = trade.toLocaleString()
 
     return (
-        <span style={{color: trade == 0 ? 'black' : trade > 0 ? 'red' : 'blue'}}>
+        <span style={{color: trade == 0 ? '' : trade > 0 ? 'red' : 'blue'}}>
             {trade > 0 ? `+${text}` : `${text}`}
         </span>
     )
-}
-
-export function renderInfo(trade: number) {
-    return (
-        <span style={{color: 'black'}}>
-            {trade.toLocaleString()}
-        </span>
-    );
-}
-
-export function renderPercent(trade: number) {
-    return (
-        <span style={{color: 'black'}}>
-            {`${trade}%`}
-        </span>
-    );
 }
 
 export function renderTradePricaColor(trade: string) {
@@ -34,7 +18,7 @@ export function renderTradePricaColor(trade: string) {
     });
 
     return (
-        <span style={{color: value == 0 ? 'black' : value > 0 ? 'red' : 'blue'}}>
+        <span style={{color: value == 0 ? '' : value > 0 ? 'red' : 'blue'}}>
             {value > 0 ? `+${formatted}억` : `${formatted}억`}
         </span>
     )

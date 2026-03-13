@@ -33,14 +33,14 @@ import CheckIcon from "@mui/icons-material/Check";
 import PriorityHighIcon from "@mui/icons-material/PriorityHigh";
 import DoNotDisturbIcon from "@mui/icons-material/DoNotDisturb";
 import CustomDataTable from "../../components/CustomDataTable.tsx";
-import {GridColDef, GridRowsProp} from "@mui/x-data-grid";
+import {GridColDef} from "@mui/x-data-grid";
 import {fetchTimeNow} from "../../api/time/TimeApi.ts";
 import {MarketType} from "../../type/timeType.ts";
 import {LineSeriesType} from "@mui/x-charts";
 import { MakeOptional } from '@mui/x-internals/types';
 import InvestorLineChart from "../../components/InvestorLineChart.tsx";
 import * as React from "react";
-import {renderInfo, renderPercent, renderTradeColor} from "../../components/CustomRender.tsx";
+import {renderTradeColor} from "../../components/CustomRender.tsx";
 
 const StyledToggleButtonGroup = styled(ToggleButtonGroup)(({ theme }) => ({
     border: 'none',
@@ -541,35 +541,35 @@ const StockDetail = () => {
                     headerName: '공매도 거래 대금',
                     flex: 1,
                     minWidth: 100,
-                    renderCell: (params) => renderInfo(params.value as number),
+                    valueFormatter: (value: string) => Number(value).toLocaleString(),
                 },
                 {
                     field: 'shrtsQty',
                     headerName: '공매도 수량',
                     flex: 1,
                     minWidth: 100,
-                    renderCell: (params) => renderInfo(params.value as number),
+                    valueFormatter: (value: string) => Number(value).toLocaleString(),
                 },
                 {
                     field: 'trdeQty',
                     headerName: '거래량',
                     flex: 1,
                     minWidth: 100,
-                    renderCell: (params) => renderInfo(params.value as number),
+                    valueFormatter: (value: string) => Number(value).toLocaleString(),
                 },
                 {
                     field: 'trdeWght',
                     headerName: '매매비중',
                     flex: 1,
                     minWidth: 100,
-                    renderCell: (params) => renderPercent(params.value as number),
+                    valueFormatter: (value: string) => `${value}%`,
                 },
                 {
                     field: 'shrtsAvgPric',
                     headerName: '공매도 평균가',
                     flex: 1,
                     minWidth: 100,
-                    renderCell: (params) => renderInfo(params.value as number),
+                    valueFormatter: (value: string) => Number(value).toLocaleString(),
                 },
             ];
 

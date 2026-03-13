@@ -11,7 +11,7 @@ import {StockGridRow, StockStream, StockStreamRes} from "../../type/StockType.ts
 import {useNavigate, useParams} from "react-router-dom";
 import {InvestorListItem, InvestorListReq, InvestorStreamReq} from "../../type/InvestorType.ts";
 import {fetchInvestorList, fetchInvestorStream} from "../../api/investor/InvestorApi.ts";
-import {renderChip, renderInfo, renderTradePricaColor} from "../../components/CustomRender.tsx";
+import {renderChip, renderTradePricaColor} from "../../components/CustomRender.tsx";
 
 const InvestorList = () => {
     const navigate = useNavigate();
@@ -53,7 +53,7 @@ const InvestorList = () => {
             headerName: '현재가',
             flex: 1,
             minWidth: 100,
-            renderCell: (params: {value: string}) => renderInfo(Number(params.value)),
+            valueFormatter: (value: string) => Number(value).toLocaleString(),
         },
         {
             field: 'netprpsAmt',
