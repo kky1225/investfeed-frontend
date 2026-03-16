@@ -12,6 +12,7 @@ import ShowChartIcon from '@mui/icons-material/ShowChart';
 import SettingsRoundedIcon from '@mui/icons-material/SettingsRounded';
 import InfoRoundedIcon from '@mui/icons-material/InfoRounded';
 import HelpRoundedIcon from '@mui/icons-material/HelpRounded';
+import FavoriteIcon from '@mui/icons-material/Favorite';
 import DiamondIcon from '@mui/icons-material/Diamond';
 import GroupIcon from '@mui/icons-material/Group';
 import RecommendIcon from '@mui/icons-material/Recommend';
@@ -34,7 +35,7 @@ const mainListItems = [
             { id: 6, text: '순위', icon: <ShowChartIcon />, url: '/stock/list/0' },
             { id: 7, text: '투자자별', icon: <GroupIcon />, url: '/investor/6/list/1' },
             { id: 8, text: '추천', icon: <RecommendIcon />, url: '/recommend/list' },
-            { id: 9, text: '관심 종목', icon: <PeopleRoundedIcon />, url: '/favorite/list' },
+            { id: 9, text: '관심 종목', icon: <FavoriteIcon />, url: '/interest/list' },
             { id: 10, text: '보유 주식', icon: <PeopleRoundedIcon />, url: '/holding/list' },
         ]
     },

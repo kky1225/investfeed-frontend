@@ -3,7 +3,6 @@ import Box from "@mui/material/Box";
 import Grid from "@mui/material/Grid";
 import {GridColDef} from "@mui/x-data-grid";
 import StockTable from "../../components/StockTable.tsx";
-import Chip from "@mui/material/Chip";
 import {useEffect, useRef, useState} from "react";
 import {fetchStockList, fetchStockStream} from "../../api/stock/StockApi.ts";
 import {Tab, Tabs } from "@mui/material";
@@ -19,6 +18,7 @@ import {
     StockStreamRes
 } from "../../type/StockType.ts";
 import {useNavigate, useParams} from "react-router-dom";
+import {renderChip} from "../../components/CustomRender.tsx";
 
 const StockList = () => {
     const navigate = useNavigate();
@@ -207,7 +207,7 @@ const StockList = () => {
                             headerName: '등락률',
                             flex: 0.5,
                             minWidth: 100,
-                            renderCell: (params) => renderStatus(params.value as number),
+                            renderCell: (params) => renderChip(params.value as number),
                         },
                         {
                             field: 'curPrc',
@@ -251,7 +251,7 @@ const StockList = () => {
                             headerName: '등락률',
                             flex: 0.5,
                             minWidth: 100,
-                            renderCell: (params) => renderStatus(params.value as number),
+                            renderCell: (params) => renderChip(params.value as number),
                         },
                         {
                             field: 'curPrc',
@@ -295,7 +295,7 @@ const StockList = () => {
                             headerName: '등락률',
                             flex: 0.5,
                             minWidth: 100,
-                            renderCell: (params) => renderStatus(params.value as number),
+                            renderCell: (params) => renderChip(params.value as number),
                         },
                         {
                             field: 'curPrc',
@@ -352,12 +352,6 @@ const StockList = () => {
         };
 
         return socket;
-    }
-
-    function renderStatus(status: number) {
-        const colors = status == 0 ? 'default' : status > 0 ? 'error': 'info';
-
-        return <Chip label={status > 0 ? `${status}%` : `${status}%`} color={colors} />;
     }
 
     const handleChange = (_event: React.SyntheticEvent, newValue: number) => {

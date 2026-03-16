@@ -47,6 +47,8 @@ function App() {
                         <Route path="/investor/:orgnTp/list/:trdeTp" Component={InvestorList} />
 
                         <Route path="/recommend/list" Component={RecommendList} />
+
+                        <Route path="/interest/list" Component={Interest} />
                     </Route>
                 </Route>
             </Routes>

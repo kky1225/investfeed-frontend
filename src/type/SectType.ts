@@ -33,10 +33,6 @@ export interface SectStockListRes {
     sectStockList: Array<SectStockListItem>
 }
 
-export interface SectStockListStreamReq {
-    items: Array<string>
-}
-
 export interface SectStockListItem {
     stkCd: string,
     stkNm: string,

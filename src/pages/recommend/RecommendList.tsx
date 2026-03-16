@@ -205,7 +205,7 @@ const RecommendList = () => {
     return (
         <Box sx={{ width: '100%', maxWidth: { sm: '100%', md: '1700px' } }}>
             <Typography component="h2" variant="h6" sx={{ mb: 2 }}>
-                업종 목록
+                추천 목록
             </Typography>
             <Grid
                 container
@@ -223,12 +223,12 @@ const RecommendList = () => {
                         columns={12}
                         sx={{ mt: 1, mb: (theme) => theme.spacing(2) }}
                     >
-                        {
+                        { recommendDataList.length > 0 ?
                             recommendDataList.map((data: SectCardProps, index: number) => (
                                 <Grid key={index} size={{ xs: 12, md: 6 }}>
                                     <RecommendCard {...data} />
                                 </Grid>
-                            ))
+                            )) : <p>매수 추천 종목 없음</p>
                         }
                     </Grid>
                 </Box>
@@ -242,12 +242,12 @@ const RecommendList = () => {
                         columns={12}
                         sx={{ mt: 1, mb: (theme) => theme.spacing(2) }}
                     >
-                        {
+                        { avoidDataList.length > 0 ?
                             avoidDataList.map((data: SectCardProps, index: number) => (
                                 <Grid key={index} size={{ xs: 12, md: 6 }}>
                                     <RecommendCard {...data} />
                                 </Grid>
-                            ))
+                            )) : <p>매도 추천 종목 없음</p>
                         }
                     </Grid>
                 </Box>

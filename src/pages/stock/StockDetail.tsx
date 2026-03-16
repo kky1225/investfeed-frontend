@@ -41,6 +41,22 @@ import { MakeOptional } from '@mui/x-internals/types';
 import InvestorLineChart from "../../components/InvestorLineChart.tsx";
 import * as React from "react";
 import {renderTradeColor} from "../../components/CustomRender.tsx";
+import FavoriteBorderIcon from "@mui/icons-material/FavoriteBorder";
+import FavoriteIcon from "@mui/icons-material/Favorite";
+import IconButton from "@mui/material/IconButton";
+import Button from "@mui/material/Button";
+import Dialog from "@mui/material/Dialog";
+import DialogTitle from "@mui/material/DialogTitle";
+import DialogContent from "@mui/material/DialogContent";
+import DialogActions from "@mui/material/DialogActions";
+import CircularProgress from "@mui/material/CircularProgress";
+import List from "@mui/material/List";
+import ListItemButton from "@mui/material/ListItemButton";
+import ListItemText from "@mui/material/ListItemText";
+import Snackbar from "@mui/material/Snackbar";
+import Alert from "@mui/material/Alert";
+import {addInterestItem, fetchInterestGroups} from "../../api/interest/InterestApi.ts";
+import {InterestGroup} from "../../type/InterestType.ts";
 
 const StyledToggleButtonGroup = styled(ToggleButtonGroup)(({ theme }) => ({
     border: 'none',
@@ -900,6 +916,39 @@ const StockDetail = () => {
         }
     };
 
+    const [interestDialogOpen, setInterestDialogOpen] = useState(false);
+    const [interestGroups, setInterestGroups] = useState<InterestGroup[]>([]);
+    const [interestLoading, setInterestLoading] = useState(false);
+    const [addedGroupIds, setAddedGroupIds] = useState<Set<number>>(new Set());
+    const [snackbar, setSnackbar] = useState<{ open: boolean; message: string; severity: 'success' | 'error' }>({
+        open: false, message: '', severity: 'success'
+    });
+
+    const handleHeartClick = async () => {
+        setInterestDialogOpen(true);
+        setInterestLoading(true);
+        setAddedGroupIds(new Set());
+        try {
+            const res = await fetchInterestGroups();
+            setInterestGroups(res.result ?? []);
+        } finally {
+            setInterestLoading(false);
+        }
+    };
+
+    const handleAddToGroup = async (group: InterestGroup) => {
+        try {
+            await addInterestItem(group.id, {
+                stkCd: stockChartData.id,
+                stkNm: stockChartData.title,
+            });
+            setAddedGroupIds(prev => new Set(prev).add(group.id));
+            setSnackbar({open: true, message: `${group.groupNm}에 추가되었습니다.`, severity: 'success'});
+        } catch {
+            setSnackbar({open: true, message: '이미 추가된 종목이거나 오류가 발생했습니다.', severity: 'error'});
+        }
+    };
+
     return (
         <Box sx={{ width: '100%', maxWidth: { sm: '100%', md: '1700px' } }}>
             <Typography component="h2" variant="h6" sx={{ mb: 2 }}>
@@ -914,7 +963,7 @@ const StockDetail = () => {
                 <Grid size={{ xs: 12, md: 12 }}>
                     <Card variant="outlined" sx={{ width: '100%' }}>
                         <CardContent>
-                            <Box sx={{ display: 'flex', justifyContent: 'space-between'}}>
+                            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                 <Typography component="h2" variant="subtitle2" gutterBottom>
                                     {stockChartData.title}
                                     {stockChartData.orderWarning !== '0' &&
@@ -923,14 +972,24 @@ const StockDetail = () => {
                                         </Tooltip>
                                     }
                                 </Typography>
-                                {stockChartData.nxtEnable === 'Y' &&
-                                    <Typography component="h2" variant="subtitle2" gutterBottom>
-                                        NXT
-                                        <Tooltip title="넥스트 트레이드는 오전 8시부터 오후 8시까지 거래할 수 있는 대체 거래소입니다.">
-                                            <HelpIcon sx={{ fontSize: 'inherit', verticalAlign: 'middle', ml: "1px", mb: "3px" }} />
-                                        </Tooltip>
-                                    </Typography>
-                                }
+                                <Stack direction="row" alignItems="center" gap={0.5}>
+                                    {stockChartData.nxtEnable === 'Y' &&
+                                        <Typography component="h2" variant="subtitle2" gutterBottom>
+                                            NXT
+                                            <Tooltip title="넥스트 트레이드는 오전 8시부터 오후 8시까지 거래할 수 있는 대체 거래소입니다.">
+                                                <HelpIcon sx={{ fontSize: 'inherit', verticalAlign: 'middle', ml: "1px", mb: "3px" }} />
+                                            </Tooltip>
+                                        </Typography>
+                                    }
+                                    <Tooltip title="관심종목 추가">
+                                        <IconButton size="small" onClick={handleHeartClick} sx={{mb: "3px"}}>
+                                            {addedGroupIds.size > 0
+                                                ? <FavoriteIcon fontSize="small" color="error" />
+                                                : <FavoriteBorderIcon fontSize="small" color="error" />
+                                            }
+                                        </IconButton>
+                                    </Tooltip>
+                                </Stack>
                             </Box>
                             <Stack sx={{ justifyContent: 'space-between' }}>
                                 <Stack
@@ -1257,6 +1316,65 @@ const StockDetail = () => {
                     <CustomDataTable rows={tabData[tabValue].row} columns={tabData[tabValue].col} pageSize={20} />
                 </Grid>
             </Grid>
+
+            {/* 관심종목 그룹 선택 다이얼로그 */}
+            <Dialog open={interestDialogOpen} onClose={() => setInterestDialogOpen(false)} maxWidth="xs" fullWidth>
+                <DialogTitle>관심종목에 추가</DialogTitle>
+                <DialogContent sx={{pb: 1}}>
+                    {interestLoading ? (
+                        <Box sx={{display: 'flex', justifyContent: 'center', py: 3}}>
+                            <CircularProgress size={24} />
+                        </Box>
+                    ) : interestGroups.length === 0 ? (
+                        <Box sx={{py: 2, textAlign: 'center'}}>
+                            <Typography variant="body2" color="text.secondary">
+                                관심종목 그룹이 없습니다.
+                            </Typography>
+                            <Typography variant="caption" color="text.secondary">
+                                관심종목 메뉴에서 그룹을 먼저 만들어주세요.
+                            </Typography>
+                        </Box>
+                    ) : (
+                        <List dense disablePadding>
+                            {interestGroups.map(group => (
+                                <ListItemButton
+                                    key={group.id}
+                                    onClick={() => handleAddToGroup(group)}
+                                    disabled={addedGroupIds.has(group.id)}
+                                    sx={{borderRadius: 1}}
+                                >
+                                    <ListItemText
+                                        primary={group.groupNm}
+                                        primaryTypographyProps={{variant: 'body2'}}
+                                    />
+                                    {addedGroupIds.has(group.id) && (
+                                        <FavoriteIcon fontSize="small" color="error" />
+                                    )}
+                                </ListItemButton>
+                            ))}
+                        </List>
+                    )}
+                </DialogContent>
+                <DialogActions>
+                    <Button onClick={() => setInterestDialogOpen(false)}>닫기</Button>
+                </DialogActions>
+            </Dialog>
+
+            {/* 결과 Snackbar */}
+            <Snackbar
+                open={snackbar.open}
+                autoHideDuration={3000}
+                onClose={() => setSnackbar(prev => ({...prev, open: false}))}
+                anchorOrigin={{vertical: 'bottom', horizontal: 'center'}}
+            >
+                <Alert
+                    severity={snackbar.severity}
+                    onClose={() => setSnackbar(prev => ({...prev, open: false}))}
+                    variant="filled"
+                >
+                    {snackbar.message}
+                </Alert>
+            </Snackbar>
         </Box>
     )
 }
