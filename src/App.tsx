@@ -1,5 +1,5 @@
 import './App.css'
-import {Route, Routes} from "react-router-dom";
+import {Route, Routes, useParams} from "react-router-dom";
 import Login from "./pages/auth/Login.tsx";
 import Signup from "./pages/auth/Signup.tsx";
 import Dashboard from "./pages/dashboard/Dashboard.tsx";
@@ -19,6 +19,11 @@ import InvestorList from "./pages/investor/InvestorList.tsx";
 import RecommendList from "./pages/recommend/RecommendList.tsx";
 import ProtectedRoute from "./components/ProtectedRoute.tsx";
 
+const StockDetailWithKey = () => {
+    const { id } = useParams();
+    return <StockDetail key={id} />;
+};
+
 function App() {
     return (
         <>
@@ -36,7 +41,7 @@ function App() {
                         <Route path="/commodity/detail/:id" Component={CommodityDetail} />
 
                         <Route path="/stock/list/:type" Component={StockList} />
-                        <Route path="/stock/detail/:id" Component={StockDetail} />
+                        <Route path="/stock/detail/:id" Component={StockDetailWithKey} />
 
                         <Route path="/sect/list/:indsCd" Component={SectList} />
                         <Route path="/sect/:indsCd/list" Component={SectStockList} />

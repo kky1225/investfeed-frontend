@@ -1,4 +1,4 @@
-import {useEffect, useRef, useState} from "react";
+import React, {createContext, useContext, useEffect, useRef, useState} from "react";
 import Box from "@mui/material/Box";
 import Typography from "@mui/material/Typography";
 import Stack from "@mui/material/Stack";
@@ -9,6 +9,7 @@ import DialogTitle from "@mui/material/DialogTitle";
 import DialogContent from "@mui/material/DialogContent";
 import DialogActions from "@mui/material/DialogActions";
 import TextField from "@mui/material/TextField";
+import Autocomplete from "@mui/material/Autocomplete";
 import List from "@mui/material/List";
 import ListItem from "@mui/material/ListItem";
 import ListItemButton from "@mui/material/ListItemButton";
@@ -24,11 +25,11 @@ import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
 import DragIndicatorIcon from "@mui/icons-material/DragIndicator";
 import FolderOpenIcon from "@mui/icons-material/FolderOpen";
 import SaveIcon from "@mui/icons-material/Save";
-import {GridActionsCell, GridActionsCellItem, GridColDef, GridRenderCellParams} from "@mui/x-data-grid";
-import {DataGridPro} from "@mui/x-data-grid-pro";
+import {DataGrid, GridActionsCellItem, GridColDef, GridRow, GridRowProps} from "@mui/x-data-grid";
 import {DndContext, DragEndEvent, PointerSensor, useSensor, useSensors} from "@dnd-kit/core";
 import {arrayMove, SortableContext, useSortable, verticalListSortingStrategy} from "@dnd-kit/sortable";
 import {CSS} from "@dnd-kit/utilities";
+import {useNavigate} from "react-router-dom";
 import {
     addInterestItem,
     createInterestGroup,
@@ -36,12 +37,22 @@ import {
     deleteInterestItem,
     fetchInterestGroups,
     fetchInterestItems,
+    fetchInterestItemsStream,
     reorderInterestGroups,
     reorderInterestItems,
     updateInterestGroup,
 } from "../../api/interest/InterestApi.ts";
 import {InterestGroup, InterestItem} from "../../type/InterestType.ts";
 import {renderChip} from "../../components/CustomRender.tsx";
+import {fetchTimeNow} from "../../api/time/TimeApi.ts";
+import {MarketType} from "../../type/timeType.ts";
+import {fetchStockSearch} from "../../api/stock/StockApi.ts";
+
+interface StockSearchItem {
+    stkCd: string;
+    stkNm: string;
+    marketName: string;
+}
 
 interface GroupMenuState {
     anchorEl: HTMLElement;
@@ -54,6 +65,8 @@ interface SortableGroupItemProps {
     onSelect: () => void;
     onMenuOpen: (e: React.MouseEvent<HTMLButtonElement>) => void;
 }
+
+// ─── 그룹 드래그 아이템 ───────────────────────────────────────────────────────
 
 const SortableGroupItem = ({group, selected, onSelect, onMenuOpen}: SortableGroupItemProps) => {
     const {attributes, listeners, setNodeRef, transform, transition, isDragging} = useSortable({id: group.id});
@@ -97,19 +110,10 @@ const SortableGroupItem = ({group, selected, onSelect, onMenuOpen}: SortableGrou
                 >
                     <DragIndicatorIcon sx={{fontSize: 16}}/>
                 </Box>
-                <ListItemButton
-                    selected={selected}
-                    onClick={onSelect}
-                    sx={{pr: 5, pl: 0.5}}
-                >
+                <ListItemButton selected={selected} onClick={onSelect} sx={{pr: 5, pl: 0.5}}>
                     <ListItemText
                         primary={group.groupNm}
-                        slotProps={{
-                            primary: {
-                                variant: "body2",
-                                noWrap: true,
-                            }
-                        }}
+                        slotProps={{primary: {variant: "body2", noWrap: true}}}
                     />
                 </ListItemButton>
             </ListItem>
@@ -117,7 +121,69 @@ const SortableGroupItem = ({group, selected, onSelect, onMenuOpen}: SortableGrou
     );
 };
 
+// ─── DataGrid 행 드래그 (Context 패턴) ───────────────────────────────────────
+
+type DragListeners = ReturnType<typeof useSortable>["listeners"];
+type DragAttributes = ReturnType<typeof useSortable>["attributes"];
+
+interface RowDragContextValue {
+    listeners: DragListeners;
+    attributes: DragAttributes;
+}
+
+const RowDragContext = createContext<RowDragContextValue>({
+    listeners: undefined,
+    attributes: {} as DragAttributes,
+});
+
+const DragHandleCell = () => {
+    const {listeners, attributes} = useContext(RowDragContext);
+    return (
+        <Box
+            {...listeners}
+            {...attributes}
+            onClick={(e) => e.stopPropagation()}
+            sx={{
+                display: "flex",
+                alignItems: "center",
+                cursor: "grab",
+                color: "text.disabled",
+                height: "100%",
+                px: 0.5,
+                "&:active": {cursor: "grabbing"},
+            }}
+        >
+            <DragIndicatorIcon sx={{fontSize: 16}}/>
+        </Box>
+    );
+};
+
+const DraggableRow = React.forwardRef<HTMLDivElement, GridRowProps>((props, _ref) => {
+    const {attributes, listeners, setNodeRef, transform, transition, isDragging} = useSortable({
+        id: props.rowId as number,
+    });
+
+    return (
+        <RowDragContext.Provider value={{listeners, attributes}}>
+            <GridRow
+                ref={setNodeRef}
+                {...props}
+                style={{
+                    ...props.style,
+                    transform: CSS.Transform.toString(transform),
+                    transition,
+                    opacity: isDragging ? 0.5 : 1,
+                    zIndex: isDragging ? 1 : undefined,
+                    position: isDragging ? "relative" : undefined,
+                }}
+            />
+        </RowDragContext.Provider>
+    );
+});
+
 const Interest = () => {
+    const navigate = useNavigate();
+
     const [groups, setGroups] = useState<InterestGroup[]>([]);
     const [selectedGroup, setSelectedGroup] = useState<InterestGroup | null>(null);
     const [items, setItems] = useState<InterestItem[]>([]);
@@ -140,16 +206,26 @@ const Interest = () => {
     const [groupMenu, setGroupMenu] = useState<GroupMenuState | null>(null);
 
     const [addItemOpen, setAddItemOpen] = useState(false);
-    const [newItemStkCd, setNewItemStkCd] = useState("");
-    const [newItemStkNm, setNewItemStkNm] = useState("");
+    const [searchKeyword, setSearchKeyword] = useState("");
+    const [searchResults, setSearchResults] = useState<StockSearchItem[]>([]);
+    const [searchLoading, setSearchLoading] = useState(false);
+    const [selectedStock, setSelectedStock] = useState<StockSearchItem | null>(null);
     const [addItemError, setAddItemError] = useState("");
+    const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
     const loadingGroupRef = useRef<number | null>(null);
+    const socketRef = useRef<WebSocket | null>(null);
 
-    const sensors = useSensors(useSensor(PointerSensor));
+    // 클릭과 드래그를 구분하기 위해 distance: 5 적용
+    const sensors = useSensors(
+        useSensor(PointerSensor, {activationConstraint: {distance: 5}})
+    );
 
     useEffect(() => {
         loadGroups();
+        return () => {
+            socketRef.current?.close();
+        };
     }, []);
 
     const loadGroups = async () => {
@@ -175,14 +251,35 @@ const Interest = () => {
         setItemOrderDirty(false);
         try {
             const data = await fetchInterestItems(groupId);
-
-            console.log(data)
-
             setItems(data.result ?? []);
+
+            socketRef.current?.close();
+            const marketInfo = await fetchTimeNow({marketType: MarketType.STOCK});
+            if (marketInfo.result.isMarketOpen) {
+                await fetchInterestItemsStream(groupId);
+                socketRef.current = openSocket();
+            }
         } finally {
             setItemsLoading(false);
             loadingGroupRef.current = null;
         }
+    };
+
+    const openSocket = () => {
+        const socket = new WebSocket("ws://localhost:8080/ws");
+        socket.onmessage = (event) => {
+            const data = JSON.parse(event.data);
+            if (data.trnm === "REAL" && Array.isArray(data.data)) {
+                setItems(prev => prev.map(item => {
+                    const newData = data.data.find((entry: { item: string; values: Record<string, string> }) => entry.item === item.stkCd);
+                    if (newData) {
+                        return {...item, curPrc: newData.values["10"], fluRt: newData.values["12"]};
+                    }
+                    return item;
+                }));
+            }
+        };
+        return socket;
     };
 
     const handleSelectGroup = (group: InterestGroup) => {
@@ -242,6 +339,15 @@ const Interest = () => {
         setGroupOrderDirty(true);
     };
 
+    const handleItemDragEnd = (event: DragEndEvent) => {
+        const {active, over} = event;
+        if (!over || active.id === over.id) return;
+        const oldIndex = items.findIndex(i => i.id === active.id);
+        const newIndex = items.findIndex(i => i.id === over.id);
+        setItems(prev => arrayMove(prev, oldIndex, newIndex));
+        setItemOrderDirty(true);
+    };
+
     const handleSaveGroupOrder = async () => {
         setSavingGroupOrder(true);
         try {
@@ -263,21 +369,43 @@ const Interest = () => {
         }
     };
 
+    const handleSearchKeywordChange = (keyword: string) => {
+        setSearchKeyword(keyword);
+        setAddItemError("");
+        if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
+        if (!keyword.trim()) {
+            setSearchResults([]);
+            return;
+        }
+        searchTimerRef.current = setTimeout(async () => {
+            setSearchLoading(true);
+            try {
+                const data = await fetchStockSearch(keyword.trim());
+                setSearchResults(data.result ?? []);
+            } catch {
+                setSearchResults([]);
+            } finally {
+                setSearchLoading(false);
+            }
+        }, 300);
+    };
+
     const handleAddItem = async () => {
         if (!selectedGroup) return;
-        if (!newItemStkCd.trim() || !newItemStkNm.trim()) {
-            setAddItemError("종목코드와 종목명을 모두 입력해주세요.");
+        if (!selectedStock) {
+            setAddItemError("종목을 선택해주세요.");
             return;
         }
         try {
             const res = await addInterestItem(selectedGroup.id, {
-                stkCd: newItemStkCd.trim(),
-                stkNm: newItemStkNm.trim(),
+                stkCd: selectedStock.stkCd,
+                stkNm: selectedStock.stkNm,
             });
             setItems(prev => [...prev, res.result]);
             setAddItemOpen(false);
-            setNewItemStkCd("");
-            setNewItemStkNm("");
+            setSearchKeyword("");
+            setSearchResults([]);
+            setSelectedStock(null);
             setAddItemError("");
         } catch {
             setAddItemError("이미 추가된 종목이거나 오류가 발생했습니다.");
@@ -291,39 +419,47 @@ const Interest = () => {
     };
 
     const columns: GridColDef[] = [
+        {
+            field: "__drag__",
+            headerName: "",
+            width: 40,
+            sortable: false,
+            disableColumnMenu: true,
+            renderCell: () => <DragHandleCell/>,
+        },
         {field: "stkNm", headerName: "주식명", flex: 1.5, minWidth: 140},
         {
-            field: 'fluRt',
-            headerName: '등락률',
+            field: "fluRt",
+            headerName: "등락률",
             flex: 0.5,
             minWidth: 100,
-            renderCell: (params) => renderChip(params.value as number),
+            renderCell: (params) => renderChip(params.value as string),
         },
         {
-            field: 'curPrc',
-            headerName: '현재가',
+            field: "curPrc",
+            headerName: "현재가",
             flex: 1,
             minWidth: 100,
-            valueFormatter: (param: number) => {
-                return Number(param).toLocaleString().replace(/^[+-]/, '')
-            }
+            valueFormatter: (param: string) =>
+                param ? Number(param).toLocaleString().replace(/^[+-]/, "") : "-",
         },
         {
             field: "actions",
             type: "actions",
             headerName: "",
             width: 48,
-            renderCell: (params: GridRenderCellParams) => (
-                <GridActionsCell {...params}>
-                    <GridActionsCellItem
-                        icon={<DeleteOutlineIcon fontSize="small"/>}
-                        label="삭제"
-                        color="error"
-                        sx={{width: 26, height: 26}}
-                        onClick={() => handleDeleteItem(params.row.id)}
-                    />
-                </GridActionsCell>
-            ),
+            getActions: (params) => [
+                <GridActionsCellItem
+                    icon={<DeleteOutlineIcon fontSize="small"/>}
+                    label="삭제"
+                    color="error"
+                    sx={{width: 26, height: 26}}
+                    onClick={(e) => {
+                        e.stopPropagation();
+                        handleDeleteItem(params.row.id);
+                    }}
+                />,
+            ],
         },
     ];
 
@@ -365,9 +501,7 @@ const Interest = () => {
                             bgcolor: "action.hover",
                         }}
                     >
-                        <Typography variant="body2" fontWeight={600}>
-                            그룹
-                        </Typography>
+                        <Typography variant="body2" fontWeight={600}>그룹</Typography>
                         <Stack direction="row" sx={{gap: 0.5, alignItems: "center"}}>
                             {groupOrderDirty && (
                                 <Button
@@ -438,11 +572,7 @@ const Interest = () => {
                                 {selectedGroup ? selectedGroup.groupNm : "그룹을 선택하세요"}
                             </Typography>
                             {selectedGroup && (
-                                <Chip
-                                    label={`${items.length}종목`}
-                                    size="small"
-                                    variant="outlined"
-                                />
+                                <Chip label={`${items.length}종목`} size="small" variant="outlined"/>
                             )}
                         </Stack>
                         <Stack direction="row" sx={{gap: 1, alignItems: "center"}}>
@@ -463,8 +593,9 @@ const Interest = () => {
                                     size="small"
                                     startIcon={<AddIcon/>}
                                     onClick={() => {
-                                        setNewItemStkCd("");
-                                        setNewItemStkNm("");
+                                        setSearchKeyword("");
+                                        setSearchResults([]);
+                                        setSelectedStock(null);
                                         setAddItemError("");
                                         setAddItemOpen(true);
                                     }}
@@ -492,52 +623,41 @@ const Interest = () => {
                             </Typography>
                         </Box>
                     ) : (
-                        <DataGridPro
-                            rowReordering
-                            onRowOrderChange={(params) => {
-                                setItems(prev => arrayMove(prev, params.oldIndex, params.targetIndex));
-                                setItemOrderDirty(true);
-                            }}
-                            rows={rows}
-                            columns={columns}
-                            getRowClassName={(params) =>
-                                params.indexRelativeToCurrentPage % 2 === 0 ? 'even' : 'odd'
-                            }
-                            initialState={{
-                                pagination: {paginationModel: {pageSize: 20}},
-                            }}
-                            pageSizeOptions={[10, 20, 50]}
-                            disableColumnResize
-                            density="compact"
-                            loading={itemsLoading}
-                            sx={{"& .MuiDataGrid-cell[data-field='actions']": {padding: 0}}}
-                            slotProps={{
-                                filterPanel: {
-                                    filterFormProps: {
-                                        logicOperatorInputProps: {
-                                            variant: 'outlined',
-                                            size: 'small',
-                                        },
-                                        columnInputProps: {
-                                            variant: 'outlined',
-                                            size: 'small',
-                                            sx: {mt: 'auto'},
-                                        },
-                                        operatorInputProps: {
-                                            variant: 'outlined',
-                                            size: 'small',
-                                            sx: {mt: 'auto'},
-                                        },
-                                        valueInputProps: {
-                                            InputComponentProps: {
-                                                variant: 'outlined',
-                                                size: 'small',
+                        <DndContext sensors={sensors} onDragEnd={handleItemDragEnd}>
+                            <SortableContext items={items.map(i => i.id)} strategy={verticalListSortingStrategy}>
+                                <DataGrid
+                                    rows={rows}
+                                    columns={columns}
+                                    getRowClassName={(params) =>
+                                        params.indexRelativeToCurrentPage % 2 === 0 ? "even" : "odd"
+                                    }
+                                    initialState={{
+                                        pagination: {paginationModel: {pageSize: 20}},
+                                    }}
+                                    pageSizeOptions={[10, 20, 50]}
+                                    disableColumnResize
+                                    density="compact"
+                                    loading={itemsLoading}
+                                    onRowClick={(params) => navigate(`/stock/detail/${params.row.stkCd}`)}
+                                    slots={{row: DraggableRow}}
+                                    sx={{
+                                        cursor: "pointer",
+                                        "& .MuiDataGrid-cell[data-field='actions']": {padding: 0},
+                                        "& .MuiDataGrid-cell[data-field='__drag__']": {padding: 0},
+                                    }}
+                                    slotProps={{
+                                        filterPanel: {
+                                            filterFormProps: {
+                                                logicOperatorInputProps: {variant: "outlined", size: "small"},
+                                                columnInputProps: {variant: "outlined", size: "small", sx: {mt: "auto"}},
+                                                operatorInputProps: {variant: "outlined", size: "small", sx: {mt: "auto"}},
+                                                valueInputProps: {InputComponentProps: {variant: "outlined", size: "small"}},
                                             },
                                         },
-                                    },
-                                },
-                            }}
-                        />
+                                    }}
+                                />
+                            </SortableContext>
+                        </DndContext>
                     )}
                 </Box>
             </Stack>
@@ -548,18 +668,17 @@ const Interest = () => {
                 open={Boolean(groupMenu)}
                 onClose={() => setGroupMenu(null)}
             >
-                <MenuItem
-                    onClick={() => {
-                        setEditGroupName(groupMenu!.group.groupNm);
-                        setEditGroupOpen(true);
-                    }}
-                >
+                <MenuItem onClick={() => {
+                    setEditGroupName(groupMenu!.group.groupNm);
+                    setEditGroupOpen(true);
+                    setGroupMenu(null);
+                }}>
                     이름 변경
                 </MenuItem>
-                <MenuItem
-                    sx={{color: "error.main"}}
-                    onClick={() => setDeleteGroupOpen(true)}
-                >
+                <MenuItem sx={{color: "error.main"}} onClick={() => {
+                    setDeleteGroupOpen(true)
+                    setGroupMenu(null);
+                }}>
                     그룹 삭제
                 </MenuItem>
             </Menu>
@@ -569,9 +688,7 @@ const Interest = () => {
                 <DialogTitle>그룹 추가</DialogTitle>
                 <DialogContent>
                     <TextField
-                        autoFocus
-                        fullWidth
-                        label="그룹명"
+                        autoFocus fullWidth label="그룹명"
                         value={newGroupName}
                         onChange={e => setNewGroupName(e.target.value)}
                         onKeyDown={e => e.key === "Enter" && !e.nativeEvent.isComposing && handleAddGroup()}
@@ -581,9 +698,7 @@ const Interest = () => {
                 </DialogContent>
                 <DialogActions>
                     <Button onClick={() => setAddGroupOpen(false)}>취소</Button>
-                    <Button variant="contained" onClick={handleAddGroup} disabled={!newGroupName.trim()}>
-                        추가
-                    </Button>
+                    <Button onClick={handleAddGroup} disabled={!newGroupName.trim()}>추가</Button>
                 </DialogActions>
             </Dialog>
 
@@ -592,9 +707,7 @@ const Interest = () => {
                 <DialogTitle>그룹 이름 변경</DialogTitle>
                 <DialogContent>
                     <TextField
-                        autoFocus
-                        fullWidth
-                        label="그룹명"
+                        autoFocus fullWidth label="그룹명"
                         value={editGroupName}
                         onChange={e => setEditGroupName(e.target.value)}
                         onKeyDown={e => e.key === "Enter" && !e.nativeEvent.isComposing && handleEditGroup()}
@@ -604,9 +717,7 @@ const Interest = () => {
                 </DialogContent>
                 <DialogActions>
                     <Button onClick={() => setEditGroupOpen(false)}>취소</Button>
-                    <Button variant="contained" onClick={handleEditGroup} disabled={!editGroupName.trim()}>
-                        저장
-                    </Button>
+                    <Button onClick={handleEditGroup} disabled={!editGroupName.trim()}>저장</Button>
                 </DialogActions>
             </Dialog>
 
@@ -622,9 +733,7 @@ const Interest = () => {
                 </DialogContent>
                 <DialogActions>
                     <Button onClick={() => setDeleteGroupOpen(false)}>취소</Button>
-                    <Button variant="contained" color="error" onClick={handleDeleteGroup}>
-                        삭제
-                    </Button>
+                    <Button color="error" onClick={handleDeleteGroup}>삭제</Button>
                 </DialogActions>
             </Dialog>
 
@@ -632,44 +741,64 @@ const Interest = () => {
             <Dialog open={addItemOpen} onClose={() => setAddItemOpen(false)} maxWidth="xs" fullWidth>
                 <DialogTitle>종목 추가</DialogTitle>
                 <DialogContent>
-                    <Stack sx={{gap: 2, mt: 1}}>
-                        <TextField
-                            autoFocus
-                            fullWidth
-                            label="종목코드"
-                            placeholder="예) 005930"
-                            value={newItemStkCd}
-                            onChange={e => {
-                                setNewItemStkCd(e.target.value);
+                    <Box sx={{mt: 1}}>
+                        <Autocomplete
+                            options={searchResults}
+                            getOptionLabel={(option) => `${option.stkNm} (${option.stkCd})`}
+                            filterOptions={(x) => x}
+                            loading={searchLoading}
+                            value={selectedStock}
+                            inputValue={searchKeyword}
+                            onInputChange={(_, value) => handleSearchKeywordChange(value)}
+                            onChange={(_, value) => {
+                                setSelectedStock(value);
                                 setAddItemError("");
                             }}
-                            slotProps={{htmlInput: {maxLength: 20}}}
-                        />
-                        <TextField
-                            fullWidth
-                            label="종목명"
-                            placeholder="예) 삼성전자"
-                            value={newItemStkNm}
-                            onChange={e => {
-                                setNewItemStkNm(e.target.value);
-                                setAddItemError("");
+                            noOptionsText={searchKeyword ? "검색 결과 없음" : "종목명을 입력하세요"}
+                            forcePopupIcon={false}
+                            slotProps={{
+                                clearIndicator: {size: "small", sx: {padding: "1px", "& svg": {fontSize: "16px"}}},
                             }}
-                            onKeyDown={e => e.key === "Enter" && !e.nativeEvent.isComposing && handleAddItem()}
-                            slotProps={{htmlInput: {maxLength: 50}}}
-                            error={Boolean(addItemError)}
-                            helperText={addItemError}
+                            renderOption={(props, option) => (
+                                <Box component="li" {...props} key={`${option.stkCd}-${option.marketName}`}>
+                                    <Stack direction="row" sx={{width: "100%", justifyContent: "space-between", alignItems: "center", gap: 1}}>
+                                        <Box>
+                                            <Typography variant="body2">{option.stkNm}</Typography>
+                                            <Typography variant="caption" color="text.secondary">{option.stkCd}</Typography>
+                                        </Box>
+                                        <Typography variant="caption" color="text.secondary" sx={{flexShrink: 0}}>
+                                            {option.marketName}
+                                        </Typography>
+                                    </Stack>
+                                </Box>
+                            )}
+                            renderInput={(params) => (
+                                <TextField
+                                    {...params}
+                                    autoFocus
+                                    label="종목 검색"
+                                    placeholder="종목명을 입력하세요"
+                                    error={Boolean(addItemError)}
+                                    helperText={addItemError}
+                                    slotProps={{
+                                        input: {
+                                            ...params.InputProps,
+                                            endAdornment: (
+                                                <>
+                                                    {searchLoading ? <CircularProgress size={16}/> : null}
+                                                    {params.InputProps.endAdornment}
+                                                </>
+                                            ),
+                                        }
+                                    }}
+                                />
+                            )}
                         />
-                    </Stack>
+                    </Box>
                 </DialogContent>
                 <DialogActions>
                     <Button onClick={() => setAddItemOpen(false)}>취소</Button>
-                    <Button
-                        variant="contained"
-                        onClick={handleAddItem}
-                        disabled={!newItemStkCd.trim() || !newItemStkNm.trim()}
-                    >
-                        추가
-                    </Button>
+                    <Button onClick={handleAddItem} disabled={!selectedStock}>추가</Button>
                 </DialogActions>
             </Dialog>
         </Box>

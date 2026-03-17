@@ -281,8 +281,8 @@ const StockDetail = () => {
             });
 
             setInfo({
-                marketName: stockInfo.marketCode === '0' ? '코스피' : '코스닥',
-                upName: stockInfo.upName,
+                marketName: stockInfo.marketName || '-',
+                upName: stockInfo.upName || '-',
                 trdeQty: Number(stockInfo.trdeQty),
                 trdePrica: Number(stockInfo.trdePrica.substring(0, 7)),
                 openPric: Number(stockInfo.openPric.replace(/^[+-]/, '')),

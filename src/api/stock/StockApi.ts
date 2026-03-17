@@ -15,3 +15,8 @@ export const fetchStockStream = async (req: StockStreamReq) => {
     const res = await api.post(`/stock/stream`, req);
     return res.data;
 }
+
+export const fetchStockSearch = async (keyword: string) => {
+    const res = await api.get(`/stock/search`, {params: {keyword}});
+    return res.data;
+}

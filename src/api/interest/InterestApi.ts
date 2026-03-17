@@ -45,3 +45,8 @@ export const reorderInterestItems = async (groupId: number, req: ReorderReq) => 
     const res = await api.put(`/interest/groups/${groupId}/items/reorder`, req);
     return res.data;
 };
+
+export const fetchInterestItemsStream = async (groupId: number) => {
+    const res = await api.post(`/interest/groups/${groupId}/items/stream`);
+    return res.data;
+};
