@@ -22,9 +22,7 @@ const RecommendList = () => {
     const marketTimer = useRef<number>(0);
 
     useEffect(() => {
-        let chartTimeout: ReturnType<typeof setTimeout>;
         let socketTimeout: ReturnType<typeof setTimeout>;
-        let interval: ReturnType<typeof setInterval>;
         let socket: WebSocket;
 
         (async () => {
@@ -34,9 +32,6 @@ const RecommendList = () => {
             }
 
             const marketInfo = await timeNow();
-
-            const now = Date.now() + chartTimer.current;
-            const waitTime = 60_000 - (now % 60_000);
 
             if(marketInfo.isMarketOpen) {
                 await recommendListStream(recommendListStreamReq);
@@ -52,20 +47,11 @@ const RecommendList = () => {
                     }
                 }, marketTimer.current + 200);
             }
-
-            chartTimeout = setTimeout(() => {
-                recommendList();
-                interval = setInterval(() => {
-                    recommendList();
-                }, (60 * 1000));
-            }, waitTime + 200);
         })();
 
         return () => {
             socket?.close();
             clearInterval(socketTimeout);
-            clearTimeout(chartTimeout);
-            clearInterval(interval);
         }
     }, []);
 
@@ -73,7 +59,7 @@ const RecommendList = () => {
         try {
             const startTime = Date.now();
             const data = await fetchTimeNow({
-                marketType: MarketType.INDEX
+                marketType: MarketType.STOCK
             });
 
             if(data.code !== "0000") {
@@ -82,7 +68,7 @@ const RecommendList = () => {
 
             const { time, isMarketOpen, startMarketTime, marketType } = data.result
 
-            if(marketType !== MarketType.INDEX) {
+            if(marketType !== MarketType.STOCK) {
                 throw new Error(data.msg);
             }
 
@@ -109,27 +95,25 @@ const RecommendList = () => {
         try {
             const data = await fetchRecommendList();
 
-            console.log(data);
-
             const { recommendList, avoidList } = data.result;
 
             const newRecommendDataList: SectCardProps[] = recommendList.map((recommend: RecommendListItem) => {
                 return {
                     id: recommend.stkCd,
                     title: recommend.stkNm,
-                    value: recommend.curPrc.replace(/^[+-]/, ''),
+                    value: Number(recommend.curPrc.replace(/^[+-]/, '')).toLocaleString(),
                     fluRt: recommend.fluRt,
                     trend: trendColor(recommend.preSig)
                 }
             });
 
-            const newAvoidDataList: SectCardProps[] = avoidList.map((recommend: RecommendListItem) => {
+            const newAvoidDataList: SectCardProps[] = avoidList.map((avoid: RecommendListItem) => {
                 return {
-                    id: recommend.stkCd,
-                    title: recommend.stkNm,
-                    value: recommend.curPrc.replace(/^[+-]/, ''),
-                    fluRt: recommend.fluRt,
-                    trend: trendColor(recommend.preSig)
+                    id: avoid.stkCd,
+                    title: avoid.stkNm,
+                    value: Number(avoid.curPrc.replace(/^[+-]/, '')).toLocaleString(),
+                    fluRt: avoid.fluRt,
+                    trend: trendColor(avoid.preSig)
                 }
             });
 
