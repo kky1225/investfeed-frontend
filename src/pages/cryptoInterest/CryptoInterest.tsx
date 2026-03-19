@@ -31,36 +31,33 @@ import {arrayMove, SortableContext, useSortable, verticalListSortingStrategy} fr
 import {CSS} from "@dnd-kit/utilities";
 import {useNavigate} from "react-router-dom";
 import {
-    addInterestItem,
-    createInterestGroup,
-    deleteInterestGroup,
-    deleteInterestItem,
-    fetchInterestGroups,
-    fetchInterestItems,
-    fetchInterestItemsStream,
-    reorderInterestGroups,
-    reorderInterestItems,
-    updateInterestGroup,
-} from "../../api/interest/InterestApi.ts";
-import {InterestGroup, InterestItem} from "../../type/InterestType.ts";
-import {renderChip} from "../../components/CustomRender.tsx";
-import {fetchTimeNow} from "../../api/time/TimeApi.ts";
-import {MarketType} from "../../type/timeType.ts";
-import {fetchStockSearch} from "../../api/stock/StockApi.ts";
+    addCryptoInterestItem,
+    createCryptoInterestGroup,
+    deleteCryptoInterestGroup,
+    deleteCryptoInterestItem,
+    fetchCryptoInterestGroups,
+    fetchCryptoInterestItems,
+    fetchCryptoInterestItemsStream,
+    reorderCryptoInterestGroups,
+    reorderCryptoInterestItems,
+    updateCryptoInterestGroup,
+} from "../../api/cryptoInterest/CryptoInterestApi.ts";
+import {CryptoInterestGroup, CryptoInterestItem} from "../../type/CryptoInterestType.ts";
+import {fetchCryptoSearch} from "../../api/crypto/CryptoApi.ts";
 
-interface StockSearchItem {
-    stkCd: string;
-    stkNm: string;
-    marketName: string;
+interface CryptoSearchItem {
+    market: string;
+    koreanName: string;
+    englishName: string;
 }
 
 interface GroupMenuState {
     anchorEl: HTMLElement;
-    group: InterestGroup;
+    group: CryptoInterestGroup;
 }
 
 interface SortableGroupItemProps {
-    group: InterestGroup;
+    group: CryptoInterestGroup;
     selected: boolean;
     onSelect: () => void;
     onMenuOpen: (e: React.MouseEvent<HTMLButtonElement>) => void;
@@ -181,12 +178,12 @@ const DraggableRow = React.forwardRef<HTMLDivElement, GridRowProps>((props, _ref
     );
 });
 
-const Interest = () => {
+const CryptoInterest = () => {
     const navigate = useNavigate();
 
-    const [groups, setGroups] = useState<InterestGroup[]>([]);
-    const [selectedGroup, setSelectedGroup] = useState<InterestGroup | null>(null);
-    const [items, setItems] = useState<InterestItem[]>([]);
+    const [groups, setGroups] = useState<CryptoInterestGroup[]>([]);
+    const [selectedGroup, setSelectedGroup] = useState<CryptoInterestGroup | null>(null);
+    const [items, setItems] = useState<CryptoInterestItem[]>([]);
     const [groupsLoading, setGroupsLoading] = useState(false);
     const [itemsLoading, setItemsLoading] = useState(false);
 
@@ -207,16 +204,15 @@ const Interest = () => {
 
     const [addItemOpen, setAddItemOpen] = useState(false);
     const [searchKeyword, setSearchKeyword] = useState("");
-    const [searchResults, setSearchResults] = useState<StockSearchItem[]>([]);
+    const [searchResults, setSearchResults] = useState<CryptoSearchItem[]>([]);
     const [searchLoading, setSearchLoading] = useState(false);
-    const [selectedStock, setSelectedStock] = useState<StockSearchItem | null>(null);
+    const [selectedCrypto, setSelectedCrypto] = useState<CryptoSearchItem | null>(null);
     const [addItemError, setAddItemError] = useState("");
     const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
     const loadingGroupRef = useRef<number | null>(null);
     const socketRef = useRef<WebSocket | null>(null);
 
-    // 클릭과 드래그를 구분하기 위해 distance: 5 적용
     const sensors = useSensors(
         useSensor(PointerSensor, {activationConstraint: {distance: 5}})
     );
@@ -232,8 +228,8 @@ const Interest = () => {
         setGroupsLoading(true);
         setGroupOrderDirty(false);
         try {
-            const data = await fetchInterestGroups();
-            const groupList: InterestGroup[] = data.result ?? [];
+            const data = await fetchCryptoInterestGroups();
+            const groupList: CryptoInterestGroup[] = data.result ?? [];
             setGroups(groupList);
             if (groupList.length > 0) {
                 setSelectedGroup(groupList[0]);
@@ -250,15 +246,13 @@ const Interest = () => {
         setItemsLoading(true);
         setItemOrderDirty(false);
         try {
-            const data = await fetchInterestItems(groupId);
+            const data = await fetchCryptoInterestItems(groupId);
             setItems(data.result ?? []);
 
+            // 암호화폐는 24시간 운영이므로 시장 오픈 체크 불필요
             socketRef.current?.close();
-            const marketInfo = await fetchTimeNow({marketType: MarketType.STOCK});
-            if (marketInfo.result.isMarketOpen) {
-                await fetchInterestItemsStream(groupId);
-                socketRef.current = openSocket();
-            }
+            await fetchCryptoInterestItemsStream(groupId);
+            socketRef.current = openSocket();
         } finally {
             setItemsLoading(false);
             loadingGroupRef.current = null;
@@ -269,11 +263,16 @@ const Interest = () => {
         const socket = new WebSocket("ws://localhost:8080/ws");
         socket.onmessage = (event) => {
             const data = JSON.parse(event.data);
-            if (data.trnm === "REAL" && Array.isArray(data.data)) {
+            if (data.type === "CRYPTO_TICKER" && data.data) {
+                const ticker = data.data;
                 setItems(prev => prev.map(item => {
-                    const newData = data.data.find((entry: { item: string; values: Record<string, string> }) => entry.item === item.stkCd);
-                    if (newData) {
-                        return {...item, curPrc: newData.values["10"], fluRt: newData.values["12"]};
+                    if (item.market === ticker.market) {
+                        return {
+                            ...item,
+                            tradePrice: ticker.tradePrice,
+                            signedChangeRate: ticker.signedChangeRate,
+                            change: ticker.change,
+                        };
                     }
                     return item;
                 }));
@@ -282,7 +281,7 @@ const Interest = () => {
         return socket;
     };
 
-    const handleSelectGroup = (group: InterestGroup) => {
+    const handleSelectGroup = (group: CryptoInterestGroup) => {
         setSelectedGroup(group);
         setItems([]);
         socketRef.current?.close();
@@ -292,8 +291,8 @@ const Interest = () => {
 
     const handleAddGroup = async () => {
         if (!newGroupName.trim()) return;
-        const res = await createInterestGroup({groupNm: newGroupName.trim()});
-        const created: InterestGroup = res.result;
+        const res = await createCryptoInterestGroup({groupNm: newGroupName.trim()});
+        const created: CryptoInterestGroup = res.result;
         setGroups(prev => [...prev, created]);
         setAddGroupOpen(false);
         setNewGroupName("");
@@ -303,7 +302,7 @@ const Interest = () => {
 
     const handleEditGroup = async () => {
         if (!editGroupName.trim() || !groupMenu) return;
-        await updateInterestGroup(groupMenu.group.id, {groupNm: editGroupName.trim()});
+        await updateCryptoInterestGroup(groupMenu.group.id, {groupNm: editGroupName.trim()});
         setGroups(prev =>
             prev.map(g => g.id === groupMenu.group.id ? {...g, groupNm: editGroupName.trim()} : g)
         );
@@ -316,7 +315,7 @@ const Interest = () => {
 
     const handleDeleteGroup = async () => {
         if (!groupMenu) return;
-        await deleteInterestGroup(groupMenu.group.id);
+        await deleteCryptoInterestGroup(groupMenu.group.id);
         const newGroups = groups.filter(g => g.id !== groupMenu.group.id);
         setGroups(newGroups);
         if (selectedGroup?.id === groupMenu.group.id) {
@@ -354,7 +353,7 @@ const Interest = () => {
     const handleSaveGroupOrder = async () => {
         setSavingGroupOrder(true);
         try {
-            await reorderInterestGroups({orderedIds: groups.map(g => g.id)});
+            await reorderCryptoInterestGroups({orderedIds: groups.map(g => g.id)});
             setGroupOrderDirty(false);
         } finally {
             setSavingGroupOrder(false);
@@ -365,7 +364,7 @@ const Interest = () => {
         if (!selectedGroup) return;
         setSavingItemOrder(true);
         try {
-            await reorderInterestItems(selectedGroup.id, {orderedIds: items.map(i => i.id)});
+            await reorderCryptoInterestItems(selectedGroup.id, {orderedIds: items.map(i => i.id)});
             setItemOrderDirty(false);
         } finally {
             setSavingItemOrder(false);
@@ -383,7 +382,7 @@ const Interest = () => {
         searchTimerRef.current = setTimeout(async () => {
             setSearchLoading(true);
             try {
-                const data = await fetchStockSearch(keyword.trim());
+                const data = await fetchCryptoSearch(keyword.trim());
                 setSearchResults(data.result ?? []);
             } catch {
                 setSearchResults([]);
@@ -395,30 +394,36 @@ const Interest = () => {
 
     const handleAddItem = async () => {
         if (!selectedGroup) return;
-        if (!selectedStock) {
-            setAddItemError("종목을 선택해주세요.");
+        if (!selectedCrypto) {
+            setAddItemError("코인을 선택해주세요.");
             return;
         }
         try {
-            await addInterestItem(selectedGroup.id, {
-                stkCd: selectedStock.stkCd,
-                stkNm: selectedStock.stkNm,
+            await addCryptoInterestItem(selectedGroup.id, {
+                market: selectedCrypto.market,
+                koreanName: selectedCrypto.koreanName,
             });
             await loadItems(selectedGroup.id);
             setAddItemOpen(false);
             setSearchKeyword("");
             setSearchResults([]);
-            setSelectedStock(null);
+            setSelectedCrypto(null);
             setAddItemError("");
         } catch {
-            setAddItemError("이미 추가된 종목이거나 오류가 발생했습니다.");
+            setAddItemError("이미 추가된 코인이거나 오류가 발생했습니다.");
         }
     };
 
     const handleDeleteItem = async (itemId: number) => {
         if (!selectedGroup) return;
-        await deleteInterestItem(selectedGroup.id, itemId);
+        await deleteCryptoInterestItem(selectedGroup.id, itemId);
         setItems(prev => prev.filter(i => i.id !== itemId));
+    };
+
+    const trendColor = (change: string) => {
+        if (change === 'RISE') return 'error' as const;
+        if (change === 'FALL') return 'info' as const;
+        return 'default' as const;
     };
 
     const columns: GridColDef[] = [
@@ -430,21 +435,27 @@ const Interest = () => {
             disableColumnMenu: true,
             renderCell: () => <DragHandleCell/>,
         },
-        {field: "stkNm", headerName: "주식명", flex: 1.5, minWidth: 140},
+        {field: "koreanName", headerName: "코인명", flex: 1.5, minWidth: 140},
         {
-            field: "fluRt",
+            field: "signedChangeRate",
             headerName: "등락률",
             flex: 0.5,
             minWidth: 100,
-            renderCell: (params) => renderChip(params.value as string),
+            renderCell: (params) => {
+                const rate = params.row.signedChangeRate;
+                const change = params.row.change;
+                if (rate == null) return "-";
+                const formatted = `${(rate * 100).toFixed(2)}%`;
+                return <Chip label={formatted} size="small" color={trendColor(change)} sx={{fontWeight: 600}}/>;
+            },
         },
         {
-            field: "curPrc",
+            field: "tradePrice",
             headerName: "현재가",
             flex: 1,
             minWidth: 100,
-            valueFormatter: (param: string) =>
-                param ? Number(param).toLocaleString().replace(/^[+-]/, "") : "-",
+            valueFormatter: (param: number) =>
+                param ? param.toLocaleString() : "-",
         },
         {
             field: "actions",
@@ -468,16 +479,17 @@ const Interest = () => {
 
     const rows = items.map(item => ({
         id: item.id,
-        stkNm: item.stkNm,
-        stkCd: item.stkCd,
-        curPrc: item.curPrc,
-        fluRt: item.fluRt,
+        market: item.market,
+        koreanName: item.koreanName,
+        tradePrice: item.tradePrice,
+        signedChangeRate: item.signedChangeRate,
+        change: item.change,
     }));
 
     return (
         <Box sx={{width: "100%", maxWidth: {sm: "100%", md: "1700px"}}}>
             <Typography component="h2" variant="h6" sx={{mb: 2}}>
-                관심 종목
+                암호화폐 관심 종목
             </Typography>
 
             <Stack direction="row" sx={{gap: 2, alignItems: "flex-start"}}>
@@ -564,7 +576,7 @@ const Interest = () => {
                     )}
                 </Box>
 
-                {/* 종목 패널 */}
+                {/* 코인 패널 */}
                 <Box sx={{flex: 1, minWidth: 0}}>
                     <Stack
                         direction="row"
@@ -575,7 +587,7 @@ const Interest = () => {
                                 {selectedGroup ? selectedGroup.groupNm : "그룹을 선택하세요"}
                             </Typography>
                             {selectedGroup && (
-                                <Chip label={`${items.length}종목`} size="small" variant="outlined"/>
+                                <Chip label={`${items.length}코인`} size="small" variant="outlined"/>
                             )}
                         </Stack>
                         <Stack direction="row" sx={{gap: 1, alignItems: "center"}}>
@@ -598,12 +610,12 @@ const Interest = () => {
                                     onClick={() => {
                                         setSearchKeyword("");
                                         setSearchResults([]);
-                                        setSelectedStock(null);
+                                        setSelectedCrypto(null);
                                         setAddItemError("");
                                         setAddItemOpen(true);
                                     }}
                                 >
-                                    종목 추가
+                                    코인 추가
                                 </Button>
                             )}
                         </Stack>
@@ -641,7 +653,7 @@ const Interest = () => {
                                     disableColumnResize
                                     density="compact"
                                     loading={itemsLoading}
-                                    onRowClick={(params) => navigate(`/stock/detail/${params.row.stkCd}`)}
+                                    onRowClick={(params) => navigate(`/crypto/detail/${params.row.market}`)}
                                     slots={{row: DraggableRow}}
                                     sx={{
                                         cursor: "pointer",
@@ -740,37 +752,37 @@ const Interest = () => {
                 </DialogActions>
             </Dialog>
 
-            {/* 종목 추가 다이얼로그 */}
+            {/* 코인 추가 다이얼로그 */}
             <Dialog open={addItemOpen} onClose={() => setAddItemOpen(false)} maxWidth="xs" fullWidth>
-                <DialogTitle>종목 추가</DialogTitle>
+                <DialogTitle>코인 추가</DialogTitle>
                 <DialogContent>
                     <Box sx={{mt: 1}}>
                         <Autocomplete
                             options={searchResults}
-                            getOptionLabel={(option) => `${option.stkNm} (${option.stkCd})`}
+                            getOptionLabel={(option) => `${option.koreanName} (${option.market})`}
                             filterOptions={(x) => x}
                             loading={searchLoading}
-                            value={selectedStock}
+                            value={selectedCrypto}
                             inputValue={searchKeyword}
                             onInputChange={(_, value) => handleSearchKeywordChange(value)}
                             onChange={(_, value) => {
-                                setSelectedStock(value);
+                                setSelectedCrypto(value);
                                 setAddItemError("");
                             }}
-                            noOptionsText={searchKeyword ? "검색 결과 없음" : "종목명을 입력하세요"}
+                            noOptionsText={searchKeyword ? "검색 결과 없음" : "코인명을 입력하세요"}
                             forcePopupIcon={false}
                             slotProps={{
                                 clearIndicator: {size: "small", sx: {padding: "1px", "& svg": {fontSize: "16px"}}},
                             }}
                             renderOption={(props, option) => (
-                                <Box component="li" {...props} key={`${option.stkCd}-${option.marketName}`}>
+                                <Box component="li" {...props} key={option.market}>
                                     <Stack direction="row" sx={{width: "100%", justifyContent: "space-between", alignItems: "center", gap: 1}}>
                                         <Box>
-                                            <Typography variant="body2">{option.stkNm}</Typography>
-                                            <Typography variant="caption" color="text.secondary">{option.stkCd}</Typography>
+                                            <Typography variant="body2">{option.koreanName}</Typography>
+                                            <Typography variant="caption" color="text.secondary">{option.market}</Typography>
                                         </Box>
                                         <Typography variant="caption" color="text.secondary" sx={{flexShrink: 0}}>
-                                            {option.marketName}
+                                            {option.englishName}
                                         </Typography>
                                     </Stack>
                                 </Box>
@@ -779,8 +791,8 @@ const Interest = () => {
                                 <TextField
                                     {...params}
                                     autoFocus
-                                    label="종목 검색"
-                                    placeholder="종목명을 입력하세요"
+                                    label="코인 검색"
+                                    placeholder="코인명을 입력하세요"
                                     error={Boolean(addItemError)}
                                     helperText={addItemError}
                                     slotProps={{
@@ -801,11 +813,11 @@ const Interest = () => {
                 </DialogContent>
                 <DialogActions>
                     <Button onClick={() => setAddItemOpen(false)}>취소</Button>
-                    <Button onClick={handleAddItem} disabled={!selectedStock}>추가</Button>
+                    <Button onClick={handleAddItem} disabled={!selectedCrypto}>추가</Button>
                 </DialogActions>
             </Dialog>
         </Box>
     );
 };
 
-export default Interest;
+export default CryptoInterest;

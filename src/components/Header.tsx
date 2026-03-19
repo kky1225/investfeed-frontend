@@ -11,19 +11,22 @@ import Box from '@mui/material/Box';
 import CircularProgress from '@mui/material/CircularProgress';
 import SearchRoundedIcon from '@mui/icons-material/SearchRounded';
 import InputAdornment from '@mui/material/InputAdornment';
+import Chip from '@mui/material/Chip';
 import {fetchStockSearch} from '../api/stock/StockApi.ts';
+import {fetchCryptoSearch} from '../api/crypto/CryptoApi.ts';
 import {useNavigate} from 'react-router-dom';
 
-interface StockSearchItem {
-    stkCd: string;
-    stkNm: string;
+interface SearchItem {
+    code: string;
+    name: string;
     marketName: string;
+    category: '주식' | '코인';
 }
 
 export default function Header() {
     const navigate = useNavigate();
     const [searchKeyword, setSearchKeyword] = useState('');
-    const [searchResults, setSearchResults] = useState<StockSearchItem[]>([]);
+    const [searchResults, setSearchResults] = useState<SearchItem[]>([]);
     const [searchLoading, setSearchLoading] = useState(false);
     const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -34,11 +37,30 @@ export default function Header() {
             setSearchResults([]);
             return;
         }
+
         searchTimerRef.current = setTimeout(async () => {
             setSearchLoading(true);
             try {
-                const data = await fetchStockSearch(keyword.trim());
-                setSearchResults(data.result ?? []);
+                const [stockData, cryptoData] = await Promise.all([
+                    fetchStockSearch(keyword.trim()),
+                    fetchCryptoSearch(keyword.trim()),
+                ]);
+
+                const stockResults: SearchItem[] = (stockData.result ?? []).map((s: { stkCd: string; stkNm: string; marketName: string }) => ({
+                    code: s.stkCd,
+                    name: s.stkNm,
+                    marketName: s.marketName,
+                    category: '주식' as const,
+                }));
+
+                const cryptoResults: SearchItem[] = (cryptoData.result ?? []).map((c: { market: string; koreanName: string; englishName: string }) => ({
+                    code: c.market,
+                    name: c.koreanName,
+                    marketName: 'Upbit',
+                    category: '코인' as const,
+                }));
+
+                setSearchResults([...cryptoResults, ...stockResults]);
             } catch {
                 setSearchResults([]);
             } finally {
@@ -47,11 +69,15 @@ export default function Header() {
         }, 300);
     };
 
-    const handleSelect = (_: unknown, value: StockSearchItem | null) => {
+    const handleSelect = (_: unknown, value: SearchItem | null) => {
         if (!value) return;
         setSearchKeyword('');
         setSearchResults([]);
-        navigate(`/stock/detail/${value.stkCd}`);
+        if (value.category === '코인') {
+            navigate(`/crypto/detail/${value.code}`);
+        } else {
+            navigate(`/stock/detail/${value.code}`);
+        }
     };
 
     return (
@@ -70,7 +96,7 @@ export default function Header() {
             <NavbarBreadcrumbs/>
             <Autocomplete
                 options={searchResults}
-                getOptionLabel={(option) => `${option.stkNm} (${option.stkCd})`}
+                getOptionLabel={(option) => `${option.name} (${option.code})`}
                 filterOptions={(x) => x}
                 loading={searchLoading}
                 inputValue={searchKeyword}
@@ -84,12 +110,20 @@ export default function Header() {
                 }}
                 sx={{width: 280}}
                 renderOption={(props, option) => (
-                    <Box component="li" {...props} key={`${option.stkCd}-${option.marketName}`}>
+                    <Box component="li" {...props} key={`${option.category}-${option.code}-${option.marketName}`}>
                         <Stack direction="row" sx={{width: '100%', justifyContent: 'space-between', alignItems: 'center', gap: 1}}>
-                            <Box>
-                                <Typography variant="body2">{option.stkNm}</Typography>
-                                <Typography variant="caption" color="text.secondary">{option.stkCd}</Typography>
-                            </Box>
+                            <Stack direction="row" spacing={1} alignItems="center">
+                                <Chip
+                                    label={option.category}
+                                    size="small"
+                                    color={option.category === '코인' ? 'warning' : 'primary'}
+                                    sx={{ fontSize: '0.65rem', height: 20 }}
+                                />
+                                <Box>
+                                    <Typography variant="body2">{option.name}</Typography>
+                                    <Typography variant="caption" color="text.secondary">{option.code}</Typography>
+                                </Box>
+                            </Stack>
                             <Typography variant="caption" color="text.secondary" sx={{flexShrink: 0}}>
                                 {option.marketName}
                             </Typography>
@@ -100,7 +134,7 @@ export default function Header() {
                     <TextField
                         {...params}
                         size="small"
-                        placeholder="종목 검색"
+                        placeholder="종목/코인 검색"
                         slotProps={{
                             input: {
                                 ...params.InputProps,

@@ -16,6 +16,7 @@ import FavoriteIcon from '@mui/icons-material/Favorite';
 import DiamondIcon from '@mui/icons-material/Diamond';
 import GroupIcon from '@mui/icons-material/Group';
 import RecommendIcon from '@mui/icons-material/Recommend';
+import CurrencyBitcoinIcon from '@mui/icons-material/CurrencyBitcoin';
 import {useLocation, useNavigate} from "react-router-dom";
 import {Fragment, useState} from "react";
 import { Collapse } from "@mui/material";
@@ -41,6 +42,12 @@ const mainListItems = [
         ]
     },
     { id: 12, text: '원자재', icon: <DiamondIcon />, url: '/commodity/list' },
+    { id: 13, text: '암호화폐', icon: <CurrencyBitcoinIcon />,
+        children: [
+            { id: 14, text: '지수', icon: <AnalyticsRoundedIcon />, url: '/crypto/list' },
+            { id: 15, text: '관심 종목', icon: <FavoriteIcon />, url: '/crypto-interest/list' },
+        ]
+    },
 
 
     // { id: 6, text: '투자자별', icon: <GroupIcon />,

@@ -6,7 +6,7 @@ import CardContent from "@mui/material/CardContent";
 import Typography from "@mui/material/Typography";
 import Stack from "@mui/material/Stack";
 import Chip from "@mui/material/Chip";
-import {areaElementClasses} from "@mui/x-charts/LineChart";
+import {lineClasses} from "@mui/x-charts/LineChart";
 import {CardActionArea} from "@mui/material";
 import {useNavigate} from "react-router-dom";
 
@@ -114,7 +114,7 @@ const CommodityLineChart = (
                     margin={{ left:10, right: 20, top: 20, bottom: 20 }}
                     grid={{ horizontal: true }}
                     sx={{
-                        [`& .${areaElementClasses.root}`]: {
+                        [`& .${lineClasses.area}`]: {
                             fill: 'url(#switch-color-id-1)',
                             filter: 'none',
                         },
