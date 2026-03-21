@@ -9,12 +9,14 @@ import Chip from "@mui/material/Chip";
 import {lineClasses} from "@mui/x-charts/LineChart";
 import {CardActionArea} from "@mui/material";
 import {useNavigate} from "react-router-dom";
+import {renderChangeAmount} from "./CustomRender.tsx";
 
 export interface CryptoLineChartProps {
     market: string,
     title: string,
     value: string,
     changeRate: string,
+    changePrice: number,
     trend: 'up' | 'down' | 'neutral',
     interval: string,
     accTradePrice24h: string,
@@ -23,7 +25,7 @@ export interface CryptoLineChartProps {
 }
 
 const CryptoLineChart = (
-    {market, title, value, changeRate, trend, interval, accTradePrice24h, seriesData, dateList}: CryptoLineChartProps,
+    {market, title, value, changeRate, changePrice, trend, interval, accTradePrice24h, seriesData, dateList}: CryptoLineChartProps,
 ) => {
     const theme = useTheme();
     const navigate = useNavigate();
@@ -81,6 +83,7 @@ const CryptoLineChart = (
                             {value}
                         </Typography>
                         <Chip size="small" color={color} label={trendValues[trend]}/>
+                        {renderChangeAmount(changePrice)}
                     </Stack>
                     <Stack
                         direction="row"

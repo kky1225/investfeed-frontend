@@ -1,14 +1,29 @@
+import { MouseEvent, useState } from 'react';
 import Avatar from '@mui/material/Avatar';
-import Button from '@mui/material/Button';
-import Divider from '@mui/material/Divider';
+import Box from '@mui/material/Box';
+import Divider, { dividerClasses } from '@mui/material/Divider';
 import Drawer, { drawerClasses } from '@mui/material/Drawer';
 import Stack from '@mui/material/Stack';
 import Typography from '@mui/material/Typography';
+import Menu from '@mui/material/Menu';
+import MuiMenuItem from '@mui/material/MenuItem';
+import { styled } from '@mui/material/styles';
+import { ListItemText } from '@mui/material';
+import ListItemIcon, { listItemIconClasses } from '@mui/material/ListItemIcon';
+import { listClasses } from '@mui/material/List';
+import { paperClasses } from '@mui/material/Paper';
 import LogoutRoundedIcon from '@mui/icons-material/LogoutRounded';
-import NotificationsRoundedIcon from '@mui/icons-material/NotificationsRounded';
+import MoreVertRoundedIcon from '@mui/icons-material/MoreVertRounded';
 import MenuButton from './MenuButton';
 import MenuContent from './MenuContent';
 import CardAlert from './CardAlert';
+import { useAuth } from '../context/AuthContext';
+import { logout } from '../api/auth/AuthApi';
+import { useNavigate } from 'react-router-dom';
+
+const MenuItem = styled(MuiMenuItem)({
+    margin: '2px 0',
+});
 
 interface SideMenuMobileProps {
     open: boolean | undefined;
@@ -16,6 +31,34 @@ interface SideMenuMobileProps {
 }
 
 export default function SideMenuMobile({ open, toggleDrawer }: SideMenuMobileProps) {
+    const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
+    const menuOpen = Boolean(anchorEl);
+    const { user, clearAuth } = useAuth();
+    const navigate = useNavigate();
+
+    const displayName = user?.nickname ?? user?.loginId ?? '';
+    const displayEmail = user?.email ?? '';
+    const initials = displayName.charAt(0).toUpperCase();
+
+    const handleClick = (event: MouseEvent<HTMLElement>) => {
+        setAnchorEl(event.currentTarget);
+    };
+    const handleClose = () => {
+        setAnchorEl(null);
+    };
+
+    const handleLogout = async () => {
+        handleClose();
+        try {
+            await logout();
+        } catch {
+            // 서버 오류여도 로컬 상태는 초기화
+        } finally {
+            clearAuth();
+            navigate('/login');
+        }
+    };
+
     return (
         <Drawer
             anchor="right"
@@ -35,35 +78,76 @@ export default function SideMenuMobile({ open, toggleDrawer }: SideMenuMobilePro
                     height: '100%',
                 }}
             >
-                <Stack direction="row" sx={{ p: 2, pb: 0, gap: 1 }}>
-                    <Stack
-                        direction="row"
-                        sx={{ gap: 1, alignItems: 'center', flexGrow: 1, p: 1 }}
-                    >
-                        <Avatar
-                            sizes="small"
-                            alt="Riley Carter"
-                            src="/static/images/avatar/7.jpg"
-                            sx={{ width: 24, height: 24 }}
-                        />
-                        <Typography component="p" variant="h6">
-                            Riley Carter
-                        </Typography>
-                    </Stack>
-                    <MenuButton showBadge>
-                        <NotificationsRoundedIcon />
-                    </MenuButton>
-                </Stack>
-                <Divider />
-                <Stack sx={{ flexGrow: 1 }}>
+                <Stack sx={{ flexGrow: 1, overflow: 'auto' }}>
                     <MenuContent />
-                    <Divider />
                 </Stack>
                 <CardAlert />
-                <Stack sx={{ p: 2 }}>
-                    <Button variant="outlined" fullWidth startIcon={<LogoutRoundedIcon />}>
-                        Logout
-                    </Button>
+                <Stack
+                    direction="row"
+                    sx={{
+                        p: 2,
+                        gap: 1,
+                        alignItems: 'center',
+                        borderTop: '1px solid',
+                        borderColor: 'divider',
+                    }}
+                >
+                    <Avatar sizes="small" sx={{ width: 36, height: 36 }}>
+                        {initials}
+                    </Avatar>
+                    <Box sx={{ mr: 'auto' }}>
+                        <Typography variant="body2" sx={{ fontWeight: 500, lineHeight: '16px' }}>
+                            {displayName}
+                        </Typography>
+                        {displayEmail && (
+                            <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+                                {displayEmail}
+                            </Typography>
+                        )}
+                    </Box>
+                    <MenuButton
+                        aria-label="Open menu"
+                        onClick={handleClick}
+                        sx={{ borderColor: 'transparent' }}
+                    >
+                        <MoreVertRoundedIcon />
+                    </MenuButton>
+                    <Menu
+                        anchorEl={anchorEl}
+                        id="mobile-user-menu"
+                        open={menuOpen}
+                        onClose={handleClose}
+                        onClick={handleClose}
+                        transformOrigin={{ horizontal: 'right', vertical: 'bottom' }}
+                        anchorOrigin={{ horizontal: 'right', vertical: 'top' }}
+                        sx={{
+                            [`& .${listClasses.root}`]: {
+                                padding: '4px',
+                            },
+                            [`& .${paperClasses.root}`]: {
+                                padding: 0,
+                            },
+                            [`& .${dividerClasses.root}`]: {
+                                margin: '4px -4px',
+                            },
+                        }}
+                    >
+                        <Divider />
+                        <MenuItem
+                            onClick={handleLogout}
+                            sx={{
+                                [`& .${listItemIconClasses.root}`]: {
+                                    ml: 'auto',
+                                    minWidth: 0,
+                                },
+                            }}
+                        >
+                            <ListItemText>Logout</ListItemText>
+                            <ListItemIcon>
+                                <LogoutRoundedIcon fontSize="small" />
+                            </ListItemIcon>
+                        </MenuItem>
+                    </Menu>
                 </Stack>
             </Stack>
         </Drawer>

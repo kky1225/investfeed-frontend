@@ -12,6 +12,8 @@ import MuiMenuItem from "@mui/material/MenuItem";
 import MenuButton from "./MenuButton.tsx";
 import LogoutRoundedIcon from '@mui/icons-material/LogoutRounded';
 import MoreVertRoundedIcon from '@mui/icons-material/MoreVertRounded';
+import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
+import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import ListItemIcon, { listItemIconClasses } from "@mui/material/ListItemIcon";
 import Divider, { dividerClasses } from "@mui/material/Divider";
 import { ListItemText } from '@mui/material';
@@ -20,19 +22,26 @@ import { paperClasses } from "@mui/material/Paper";
 import { useAuth } from '../context/AuthContext';
 import { logout } from '../api/auth/AuthApi';
 import { useNavigate } from 'react-router-dom';
+import IconButton from '@mui/material/IconButton';
+import Tooltip from '@mui/material/Tooltip';
 
-const drawerWidth = 240;
+const drawerWidthOpen = 240;
+const drawerWidthClosed = 64;
 
-const Drawer = styled(MuiDrawer)({
-    width: drawerWidth,
+const Drawer = styled(MuiDrawer, {
+    shouldForwardProp: (prop) => prop !== 'collapsed',
+})<{ collapsed?: boolean }>(({ collapsed }) => ({
+    width: collapsed ? drawerWidthClosed : drawerWidthOpen,
     flexShrink: 0,
     boxSizing: 'border-box',
-    mt: 10,
+    transition: 'width 0.2s ease-in-out',
     [`& .${drawerClasses.paper}`]: {
-        width: drawerWidth,
+        width: collapsed ? drawerWidthClosed : drawerWidthOpen,
         boxSizing: 'border-box',
+        overflowX: 'hidden',
+        transition: 'width 0.2s ease-in-out',
     },
-});
+}));
 
 const MenuItem = styled(MuiMenuItem)({
     margin: '2px 0',
@@ -40,6 +49,7 @@ const MenuItem = styled(MuiMenuItem)({
 
 export default function SideMenu() {
     const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
+    const [collapsed, setCollapsed] = useState(false);
     const open = Boolean(anchorEl);
     const { user, clearAuth } = useAuth();
     const navigate = useNavigate();
@@ -70,6 +80,7 @@ export default function SideMenu() {
     return (
         <Drawer
             variant="permanent"
+            collapsed={collapsed}
             sx={{
                 display: { xs: 'none', md: 'block' },
                 [`& .${drawerClasses.paper}`]: {
@@ -79,56 +90,81 @@ export default function SideMenu() {
         >
             <Box
                 sx={{
+                    display: 'flex',
+                    justifyContent: collapsed ? 'center' : 'flex-end',
+                    p: 1,
+                }}
+            >
+                <IconButton onClick={() => setCollapsed(!collapsed)} size="small">
+                    {collapsed ? <ChevronRightIcon /> : <ChevronLeftIcon />}
+                </IconButton>
+            </Box>
+            <Box
+                sx={{
                     overflow: 'auto',
                     height: '100%',
                     display: 'flex',
                     flexDirection: 'column',
                 }}
             >
-                <MenuContent />
-                <CardAlert />
+                <MenuContent collapsed={collapsed} />
+                {!collapsed && <CardAlert />}
             </Box>
             <Stack
                 direction="row"
                 sx={{
-                    p: 2,
+                    p: collapsed ? 1 : 2,
                     gap: 1,
                     alignItems: 'center',
+                    justifyContent: collapsed ? 'center' : 'flex-start',
                     borderTop: '1px solid',
                     borderColor: 'divider',
                 }}
             >
-                <Avatar
-                    sizes="small"
-                    sx={{ width: 36, height: 36 }}
-                >
-                    {initials}
-                </Avatar>
-                <Box sx={{ mr: 'auto' }}>
-                    <Typography variant="body2" sx={{ fontWeight: 500, lineHeight: '16px' }}>
-                        {displayName}
-                    </Typography>
-                    {displayEmail && (
-                        <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-                            {displayEmail}
-                        </Typography>
-                    )}
-                </Box>
-                <MenuButton
-                    aria-label="Open menu"
-                    onClick={handleClick}
-                    sx={{ borderColor: 'transparent' }}
-                >
-                    <MoreVertRoundedIcon />
-                </MenuButton>
+                {collapsed ? (
+                    <IconButton onClick={handleClick} sx={{ p: 0 }}>
+                        <Avatar sizes="small" sx={{ width: 36, height: 36, cursor: 'pointer' }}>
+                            {initials}
+                        </Avatar>
+                    </IconButton>
+                ) : (
+                    <>
+                        <Avatar sizes="small" sx={{ width: 36, height: 36 }}>
+                            {initials}
+                        </Avatar>
+                        <Box sx={{ mr: 'auto' }}>
+                            <Typography variant="body2" sx={{ fontWeight: 500, lineHeight: '16px' }}>
+                                {displayName}
+                            </Typography>
+                            {displayEmail && (
+                                <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+                                    {displayEmail}
+                                </Typography>
+                            )}
+                        </Box>
+                        <MenuButton
+                            aria-label="Open menu"
+                            onClick={handleClick}
+                            sx={{ borderColor: 'transparent' }}
+                        >
+                            <MoreVertRoundedIcon />
+                        </MenuButton>
+                    </>
+                )}
                 <Menu
                     anchorEl={anchorEl}
                     id="menu"
                     open={open}
                     onClose={handleClose}
                     onClick={handleClose}
-                    transformOrigin={{ horizontal: 'right', vertical: 'top' }}
-                    anchorOrigin={{ horizontal: 'right', vertical: 'bottom' }}
+                    transformOrigin={collapsed
+                        ? { horizontal: 'left', vertical: 'bottom' }
+                        : { horizontal: 'right', vertical: 'top' }
+                    }
+                    anchorOrigin={collapsed
+                        ? { horizontal: 'right', vertical: 'center' }
+                        : { horizontal: 'right', vertical: 'bottom' }
+                    }
                     sx={{
                         [`& .${listClasses.root}`]: {
                             padding: '4px',
@@ -141,6 +177,18 @@ export default function SideMenu() {
                         },
                     }}
                 >
+                    {collapsed && (
+                        <Box sx={{ px: 2, py: 1 }}>
+                            <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                                {displayName}
+                            </Typography>
+                            {displayEmail && (
+                                <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+                                    {displayEmail}
+                                </Typography>
+                            )}
+                        </Box>
+                    )}
                     <Divider />
                     <MenuItem
                         onClick={handleLogout}

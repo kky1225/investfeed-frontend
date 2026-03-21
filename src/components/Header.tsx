@@ -15,6 +15,8 @@ import Chip from '@mui/material/Chip';
 import {fetchStockSearch} from '../api/stock/StockApi.ts';
 import {fetchCryptoSearch} from '../api/crypto/CryptoApi.ts';
 import {useNavigate} from 'react-router-dom';
+import {useNotification} from '../context/NotificationContext';
+import NotificationPopover from './NotificationPopover';
 
 interface SearchItem {
     code: string;
@@ -25,10 +27,12 @@ interface SearchItem {
 
 export default function Header() {
     const navigate = useNavigate();
+    const {unreadCount} = useNotification();
     const [searchKeyword, setSearchKeyword] = useState('');
     const [searchResults, setSearchResults] = useState<SearchItem[]>([]);
     const [searchLoading, setSearchLoading] = useState(false);
     const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const [notificationAnchorEl, setNotificationAnchorEl] = useState<HTMLElement | null>(null);
 
     const handleSearchKeywordChange = (keyword: string) => {
         setSearchKeyword(keyword);
@@ -116,7 +120,7 @@ export default function Header() {
                                 <Chip
                                     label={option.category}
                                     size="small"
-                                    color={option.category === '코인' ? 'warning' : 'primary'}
+                                    color="default"
                                     sx={{ fontSize: '0.65rem', height: 20 }}
                                 />
                                 <Box>
@@ -155,11 +159,20 @@ export default function Header() {
                 )}
             />
             <Stack direction="row" sx={{gap: 1}}>
-                <MenuButton showBadge aria-label="Open notifications">
+                <MenuButton
+                    showBadge={unreadCount > 0}
+                    aria-label="Open notifications"
+                    onClick={(e) => setNotificationAnchorEl(e.currentTarget)}
+                >
                     <NotificationsRoundedIcon/>
                 </MenuButton>
                 <ColorModeIconDropdown/>
             </Stack>
+            <NotificationPopover
+                anchorEl={notificationAnchorEl}
+                open={Boolean(notificationAnchorEl)}
+                onClose={() => setNotificationAnchorEl(null)}
+            />
         </Stack>
     );
 }

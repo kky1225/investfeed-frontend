@@ -26,6 +26,7 @@ import CheckIcon from "@mui/icons-material/Check";
 import PriorityHighIcon from "@mui/icons-material/PriorityHigh";
 import DoNotDisturbIcon from "@mui/icons-material/DoNotDisturb";
 import {useParams} from "react-router-dom";
+import {renderChangeAmount} from "../../components/CustomRender.tsx";
 import {fetchTimeNow} from "../../api/time/TimeApi.ts";
 import {MarketType} from "../../type/timeType.ts";
 import ProgramBarChart from "../../components/ProgramBarChart.tsx";
@@ -70,6 +71,7 @@ const IndexDetail = () => {
         title: '-',
         value: '-',
         fluRt: '0',
+        predPre: '0',
         openPric: 0,
         interval: '-',
         trend: 'neutral',
@@ -242,6 +244,7 @@ const IndexDetail = () => {
                 title: indexInfo.indsNm,
                 value: Number(indexInfo.curPrc.replace(/^[+-]/, '')).toLocaleString(),
                 fluRt: indexInfo.fluRt,
+                predPre: indexInfo.predPre || '0',
                 openPric: parseFloat(indexInfo.openPric.replace(/^[+-]/, '')),
                 interval: today,
                 trend: trendColor(indexInfo.predPreSig),
@@ -431,6 +434,7 @@ const IndexDetail = () => {
                             ...prev,
                             value: index.value.replace(/^[+-]/, ''),
                             fluRt: index.fluRt,
+                            predPre: index.change || '0',
                             trend: trendColor(index.trend),
                         }));
                     }
@@ -671,13 +675,18 @@ const IndexDetail = () => {
                                         {sectChartData.value}
                                     </Typography>
                                     <Chip size="small" color={color} label={trendValues[sectChartData.trend]} />
+                                    {renderChangeAmount(sectChartData.predPre, '')}
                                 </Stack>
                                 <Typography variant="caption" sx={{ color: 'text.secondary' }}>
                                     {sectChartData.interval}
                                 </Typography>
                             </Stack>
                         </CardContent>
-                        <IndexDetailLineChart {...sectChartData} />
+                        <Box sx={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+                            <Box sx={{ minWidth: 1200 }}>
+                                <IndexDetailLineChart {...sectChartData} />
+                            </Box>
+                        </Box>
                         <Box
                             display="flex"
                             justifyContent="space-between"
@@ -907,7 +916,11 @@ const IndexDetail = () => {
                     </Typography>
                     <Card variant="outlined" sx={{ width: '100%' }}>
                         <CardContent>
-                            <ProgramLineChart seriesData={programChartData} date={programDateData} />
+                            <Box sx={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+                                <Box sx={{ minWidth: 1200 }}>
+                                    <ProgramLineChart seriesData={programChartData} date={programDateData} />
+                                </Box>
+                            </Box>
                         </CardContent>
                     </Card>
                 </Grid>

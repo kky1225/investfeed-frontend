@@ -9,12 +9,14 @@ import Chip from "@mui/material/Chip";
 import {lineClasses} from "@mui/x-charts/LineChart";
 import {CardActionArea} from "@mui/material";
 import {useNavigate} from "react-router-dom";
+import {renderChangeAmount} from "./CustomRender.tsx";
 
 export interface IndexLineChartProps {
     id: string,
     title: string,
     value: string,
     fluRt: string,
+    predPre: string,
     openPric: number,
     interval: string,
     trend: 'up' | 'down' | 'neutral',
@@ -23,7 +25,7 @@ export interface IndexLineChartProps {
 }
 
 const IndexLineChart = (
-    { id, title, value, fluRt, openPric, interval, trend, seriesData, dateList }: IndexLineChartProps,
+    { id, title, value, fluRt, predPre, openPric, interval, trend, seriesData, dateList }: IndexLineChartProps,
 ) => {
     const theme = useTheme();
 
@@ -84,6 +86,7 @@ const IndexLineChart = (
                                 {value}
                             </Typography>
                             <Chip size="small" color={color} label={trendValues[trend]} />
+                            {renderChangeAmount(predPre, '')}
                         </Stack>
                         <Typography variant="caption" sx={{ color: 'text.secondary' }}>
                             {interval}

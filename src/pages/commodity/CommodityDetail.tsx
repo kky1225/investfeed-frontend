@@ -586,7 +586,11 @@ const CommodityDetail = () => {
                                 </Typography>
                             </Stack>
                         </CardContent>
-                        <CommodityDetailLineChart {...commodityChartData} />
+                        <Box sx={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+                            <Box sx={{ minWidth: 1200 }}>
+                                <CommodityDetailLineChart {...commodityChartData} />
+                            </Box>
+                        </Box>
                         <Box
                             display="flex"
                             justifyContent="space-between"

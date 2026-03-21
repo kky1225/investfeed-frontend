@@ -47,7 +47,7 @@ const ProgoramLineChart = (
                 },
             ]}
             series={seriesData}
-            height={250}
+            height={310}
             margin={{ left: 20, right: 20, top: 20, bottom: 20 }}
             grid={{ horizontal: true }}
             sx={{

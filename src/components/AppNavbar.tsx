@@ -173,7 +173,7 @@ export default function AppNavbar() {
                                         <Chip
                                             label={option.category}
                                             size="small"
-                                            color={option.category === '코인' ? 'warning' : 'primary'}
+                                            color="default"
                                             sx={{ fontSize: '0.65rem', height: 20 }}
                                         />
                                         <Box>

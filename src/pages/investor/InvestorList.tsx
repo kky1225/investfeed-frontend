@@ -243,6 +243,7 @@ const InvestorList = () => {
                         code: res.item,
                         value: String(values["10"]).replace(/^[+-]/, ''),
                         fluRt: String(values["12"]),
+                        predPre: String(values["11"]),
                         trend: String(values["25"])
                     });
                 });

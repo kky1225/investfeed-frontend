@@ -147,6 +147,7 @@ const IndexList = () => {
                     title: indexItem.indsNm,
                     value: indexItem.curPrc.replace(/^[+-]/, ''),
                     fluRt: indexItem.fluRt,
+                    predPre: indexItem.predPre || '0',
                     openPric: parseFloat(indexItem.openPric.replace(/^[+-]/, '')),
                     interval: today,
                     trend: trendColor(indexItem.predPreSig),
@@ -198,6 +199,7 @@ const IndexList = () => {
                                 ...item,
                                 value: newData.value.replace(/^[+-]/, ''),
                                 fluRt: newData.fluRt,
+                                predPre: newData.change || '0',
                                 trend: trendColor(newData.trend)
                             };
                         }

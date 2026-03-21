@@ -17,6 +17,7 @@ import CryptoDetailLineChart, {CryptoDetailLineChartProps} from "../../component
 import {fetchCryptoDetail, fetchCryptoDetailStream} from "../../api/crypto/CryptoApi.ts";
 import {CryptoChart, CryptoChartType, CryptoDetailReq} from "../../type/CryptoType.ts";
 import {useParams} from "react-router-dom";
+import {renderChangeAmount} from "../../components/CustomRender.tsx";
 
 interface CryptoTickerData {
     market: string;
@@ -66,6 +67,7 @@ const CryptoDetail = () => {
         title: '-',
         value: '-',
         changeRate: '0',
+        changePrice: 0,
         interval: '-',
         trend: 'neutral',
         seriesData: [
@@ -194,6 +196,7 @@ const CryptoDetail = () => {
                 title: cryptoInfo.koreanName,
                 value: cryptoInfo.tradePrice.toLocaleString(),
                 changeRate: (cryptoInfo.signedChangeRate * 100).toFixed(2),
+                changePrice: cryptoInfo.signedChangePrice,
                 interval: today,
                 trend: trendColor(cryptoInfo.change),
                 seriesData: [
@@ -278,6 +281,7 @@ const CryptoDetail = () => {
                     ...prev,
                     value: ticker.tradePrice.toLocaleString(),
                     changeRate: (ticker.signedChangeRate * 100).toFixed(2),
+                    changePrice: ticker.signedChangePrice,
                     trend: trendColor(ticker.change),
                     interval: tradeDateTimeKst,
                 }));
@@ -421,13 +425,18 @@ const CryptoDetail = () => {
                                         {chartData.value}
                                     </Typography>
                                     <Chip size="small" color={color} label={trendValues[chartData.trend]} />
+                                    {renderChangeAmount(chartData.changePrice)}
                                 </Stack>
                                 <Typography variant="caption" sx={{ color: 'text.secondary' }}>
                                     {chartData.interval}
                                 </Typography>
                             </Stack>
                         </CardContent>
-                        <CryptoDetailLineChart {...chartData} />
+                        <Box sx={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+                            <Box sx={{ minWidth: 1200 }}>
+                                <CryptoDetailLineChart {...chartData} />
+                            </Box>
+                        </Box>
                         <Box
                             display="flex"
                             justifyContent="space-between"

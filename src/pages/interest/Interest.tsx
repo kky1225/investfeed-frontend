@@ -29,7 +29,7 @@ import {DataGrid, GridActionsCellItem, GridColDef, GridRow, GridRowProps} from "
 import {DndContext, DragEndEvent, PointerSensor, useSensor, useSensors} from "@dnd-kit/core";
 import {arrayMove, SortableContext, useSortable, verticalListSortingStrategy} from "@dnd-kit/sortable";
 import {CSS} from "@dnd-kit/utilities";
-import {useNavigate} from "react-router-dom";
+import {useNavigate, useParams} from "react-router-dom";
 import {
     addInterestItem,
     createInterestGroup,
@@ -183,6 +183,7 @@ const DraggableRow = React.forwardRef<HTMLDivElement, GridRowProps>((props, _ref
 
 const Interest = () => {
     const navigate = useNavigate();
+    const {groupId} = useParams<{ groupId: string }>();
 
     const [groups, setGroups] = useState<InterestGroup[]>([]);
     const [selectedGroup, setSelectedGroup] = useState<InterestGroup | null>(null);
@@ -200,6 +201,7 @@ const Interest = () => {
 
     const [editGroupOpen, setEditGroupOpen] = useState(false);
     const [editGroupName, setEditGroupName] = useState("");
+    const [editGroupId, setEditGroupId] = useState<number | null>(null);
 
     const [deleteGroupOpen, setDeleteGroupOpen] = useState(false);
 
@@ -236,8 +238,11 @@ const Interest = () => {
             const groupList: InterestGroup[] = data.result ?? [];
             setGroups(groupList);
             if (groupList.length > 0) {
-                setSelectedGroup(groupList[0]);
-                loadItems(groupList[0].id);
+                const target = groupId
+                    ? groupList.find(g => g.id === Number(groupId)) ?? groupList[0]
+                    : groupList[0];
+                setSelectedGroup(target);
+                loadItems(target.id);
             }
         } finally {
             setGroupsLoading(false);
@@ -284,6 +289,7 @@ const Interest = () => {
 
     const handleSelectGroup = (group: InterestGroup) => {
         setSelectedGroup(group);
+        navigate(`/interest/list/${group.id}`, {replace: true});
         setItems([]);
         socketRef.current?.close();
         socketRef.current = null;
@@ -302,16 +308,16 @@ const Interest = () => {
     };
 
     const handleEditGroup = async () => {
-        if (!editGroupName.trim() || !groupMenu) return;
-        await updateInterestGroup(groupMenu.group.id, {groupNm: editGroupName.trim()});
+        if (!editGroupName.trim() || !editGroupId) return;
+        await updateInterestGroup(editGroupId, {groupNm: editGroupName.trim()});
         setGroups(prev =>
-            prev.map(g => g.id === groupMenu.group.id ? {...g, groupNm: editGroupName.trim()} : g)
+            prev.map(g => g.id === editGroupId ? {...g, groupNm: editGroupName.trim()} : g)
         );
-        if (selectedGroup?.id === groupMenu.group.id) {
+        if (selectedGroup?.id === editGroupId) {
             setSelectedGroup(prev => prev ? {...prev, groupNm: editGroupName.trim()} : prev);
         }
         setEditGroupOpen(false);
-        setGroupMenu(null);
+        setEditGroupId(null);
     };
 
     const handleDeleteGroup = async () => {
@@ -480,11 +486,11 @@ const Interest = () => {
                 관심 종목
             </Typography>
 
-            <Stack direction="row" sx={{gap: 2, alignItems: "flex-start"}}>
+            <Stack direction={{xs: "column", md: "row"}} sx={{gap: 2, alignItems: "flex-start"}}>
                 {/* 그룹 패널 */}
                 <Box
                     sx={{
-                        width: 220,
+                        width: {xs: "100%", md: 220},
                         flexShrink: 0,
                         border: "1px solid",
                         borderColor: "divider",
@@ -565,7 +571,7 @@ const Interest = () => {
                 </Box>
 
                 {/* 종목 패널 */}
-                <Box sx={{flex: 1, minWidth: 0}}>
+                <Box sx={{flex: 1, minWidth: 0, width: '100%'}}>
                     <Stack
                         direction="row"
                         sx={{mb: 1.5, alignItems: "center", justifyContent: "space-between"}}
@@ -626,6 +632,7 @@ const Interest = () => {
                             </Typography>
                         </Box>
                     ) : (
+                        <Box sx={{overflowX: 'auto', WebkitOverflowScrolling: 'touch'}}>
                         <DndContext sensors={sensors} onDragEnd={handleItemDragEnd}>
                             <SortableContext items={items.map(i => i.id)} strategy={verticalListSortingStrategy}>
                                 <DataGrid
@@ -661,6 +668,7 @@ const Interest = () => {
                                 />
                             </SortableContext>
                         </DndContext>
+                        </Box>
                     )}
                 </Box>
             </Stack>
@@ -673,6 +681,7 @@ const Interest = () => {
             >
                 <MenuItem onClick={() => {
                     setEditGroupName(groupMenu!.group.groupNm);
+                    setEditGroupId(groupMenu!.group.id);
                     setEditGroupOpen(true);
                     setGroupMenu(null);
                 }}>

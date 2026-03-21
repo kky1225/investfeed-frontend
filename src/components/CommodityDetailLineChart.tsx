@@ -105,11 +105,7 @@ const CommodityDetailLineChart = (
                 }
             ]}
             sx={{
-                height: {
-                    xs: 250,
-                    sm: 250,
-                    md: 310
-                }
+                height: 310
             }}
         >
             <ChartsXAxis axisId="x-line" />

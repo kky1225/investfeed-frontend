@@ -1,0 +1,22 @@
+import api from "../../axios.ts";
+
+export const fetchNotifications = async (assetType?: string) => {
+    const params = assetType ? {assetType} : {};
+    const res = await api.get("/notifications", {params});
+    return res.data;
+};
+
+export const fetchUnreadCount = async () => {
+    const res = await api.get("/notifications/unread-count");
+    return res.data;
+};
+
+export const markAsRead = async (id: number) => {
+    const res = await api.put(`/notifications/${id}/read`);
+    return res.data;
+};
+
+export const markAllAsRead = async () => {
+    const res = await api.put("/notifications/read-all");
+    return res.data;
+};

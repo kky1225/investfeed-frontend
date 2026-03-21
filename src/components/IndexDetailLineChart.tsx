@@ -14,6 +14,7 @@ export interface CustomIndexDetailLineChartProps {
     title: string,
     value: string,
     fluRt: string,
+    predPre: string,
     openPric: number,
     interval: string,
     trend: 'up' | 'down' | 'neutral',
@@ -104,11 +105,7 @@ const IndexDetailLineChart = (
                 }
             ]}
             sx={{
-                height: {
-                    xs: 250,
-                    sm: 250,
-                    md: 310
-                }
+                height: 310
             }}
         >
             <ChartsXAxis axisId="x-line" />

@@ -4,29 +4,28 @@ import ListItemButton from '@mui/material/ListItemButton';
 import ListItemIcon from '@mui/material/ListItemIcon';
 import ListItemText from '@mui/material/ListItemText';
 import Stack from '@mui/material/Stack';
+import Tooltip from '@mui/material/Tooltip';
+import Paper from '@mui/material/Paper';
+import Popper from '@mui/material/Popper';
+import ClickAwayListener from '@mui/material/ClickAwayListener';
+import Typography from '@mui/material/Typography';
 import DashboardIcon from '@mui/icons-material/Dashboard';
 import HomeRoundedIcon from '@mui/icons-material/HomeRounded';
 import AnalyticsRoundedIcon from '@mui/icons-material/AnalyticsRounded';
 import PeopleRoundedIcon from '@mui/icons-material/PeopleRounded';
 import ShowChartIcon from '@mui/icons-material/ShowChart';
-import SettingsRoundedIcon from '@mui/icons-material/SettingsRounded';
-import InfoRoundedIcon from '@mui/icons-material/InfoRounded';
-import HelpRoundedIcon from '@mui/icons-material/HelpRounded';
 import FavoriteIcon from '@mui/icons-material/Favorite';
 import DiamondIcon from '@mui/icons-material/Diamond';
 import GroupIcon from '@mui/icons-material/Group';
 import RecommendIcon from '@mui/icons-material/Recommend';
 import CurrencyBitcoinIcon from '@mui/icons-material/CurrencyBitcoin';
+import NotificationsIcon from '@mui/icons-material/Notifications';
 import {useLocation, useNavigate} from "react-router-dom";
-import {Fragment, useState} from "react";
+import {Fragment, useEffect, useRef, useState} from "react";
 import { Collapse } from "@mui/material";
 import {ExpandLess, ExpandMore} from "@mui/icons-material";
 
 const mainListItems = [
-    // { id: 1, text: '주식', icon: <ShowChartIcon />, url: '/stock/list/0' },
-    // { id: 20, text: '코인', icon: <ShowChartIcon />, url: '/stock/list/0' },
-
-
     { id: 1, text: '대시보드', icon: <DashboardIcon />, url: '/' },
     { id: 2, text: '주요 지수', icon: <AnalyticsRoundedIcon />, url: '/market-index/list' },
     { id: 3, text: '국내 주식', icon: <ShowChartIcon />,
@@ -48,35 +47,63 @@ const mainListItems = [
             { id: 15, text: '관심 종목', icon: <FavoriteIcon />, url: '/crypto-interest/list' },
         ]
     },
-
-
-    // { id: 6, text: '투자자별', icon: <GroupIcon />,
-    //     children: [
-    //         { id: 10, text: '장중 매매 순위', url: '/investor/6/list/1', icon: <GroupIcon /> },
-    //         { id: 11, text: '장마감 후 매매 순위', url: '/investor/7/list/1', icon: <GroupIcon /> },
-    //     ]
-    // },
+    { id: 16, text: '알림', icon: <NotificationsIcon />, url: '/notification/list' },
 ];
 
-// const secondaryListItems = [
-//     { text: 'Settings', icon: <SettingsRoundedIcon />, url: '/setting' },
-//     { text: 'About', icon: <InfoRoundedIcon />, url: '/about' },
-//     { text: 'Feedback', icon: <HelpRoundedIcon />, url: '/feedback' },
-// ];
+interface MenuContentProps {
+    collapsed?: boolean;
+}
 
-export default function MenuContent() {
+export default function MenuContent({ collapsed = false }: MenuContentProps) {
     const location = useLocation();
     const navigate = useNavigate();
 
     const [openSubMenu, setOpenSubMenu] = useState<string | null>(null);
+    const [popoverMenu, setPopoverMenu] = useState<string | null>(null);
+    const anchorRefs = useRef<Record<string, HTMLElement | null>>({});
+    const popoverTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+    useEffect(() => {
+        if (collapsed) {
+            setOpenSubMenu(null);
+        }
+    }, [collapsed]);
 
     const handleMainMenuClick = (item: any) => {
         if (item.children) {
-            setOpenSubMenu(openSubMenu === item.text ? null : item.text);
+            if (!collapsed) {
+                setOpenSubMenu(openSubMenu === item.text ? null : item.text);
+            }
         } else {
             navigate(item.url);
             setOpenSubMenu(null);
         }
+    };
+
+    const handlePopoverOpen = (text: string) => {
+        if (popoverTimeout.current) {
+            clearTimeout(popoverTimeout.current);
+            popoverTimeout.current = null;
+        }
+        setPopoverMenu(text);
+    };
+
+    const handlePopoverClose = () => {
+        popoverTimeout.current = setTimeout(() => {
+            setPopoverMenu(null);
+        }, 150);
+    };
+
+    const handlePopoverPaperEnter = () => {
+        if (popoverTimeout.current) {
+            clearTimeout(popoverTimeout.current);
+            popoverTimeout.current = null;
+        }
+    };
+
+    const handleChildClick = (url: string) => {
+        navigate(url);
+        setPopoverMenu(null);
     };
 
     return (
@@ -85,17 +112,49 @@ export default function MenuContent() {
                 {mainListItems.map((item) => (
                     <Fragment key={item.id}>
                         <ListItem disablePadding sx={{ display: 'block' }}>
-                            <ListItemButton
-                                selected={location.pathname === item.url}
-                                onClick={() => handleMainMenuClick(item)}
-                            >
-                                <ListItemIcon>{item.icon}</ListItemIcon>
-                                <ListItemText primary={item.text} />
-                                {item.children ? (openSubMenu === item.text ? <ExpandLess /> : <ExpandMore />) : null}
-                            </ListItemButton>
+                            {collapsed && !item.children ? (
+                                <Tooltip title={item.text} placement="right" arrow>
+                                    <ListItemButton
+                                        selected={location.pathname === item.url}
+                                        onClick={() => handleMainMenuClick(item)}
+                                        sx={{
+                                            justifyContent: 'center',
+                                            px: 1.5,
+                                        }}
+                                    >
+                                        <ListItemIcon sx={{ minWidth: 0, justifyContent: 'center' }}>
+                                            {item.icon}
+                                        </ListItemIcon>
+                                    </ListItemButton>
+                                </Tooltip>
+                            ) : collapsed && item.children ? (
+                                <ListItemButton
+                                    ref={(el) => { anchorRefs.current[item.text] = el; }}
+                                    onMouseEnter={() => handlePopoverOpen(item.text)}
+                                    onMouseLeave={handlePopoverClose}
+                                    sx={{
+                                        justifyContent: 'center',
+                                        px: 1.5,
+                                    }}
+                                >
+                                    <ListItemIcon sx={{ minWidth: 0, justifyContent: 'center' }}>
+                                        {item.icon}
+                                    </ListItemIcon>
+                                </ListItemButton>
+                            ) : (
+                                <ListItemButton
+                                    selected={location.pathname === item.url}
+                                    onClick={() => handleMainMenuClick(item)}
+                                >
+                                    <ListItemIcon>{item.icon}</ListItemIcon>
+                                    <ListItemText primary={item.text} />
+                                    {item.children ? (openSubMenu === item.text ? <ExpandLess /> : <ExpandMore />) : null}
+                                </ListItemButton>
+                            )}
                         </ListItem>
 
-                        {item.children && (
+                        {/* 펼침: 기존 Collapse 서브메뉴 */}
+                        {!collapsed && item.children && (
                             <Collapse in={openSubMenu === item.text} timeout="auto" unmountOnExit>
                                 <List component="div" disablePadding>
                                     {item.children.map((child) => (
@@ -109,20 +168,45 @@ export default function MenuContent() {
                                 </List>
                             </Collapse>
                         )}
+
+                        {/* 접힘: Hover 팝오버 서브메뉴 */}
+                        {collapsed && item.children && (
+                            <Popper
+                                open={popoverMenu === item.text}
+                                anchorEl={anchorRefs.current[item.text]}
+                                placement="right-start"
+                                sx={{ zIndex: 1300 }}
+                            >
+                                <ClickAwayListener onClickAway={() => setPopoverMenu(null)}>
+                                    <Paper
+                                        elevation={8}
+                                        sx={{ py: 0.5, minWidth: 160 }}
+                                        onMouseEnter={handlePopoverPaperEnter}
+                                        onMouseLeave={handlePopoverClose}
+                                    >
+                                        <Typography variant="caption" sx={{ px: 2, py: 0.5, color: 'text.secondary', fontWeight: 600 }}>
+                                            {item.text}
+                                        </Typography>
+                                        <List dense>
+                                            {item.children.map((child) => (
+                                                <ListItem key={child.url} disablePadding>
+                                                    <ListItemButton
+                                                        selected={location.pathname === child.url}
+                                                        onClick={() => handleChildClick(child.url)}
+                                                    >
+                                                        <ListItemIcon sx={{ minWidth: 32 }}>{child.icon}</ListItemIcon>
+                                                        <ListItemText primary={child.text} />
+                                                    </ListItemButton>
+                                                </ListItem>
+                                            ))}
+                                        </List>
+                                    </Paper>
+                                </ClickAwayListener>
+                            </Popper>
+                        )}
                     </Fragment>
                 ))}
             </List>
-
-            {/*<List dense>*/}
-            {/*    {secondaryListItems.map((item, index) => (*/}
-            {/*        <ListItem key={index} disablePadding sx={{ display: 'block' }}>*/}
-            {/*            <ListItemButton>*/}
-            {/*                <ListItemIcon>{item.icon}</ListItemIcon>*/}
-            {/*                <ListItemText primary={item.text} />*/}
-            {/*            </ListItemButton>*/}
-            {/*        </ListItem>*/}
-            {/*    ))}*/}
-            {/*</List>*/}
         </Stack>
     );
 }

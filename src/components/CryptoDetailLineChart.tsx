@@ -14,6 +14,7 @@ export interface CryptoDetailLineChartProps {
     title: string,
     value: string,
     changeRate: string,
+    changePrice: number,
     interval: string,
     trend: 'up' | 'down' | 'neutral',
     seriesData: MakeOptional<LineSeriesType, 'type'>[],
@@ -104,11 +105,7 @@ const CryptoDetailLineChart = (
                 }
             ]}
             sx={{
-                height: {
-                    xs: 250,
-                    sm: 250,
-                    md: 310
-                }
+                height: 310
             }}
         >
             <ChartsXAxis axisId="x-line" />

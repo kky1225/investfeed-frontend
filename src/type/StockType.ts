@@ -58,5 +58,6 @@ export interface StockStream {
     code: string,
     value: string,
     fluRt: string,
+    predPre: string,
     trend: string,
 }

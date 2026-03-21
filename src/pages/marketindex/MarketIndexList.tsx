@@ -11,6 +11,7 @@ import Stack from "@mui/material/Stack";
 import CircularProgress from "@mui/material/CircularProgress";
 import {MarketIndexRes} from "../../type/MarketIndexType.ts";
 import {fetchMarketIndexAll} from "../../api/marketindex/MarketIndexApi.ts";
+import {renderChangeAmount} from "../../components/CustomRender.tsx";
 
 // 타입별 카테고리 섹션 정의
 const SECTIONS = [
@@ -18,7 +19,7 @@ const SECTIONS = [
         title: '미국 증시',
         types: ['NASDAQ', 'SP500', 'VIX', 'PHILADELPHIA_SEMICONDUCTOR'],
         linkable: false,
-        gridSize: {xs: 12, sm: 6, md: 3},
+        gridSize: {xs: 12, sm: 6, md: 6, xl: 3},
     },
     {
         title: '환율 · 지수',
@@ -83,15 +84,12 @@ function MarketIndexCard({item, linkable, linkUrl}: MarketIndexCardProps) {
                 />
             </Stack>
 
-            <Typography variant="h4" component="p" sx={{fontWeight: 700, mb: 1}}>
-                {item.price}
-            </Typography>
-
             <Stack direction="row" sx={{alignItems: 'center', gap: 1, mb: 1}}>
-                <Chip size="small" color={chipColor} label={item.changeRate}/>
-                <Typography variant="body2" sx={{color: 'text.secondary'}}>
-                    {item.changeAmount}
+                <Typography variant="h4" component="p" sx={{fontWeight: 700}}>
+                    {item.price}
                 </Typography>
+                <Chip size="small" color={chipColor} label={item.changeRate}/>
+                {renderChangeAmount(item.changeAmount, item.type === 'USD_KRW' ? '원' : '')}
             </Stack>
 
             <Typography variant="caption" sx={{color: 'text.disabled', display: 'block'}}>
@@ -147,7 +145,7 @@ export default function MarketIndexList() {
                 interval = setInterval(() => {
                     loadData();
                 }, 60 * 1000);
-            }, waitTime + 6000);
+            }, waitTime + 2000);
         })();
 
         return () => {

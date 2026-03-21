@@ -40,7 +40,7 @@ import {LineSeriesType} from "@mui/x-charts";
 import { MakeOptional } from '@mui/x-internals/types';
 import InvestorLineChart from "../../components/InvestorLineChart.tsx";
 import * as React from "react";
-import {renderTradeColor} from "../../components/CustomRender.tsx";
+import {renderTradeColor, renderChangeAmount} from "../../components/CustomRender.tsx";
 import FavoriteBorderIcon from "@mui/icons-material/FavoriteBorder";
 import FavoriteIcon from "@mui/icons-material/Favorite";
 import IconButton from "@mui/material/IconButton";
@@ -100,6 +100,7 @@ const StockDetail = () => {
         orderWarning: "0",
         value: '-',
         fluRt: '0',
+        predPre: '0',
         openPric: 0,
         interval: '-',
         trend: 'neutral',
@@ -261,6 +262,7 @@ const StockDetail = () => {
                 orderWarning: stockInfo.orderWarning,
                 value: Number(stockInfo.curPrc.replace(/^[+-]/, '')).toLocaleString(),
                 fluRt: stockInfo.fluRt,
+                predPre: stockInfo.predPre || '0',
                 openPric: parseFloat(stockInfo.openPric),
                 interval: today,
                 trend: trendColor(stockInfo.preSig),
@@ -498,35 +500,35 @@ const StockDetail = () => {
                     field: 'dt',
                     headerName: '날짜',
                     flex: 1,
-                    minWidth: 100,
+                    minWidth: 110,
                     maxWidth: 120
                 },
                 {
                     field: 'prmNetprpsQty',
                     headerName: '프로그램 순매수 수량',
                     flex: 1,
-                    minWidth: 100,
+                    minWidth: 170,
                     renderCell: (params) => renderTradeColor(params.value as number),
                 },
                 {
                     field: 'prmBuyQty',
                     headerName: '프로그램 매수 수량',
                     flex: 1,
-                    minWidth: 100,
+                    minWidth: 160,
                     renderCell: (params) => renderTradeColor(params.value as number),
                 },
                 {
                     field: 'prmSellQty',
                     headerName: '프로그램 매도 수량',
                     flex: 1,
-                    minWidth: 100,
+                    minWidth: 160,
                     renderCell: (params) => renderTradeColor(params.value as number),
                 },
                 {
                     field: 'prmNetprpsQtyIrds',
                     headerName: '프로그램 순매수 수량 증감',
                     flex: 1,
-                    minWidth: 100,
+                    minWidth: 200,
                     renderCell: (params) => renderTradeColor(params.value as number),
                 },
             ];
@@ -549,21 +551,21 @@ const StockDetail = () => {
                     field: 'dt',
                     headerName: '날짜',
                     flex: 1,
-                    minWidth: 100,
+                    minWidth: 110,
                     maxWidth: 120
                 },
                 {
                     field: 'shrtsTrdePrica',
                     headerName: '공매도 거래 대금',
                     flex: 1,
-                    minWidth: 100,
+                    minWidth: 150,
                     valueFormatter: (value: string) => Number(value).toLocaleString(),
                 },
                 {
                     field: 'shrtsQty',
                     headerName: '공매도 수량',
                     flex: 1,
-                    minWidth: 100,
+                    minWidth: 120,
                     valueFormatter: (value: string) => Number(value).toLocaleString(),
                 },
                 {
@@ -584,7 +586,7 @@ const StockDetail = () => {
                     field: 'shrtsAvgPric',
                     headerName: '공매도 평균가',
                     flex: 1,
-                    minWidth: 100,
+                    minWidth: 140,
                     valueFormatter: (value: string) => Number(value).toLocaleString(),
                 },
             ];
@@ -686,6 +688,7 @@ const StockDetail = () => {
                         code: res.item,
                         value: values["10"],
                         fluRt: values["12"],
+                        predPre: values["11"],
                         trend: values["25"],
                     };
                 });
@@ -696,6 +699,7 @@ const StockDetail = () => {
                             ...old,
                             value: Number(stock.value.replace(/^[+-]/, '')).toLocaleString(),
                             fluRt: stock.fluRt,
+                            predPre: stock.predPre || '0',
                             trend: trendColor(stock.trend),
                         }));
                     }
@@ -1004,13 +1008,18 @@ const StockDetail = () => {
                                         {stockChartData.value}
                                     </Typography>
                                     <Chip size="small" color={color} label={trendValues[stockChartData.trend]} />
+                                    {renderChangeAmount(stockChartData.predPre)}
                                 </Stack>
                                 <Typography variant="caption" sx={{ color: 'text.secondary' }}>
                                     {stockChartData.interval}
                                 </Typography>
                             </Stack>
                         </CardContent>
-                        <StockDetailLineChart {...stockChartData} />
+                        <Box sx={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+                            <Box sx={{ minWidth: 1200 }}>
+                                <StockDetailLineChart {...stockChartData} />
+                            </Box>
+                        </Box>
                         <Box
                             display="flex"
                             justifyContent="space-between"

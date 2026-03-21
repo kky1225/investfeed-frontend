@@ -21,6 +21,7 @@ import MarketIndexList from "./pages/marketindex/MarketIndexList.tsx";
 import CryptoList from "./pages/crypto/CryptoList.tsx";
 import CryptoDetail from "./pages/crypto/CryptoDetail.tsx";
 import CryptoInterest from "./pages/cryptoInterest/CryptoInterest.tsx";
+import NotificationList from "./pages/notification/NotificationList.tsx";
 import ProtectedRoute from "./components/ProtectedRoute.tsx";
 
 const StockDetailWithKey = () => {
@@ -62,8 +63,10 @@ function App() {
                         <Route path="/crypto/list" Component={CryptoList} />
                         <Route path="/crypto/detail/:id" Component={CryptoDetail} />
 
-                        <Route path="/crypto-interest/list" Component={CryptoInterest} />
-                        <Route path="/interest/list" Component={Interest} />
+                        <Route path="/crypto-interest/list/:groupId?" Component={CryptoInterest} />
+                        <Route path="/interest/list/:groupId?" Component={Interest} />
+
+                        <Route path="/notification/list" Component={NotificationList} />
                     </Route>
                 </Route>
             </Routes>
