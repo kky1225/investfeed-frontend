@@ -98,9 +98,16 @@ export default function Login(props: { disableCustomTheme?: boolean }) {
         try {
             const res = await login({ loginId, password });
             if (res.result?.accessToken) {
-                // loginId를 user 정보로 저장 (nickname/email은 별도 API가 있으면 추후 확장)
-                setAuth({ loginId, nickname: loginId, email: '' }, res.result.accessToken);
-                navigate('/');
+                setAuth(
+                    { loginId, nickname: loginId, email: '' },
+                    res.result.accessToken,
+                    res.result.passwordChangeRequired,
+                );
+                if (res.result.passwordChangeRequired) {
+                    navigate('/settings/change-password');
+                } else {
+                    navigate('/');
+                }
             }
         } catch (err: unknown) {
             const axiosErr = err as { response?: { data?: { message?: string } } };

@@ -13,6 +13,7 @@ import ListItemIcon, { listItemIconClasses } from '@mui/material/ListItemIcon';
 import { listClasses } from '@mui/material/List';
 import { paperClasses } from '@mui/material/Paper';
 import LogoutRoundedIcon from '@mui/icons-material/LogoutRounded';
+import LockResetIcon from '@mui/icons-material/LockReset';
 import MoreVertRoundedIcon from '@mui/icons-material/MoreVertRounded';
 import MenuButton from './MenuButton';
 import MenuContent from './MenuContent';
@@ -134,11 +135,27 @@ export default function SideMenuMobile({ open, toggleDrawer }: SideMenuMobilePro
                     >
                         <Divider />
                         <MenuItem
+                            onClick={() => { handleClose(); navigate('/settings/change-password'); }}
+                            sx={{
+                                [`& .${listItemIconClasses.root}`]: {
+                                    ml: 'auto',
+                                    minWidth: 0,
+                                    pl: 1,
+                                },
+                            }}
+                        >
+                            <ListItemText>비밀번호 변경</ListItemText>
+                            <ListItemIcon>
+                                <LockResetIcon fontSize="small" />
+                            </ListItemIcon>
+                        </MenuItem>
+                        <MenuItem
                             onClick={handleLogout}
                             sx={{
                                 [`& .${listItemIconClasses.root}`]: {
                                     ml: 'auto',
                                     minWidth: 0,
+                                    pl: 1,
                                 },
                             }}
                         >

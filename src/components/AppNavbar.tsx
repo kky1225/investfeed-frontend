@@ -49,7 +49,7 @@ const Toolbar = styled(MuiToolbar)({
 
 export default function AppNavbar() {
     const navigate = useNavigate();
-    const {unreadCount} = useNotification();
+    const {unreadCount, refreshAll} = useNotification();
     const [open, setOpen] = useState(false);
     const [searchOpen, setSearchOpen] = useState(false);
     const [notificationAnchorEl, setNotificationAnchorEl] = useState<HTMLElement | null>(null);
@@ -152,7 +152,10 @@ export default function AppNavbar() {
                     <MenuButton
                         showBadge={unreadCount > 0}
                         aria-label="Open notifications"
-                        onClick={(e) => setNotificationAnchorEl(e.currentTarget)}
+                        onClick={(e) => {
+                            refreshAll();
+                            setNotificationAnchorEl(e.currentTarget);
+                        }}
                     >
                         <NotificationsRoundedIcon />
                     </MenuButton>

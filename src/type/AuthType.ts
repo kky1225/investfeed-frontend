@@ -14,12 +14,18 @@ export interface SignupReq {
 
 export interface TokenRes {
     accessToken: string;
+    passwordChangeRequired: boolean;
 }
 
 export interface ApiResponse<T> {
     code: string;
     message: string;
     result: T | null;
+}
+
+export interface ChangePasswordReq {
+    currentPassword: string;
+    newPassword: string;
 }
 
 export interface AuthUser {

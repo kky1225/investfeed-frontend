@@ -24,6 +24,7 @@ import CryptoRank from "./pages/crypto/CryptoRank.tsx";
 import CryptoInterest from "./pages/cryptoInterest/CryptoInterest.tsx";
 import NotificationList from "./pages/notification/NotificationList.tsx";
 import ProtectedRoute from "./components/ProtectedRoute.tsx";
+import ChangePassword from "./pages/settings/ChangePassword.tsx";
 
 const StockDetailWithKey = () => {
     const { id } = useParams();
@@ -38,6 +39,7 @@ function App() {
                 <Route path="/signup" Component={Signup} />
 
                 <Route element={<ProtectedRoute />}>
+                    <Route path="/settings/change-password" Component={ChangePassword} />
                     <Route element={<MainLayout />}>
                         <Route path="/" Component={Dashboard} />
                         <Route path="/interest" Component={Interest} />

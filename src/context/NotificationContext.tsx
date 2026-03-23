@@ -7,6 +7,7 @@ interface NotificationContextType {
     notifications: Notification[];
     unreadCount: number;
     loadNotifications: () => Promise<void>;
+    refreshAll: () => Promise<void>;
     handleMarkAsRead: (id: number) => Promise<void>;
     handleMarkAllAsRead: () => Promise<void>;
 }
@@ -49,46 +50,67 @@ export function NotificationProvider({children}: { children: ReactNode }) {
         setUnreadCount(0);
     }, []);
 
+    const refreshAll = useCallback(async () => {
+        await Promise.all([loadNotifications(), loadUnreadCount()]);
+    }, [loadNotifications, loadUnreadCount]);
+
     useEffect(() => {
         if (!isAuthenticated || !accessToken) return;
 
-        loadNotifications();
-        loadUnreadCount();
+        refreshAll();
 
-        const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-        const wsUrl = `${protocol}//${window.location.host}/ws/notification?token=${accessToken}`;
-        const ws = new WebSocket(wsUrl);
-        wsRef.current = ws;
+        let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+        let isCancelled = false;
 
-        ws.onmessage = (event) => {
-            try {
-                const notification: Notification = JSON.parse(event.data);
-                setNotifications(prev => [notification, ...prev]);
-                setUnreadCount(prev => prev + 1);
-            } catch {
-                // ignore
-            }
+        const connect = () => {
+            if (isCancelled) return;
+
+            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const wsUrl = `${protocol}//${window.location.host}/ws/notification?token=${accessToken}`;
+            const ws = new WebSocket(wsUrl);
+            wsRef.current = ws;
+
+            ws.onmessage = (event) => {
+                try {
+                    const notification: Notification = JSON.parse(event.data);
+                    setNotifications(prev => [notification, ...prev]);
+                    setUnreadCount(prev => prev + 1);
+                } catch {
+                    // ignore
+                }
+            };
+
+            ws.onerror = () => {
+                // silent
+            };
+
+            ws.onclose = () => {
+                wsRef.current = null;
+                if (!isCancelled) {
+                    reconnectTimer = setTimeout(() => {
+                        refreshAll();
+                        connect();
+                    }, 3000);
+                }
+            };
         };
 
-        ws.onerror = () => {
-            // silent
-        };
-
-        ws.onclose = () => {
-            wsRef.current = null;
-        };
+        connect();
 
         return () => {
-            ws.close();
+            isCancelled = true;
+            if (reconnectTimer) clearTimeout(reconnectTimer);
+            wsRef.current?.close();
             wsRef.current = null;
         };
-    }, [isAuthenticated, accessToken, loadNotifications, loadUnreadCount]);
+    }, [isAuthenticated, accessToken, refreshAll]);
 
     return (
         <NotificationContext.Provider value={{
             notifications,
             unreadCount,
             loadNotifications,
+            refreshAll,
             handleMarkAsRead,
             handleMarkAllAsRead,
         }}>

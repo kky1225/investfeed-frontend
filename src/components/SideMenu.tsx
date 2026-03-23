@@ -11,6 +11,7 @@ import { MouseEvent, useState } from "react";
 import MuiMenuItem from "@mui/material/MenuItem";
 import MenuButton from "./MenuButton.tsx";
 import LogoutRoundedIcon from '@mui/icons-material/LogoutRounded';
+import LockResetIcon from '@mui/icons-material/LockReset';
 import MoreVertRoundedIcon from '@mui/icons-material/MoreVertRounded';
 import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
@@ -191,11 +192,27 @@ export default function SideMenu() {
                     )}
                     <Divider />
                     <MenuItem
+                        onClick={() => { handleClose(); navigate('/settings/change-password'); }}
+                        sx={{
+                            [`& .${listItemIconClasses.root}`]: {
+                                ml: 'auto',
+                                minWidth: 0,
+                                pl: 1,
+                            },
+                        }}
+                    >
+                        <ListItemText>비밀번호 변경</ListItemText>
+                        <ListItemIcon>
+                            <LockResetIcon fontSize="small" />
+                        </ListItemIcon>
+                    </MenuItem>
+                    <MenuItem
                         onClick={handleLogout}
                         sx={{
                             [`& .${listItemIconClasses.root}`]: {
                                 ml: 'auto',
                                 minWidth: 0,
+                                pl: 1,
                             },
                         }}
                     >

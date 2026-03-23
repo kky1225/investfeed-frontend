@@ -27,7 +27,7 @@ interface SearchItem {
 
 export default function Header() {
     const navigate = useNavigate();
-    const {unreadCount} = useNotification();
+    const {unreadCount, refreshAll} = useNotification();
     const [searchKeyword, setSearchKeyword] = useState('');
     const [searchResults, setSearchResults] = useState<SearchItem[]>([]);
     const [searchLoading, setSearchLoading] = useState(false);
@@ -162,7 +162,10 @@ export default function Header() {
                 <MenuButton
                     showBadge={unreadCount > 0}
                     aria-label="Open notifications"
-                    onClick={(e) => setNotificationAnchorEl(e.currentTarget)}
+                    onClick={(e) => {
+                        refreshAll();
+                        setNotificationAnchorEl(e.currentTarget);
+                    }}
                 >
                     <NotificationsRoundedIcon/>
                 </MenuButton>
