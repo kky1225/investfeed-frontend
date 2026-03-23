@@ -1007,8 +1007,8 @@ const StockDetail = () => {
                                     <Typography variant="h4" component="p">
                                         {stockChartData.value}
                                     </Typography>
-                                    <Chip size="small" color={color} label={trendValues[stockChartData.trend]} />
                                     {renderChangeAmount(stockChartData.predPre)}
+                                    <Chip size="small" color={color} label={trendValues[stockChartData.trend]} />
                                 </Stack>
                                 <Typography variant="caption" sx={{ color: 'text.secondary' }}>
                                     {stockChartData.interval}

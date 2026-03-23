@@ -70,6 +70,22 @@ export interface CryptoChart {
     candleAccTradePrice: number,
 }
 
+export interface CryptoRankItem {
+    market: string,
+    koreanName: string,
+    englishName: string,
+    tradePrice: number,
+    signedChangePrice: number,
+    signedChangeRate: number,
+    change: string,
+    accTradePrice24h: number,
+    accTradeVolume24h: number,
+    highPrice: number,
+    lowPrice: number,
+    prevClosingPrice: number,
+    warning: boolean,
+}
+
 export interface FearGreedRes {
     current: FearGreedItem,
     history: FearGreedItem[],

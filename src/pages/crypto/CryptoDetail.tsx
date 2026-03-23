@@ -424,8 +424,8 @@ const CryptoDetail = () => {
                                     <Typography variant="h4" component="p">
                                         {chartData.value}
                                     </Typography>
-                                    <Chip size="small" color={color} label={trendValues[chartData.trend]} />
                                     {renderChangeAmount(chartData.changePrice)}
+                                    <Chip size="small" color={color} label={trendValues[chartData.trend]} />
                                 </Stack>
                                 <Typography variant="caption" sx={{ color: 'text.secondary' }}>
                                     {chartData.interval}

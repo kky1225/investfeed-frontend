@@ -44,10 +44,11 @@ const mainListItems = [
     { id: 13, text: '암호화폐', icon: <CurrencyBitcoinIcon />,
         children: [
             { id: 14, text: '지수', icon: <AnalyticsRoundedIcon />, url: '/crypto/list' },
-            { id: 15, text: '관심 종목', icon: <FavoriteIcon />, url: '/crypto-interest/list' },
+            { id: 15, text: '거래대금 순위', icon: <ShowChartIcon />, url: '/crypto/rank' },
+            { id: 16, text: '관심 종목', icon: <FavoriteIcon />, url: '/crypto-interest/list' },
         ]
     },
-    { id: 16, text: '알림', icon: <NotificationsIcon />, url: '/notification/list' },
+    { id: 17, text: '알림', icon: <NotificationsIcon />, url: '/notification/list' },
 ];
 
 interface MenuContentProps {

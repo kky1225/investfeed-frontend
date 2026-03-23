@@ -9,9 +9,12 @@ import Typography from '@mui/material/Typography';
 import MenuRoundedIcon from '@mui/icons-material/MenuRounded';
 import DashboardRoundedIcon from '@mui/icons-material/DashboardRounded';
 import SearchRoundedIcon from '@mui/icons-material/SearchRounded';
+import NotificationsRoundedIcon from '@mui/icons-material/NotificationsRounded';
 import SideMenuMobile from './SideMenuMobile';
 import MenuButton from './MenuButton';
 import ColorModeIconDropdown from './ColorModeSelect.tsx';
+import NotificationPopover from './NotificationPopover';
+import {useNotification} from '../context/NotificationContext';
 import Autocomplete from '@mui/material/Autocomplete';
 import TextField from '@mui/material/TextField';
 import CircularProgress from '@mui/material/CircularProgress';
@@ -46,8 +49,10 @@ const Toolbar = styled(MuiToolbar)({
 
 export default function AppNavbar() {
     const navigate = useNavigate();
+    const {unreadCount} = useNotification();
     const [open, setOpen] = useState(false);
     const [searchOpen, setSearchOpen] = useState(false);
+    const [notificationAnchorEl, setNotificationAnchorEl] = useState<HTMLElement | null>(null);
     const [searchKeyword, setSearchKeyword] = useState('');
     const [searchResults, setSearchResults] = useState<SearchItem[]>([]);
     const [searchLoading, setSearchLoading] = useState(false);
@@ -144,11 +149,23 @@ export default function AppNavbar() {
                     <MenuButton aria-label="search" onClick={() => setSearchOpen(prev => !prev)}>
                         <SearchRoundedIcon />
                     </MenuButton>
+                    <MenuButton
+                        showBadge={unreadCount > 0}
+                        aria-label="Open notifications"
+                        onClick={(e) => setNotificationAnchorEl(e.currentTarget)}
+                    >
+                        <NotificationsRoundedIcon />
+                    </MenuButton>
                     <ColorModeIconDropdown />
                     <MenuButton aria-label="menu" onClick={toggleDrawer(true)}>
                         <MenuRoundedIcon />
                     </MenuButton>
                     <SideMenuMobile open={open} toggleDrawer={toggleDrawer} />
+                    <NotificationPopover
+                        anchorEl={notificationAnchorEl}
+                        open={Boolean(notificationAnchorEl)}
+                        onClose={() => setNotificationAnchorEl(null)}
+                    />
                 </Stack>
                 <Collapse in={searchOpen} sx={{width: '100%'}}>
                     <Autocomplete

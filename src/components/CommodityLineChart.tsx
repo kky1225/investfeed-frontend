@@ -9,12 +9,14 @@ import Chip from "@mui/material/Chip";
 import {lineClasses} from "@mui/x-charts/LineChart";
 import {CardActionArea} from "@mui/material";
 import {useNavigate} from "react-router-dom";
+import {renderChangeAmount} from "./CustomRender.tsx";
 
 export interface CommodityLineChartProps {
     id: string,
     title: string,
     value: string,
     fluRt: string,
+    predPre: string,
     openPric: number,
     interval: string,
     trend: 'up' | 'down' | 'neutral',
@@ -23,7 +25,7 @@ export interface CommodityLineChartProps {
 }
 
 const CommodityLineChart = (
-    { id, title, value, fluRt, openPric, interval, trend, seriesData, dateList }: CommodityLineChartProps,
+    { id, title, value, fluRt, predPre, openPric, interval, trend, seriesData, dateList }: CommodityLineChartProps,
 ) => {
     const theme = useTheme();
 
@@ -83,6 +85,7 @@ const CommodityLineChart = (
                             <Typography variant="h4" component="p">
                                 {value}
                             </Typography>
+                            {renderChangeAmount(predPre, '')}
                             <Chip size="small" color={color} label={trendValues[trend]} />
                         </Stack>
                         <Typography variant="caption" sx={{ color: 'text.secondary' }}>

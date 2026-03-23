@@ -59,7 +59,7 @@ const InvestorList = () => {
             field: 'netprpsAmt',
             headerName: '거래대금',
             flex: 0.5,
-            minWidth: 100,
+            minWidth: 120,
             renderCell: (params: {value: string}) => renderTradePricaColor(params.value as string),
         }
     ];

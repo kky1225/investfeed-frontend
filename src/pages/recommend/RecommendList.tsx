@@ -4,7 +4,6 @@ import Grid from "@mui/material/Grid";
 import {useEffect, useRef, useState} from "react";
 import {fetchTimeNow} from "../../api/time/TimeApi.ts";
 import {MarketType} from "../../type/timeType.ts";
-import {SectCardProps} from "../../components/SectCard.tsx";
 import {fetchRecommendList, fetchRecommendListStream} from "../../api/recommend/RecommendApi.ts";
 import {
     RecommendListItem,
@@ -12,11 +11,11 @@ import {
     RecommendListStreamReq,
     RecommendListStreamRes
 } from "../../type/RecommendType.ts";
-import RecommendCard from "../../components/RecommendCard.tsx";
+import RecommendCard, {RecommendCardProps} from "../../components/RecommendCard.tsx";
 
 const RecommendList = () => {
-    const [recommendDataList, setRecommendDataList] = useState<SectCardProps[]>([]);
-    const [avoidDataList, setAvoidDataList] = useState<SectCardProps[]>([]);
+    const [recommendDataList, setRecommendDataList] = useState<RecommendCardProps[]>([]);
+    const [avoidDataList, setAvoidDataList] = useState<RecommendCardProps[]>([]);
 
     const chartTimer = useRef<number>(0);
     const marketTimer = useRef<number>(0);
@@ -97,21 +96,23 @@ const RecommendList = () => {
 
             const { recommendList, avoidList } = data.result;
 
-            const newRecommendDataList: SectCardProps[] = recommendList.map((recommend: RecommendListItem) => {
+            const newRecommendDataList: RecommendCardProps[] = recommendList.map((recommend: RecommendListItem) => {
                 return {
                     id: recommend.stkCd,
                     title: recommend.stkNm,
                     value: Number(recommend.curPrc.replace(/^[+-]/, '')).toLocaleString(),
+                    changeAmount: recommend.predPre ?? '0',
                     fluRt: recommend.fluRt,
                     trend: trendColor(recommend.preSig)
                 }
             });
 
-            const newAvoidDataList: SectCardProps[] = avoidList.map((avoid: RecommendListItem) => {
+            const newAvoidDataList: RecommendCardProps[] = avoidList.map((avoid: RecommendListItem) => {
                 return {
                     id: avoid.stkCd,
                     title: avoid.stkNm,
                     value: Number(avoid.curPrc.replace(/^[+-]/, '')).toLocaleString(),
+                    changeAmount: avoid.predPre ?? '0',
                     fluRt: avoid.fluRt,
                     trend: trendColor(avoid.preSig)
                 }
@@ -160,7 +161,7 @@ const RecommendList = () => {
                     };
                 });
 
-                setRecommendDataList((prevList) => {
+                const updateList = (prevList: RecommendCardProps[]) => {
                     return prevList.map((item) => {
                         const newData = recommendList.find((data: RecommendListStream) => data.code === item.id);
 
@@ -168,6 +169,7 @@ const RecommendList = () => {
                             return {
                                 ...item,
                                 value: Number(newData.value.replace(/^[+-]/, '')).toLocaleString(),
+                                changeAmount: newData.change,
                                 fluRt: newData.fluRt,
                                 trend: trendColor(newData.trend),
                             };
@@ -175,7 +177,10 @@ const RecommendList = () => {
 
                         return item;
                     });
-                });
+                };
+
+                setRecommendDataList(updateList);
+                setAvoidDataList(updateList);
             }
         };
 
@@ -208,7 +213,7 @@ const RecommendList = () => {
                         sx={{ mt: 1, mb: (theme) => theme.spacing(2) }}
                     >
                         { recommendDataList.length > 0 ?
-                            recommendDataList.map((data: SectCardProps, index: number) => (
+                            recommendDataList.map((data: RecommendCardProps, index: number) => (
                                 <Grid key={index} size={{ xs: 12, md: 6 }}>
                                     <RecommendCard {...data} />
                                 </Grid>
@@ -227,7 +232,7 @@ const RecommendList = () => {
                         sx={{ mt: 1, mb: (theme) => theme.spacing(2) }}
                     >
                         { avoidDataList.length > 0 ?
-                            avoidDataList.map((data: SectCardProps, index: number) => (
+                            avoidDataList.map((data: RecommendCardProps, index: number) => (
                                 <Grid key={index} size={{ xs: 12, md: 6 }}>
                                     <RecommendCard {...data} />
                                 </Grid>

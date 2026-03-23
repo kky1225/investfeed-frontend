@@ -31,6 +31,7 @@ import HelpIcon from "@mui/icons-material/Help";
 import CommodityDetailLineChart, {CommodityDetailLineChartProps} from "../../components/CommodityDetailLineChart.tsx";
 import {fetchTimeNow} from "../../api/time/TimeApi.ts";
 import {MarketType} from "../../type/timeType.ts";
+import {renderChangeAmount} from "../../components/CustomRender.tsx";
 
 const StyledToggleButtonGroup = styled(ToggleButtonGroup)(({ theme }) => ({
     border: 'none',
@@ -70,6 +71,7 @@ const CommodityDetail = () => {
         orderWarning: "0",
         value: '-',
         fluRt: '0',
+        predPre: '0',
         openPric: 0,
         interval: '-',
         trend: 'neutral',
@@ -260,6 +262,7 @@ const CommodityDetail = () => {
                 orderWarning: commodityInfo.orderWarning,
                 value: Number(commodityInfo.curPrc.replace(/^[+-]/, '')).toLocaleString(),
                 fluRt: commodityInfo.fluRt,
+                predPre: commodityInfo.predPre || '0',
                 openPric: parseFloat(commodityInfo.openPric.replace(/^[+-]/, '')),
                 interval: today,
                 trend: trendColor(commodityInfo.predPreSig),
@@ -405,6 +408,7 @@ const CommodityDetail = () => {
                         setCommodityChartData((prev) => ({
                             ...prev,
                             value: commodity.value.replace(/^[+-]/, '').toLocaleString(),
+                            predPre: commodity.change || '0',
                             fluRt: commodity.fluRt,
                             trend: trendColor(commodity.trend)
                         }));
@@ -579,6 +583,7 @@ const CommodityDetail = () => {
                                     <Typography variant="h4" component="p">
                                         {commodityChartData.value}
                                     </Typography>
+                                    {renderChangeAmount(commodityChartData.predPre, '')}
                                     <Chip size="small" color={color} label={trendValues[commodityChartData.trend]} />
                                 </Stack>
                                 <Typography variant="caption" sx={{ color: 'text.secondary' }}>

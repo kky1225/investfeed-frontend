@@ -88,8 +88,8 @@ function MarketIndexCard({item, linkable, linkUrl}: MarketIndexCardProps) {
                 <Typography variant="h4" component="p" sx={{fontWeight: 700}}>
                     {item.price}
                 </Typography>
-                <Chip size="small" color={chipColor} label={item.changeRate}/>
                 {renderChangeAmount(item.changeAmount, item.type === 'USD_KRW' ? '원' : '')}
+                <Chip size="small" color={chipColor} label={item.changeRate}/>
             </Stack>
 
             <Typography variant="caption" sx={{color: 'text.disabled', display: 'block'}}>

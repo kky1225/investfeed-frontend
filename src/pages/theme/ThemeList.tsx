@@ -42,7 +42,7 @@ const ThemeList = () => {
             field: 'dtPrftRt',
             headerName: '기간 수익률',
             flex: 1,
-            minWidth: 100,
+            minWidth: 120,
             renderCell: (params) => renderStatus(params.value as number),
         }
     ];

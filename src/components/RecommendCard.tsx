@@ -5,17 +5,19 @@ import Chip from "@mui/material/Chip";
 import {CardActionArea} from "@mui/material";
 import {useNavigate} from "react-router-dom";
 import Card from "@mui/material/Card";
+import {renderChangeAmount} from "./CustomRender.tsx";
 
 export interface RecommendCardProps {
     id: string,
     title: string,
     value: string,
+    changeAmount: string,
     fluRt: string,
     trend: 'up' | 'down' | 'neutral',
 }
 
 const RecommendCard = (
-    { id, title, value, fluRt, trend }: RecommendCardProps,
+    { id, title, value, changeAmount, fluRt, trend }: RecommendCardProps,
 ) => {
     const navigate = useNavigate();
 
@@ -62,6 +64,7 @@ const RecommendCard = (
                             <Typography variant="h4" component="p">
                                 {value}
                             </Typography>
+                            {renderChangeAmount(changeAmount)}
                             <Chip size="small" color={color} label={trendValues[trend]} />
                         </Stack>
                     </Stack>

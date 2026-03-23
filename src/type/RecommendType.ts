@@ -9,6 +9,7 @@ export interface RecommendListItem {
     fluRt: string, // 등락률
     curPrc: string, // 현재가
     preSig: string, // 대비기호
+    predPre: string, // 전일대비
 }
 
 export interface RecommendListStreamReq {
@@ -25,6 +26,7 @@ export interface RecommendListStreamRes {
 export interface RecommendListStream {
     code: string,
     value: string,
+    change: string,
     fluRt: string,
     trend: string,
 }

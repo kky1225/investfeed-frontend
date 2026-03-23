@@ -82,8 +82,8 @@ const CryptoLineChart = (
                         <Typography variant="h4" component="p">
                             {value}
                         </Typography>
-                        <Chip size="small" color={color} label={trendValues[trend]}/>
                         {renderChangeAmount(changePrice)}
+                        <Chip size="small" color={color} label={trendValues[trend]}/>
                     </Stack>
                     <Stack
                         direction="row"

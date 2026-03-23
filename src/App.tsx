@@ -20,6 +20,7 @@ import RecommendList from "./pages/recommend/RecommendList.tsx";
 import MarketIndexList from "./pages/marketindex/MarketIndexList.tsx";
 import CryptoList from "./pages/crypto/CryptoList.tsx";
 import CryptoDetail from "./pages/crypto/CryptoDetail.tsx";
+import CryptoRank from "./pages/crypto/CryptoRank.tsx";
 import CryptoInterest from "./pages/cryptoInterest/CryptoInterest.tsx";
 import NotificationList from "./pages/notification/NotificationList.tsx";
 import ProtectedRoute from "./components/ProtectedRoute.tsx";
@@ -61,6 +62,7 @@ function App() {
                         <Route path="/market-index/list" Component={MarketIndexList} />
 
                         <Route path="/crypto/list" Component={CryptoList} />
+                        <Route path="/crypto/rank" Component={CryptoRank} />
                         <Route path="/crypto/detail/:id" Component={CryptoDetail} />
 
                         <Route path="/crypto-interest/list/:groupId?" Component={CryptoInterest} />

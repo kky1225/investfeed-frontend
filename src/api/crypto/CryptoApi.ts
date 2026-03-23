@@ -21,6 +21,16 @@ export const fetchCryptoDetail = async (req: CryptoDetailReq) => {
     return res.data;
 }
 
+export const fetchCryptoRankList = async () => {
+    const res = await api.get(`/crypto/rank`);
+    return res.data;
+}
+
+export const fetchCryptoRankStream = async () => {
+    const res = await api.get(`/crypto/rank/stream`);
+    return res.data;
+}
+
 export const fetchCryptoSearch = async (keyword: string) => {
     const res = await api.get(`/crypto/search`, {params: {keyword}});
     return res.data;

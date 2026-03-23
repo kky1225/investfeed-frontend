@@ -24,6 +24,7 @@ export interface CommodityListItem {
     stkNm: string,
     curPrc: string,
     predPreSig: string,
+    predPre: string,
     fluRt: string,
     trdeQty: string,
     trdePrica: string,
@@ -47,6 +48,7 @@ export interface CommodityStreamRes {
 export interface CommodityStream {
     code: string,
     value: string,
+    change: string,
     fluRt: string,
     trend: string,
 }

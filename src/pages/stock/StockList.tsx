@@ -222,7 +222,7 @@ const StockList = () => {
                             field: 'trdePrica',
                             headerName: '거래대금 (백만)',
                             flex: 1,
-                            minWidth: 100,
+                            minWidth: 150,
                             valueFormatter: (param: number) => {
                                 return Number(param).toLocaleString().replace(/^[+-]/, '')
                             }
@@ -266,7 +266,7 @@ const StockList = () => {
                             field: 'trdePrica',
                             headerName: '거래량',
                             flex: 1,
-                            minWidth: 100,
+                            minWidth: 120,
                             valueFormatter: (param: number) => {
                                 return Number(param).toLocaleString().replace(/^[+-]/, '')
                             }
@@ -310,7 +310,7 @@ const StockList = () => {
                             field: 'trdePrica',
                             headerName: '거래량 급증률',
                             flex: 1,
-                            minWidth: 100,
+                            minWidth: 140,
                             valueFormatter: (param: string) => {
                                 return `${Number(param.replace(/^[+-]/, '')).toLocaleString()}%`
                             }

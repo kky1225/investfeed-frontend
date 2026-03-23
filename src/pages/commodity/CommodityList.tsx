@@ -144,6 +144,7 @@ const CommodityList = () => {
                     title: commodityItem.stkNm,
                     value: Number(commodityItem.curPrc.replace(/^[+-]/, '')).toLocaleString(),
                     fluRt: commodityItem.fluRt,
+                    predPre: commodityItem.predPre || '0',
                     openPric: parseFloat(commodityItem.openPric.replace(/^[+-]/, '')),
                     interval: today,
                     trend: trendColor(commodityItem.predPreSig),
@@ -194,6 +195,7 @@ const CommodityList = () => {
                             return {
                                 ...item,
                                 value: Number(newData.value.replace(/^[+-]/, '')).toLocaleString(),
+                                predPre: newData.change || '0',
                                 fluRt: newData.fluRt,
                                 trend: trendColor(newData.trend)
                             };

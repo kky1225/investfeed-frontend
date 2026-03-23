@@ -15,6 +15,7 @@ export interface CommodityDetailLineChartProps {
     orderWarning: string,
     value: string,
     fluRt: string,
+    predPre: string,
     openPric: number,
     interval: string,
     trend: 'up' | 'down' | 'neutral',

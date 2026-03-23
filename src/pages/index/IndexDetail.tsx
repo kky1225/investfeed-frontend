@@ -674,8 +674,8 @@ const IndexDetail = () => {
                                     <Typography variant="h4" component="p">
                                         {sectChartData.value}
                                     </Typography>
-                                    <Chip size="small" color={color} label={trendValues[sectChartData.trend]} />
                                     {renderChangeAmount(sectChartData.predPre, '')}
+                                    <Chip size="small" color={color} label={trendValues[sectChartData.trend]} />
                                 </Stack>
                                 <Typography variant="caption" sx={{ color: 'text.secondary' }}>
                                     {sectChartData.interval}
@@ -841,18 +841,7 @@ const IndexDetail = () => {
                                     <InvestorBarChart data={indexBarData} />
                                 </CardContent>
                             </Card>
-                        </Grid>
-                        <Grid size={{ xs: 12, md: 6 }}>
-                            <Card variant="outlined" sx={{ width: '100%' }}>
-                                <CardContent>
-                                    <ProgramBarChart data={programBarData} />
-                                </CardContent>
-                            </Card>
-                        </Grid>
-                    </Grid>
-                    <Grid container spacing={2} sx={{ mt: 1 }}>
-                        <Grid size={{ xs: 12, md: 6 }}>
-                            <Card variant="outlined" sx={{ width: '100%' }}>
+                            <Card variant="outlined" sx={{ width: '100%', mt: 2 }}>
                                 {indexMessage.icon}
                                 <CardContent>
                                     <Typography gutterBottom variant="h5" component="div">
@@ -866,6 +855,11 @@ const IndexDetail = () => {
                         </Grid>
                         <Grid size={{ xs: 12, md: 6 }}>
                             <Card variant="outlined" sx={{ width: '100%' }}>
+                                <CardContent>
+                                    <ProgramBarChart data={programBarData} />
+                                </CardContent>
+                            </Card>
+                            <Card variant="outlined" sx={{ width: '100%', mt: 2 }}>
                                 {programMessage.icon}
                                 <CardContent>
                                     <Typography gutterBottom variant="h5" component="div">
