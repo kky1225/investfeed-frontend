@@ -41,6 +41,14 @@ api.interceptors.response.use(
                 const newToken = res.result?.accessToken;
                 if (newToken) {
                     sessionStorage.setItem('accessToken', newToken);
+                    const storedUser = sessionStorage.getItem('user');
+                    if (storedUser && res.result) {
+                        const user = JSON.parse(storedUser);
+                        if (res.result.role) user.role = res.result.role;
+                        if (res.result.nickname) user.nickname = res.result.nickname;
+                        if (res.result.email) user.email = res.result.email;
+                        sessionStorage.setItem('user', JSON.stringify(user));
+                    }
                     api.defaults.headers.common.Authorization = `Bearer ${newToken}`;
                     processQueue(null, newToken);
                     originalRequest.headers.Authorization = `Bearer ${newToken}`;

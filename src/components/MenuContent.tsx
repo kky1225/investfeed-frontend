@@ -20,10 +20,12 @@ import GroupIcon from '@mui/icons-material/Group';
 import RecommendIcon from '@mui/icons-material/Recommend';
 import CurrencyBitcoinIcon from '@mui/icons-material/CurrencyBitcoin';
 import NotificationsIcon from '@mui/icons-material/Notifications';
+import AdminPanelSettingsIcon from '@mui/icons-material/AdminPanelSettings';
 import {useLocation, useNavigate} from "react-router-dom";
-import {Fragment, useEffect, useRef, useState} from "react";
+import {Fragment, useEffect, useMemo, useRef, useState} from "react";
 import { Collapse } from "@mui/material";
 import {ExpandLess, ExpandMore} from "@mui/icons-material";
+import {useAuth} from "../context/AuthContext";
 
 const mainListItems = [
     { id: 1, text: '대시보드', icon: <DashboardIcon />, url: '/' },
@@ -58,6 +60,15 @@ interface MenuContentProps {
 export default function MenuContent({ collapsed = false }: MenuContentProps) {
     const location = useLocation();
     const navigate = useNavigate();
+    const { user } = useAuth();
+
+    const menuItems = useMemo(() => {
+        const items = [...mainListItems];
+        if (user?.role === 'ADMIN') {
+            items.push({ id: 100, text: '회원 관리', icon: <AdminPanelSettingsIcon />, url: '/admin/members' });
+        }
+        return items;
+    }, [user?.role]);
 
     const [openSubMenu, setOpenSubMenu] = useState<string | null>(null);
     const [popoverMenu, setPopoverMenu] = useState<string | null>(null);
@@ -110,7 +121,7 @@ export default function MenuContent({ collapsed = false }: MenuContentProps) {
     return (
         <Stack sx={{ flexGrow: 1, p: 1, justifyContent: 'space-between' }}>
             <List dense>
-                {mainListItems.map((item) => (
+                {menuItems.map((item) => (
                     <Fragment key={item.id}>
                         <ListItem disablePadding sx={{ display: 'block' }}>
                             {collapsed && !item.children ? (

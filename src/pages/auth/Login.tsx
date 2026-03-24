@@ -99,7 +99,7 @@ export default function Login(props: { disableCustomTheme?: boolean }) {
             const res = await login({ loginId, password });
             if (res.result?.accessToken) {
                 setAuth(
-                    { loginId, nickname: loginId, email: '' },
+                    { loginId, nickname: res.result.nickname, email: res.result.email, role: res.result.role },
                     res.result.accessToken,
                     res.result.passwordChangeRequired,
                 );
@@ -110,8 +110,24 @@ export default function Login(props: { disableCustomTheme?: boolean }) {
                 }
             }
         } catch (err: unknown) {
-            const axiosErr = err as { response?: { data?: { message?: string } } };
-            setErrorMessage(axiosErr.response?.data?.message ?? '로그인에 실패했습니다.');
+            const axiosErr = err as { response?: { data?: { code?: string; message?: string } } };
+            const code = axiosErr.response?.data?.code;
+            switch (code) {
+                case 'AUTH_4011':
+                    setErrorMessage('아이디 또는 비밀번호가 올바르지 않습니다.');
+                    break;
+                case 'AUTH_4012':
+                    setErrorMessage('비밀번호를 여러 번 잘못 입력하여 계정이 잠금되었습니다.');
+                    break;
+                case 'AUTH_4013':
+                    setErrorMessage(axiosErr.response?.data?.message ?? '계정이 잠금된 상태입니다.');
+                    break;
+                case 'AUTH_4014':
+                    setErrorMessage('계정이 영구 잠금되었습니다. 관리자에게 문의하세요.');
+                    break;
+                default:
+                    setErrorMessage('로그인에 실패했습니다.');
+            }
         } finally {
             setLoading(false);
         }

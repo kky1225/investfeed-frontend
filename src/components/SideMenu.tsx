@@ -12,6 +12,7 @@ import MuiMenuItem from "@mui/material/MenuItem";
 import MenuButton from "./MenuButton.tsx";
 import LogoutRoundedIcon from '@mui/icons-material/LogoutRounded';
 import LockResetIcon from '@mui/icons-material/LockReset';
+import AccountCircleIcon from '@mui/icons-material/AccountCircle';
 import MoreVertRoundedIcon from '@mui/icons-material/MoreVertRounded';
 import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
@@ -191,6 +192,21 @@ export default function SideMenu() {
                         </Box>
                     )}
                     <Divider />
+                    <MenuItem
+                        onClick={() => { handleClose(); navigate('/settings/profile'); }}
+                        sx={{
+                            [`& .${listItemIconClasses.root}`]: {
+                                ml: 'auto',
+                                minWidth: 0,
+                                pl: 1,
+                            },
+                        }}
+                    >
+                        <ListItemText>회원정보 수정</ListItemText>
+                        <ListItemIcon>
+                            <AccountCircleIcon fontSize="small" />
+                        </ListItemIcon>
+                    </MenuItem>
                     <MenuItem
                         onClick={() => { handleClose(); navigate('/settings/change-password'); }}
                         sx={{

@@ -23,6 +23,8 @@ import CryptoDetail from "./pages/crypto/CryptoDetail.tsx";
 import CryptoRank from "./pages/crypto/CryptoRank.tsx";
 import CryptoInterest from "./pages/cryptoInterest/CryptoInterest.tsx";
 import NotificationList from "./pages/notification/NotificationList.tsx";
+import MemberManagement from "./pages/admin/MemberManagement.tsx";
+import Profile from "./pages/settings/Profile.tsx";
 import ProtectedRoute from "./components/ProtectedRoute.tsx";
 import ChangePassword from "./pages/settings/ChangePassword.tsx";
 
@@ -40,6 +42,7 @@ function App() {
 
                 <Route element={<ProtectedRoute />}>
                     <Route path="/settings/change-password" Component={ChangePassword} />
+                    <Route path="/settings/profile" Component={Profile} />
                     <Route element={<MainLayout />}>
                         <Route path="/" Component={Dashboard} />
                         <Route path="/interest" Component={Interest} />
@@ -71,6 +74,8 @@ function App() {
                         <Route path="/interest/list/:groupId?" Component={Interest} />
 
                         <Route path="/notification/list" Component={NotificationList} />
+
+                        <Route path="/admin/members" Component={MemberManagement} />
                     </Route>
                 </Route>
             </Routes>

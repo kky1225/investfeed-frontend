@@ -15,6 +15,9 @@ export interface SignupReq {
 export interface TokenRes {
     accessToken: string;
     passwordChangeRequired: boolean;
+    role: string;
+    nickname: string;
+    email: string;
 }
 
 export interface ApiResponse<T> {
@@ -32,4 +35,27 @@ export interface AuthUser {
     loginId: string;
     nickname: string;
     email: string;
+    role: string;
+}
+
+export interface UpdateProfileReq {
+    nickname: string;
+    email: string;
+    name: string;
+    phone: string;
+}
+
+export interface MemberRes {
+    id: number;
+    loginId: string;
+    email: string;
+    nickname: string;
+    name: string;
+    phone: string;
+    role: string;
+    failedLoginAttempts: number;
+    lockedAt: string | null;
+    lockExpiresAt: string | null;
+    permanentLock: boolean;
+    createdAt: string;
 }
