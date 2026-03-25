@@ -10,11 +10,17 @@ import DialogTitle from '@mui/material/DialogTitle';
 import DialogContent from '@mui/material/DialogContent';
 import DialogContentText from '@mui/material/DialogContentText';
 import DialogActions from '@mui/material/DialogActions';
+import TextField from '@mui/material/TextField';
+import FormControl from '@mui/material/FormControl';
+import InputLabel from '@mui/material/InputLabel';
+import Select from '@mui/material/Select';
+import MenuItem from '@mui/material/MenuItem';
 import {DataGrid, type GridColDef} from '@mui/x-data-grid';
 import LockOpenIcon from '@mui/icons-material/LockOpen';
 import LockIcon from '@mui/icons-material/Lock';
-import {fetchMembers, lockAccount, unlockAccount} from '../../api/admin/AdminApi';
-import type {MemberRes} from '../../type/AuthType';
+import PersonAddIcon from '@mui/icons-material/PersonAdd';
+import {createMember, fetchMembers, lockAccount, unlockAccount} from '../../api/admin/AdminApi';
+import type {CreateMemberReq, MemberRes} from '../../type/AuthType';
 
 function formatDateTime(dateStr: string | null) {
     if (!dateStr) return '-';
@@ -35,6 +41,19 @@ function getLockStatus(member: MemberRes): { label: string; color: 'default' | '
     return {label: '잠금', color: 'warning'};
 }
 
+function getRoleLabel(role: string): { label: string; color: 'primary' | 'default' | 'secondary' } {
+    switch (role) {
+        case 'ADMIN': return {label: '관리자', color: 'primary'};
+        case 'USER': return {label: '사용자', color: 'secondary'};
+        case 'GUEST': return {label: '게스트', color: 'default'};
+        default: return {label: role, color: 'default'};
+    }
+}
+
+const initialCreateForm: CreateMemberReq = {
+    loginId: '', email: '', nickname: '', name: '', phone: '', role: 'GUEST'
+};
+
 export default function MemberManagement() {
     const [members, setMembers] = useState<MemberRes[]>([]);
     const [loading, setLoading] = useState(true);
@@ -44,6 +63,9 @@ export default function MemberManagement() {
     const [confirmDialog, setConfirmDialog] = useState<{ open: boolean; loginId: string; action: 'lock' | 'unlock' }>({
         open: false, loginId: '', action: 'unlock'
     });
+    const [createDialog, setCreateDialog] = useState(false);
+    const [createForm, setCreateForm] = useState<CreateMemberReq>(initialCreateForm);
+    const [createLoading, setCreateLoading] = useState(false);
 
     const loadMembers = async () => {
         setLoading(true);
@@ -84,17 +106,35 @@ export default function MemberManagement() {
         }
     };
 
+    const handleCreateMember = async () => {
+        if (!createForm.loginId || !createForm.email || !createForm.nickname || !createForm.name || !createForm.phone) {
+            setSnackbar({open: true, message: '모든 필드를 입력해주세요.', severity: 'error'});
+            return;
+        }
+
+        setCreateLoading(true);
+        try {
+            await createMember(createForm);
+            setSnackbar({open: true, message: `${createForm.loginId} 계정이 생성되었습니다.`, severity: 'success'});
+            setCreateDialog(false);
+            setCreateForm(initialCreateForm);
+            await loadMembers();
+        } catch (error: any) {
+            const message = error?.response?.data?.message || '회원 생성에 실패했습니다.';
+            setSnackbar({open: true, message, severity: 'error'});
+        } finally {
+            setCreateLoading(false);
+        }
+    };
+
     const columns: GridColDef[] = [
         {field: 'loginId', headerName: '아이디', flex: 1, minWidth: 120},
         {
             field: 'role', headerName: '역할', width: 80,
-            renderCell: (params) => (
-                <Chip
-                    label={params.value === 'ADMIN' ? '관리자' : '사용자'}
-                    size="small"
-                    color={params.value === 'ADMIN' ? 'primary' : 'default'}
-                />
-            )
+            renderCell: (params) => {
+                const role = getRoleLabel(params.value);
+                return <Chip label={role.label} size="small" color={role.color}/>;
+            }
         },
         {
             field: 'status', headerName: '상태', width: 120,
@@ -155,9 +195,18 @@ export default function MemberManagement() {
 
     return (
         <Box sx={{width: '100%', maxWidth: {sm: '100%', md: '1700px'}}}>
-            <Typography component="h2" variant="h6" sx={{mb: 2}}>
-                회원 관리
-            </Typography>
+            <Box sx={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2}}>
+                <Typography component="h2" variant="h6">
+                    회원 관리
+                </Typography>
+                <Button
+                    variant="contained"
+                    startIcon={<PersonAddIcon/>}
+                    onClick={() => setCreateDialog(true)}
+                >
+                    회원 추가
+                </Button>
+            </Box>
 
             <DataGrid
                 rows={members}
@@ -178,6 +227,7 @@ export default function MemberManagement() {
                 }}
             />
 
+            {/* 잠금/해제 확인 다이얼로그 */}
             <Dialog open={confirmDialog.open} onClose={() => setConfirmDialog({open: false, loginId: '', action: 'unlock'})}>
                 <DialogTitle>
                     {confirmDialog.action === 'lock' ? '계정 잠금' : '계정 잠금 해제'}
@@ -198,6 +248,60 @@ export default function MemberManagement() {
                         color={confirmDialog.action === 'lock' ? 'error' : 'primary'}
                     >
                         {confirmDialog.action === 'lock' ? '잠금' : '해제'}
+                    </Button>
+                </DialogActions>
+            </Dialog>
+
+            {/* 회원 생성 다이얼로그 */}
+            <Dialog open={createDialog} onClose={() => { setCreateDialog(false); setCreateForm(initialCreateForm); }} maxWidth="sm" fullWidth>
+                <DialogTitle>회원 추가</DialogTitle>
+                <DialogContent>
+                    <Box sx={{display: 'flex', flexDirection: 'column', gap: 2, mt: 1}}>
+                        <TextField
+                            label="아이디" required fullWidth size="small"
+                            value={createForm.loginId}
+                            onChange={(e) => setCreateForm({...createForm, loginId: e.target.value})}
+                        />
+                        <TextField
+                            label="이름" required fullWidth size="small"
+                            value={createForm.name}
+                            onChange={(e) => setCreateForm({...createForm, name: e.target.value})}
+                        />
+                        <TextField
+                            label="닉네임" required fullWidth size="small"
+                            value={createForm.nickname}
+                            onChange={(e) => setCreateForm({...createForm, nickname: e.target.value})}
+                        />
+                        <TextField
+                            label="이메일" required fullWidth size="small" type="email"
+                            value={createForm.email}
+                            onChange={(e) => setCreateForm({...createForm, email: e.target.value})}
+                        />
+                        <TextField
+                            label="전화번호" required fullWidth size="small"
+                            value={createForm.phone}
+                            onChange={(e) => setCreateForm({...createForm, phone: e.target.value})}
+                        />
+                        <FormControl fullWidth size="small">
+                            <InputLabel>역할</InputLabel>
+                            <Select
+                                value={createForm.role}
+                                label="역할"
+                                onChange={(e) => setCreateForm({...createForm, role: e.target.value})}
+                            >
+                                <MenuItem value="USER">사용자</MenuItem>
+                                <MenuItem value="GUEST">게스트</MenuItem>
+                            </Select>
+                        </FormControl>
+                        <Alert severity="info" sx={{mt: 1}}>
+                            기본 비밀번호가 설정되며, 첫 로그인 시 비밀번호 변경이 필요합니다.
+                        </Alert>
+                    </Box>
+                </DialogContent>
+                <DialogActions>
+                    <Button onClick={() => { setCreateDialog(false); setCreateForm(initialCreateForm); }}>취소</Button>
+                    <Button onClick={handleCreateMember} variant="contained" disabled={createLoading}>
+                        {createLoading ? '생성 중...' : '생성'}
                     </Button>
                 </DialogActions>
             </Dialog>

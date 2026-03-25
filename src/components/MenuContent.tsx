@@ -28,10 +28,10 @@ import {ExpandLess, ExpandMore} from "@mui/icons-material";
 import {useAuth} from "../context/AuthContext";
 
 const mainListItems = [
-    { id: 1, text: '대시보드', icon: <DashboardIcon />, url: '/' },
-    { id: 2, text: '주요 지수', icon: <AnalyticsRoundedIcon />, url: '/market-index/list' },
+    { id: 1, text: '주요 지수', icon: <AnalyticsRoundedIcon />, url: '/' },
     { id: 3, text: '국내 주식', icon: <ShowChartIcon />,
         children: [
+            { id: 2, text: '대시보드', icon: <DashboardIcon />, url: '/dashboard' },
             { id: 4, text: '지수', icon: <AnalyticsRoundedIcon />, url: '/index/list' },
             { id: 5, text: '업종', icon: <HomeRoundedIcon />, url: '/sect/list/001' },
             { id: 6, text: '테마', icon: <GroupIcon />, url: '/theme/list' },

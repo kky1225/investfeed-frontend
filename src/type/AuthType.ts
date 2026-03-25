@@ -45,6 +45,28 @@ export interface UpdateProfileReq {
     phone: string;
 }
 
+export interface CreateMemberReq {
+    loginId: string;
+    email: string;
+    nickname: string;
+    name: string;
+    phone: string;
+    role: string;
+}
+
+export interface ApiKeyReq {
+    provider: string;
+    appKey: string;
+    secretKey: string;
+}
+
+export interface ApiKeyRes {
+    id: number;
+    provider: string;
+    appKey: string;
+    createdAt: string;
+}
+
 export interface MemberRes {
     id: number;
     loginId: string;

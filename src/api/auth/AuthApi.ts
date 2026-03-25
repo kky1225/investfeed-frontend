@@ -1,5 +1,5 @@
 import api from '../../axios';
-import type { LoginReq, SignupReq, ChangePasswordReq, UpdateProfileReq, TokenRes, MemberRes, ApiResponse } from '../../type/AuthType';
+import type { LoginReq, SignupReq, ChangePasswordReq, UpdateProfileReq, ApiKeyReq, ApiKeyRes, TokenRes, MemberRes, ApiResponse } from '../../type/AuthType';
 
 export const login = async (req: LoginReq): Promise<ApiResponse<TokenRes>> => {
     const res = await api.post<ApiResponse<TokenRes>>('/auth/login', req);
@@ -32,5 +32,20 @@ export const fetchProfile = async (): Promise<ApiResponse<MemberRes>> => {
 
 export const updateProfile = async (req: UpdateProfileReq): Promise<ApiResponse<null>> => {
     const res = await api.put<ApiResponse<null>>('/auth/profile', req);
+    return res.data;
+};
+
+export const fetchApiKeys = async (): Promise<ApiResponse<ApiKeyRes[]>> => {
+    const res = await api.get<ApiResponse<ApiKeyRes[]>>('/auth/api-keys');
+    return res.data;
+};
+
+export const createApiKey = async (req: ApiKeyReq): Promise<ApiResponse<null>> => {
+    const res = await api.post<ApiResponse<null>>('/auth/api-keys', req);
+    return res.data;
+};
+
+export const deleteApiKey = async (id: number): Promise<ApiResponse<null>> => {
+    const res = await api.delete<ApiResponse<null>>(`/auth/api-keys/${id}`);
     return res.data;
 };

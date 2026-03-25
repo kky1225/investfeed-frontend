@@ -14,6 +14,7 @@ import { listClasses } from '@mui/material/List';
 import { paperClasses } from '@mui/material/Paper';
 import LogoutRoundedIcon from '@mui/icons-material/LogoutRounded';
 import LockResetIcon from '@mui/icons-material/LockReset';
+import VpnKeyIcon from '@mui/icons-material/VpnKey';
 import MoreVertRoundedIcon from '@mui/icons-material/MoreVertRounded';
 import MenuButton from './MenuButton';
 import MenuContent from './MenuContent';
@@ -147,6 +148,21 @@ export default function SideMenuMobile({ open, toggleDrawer }: SideMenuMobilePro
                             <ListItemText>비밀번호 변경</ListItemText>
                             <ListItemIcon>
                                 <LockResetIcon fontSize="small" />
+                            </ListItemIcon>
+                        </MenuItem>
+                        <MenuItem
+                            onClick={() => { handleClose(); navigate('/settings/api-keys'); }}
+                            sx={{
+                                [`& .${listItemIconClasses.root}`]: {
+                                    ml: 'auto',
+                                    minWidth: 0,
+                                    pl: 1,
+                                },
+                            }}
+                        >
+                            <ListItemText>API Key 관리</ListItemText>
+                            <ListItemIcon>
+                                <VpnKeyIcon fontSize="small" />
                             </ListItemIcon>
                         </MenuItem>
                         <MenuItem

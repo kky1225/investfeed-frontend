@@ -23,7 +23,6 @@ import DoNotDisturbIcon from '@mui/icons-material/DoNotDisturb';
 import {useNavigate} from "react-router-dom";
 import {ChartDay, DashboardIndexListItem, InvestorTradeRankList} from "../../type/DashboardType.ts";
 import {fetchDashboard} from "../../api/dashboard/DashboardApi.ts";
-
 export default function Dashboard() {
     const navigate = useNavigate();
 
@@ -213,6 +212,7 @@ export default function Dashboard() {
 
     const theme = useTheme();
     const isSmallScreen = useMediaQuery(theme.breakpoints.down('sm'));
+    const isLargeScreen = useMediaQuery(theme.breakpoints.up('lg'));
 
     function renderStatus(status: number) {
         const colors = status == 0 ? 'default' : status > 0 ? 'error': 'info';
@@ -302,61 +302,110 @@ export default function Dashboard() {
                         당일 투자자별 순매수 현황(억)
                     </Typography>
                 </Grid>
-                <Grid size={{ xs: 12, md: 4 }}>
-                    <Card variant="outlined" sx={{ width: '100%' }}>
-                        <CardContent>
-                            <Typography component="h2" variant="subtitle2" gutterBottom>
-                                종합(KOSPI)
-                            </Typography>
-                            <InvestorBarChart data={kospiBarData} />
-                        </CardContent>
-                    </Card>
-                </Grid>
-                <Grid size={{ xs: 12, md: 4 }}>
-                    <Card variant="outlined" sx={{ width: '100%' }}>
-                        <CardContent>
-                            <Typography component="h2" variant="subtitle2" gutterBottom>
-                                종합(KOSDAQ)
-                            </Typography>
-                            <InvestorBarChart data={kosdacBarData} />
-                        </CardContent>
-                    </Card>
-                </Grid>
-                <Grid size={{ xs: 12, md: 4 }}>
-                {
-                    message.map((item: MessageProps, index: number) => (
-                        <Card key={index} variant="outlined" sx={{ width: '100%', mb: 1 }}>
-                            {item.icon}
-                            <CardContent>
-                                <Typography gutterBottom variant="h5" component="div">
-                                    {item.title}
-                                </Typography>
-                                <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-                                    {item.message}
-                                </Typography>
-                            </CardContent>
-                        </Card>
-                    ))
-                }
-                </Grid>
+                {isLargeScreen ? (
+                    <>
+                        <Grid size={{ lg: 4 }}>
+                            <Card variant="outlined" sx={{ width: '100%' }}>
+                                <CardContent>
+                                    <Typography component="h2" variant="subtitle2" gutterBottom>
+                                        종합(KOSPI)
+                                    </Typography>
+                                    <InvestorBarChart data={kospiBarData} />
+                                </CardContent>
+                            </Card>
+                        </Grid>
+                        <Grid size={{ lg: 4 }}>
+                            <Card variant="outlined" sx={{ width: '100%' }}>
+                                <CardContent>
+                                    <Typography component="h2" variant="subtitle2" gutterBottom>
+                                        종합(KOSDAQ)
+                                    </Typography>
+                                    <InvestorBarChart data={kosdacBarData} />
+                                </CardContent>
+                            </Card>
+                        </Grid>
+                        <Grid size={{ lg: 4 }}>
+                            {message.map((item: MessageProps, index: number) => (
+                                <Card key={index} variant="outlined" sx={{ width: '100%', mb: 1 }}>
+                                    {item.icon}
+                                    <CardContent>
+                                        <Typography gutterBottom variant="h5" component="div">
+                                            {item.title}
+                                        </Typography>
+                                        <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+                                            {item.message}
+                                        </Typography>
+                                    </CardContent>
+                                </Card>
+                            ))}
+                        </Grid>
+                    </>
+                ) : (
+                    <>
+                        <Grid size={{ xs: 12, sm: 6 }}>
+                            <Card variant="outlined" sx={{ width: '100%' }}>
+                                <CardContent>
+                                    <Typography component="h2" variant="subtitle2" gutterBottom>
+                                        종합(KOSPI)
+                                    </Typography>
+                                    <InvestorBarChart data={kospiBarData} />
+                                </CardContent>
+                            </Card>
+                        </Grid>
+                        {message[0] && (
+                            <Grid size={{ xs: 12, sm: 6 }}>
+                                <Card variant="outlined" sx={{ width: '100%' }}>
+                                    {message[0].icon}
+                                    <CardContent>
+                                        <Typography gutterBottom variant="h5" component="div">
+                                            {message[0].title}
+                                        </Typography>
+                                        <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+                                            {message[0].message}
+                                        </Typography>
+                                    </CardContent>
+                                </Card>
+                            </Grid>
+                        )}
+                        <Grid size={{ xs: 12, sm: 6 }}>
+                            <Card variant="outlined" sx={{ width: '100%' }}>
+                                <CardContent>
+                                    <Typography component="h2" variant="subtitle2" gutterBottom>
+                                        종합(KOSDAQ)
+                                    </Typography>
+                                    <InvestorBarChart data={kosdacBarData} />
+                                </CardContent>
+                            </Card>
+                        </Grid>
+                        {message[1] && (
+                            <Grid size={{ xs: 12, sm: 6 }}>
+                                <Card variant="outlined" sx={{ width: '100%' }}>
+                                    {message[1].icon}
+                                    <CardContent>
+                                        <Typography gutterBottom variant="h5" component="div">
+                                            {message[1].title}
+                                        </Typography>
+                                        <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+                                            {message[1].message}
+                                        </Typography>
+                                    </CardContent>
+                                </Card>
+                            </Grid>
+                        )}
+                    </>
+                )}
             </Grid>
             <Grid container spacing={2} columns={12}>
                 <Grid size={{ xs: 12, lg: 7 }}>
                     <Typography component="h2" variant="h6" sx={{ mb: 2 }}>
                         월간 종합(KOSPI) 기관/외국인 매수 상위 순위
                     </Typography>
+                    <CustomDataTable rows={row} columns={columns} pageSize={20} />
                 </Grid>
                 <Grid size={{ xs: 12, lg: 5 }}>
                     <Typography component="h2" variant="h6" sx={{ mb: 2 }}>
                         투자 비중
                     </Typography>
-                </Grid>
-            </Grid>
-            <Grid container spacing={2} columns={12}>
-                <Grid size={{ xs: 12, lg: 7 }}>
-                    <CustomDataTable rows={row} columns={columns} pageSize={20} />
-                </Grid>
-                <Grid size={{ xs: 12, lg: 5 }}>
                     <Stack gap={2} direction={{ xs: 'column', sm: 'row', lg: 'column' }}>
                         <CustomPieChart />
                     </Stack>

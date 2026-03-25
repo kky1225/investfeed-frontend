@@ -1,5 +1,10 @@
 import api from '../../axios';
-import type { ApiResponse, MemberRes } from '../../type/AuthType';
+import type { ApiResponse, CreateMemberReq, MemberRes } from '../../type/AuthType';
+
+export const createMember = async (req: CreateMemberReq): Promise<ApiResponse<null>> => {
+    const res = await api.post<ApiResponse<null>>('/auth/admin/members', req);
+    return res.data;
+};
 
 export const fetchMembers = async (): Promise<ApiResponse<MemberRes[]>> => {
     const res = await api.get<ApiResponse<MemberRes[]>>('/auth/admin/members');

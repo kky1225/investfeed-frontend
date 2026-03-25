@@ -1,7 +1,6 @@
 import './App.css'
 import {Route, Routes, useParams} from "react-router-dom";
 import Login from "./pages/auth/Login.tsx";
-import Signup from "./pages/auth/Signup.tsx";
 import Dashboard from "./pages/dashboard/Dashboard.tsx";
 import MainLayout from "./layout/MainLayout.tsx";
 import Interest from "./pages/interest/Interest.tsx";
@@ -27,6 +26,7 @@ import MemberManagement from "./pages/admin/MemberManagement.tsx";
 import Profile from "./pages/settings/Profile.tsx";
 import ProtectedRoute from "./components/ProtectedRoute.tsx";
 import ChangePassword from "./pages/settings/ChangePassword.tsx";
+import ApiKeyManagement from "./pages/settings/ApiKeyManagement.tsx";
 
 const StockDetailWithKey = () => {
     const { id } = useParams();
@@ -38,13 +38,14 @@ function App() {
         <>
             <Routes>
                 <Route path="/login" Component={Login} />
-                <Route path="/signup" Component={Signup} />
 
                 <Route element={<ProtectedRoute />}>
                     <Route path="/settings/change-password" Component={ChangePassword} />
                     <Route path="/settings/profile" Component={Profile} />
+                    <Route path="/settings/api-keys" Component={ApiKeyManagement} />
                     <Route element={<MainLayout />}>
-                        <Route path="/" Component={Dashboard} />
+                        <Route path="/" Component={MarketIndexList} />
+                        <Route path="/dashboard" Component={Dashboard} />
                         <Route path="/interest" Component={Interest} />
                         <Route path="/index/list" Component={IndexList} />
                         <Route path="/index/detail/:id" Component={IndexDetail} />

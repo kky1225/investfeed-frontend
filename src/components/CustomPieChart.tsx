@@ -8,6 +8,7 @@ import Box from '@mui/material/Box';
 import Stack from '@mui/material/Stack';
 import LinearProgress, { linearProgressClasses } from '@mui/material/LinearProgress';
 import {Fragment} from "react";
+import {useMediaQuery, useTheme} from "@mui/material";
 
 const data = [
     { label: '삼성전자', value: 22100000 },
@@ -96,19 +97,21 @@ const StyledText = styled('text', {
 interface PieCenterLabelProps {
     primaryText: string;
     secondaryText: string;
+    small?: boolean;
 }
 
-function PieCenterLabel({ primaryText, secondaryText }: PieCenterLabelProps) {
+function PieCenterLabel({ primaryText, secondaryText, small }: PieCenterLabelProps) {
     const { width, height, left, top } = useDrawingArea();
-    const primaryY = top + height / 2 - 10;
-    const secondaryY = primaryY + 24;
+    const gap = small ? 18 : 24;
+    const primaryY = top + height / 2 - (small ? 8 : 10);
+    const secondaryY = primaryY + gap;
 
     return (
         <Fragment>
-            <StyledText variant="primary" x={left + width / 2} y={primaryY}>
+            <StyledText variant="primary" x={left + width / 2} y={primaryY} style={small ? { fontSize: '0.85rem' } : undefined}>
                 {primaryText}
             </StyledText>
-            <StyledText variant="secondary" x={left + width / 2} y={secondaryY}>
+            <StyledText variant="secondary" x={left + width / 2} y={secondaryY} style={small ? { fontSize: '0.7rem' } : undefined}>
                 {secondaryText}
             </StyledText>
         </Fragment>
@@ -125,6 +128,16 @@ const colors = [
 ];
 
 export default function CustomPieChart() {
+    const theme = useTheme();
+    const isSmallScreen = useMediaQuery(theme.breakpoints.down('sm'));
+
+    const chartSize = isSmallScreen ? 200 : 280;
+    const innerRadius = isSmallScreen ? 50 : 75;
+    const outerRadius = isSmallScreen ? 70 : 100;
+    const chartMargin = isSmallScreen
+        ? { left: 30, right: 30, top: 40, bottom: 40 }
+        : { left: 50, right: 80, top: 80, bottom: 80 };
+
     return (
         <Card
             variant="outlined"
@@ -134,28 +147,23 @@ export default function CustomPieChart() {
                 <Typography component="h2" variant="subtitle2">
                     보유 주식
                 </Typography>
-                <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                     <PieChart
                         colors={colors}
-                        margin={{
-                            left: 50,
-                            right: 80,
-                            top: 80,
-                            bottom: 80,
-                        }}
+                        margin={chartMargin}
                         series={[
                             {
                                 data,
-                                innerRadius: 75,
-                                outerRadius: 100,
+                                innerRadius,
+                                outerRadius,
                                 paddingAngle: 0,
                                 highlightScope: { fade: 'global', highlight: 'item' },
                             },
                         ]}
-                        height={280}
-                        width={280}
+                        height={chartSize}
+                        width={chartSize}
                     >
-                        <PieCenterLabel primaryText="63,092,578" secondaryText="Total" />
+                        <PieCenterLabel primaryText="63,092,578" secondaryText="Total" small={isSmallScreen} />
                     </PieChart>
                 </Box>
                 {countries.map((country, index) => (

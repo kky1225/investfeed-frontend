@@ -1,10 +1,8 @@
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import CssBaseline from '@mui/material/CssBaseline';
-import Divider from '@mui/material/Divider';
 import FormLabel from '@mui/material/FormLabel';
 import FormControl from '@mui/material/FormControl';
-import Link from '@mui/material/Link';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 import Stack from '@mui/material/Stack';
@@ -15,7 +13,7 @@ import { styled } from '@mui/material/styles';
 import ColorModeSelect from "../../components/ColorModeSelect.tsx";
 import AppTheme from "../../components/AppTheme.tsx";
 import { useState } from "react";
-import { useNavigate, Link as RouterLink } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext.tsx";
 import { login } from "../../api/auth/AuthApi.ts";
 
@@ -204,15 +202,6 @@ export default function Login(props: { disableCustomTheme?: boolean }) {
                         >
                             {loading ? '로그인 중...' : 'Sign in'}
                         </Button>
-                    </Box>
-                    <Divider>or</Divider>
-                    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                        <Typography sx={{ textAlign: 'center' }}>
-                            계정이 없으신가요?{' '}
-                            <Link component={RouterLink} to="/signup" variant="body2">
-                                Sign up
-                            </Link>
-                        </Typography>
                     </Box>
                 </Card>
             </SignInContainer>
