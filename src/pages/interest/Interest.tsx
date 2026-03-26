@@ -26,7 +26,7 @@ import DragIndicatorIcon from "@mui/icons-material/DragIndicator";
 import FolderOpenIcon from "@mui/icons-material/FolderOpen";
 import SaveIcon from "@mui/icons-material/Save";
 import {DataGrid, GridActionsCellItem, GridColDef, GridRow, GridRowProps} from "@mui/x-data-grid";
-import {DndContext, DragEndEvent, PointerSensor, useSensor, useSensors} from "@dnd-kit/core";
+import {DndContext, DragEndEvent, PointerSensor, TouchSensor, useSensor, useSensors} from "@dnd-kit/core";
 import {arrayMove, SortableContext, useSortable, verticalListSortingStrategy} from "@dnd-kit/sortable";
 import {CSS} from "@dnd-kit/utilities";
 import {useNavigate, useParams} from "react-router-dom";
@@ -218,9 +218,10 @@ const Interest = () => {
     const loadingGroupRef = useRef<number | null>(null);
     const socketRef = useRef<WebSocket | null>(null);
 
-    // 클릭과 드래그를 구분하기 위해 distance: 5 적용
+    // 클릭과 드래그를 구분하기 위해 distance: 5 적용, 모바일 터치 지원
     const sensors = useSensors(
-        useSensor(PointerSensor, {activationConstraint: {distance: 5}})
+        useSensor(PointerSensor, {activationConstraint: {distance: 5}}),
+        useSensor(TouchSensor, {activationConstraint: {delay: 200, tolerance: 5}})
     );
 
     useEffect(() => {

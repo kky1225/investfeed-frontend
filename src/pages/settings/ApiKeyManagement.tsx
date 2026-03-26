@@ -22,7 +22,10 @@ import IconButton from '@mui/material/IconButton';
 import AddIcon from '@mui/icons-material/Add';
 import DeleteIcon from '@mui/icons-material/Delete';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
+import CssBaseline from '@mui/material/CssBaseline';
 import {useNavigate} from 'react-router-dom';
+import ColorModeSelect from '../../components/ColorModeSelect';
+import AppTheme from '../../components/AppTheme';
 import {fetchApiKeys, createApiKey, deleteApiKey} from '../../api/auth/AuthApi';
 import type {ApiKeyReq, ApiKeyRes} from '../../type/AuthType';
 
@@ -107,7 +110,10 @@ export default function ApiKeyManagement() {
     };
 
     return (
-        <Box sx={{width: '100%', maxWidth: {sm: '100%', md: '800px'}, mx: 'auto', p: 2}}>
+        <AppTheme>
+            <CssBaseline enableColorScheme/>
+            <ColorModeSelect sx={{position: 'fixed', top: '1rem', right: '1rem'}}/>
+        <Box sx={{width: '100%', maxWidth: {sm: '100%', md: '800px'}, mx: 'auto', p: 2, mt: {xs: 7, sm: 5}}}>
             <Box sx={{display: 'flex', alignItems: 'center', gap: 1, mb: 3}}>
                 <IconButton onClick={() => navigate(-1)}>
                     <ArrowBackIcon/>
@@ -117,6 +123,7 @@ export default function ApiKeyManagement() {
                 </Typography>
                 <Button
                     variant="contained"
+                    sx={{bgcolor: 'text.primary', '&:hover': {bgcolor: 'text.secondary'}}}
                     startIcon={<AddIcon/>}
                     onClick={() => {
                         setForm(initialForm);
@@ -137,7 +144,7 @@ export default function ApiKeyManagement() {
                         <Card key={apiKey.id} variant="outlined">
                             <CardContent>
                                 <Box sx={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1}}>
-                                    <Chip label={getProviderLabel(apiKey.provider)} color="primary" size="small"/>
+                                    <Chip label={getProviderLabel(apiKey.provider)} size="small" variant="outlined"/>
                                     <Typography variant="caption" color="text.secondary">
                                         {formatDateTime(apiKey.createdAt)}
                                     </Typography>
@@ -189,7 +196,9 @@ export default function ApiKeyManagement() {
                 </DialogContent>
                 <DialogActions>
                     <Button onClick={() => setFormDialog(false)}>취소</Button>
-                    <Button onClick={handleSubmit} variant="contained" disabled={formLoading}>
+                    <Button onClick={handleSubmit} variant="contained"
+                        sx={{bgcolor: 'text.primary', '&:hover': {bgcolor: 'text.secondary'}}}
+                        disabled={formLoading}>
                         {formLoading ? '처리 중...' : '등록'}
                     </Button>
                 </DialogActions>
@@ -205,7 +214,8 @@ export default function ApiKeyManagement() {
                 </DialogContent>
                 <DialogActions>
                     <Button onClick={() => setDeleteDialog({open: false, id: 0, provider: ''})}>취소</Button>
-                    <Button onClick={handleDelete} variant="contained" color="error">삭제</Button>
+                    <Button onClick={handleDelete} variant="contained"
+                        sx={{bgcolor: '#d32f2f', '&:hover': {bgcolor: '#b71c1c'}}}>삭제</Button>
                 </DialogActions>
             </Dialog>
 
@@ -220,5 +230,6 @@ export default function ApiKeyManagement() {
                 </Alert>
             </Snackbar>
         </Box>
+        </AppTheme>
     );
 }

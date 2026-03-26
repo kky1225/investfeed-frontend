@@ -19,7 +19,12 @@ import {DataGrid, type GridColDef} from '@mui/x-data-grid';
 import LockOpenIcon from '@mui/icons-material/LockOpen';
 import LockIcon from '@mui/icons-material/Lock';
 import PersonAddIcon from '@mui/icons-material/PersonAdd';
-import {createMember, fetchMembers, lockAccount, unlockAccount} from '../../api/admin/AdminApi';
+import MoreVertIcon from '@mui/icons-material/MoreVert';
+import IconButton from '@mui/material/IconButton';
+import Menu from '@mui/material/Menu';
+import ListItemIcon from '@mui/material/ListItemIcon';
+import ListItemText from '@mui/material/ListItemText';
+import {createMember, fetchMembers, lockAccount, unlockAccount, changeRole} from '../../api/admin/AdminApi';
 import type {CreateMemberReq, MemberRes} from '../../type/AuthType';
 
 function formatDateTime(dateStr: string | null) {
@@ -41,10 +46,10 @@ function getLockStatus(member: MemberRes): { label: string; color: 'default' | '
     return {label: '잠금', color: 'warning'};
 }
 
-function getRoleLabel(role: string): { label: string; color: 'primary' | 'default' | 'secondary' } {
+function getRoleLabel(role: string): { label: string; color: 'primary' | 'default' | 'warning' } {
     switch (role) {
-        case 'ADMIN': return {label: '관리자', color: 'primary'};
-        case 'USER': return {label: '사용자', color: 'secondary'};
+        case 'ADMIN': return {label: '관리자', color: 'warning'};
+        case 'USER': return {label: '사용자', color: 'default'};
         case 'GUEST': return {label: '게스트', color: 'default'};
         default: return {label: role, color: 'default'};
     }
@@ -66,6 +71,11 @@ export default function MemberManagement() {
     const [createDialog, setCreateDialog] = useState(false);
     const [createForm, setCreateForm] = useState<CreateMemberReq>(initialCreateForm);
     const [createLoading, setCreateLoading] = useState(false);
+    const [roleDialog, setRoleDialog] = useState<{open: boolean; loginId: string; currentRole: string; newRole: string}>({
+        open: false, loginId: '', currentRole: '', newRole: ''
+    });
+    const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
+    const [menuTarget, setMenuTarget] = useState<MemberRes | null>(null);
 
     const loadMembers = async () => {
         setLoading(true);
@@ -106,6 +116,18 @@ export default function MemberManagement() {
         }
     };
 
+    const handleChangeRole = async () => {
+        const {loginId, newRole} = roleDialog;
+        setRoleDialog({open: false, loginId: '', currentRole: '', newRole: ''});
+        try {
+            await changeRole(loginId, newRole);
+            setSnackbar({open: true, message: `${loginId} 계정의 역할이 변경되었습니다.`, severity: 'success'});
+            await loadMembers();
+        } catch {
+            setSnackbar({open: true, message: '역할 변경에 실패했습니다.', severity: 'error'});
+        }
+    };
+
     const handleCreateMember = async () => {
         if (!createForm.loginId || !createForm.email || !createForm.nickname || !createForm.name || !createForm.phone) {
             setSnackbar({open: true, message: '모든 필드를 입력해주세요.', severity: 'error'});
@@ -128,6 +150,13 @@ export default function MemberManagement() {
     };
 
     const columns: GridColDef[] = [
+        {
+            field: 'no', headerName: 'No', minWidth: 80,
+            renderCell: (params) => {
+                const index = members.findIndex((m: any) => m.id === params.row.id);
+                return index + 1;
+            }
+        },
         {field: 'loginId', headerName: '아이디', flex: 1, minWidth: 120},
         {
             field: 'role', headerName: '역할', width: 80,
@@ -137,14 +166,14 @@ export default function MemberManagement() {
             }
         },
         {
-            field: 'status', headerName: '상태', width: 120,
+            field: 'status', headerName: '상태', width: 80,
             renderCell: (params) => {
                 const status = getLockStatus(params.row);
                 return <Chip label={status.label} size="small" color={status.color}/>;
             }
         },
         {
-            field: 'failedLoginAttempts', headerName: '실패 횟수', width: 90, align: 'center', headerAlign: 'center',
+            field: 'failedLoginAttempts', headerName: '실패 횟수', minWidth: 110, align: 'center', headerAlign: 'center',
         },
         {
             field: 'lockedAt', headerName: '잠금 시각', flex: 1, minWidth: 140,
@@ -162,32 +191,19 @@ export default function MemberManagement() {
             valueFormatter: (value: string) => formatDateTime(value),
         },
         {
-            field: 'actions', headerName: '관리', width: 120, sortable: false,
+            field: 'actions', headerName: '관리', width: 70, sortable: false, align: 'center', headerAlign: 'center',
             renderCell: (params) => {
-                if (isAccountLocked(params.row)) {
-                    return (
-                        <Button
-                            size="small"
-                            variant="outlined"
-                            color="primary"
-                            startIcon={<LockOpenIcon/>}
-                            onClick={() => setConfirmDialog({open: true, loginId: params.row.loginId, action: 'unlock'})}
-                        >
-                            해제
-                        </Button>
-                    );
-                }
+                if (params.row.role === 'ADMIN') return null;
                 return (
-                    <Button
+                    <IconButton
                         size="small"
-                        variant="outlined"
-                        color="error"
-                        startIcon={<LockIcon/>}
-                        disabled={params.row.role === 'ADMIN'}
-                        onClick={() => setConfirmDialog({open: true, loginId: params.row.loginId, action: 'lock'})}
+                        onClick={(e) => {
+                            setAnchorEl(e.currentTarget);
+                            setMenuTarget(params.row);
+                        }}
                     >
-                        잠금
-                    </Button>
+                        <MoreVertIcon/>
+                    </IconButton>
                 );
             }
         },
@@ -216,7 +232,6 @@ export default function MemberManagement() {
                 pageSizeOptions={[10, 25, 50]}
                 initialState={{
                     pagination: {paginationModel: {pageSize: 10}},
-                    sorting: {sortModel: [{field: 'createdAt', sort: 'desc'}]},
                 }}
                 disableRowSelectionOnClick
                 sx={{
@@ -226,6 +241,47 @@ export default function MemberManagement() {
                     },
                 }}
             />
+
+            {/* 더보기 메뉴 */}
+            <Menu
+                anchorEl={anchorEl}
+                open={Boolean(anchorEl)}
+                onClose={() => setAnchorEl(null)}
+            >
+                {menuTarget && (
+                    isAccountLocked(menuTarget) ? (
+                        <MenuItem onClick={() => {
+                            setConfirmDialog({open: true, loginId: menuTarget.loginId, action: 'unlock'});
+                            setAnchorEl(null);
+                        }}>
+                            <ListItemIcon><LockOpenIcon fontSize="small"/></ListItemIcon>
+                            <ListItemText>잠금 해제</ListItemText>
+                        </MenuItem>
+                    ) : (
+                        <MenuItem onClick={() => {
+                            setConfirmDialog({open: true, loginId: menuTarget.loginId, action: 'lock'});
+                            setAnchorEl(null);
+                        }}>
+                            <ListItemIcon><LockIcon fontSize="small"/></ListItemIcon>
+                            <ListItemText>잠금</ListItemText>
+                        </MenuItem>
+                    )
+                )}
+                {menuTarget && (
+                    <MenuItem onClick={() => {
+                        setRoleDialog({
+                            open: true,
+                            loginId: menuTarget.loginId,
+                            currentRole: menuTarget.role,
+                            newRole: menuTarget.role === 'USER' ? 'GUEST' : 'USER'
+                        });
+                        setAnchorEl(null);
+                    }}>
+                        <ListItemIcon><PersonAddIcon fontSize="small"/></ListItemIcon>
+                        <ListItemText>역할 변경</ListItemText>
+                    </MenuItem>
+                )}
+            </Menu>
 
             {/* 잠금/해제 확인 다이얼로그 */}
             <Dialog open={confirmDialog.open} onClose={() => setConfirmDialog({open: false, loginId: '', action: 'unlock'})}>
@@ -248,6 +304,37 @@ export default function MemberManagement() {
                         color={confirmDialog.action === 'lock' ? 'error' : 'primary'}
                     >
                         {confirmDialog.action === 'lock' ? '잠금' : '해제'}
+                    </Button>
+                </DialogActions>
+            </Dialog>
+
+            {/* 역할 변경 다이얼로그 */}
+            <Dialog open={roleDialog.open} onClose={() => setRoleDialog({open: false, loginId: '', currentRole: '', newRole: ''})}>
+                <DialogTitle>역할 변경</DialogTitle>
+                <DialogContent>
+                    <DialogContentText>
+                        <strong>{roleDialog.loginId}</strong> 계정의 역할을 변경하시겠습니까?
+                    </DialogContentText>
+                    <FormControl fullWidth size="small" sx={{mt: 2}}>
+                        <InputLabel>역할</InputLabel>
+                        <Select
+                            value={roleDialog.newRole}
+                            label="역할"
+                            onChange={(e) => setRoleDialog({...roleDialog, newRole: e.target.value})}
+                        >
+                            <MenuItem value="USER">사용자</MenuItem>
+                            <MenuItem value="GUEST">게스트</MenuItem>
+                        </Select>
+                    </FormControl>
+                </DialogContent>
+                <DialogActions>
+                    <Button onClick={() => setRoleDialog({open: false, loginId: '', currentRole: '', newRole: ''})}>취소</Button>
+                    <Button
+                        onClick={handleChangeRole}
+                        variant="contained"
+                        disabled={roleDialog.newRole === roleDialog.currentRole}
+                    >
+                        변경
                     </Button>
                 </DialogActions>
             </Dialog>

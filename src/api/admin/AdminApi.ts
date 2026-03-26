@@ -20,3 +20,8 @@ export const unlockAccount = async (loginId: string): Promise<ApiResponse<null>>
     const res = await api.put<ApiResponse<null>>(`/auth/admin/members/${loginId}/unlock`);
     return res.data;
 };
+
+export const changeRole = async (loginId: string, role: string): Promise<ApiResponse<null>> => {
+    const res = await api.put<ApiResponse<null>>(`/auth/admin/members/${loginId}/role`, {role});
+    return res.data;
+};
