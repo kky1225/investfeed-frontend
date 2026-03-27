@@ -15,7 +15,7 @@ interface NotificationContextType {
 const NotificationContext = createContext<NotificationContextType | null>(null);
 
 export function NotificationProvider({children}: { children: ReactNode }) {
-    const {accessToken, isAuthenticated} = useAuth();
+    const {isAuthenticated} = useAuth();
     const [notifications, setNotifications] = useState<Notification[]>([]);
     const [unreadCount, setUnreadCount] = useState(0);
     const wsRef = useRef<WebSocket | null>(null);
@@ -55,7 +55,7 @@ export function NotificationProvider({children}: { children: ReactNode }) {
     }, [loadNotifications, loadUnreadCount]);
 
     useEffect(() => {
-        if (!isAuthenticated || !accessToken) return;
+        if (!isAuthenticated) return;
 
         refreshAll();
 
@@ -66,7 +66,7 @@ export function NotificationProvider({children}: { children: ReactNode }) {
             if (isCancelled) return;
 
             const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-            const wsUrl = `${protocol}//${window.location.host}/ws/notification?token=${accessToken}`;
+            const wsUrl = `${protocol}//${window.location.host}/ws/notification`;
             const ws = new WebSocket(wsUrl);
             wsRef.current = ws;
 
@@ -103,7 +103,7 @@ export function NotificationProvider({children}: { children: ReactNode }) {
             wsRef.current?.close();
             wsRef.current = null;
         };
-    }, [isAuthenticated, accessToken, refreshAll]);
+    }, [isAuthenticated, refreshAll]);
 
     return (
         <NotificationContext.Provider value={{

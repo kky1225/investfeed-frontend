@@ -290,7 +290,7 @@ const CryptoInterest = () => {
 
     const handleSelectGroup = (group: CryptoInterestGroup) => {
         setSelectedGroup(group);
-        navigate(`/crypto-interest/list/${group.id}`, {replace: true});
+        navigate(`/crypto/interest/list/${group.id}`, {replace: true});
         setItems([]);
         socketRef.current?.close();
         socketRef.current = null;

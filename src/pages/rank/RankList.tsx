@@ -4,7 +4,7 @@ import Grid from "@mui/material/Grid";
 import {GridColDef} from "@mui/x-data-grid";
 import StockTable from "../../components/StockTable.tsx";
 import {useEffect, useRef, useState} from "react";
-import {fetchStockList, fetchStockStream} from "../../api/stock/StockApi.ts";
+import {fetchStockStream} from "../../api/stock/StockApi.ts";
 import {Tab, Tabs } from "@mui/material";
 import * as React from "react";
 import {fetchTimeNow} from "../../api/time/TimeApi.ts";
@@ -19,8 +19,9 @@ import {
 } from "../../type/StockType.ts";
 import {useNavigate, useParams} from "react-router-dom";
 import {renderChip} from "../../components/CustomRender.tsx";
+import {fetchRankList} from "../../api/rank/RankApi.ts";
 
-const StockList = () => {
+const RankList = () => {
     const navigate = useNavigate();
     const { type } = useParams();
 
@@ -163,7 +164,7 @@ const StockList = () => {
 
     const stockList = async (req: StockListReq) => {
         try {
-            const data = await fetchStockList(req);
+            const data = await fetchRankList(req);
 
             if (data.code !== "0000") {
                 throw new Error(data.msg);
@@ -171,9 +172,9 @@ const StockList = () => {
 
             console.log(data);
 
-            const { stockList } = data.result;
+            const { rankList } = data.result;
 
-            const ranking = stockList.map((stock: StockListItem) => {
+            const ranking = rankList.map((stock: StockListItem) => {
                 return {
                     id: stock.stkCd,
                     rank: stock.rank,
@@ -324,7 +325,7 @@ const StockList = () => {
             setColumns(col);
             setRow(ranking);
 
-            return stockList.map((row: StockListItem) => {
+            return rankList.map((row: StockListItem) => {
                 return row.stkCd
             });
         } catch (error) {
@@ -358,7 +359,7 @@ const StockList = () => {
     const handleChange = (_event: React.SyntheticEvent, newValue: number) => {
         setValue(newValue);
         setReq({type: String(newValue)});
-        navigate(`/stock/list/${newValue}`);
+        navigate(`/stock/rank/list/${newValue}`);
     };
 
     function a11yProps(index: number) {
@@ -394,4 +395,4 @@ const StockList = () => {
     )
 }
 
-export default StockList
+export default RankList

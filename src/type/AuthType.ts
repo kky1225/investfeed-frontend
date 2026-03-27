@@ -13,7 +13,6 @@ export interface SignupReq {
 }
 
 export interface TokenRes {
-    accessToken: string;
     passwordChangeRequired: boolean;
     role: string;
     nickname: string;

@@ -109,7 +109,7 @@ export default function NotificationPopover({anchorEl, open, onClose}: Notificat
                             </Box>
                             <ListItemText
                                 primary={
-                                    <Box sx={{display: 'flex', alignItems: 'center', gap: 0.5}}>
+                                    <Box component="span" sx={{display: 'flex', alignItems: 'center', gap: 0.5}}>
                                         <Chip
                                             label={notification.assetType === 'STOCK' ? '주식' : '코인'}
                                             size="small"
@@ -122,7 +122,7 @@ export default function NotificationPopover({anchorEl, open, onClose}: Notificat
                                     </Box>
                                 }
                                 secondary={
-                                    <Box sx={{display: 'flex', justifyContent: 'space-between', mt: 0.5}}>
+                                    <Box component="span" sx={{display: 'flex', justifyContent: 'space-between', mt: 0.5}}>
                                         <Typography variant="caption" color={notification.direction === 'UP' ? 'error' : 'primary'}>
                                             {notification.direction === 'UP' ? '+' : '-'}{notification.threshold}% 도달
                                             ({notification.fluRt > 0 ? '+' : ''}{notification.fluRt.toFixed(2)}%)

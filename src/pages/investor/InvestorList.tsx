@@ -269,7 +269,7 @@ const InvestorList = () => {
 
         setReq(newReq);
         setValue(newValue);
-        navigate(`/investor/${orgnTp}/list/${req.trdeTp}`);
+        navigate(`/stock/investor/${orgnTp}/list/${req.trdeTp}`);
     };
 
     const handleChangeInvestor = (_event: React.SyntheticEvent, newValue: number) => {
@@ -288,7 +288,7 @@ const InvestorList = () => {
 
         setReq(newReq);
         setTradeValue(newValue);
-        navigate(`/investor/${req.orgnTp}/list/${trdeTp}`);
+        navigate(`/stock/investor/${req.orgnTp}/list/${trdeTp}`);
     }
 
     function a11yProps(index: number) {

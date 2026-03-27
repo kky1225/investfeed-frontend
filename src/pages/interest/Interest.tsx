@@ -290,7 +290,7 @@ const Interest = () => {
 
     const handleSelectGroup = (group: InterestGroup) => {
         setSelectedGroup(group);
-        navigate(`/interest/list/${group.id}`, {replace: true});
+        navigate(`/stock/interest/list/${group.id}`, {replace: true});
         setItems([]);
         socketRef.current?.close();
         socketRef.current = null;

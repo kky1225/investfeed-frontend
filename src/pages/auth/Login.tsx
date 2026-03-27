@@ -95,10 +95,9 @@ export default function Login(props: { disableCustomTheme?: boolean }) {
         setErrorMessage('');
         try {
             const res = await login({ loginId, password });
-            if (res.result?.accessToken) {
+            if (res.result) {
                 setAuth(
                     { loginId, nickname: res.result.nickname, email: res.result.email, role: res.result.role },
-                    res.result.accessToken,
                     res.result.passwordChangeRequired,
                 );
                 if (res.result.passwordChangeRequired) {

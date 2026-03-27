@@ -7,14 +7,6 @@ const api = axios.create({
     withCredentials: true,
 });
 
-api.interceptors.request.use((config) => {
-    const token = sessionStorage.getItem('accessToken');
-    if (token) {
-        config.headers.Authorization = `Bearer ${token}`;
-    }
-    return config;
-});
-
 let isRefreshing = false;
 let failedQueue: Array<{ resolve: (value: unknown) => void; reject: (reason?: unknown) => void }> = [];
 
@@ -23,41 +15,36 @@ api.interceptors.response.use(
     async (error) => {
         const originalRequest = error.config;
 
-        if (error.response?.status === 401 && !originalRequest._retry) {
+        const isLoginRequest = originalRequest.url?.startsWith('/auth/login');
+
+        if (error.response?.status === 401 && !originalRequest._retry && !isLoginRequest) {
             if (isRefreshing) {
                 return new Promise((resolve, reject) => {
                     failedQueue.push({ resolve, reject });
-                }).then((token) => {
-                    originalRequest.headers.Authorization = `Bearer ${token}`;
-                    return api(originalRequest);
-                });
+                }).then(() => api(originalRequest));
             }
 
             originalRequest._retry = true;
             isRefreshing = true;
 
             try {
-                const res = await fetchReissue()
-                const newToken = res.result?.accessToken;
-                if (newToken) {
-                    sessionStorage.setItem('accessToken', newToken);
+                const res = await fetchReissue();
+                if (res.result) {
                     const storedUser = sessionStorage.getItem('user');
-                    if (storedUser && res.result) {
+                    if (storedUser) {
                         const user = JSON.parse(storedUser);
                         if (res.result.role) user.role = res.result.role;
                         if (res.result.nickname) user.nickname = res.result.nickname;
                         if (res.result.email) user.email = res.result.email;
                         sessionStorage.setItem('user', JSON.stringify(user));
                     }
-                    api.defaults.headers.common.Authorization = `Bearer ${newToken}`;
-                    processQueue(null, newToken);
-                    originalRequest.headers.Authorization = `Bearer ${newToken}`;
-                    return api(originalRequest);
                 }
+                processQueue(null);
+                return api(originalRequest);
             } catch (refreshError) {
-                processQueue(refreshError, null);
-                sessionStorage.removeItem('accessToken');
+                processQueue(refreshError);
                 sessionStorage.removeItem('user');
+                sessionStorage.removeItem('passwordChangeRequired');
                 window.location.href = '/login';
                 return Promise.reject(refreshError);
             } finally {
@@ -65,16 +52,22 @@ api.interceptors.response.use(
             }
         }
 
+        if (error.response?.status === 403) {
+            const message = error.response?.data?.message || '접근 권한이 없습니다.';
+            window.dispatchEvent(new CustomEvent('show-forbidden', { detail: { message } }));
+            return new Promise(() => {});
+        }
+
         return Promise.reject(error);
     }
 );
 
-const processQueue = (error: unknown, token: string | null = null) => {
+const processQueue = (error: unknown) => {
     failedQueue.forEach(({ resolve, reject }) => {
         if (error) {
             reject(error);
         } else {
-            resolve(token);
+            resolve(undefined);
         }
     });
     failedQueue = [];

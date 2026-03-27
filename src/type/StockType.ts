@@ -1,22 +1,3 @@
-export interface StockListReq {
-    type: string, // 0: 거래대금, 1: 거래량, 2: 급등
-}
-
-export interface StockListRes {
-    return_code: string,
-    return_msg: string,
-    stockList: Array<StockListItem>
-}
-
-export interface StockListItem {
-    stkCd: string,
-    rank: string,
-    stkNm: string,
-    fluRt: string,
-    curPrc: string,
-    trdePrica: string,
-}
-
 export interface StockGridRow {
     id: string;
     rank: string;

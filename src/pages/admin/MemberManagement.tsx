@@ -124,7 +124,7 @@ export default function MemberManagement() {
             setSnackbar({open: true, message: `${loginId} 계정의 역할이 변경되었습니다.`, severity: 'success'});
             await loadMembers();
         } catch {
-            setSnackbar({open: true, message: '역할 변경에 실패했습니다.', severity: 'error'});
+            setSnackbar({open: true, message: '권한 변경에 실패했습니다.', severity: 'error'});
         }
     };
 
@@ -278,7 +278,7 @@ export default function MemberManagement() {
                         setAnchorEl(null);
                     }}>
                         <ListItemIcon><PersonAddIcon fontSize="small"/></ListItemIcon>
-                        <ListItemText>역할 변경</ListItemText>
+                        <ListItemText>권한 변경</ListItemText>
                     </MenuItem>
                 )}
             </Menu>
@@ -308,9 +308,9 @@ export default function MemberManagement() {
                 </DialogActions>
             </Dialog>
 
-            {/* 역할 변경 다이얼로그 */}
+            {/* 권한 변경 다이얼로그 */}
             <Dialog open={roleDialog.open} onClose={() => setRoleDialog({open: false, loginId: '', currentRole: '', newRole: ''})}>
-                <DialogTitle>역할 변경</DialogTitle>
+                <DialogTitle>권한 변경</DialogTitle>
                 <DialogContent>
                     <DialogContentText>
                         <strong>{roleDialog.loginId}</strong> 계정의 역할을 변경하시겠습니까?

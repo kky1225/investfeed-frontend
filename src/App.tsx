@@ -1,5 +1,14 @@
 import './App.css'
-import {Route, Routes, useParams} from "react-router-dom";
+import {useState, useEffect, useCallback} from "react";
+import {Route, Routes, useParams, useNavigate} from "react-router-dom";
+import Dialog from "@mui/material/Dialog";
+import DialogTitle from "@mui/material/DialogTitle";
+import DialogContent from "@mui/material/DialogContent";
+import DialogContentText from "@mui/material/DialogContentText";
+import DialogActions from "@mui/material/DialogActions";
+import Button from "@mui/material/Button";
+import Box from "@mui/material/Box";
+import LockOutlinedIcon from "@mui/icons-material/LockOutlined";
 import Login from "./pages/auth/Login.tsx";
 import Dashboard from "./pages/dashboard/Dashboard.tsx";
 import MainLayout from "./layout/MainLayout.tsx";
@@ -7,7 +16,7 @@ import Interest from "./pages/interest/Interest.tsx";
 import IndexList from "./pages/index/IndexList.tsx";
 import IndexDetail from "./pages/index/IndexDetail.tsx";
 import StockDetail from "./pages/stock/StockDetail.tsx";
-import StockList from "./pages/stock/StockList.tsx";
+import RankList from "./pages/rank/RankList.tsx";
 import CommodityDetail from "./pages/commodity/CommodityDetail.tsx";
 import CommodityList from "./pages/commodity/CommodityList.tsx";
 import SectList from "./pages/sect/SectList.tsx";
@@ -23,6 +32,7 @@ import CryptoRank from "./pages/crypto/CryptoRank.tsx";
 import CryptoInterest from "./pages/cryptoInterest/CryptoInterest.tsx";
 import NotificationList from "./pages/notification/NotificationList.tsx";
 import MemberManagement from "./pages/admin/MemberManagement.tsx";
+import MenuManagement from "./pages/admin/MenuManagement.tsx";
 import Profile from "./pages/settings/Profile.tsx";
 import ProtectedRoute from "./components/ProtectedRoute.tsx";
 import ChangePassword from "./pages/settings/ChangePassword.tsx";
@@ -34,8 +44,49 @@ const StockDetailWithKey = () => {
 };
 
 function App() {
+    const navigate = useNavigate();
+    const [forbidden, setForbidden] = useState<{ open: boolean; message: string }>({
+        open: false, message: ''
+    });
+
+    const handleForbidden = useCallback((e: Event) => {
+        const { message } = (e as CustomEvent).detail;
+        setForbidden({ open: true, message });
+    }, []);
+
+    useEffect(() => {
+        window.addEventListener('show-forbidden', handleForbidden);
+        return () => window.removeEventListener('show-forbidden', handleForbidden);
+    }, [handleForbidden]);
+
+    const handleForbiddenClose = () => {
+        setForbidden({ open: false, message: '' });
+        if (window.history.length > 1) {
+            navigate(-1);
+        } else {
+            navigate('/');
+        }
+    };
+
     return (
         <>
+            <Dialog open={forbidden.open} onClose={handleForbiddenClose} maxWidth="xs" fullWidth>
+                <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', pt: 3 }}>
+                    <Box sx={{
+                        width: 48, height: 48, borderRadius: '50%',
+                        bgcolor: 'error.light', display: 'flex', alignItems: 'center', justifyContent: 'center', mb: 1
+                    }}>
+                        <LockOutlinedIcon sx={{ color: 'error.contrastText' }} />
+                    </Box>
+                </Box>
+                <DialogTitle sx={{ textAlign: 'center', pb: 0.5 }}>접근 불가</DialogTitle>
+                <DialogContent>
+                    <DialogContentText sx={{ textAlign: 'center' }}>{forbidden.message}</DialogContentText>
+                </DialogContent>
+                <DialogActions sx={{ justifyContent: 'center', pb: 2.5 }}>
+                    <Button variant="contained" onClick={handleForbiddenClose} autoFocus>확인</Button>
+                </DialogActions>
+            </Dialog>
             <Routes>
                 <Route path="/login" Component={Login} />
 
@@ -45,38 +96,36 @@ function App() {
                     <Route path="/settings/api-keys" Component={ApiKeyManagement} />
                     <Route element={<MainLayout />}>
                         <Route path="/" Component={MarketIndexList} />
-                        <Route path="/dashboard" Component={Dashboard} />
-                        <Route path="/interest" Component={Interest} />
-                        <Route path="/index/list" Component={IndexList} />
-                        <Route path="/index/detail/:id" Component={IndexDetail} />
+                        <Route path="/stock/dashboard" Component={Dashboard} />
+                        <Route path="/stock/interest" Component={Interest} />
+                        <Route path="/stock/interest/list/:groupId?" Component={Interest} />
+                        <Route path="/stock/index/list" Component={IndexList} />
+                        <Route path="/stock/index/detail/:id" Component={IndexDetail} />
                         <Route path="/commodity/list" Component={CommodityList} />
                         <Route path="/commodity/detail/:id" Component={CommodityDetail} />
 
-                        <Route path="/stock/list/:type" Component={StockList} />
+                        <Route path="/stock/rank/list/:type" Component={RankList} />
                         <Route path="/stock/detail/:id" Component={StockDetailWithKey} />
 
-                        <Route path="/sect/list/:indsCd" Component={SectList} />
-                        <Route path="/sect/:indsCd/list" Component={SectStockList} />
+                        <Route path="/stock/sect/list/:indsCd" Component={SectList} />
+                        <Route path="/stock/sect/:indsCd/list" Component={SectStockList} />
 
-                        <Route path="/theme/list" Component={ThemeList} />
-                        <Route path="/theme/:themaGrpCd/list" Component={ThemeStockList} />
+                        <Route path="/stock/theme/list" Component={ThemeList} />
+                        <Route path="/stock/theme/:themaGrpCd/list" Component={ThemeStockList} />
 
-                        <Route path="/investor/:orgnTp/list/:trdeTp" Component={InvestorList} />
+                        <Route path="/stock/investor/:orgnTp/list/:trdeTp" Component={InvestorList} />
 
-                        <Route path="/recommend/list" Component={RecommendList} />
-
-                        <Route path="/market-index/list" Component={MarketIndexList} />
+                        <Route path="/stock/recommend/list" Component={RecommendList} />
 
                         <Route path="/crypto/list" Component={CryptoList} />
                         <Route path="/crypto/rank" Component={CryptoRank} />
                         <Route path="/crypto/detail/:id" Component={CryptoDetail} />
 
-                        <Route path="/crypto-interest/list/:groupId?" Component={CryptoInterest} />
-                        <Route path="/interest/list/:groupId?" Component={Interest} />
-
+                        <Route path="/crypto/interest/list/:groupId?" Component={CryptoInterest} />
                         <Route path="/notification/list" Component={NotificationList} />
 
                         <Route path="/admin/members" Component={MemberManagement} />
+                        <Route path="/admin/menus" Component={MenuManagement} />
                     </Route>
                 </Route>
             </Routes>

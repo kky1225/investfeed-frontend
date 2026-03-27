@@ -202,7 +202,7 @@ const SectList = () => {
 
         setValue(index);
         setReq({indsCd: newValue});
-        navigate(`/sect/list/${newValue}`);
+        navigate(`/stock/sect/list/${newValue}`);
     };
 
     function a11yProps(indsCd: string) {

@@ -160,25 +160,25 @@ export default function NotificationList() {
                                     </Box>
                                     <ListItemText
                                         primary={
-                                            <Box sx={{display: 'flex', alignItems: 'center', gap: 0.5}}>
+                                            <Box component="span" sx={{display: 'flex', alignItems: 'center', gap: 0.5}}>
                                                 <Chip
                                                     label={notification.assetType === 'STOCK' ? '주식' : '코인'}
                                                     size="small"
                                                     color="default"
                                                     sx={{fontSize: '0.6rem', height: 18}}
                                                 />
-                                                <Typography variant="body2" noWrap color={notification.isRead ? 'text.disabled' : 'text.primary'}>
+                                                <Typography variant="body2" component="span" noWrap color={notification.isRead ? 'text.disabled' : 'text.primary'}>
                                                     {notification.assetName}
                                                 </Typography>
                                             </Box>
                                         }
                                         secondary={
-                                            <Box sx={{display: 'flex', justifyContent: 'space-between', mt: 0.5}}>
-                                                <Typography variant="caption" color={notification.isRead ? 'text.disabled' : (notification.direction === 'UP' ? 'error' : 'primary')}>
+                                            <Box component="span" sx={{display: 'flex', justifyContent: 'space-between', mt: 0.5}}>
+                                                <Typography variant="caption" component="span" color={notification.isRead ? 'text.disabled' : (notification.direction === 'UP' ? 'error' : 'primary')}>
                                                     {notification.direction === 'UP' ? '+' : '-'}{notification.threshold}% 도달
                                                     ({notification.fluRt > 0 ? '+' : ''}{notification.fluRt.toFixed(2)}%)
                                                 </Typography>
-                                                <Typography variant="caption" color="text.disabled">
+                                                <Typography variant="caption" component="span" color="text.disabled">
                                                     {formatTime(notification.createdAt)}
                                                 </Typography>
                                             </Box>

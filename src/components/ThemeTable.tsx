@@ -22,7 +22,7 @@ const ThemeTable = (
     const navigate = useNavigate();
 
     const onClick = (params: { row: { id: string } }) => {
-        navigate(`/theme/${params.row.id}/list`);
+        navigate(`/stock/theme/${params.row.id}/list`);
     }
 
     return (

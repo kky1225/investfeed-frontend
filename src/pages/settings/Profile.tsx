@@ -89,7 +89,7 @@ export default function Profile(props: { disableCustomTheme?: boolean }) {
     const [dialog, setDialog] = useState<{ title: string; message: string; onConfirm: () => void } | null>(null);
 
     const navigate = useNavigate();
-    const { user, setAuth, accessToken } = useAuth();
+    const { user, updateUser } = useAuth();
 
     useEffect(() => {
         const loadProfile = async () => {
@@ -157,11 +157,8 @@ export default function Profile(props: { disableCustomTheme?: boolean }) {
         try {
             await updateProfile({ nickname, email, name, phone });
 
-            if (user && accessToken) {
-                setAuth(
-                    { ...user, nickname, email },
-                    accessToken,
-                );
+            if (user) {
+                updateUser({ ...user, nickname, email });
             }
 
             setDialog({

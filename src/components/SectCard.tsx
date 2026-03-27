@@ -29,7 +29,7 @@ const SectCard = (
     const trendValues = { up: `${fluRt}%`, down: `${fluRt}%`, neutral: `${fluRt}%` };
 
     const onClick = (id: string) => {
-        navigate(`/sect/${id}/list`);
+        navigate(`/stock/sect/${id}/list`);
     }
 
     return (
