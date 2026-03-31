@@ -10,6 +10,9 @@ const api = axios.create({
 let isRefreshing = false;
 let failedQueue: Array<{ resolve: (value: unknown) => void; reject: (reason?: unknown) => void }> = [];
 
+let isSecondaryAuthPending = false;
+let secondaryAuthQueue: Array<{ resolve: (value: unknown) => void; reject: (reason?: unknown) => void }> = [];
+
 api.interceptors.response.use(
     (response) => response,
     async (error) => {
@@ -53,6 +56,25 @@ api.interceptors.response.use(
         }
 
         if (error.response?.status === 403) {
+            const code = error.response?.data?.code;
+            const isSecondaryPasswordRequest = originalRequest.url?.startsWith('/auth/secondary-password/');
+            if (isSecondaryPasswordRequest) {
+                return Promise.reject(error);
+            }
+            if (code === 'AUTH_4040' || code === 'AUTH_4041' || code === 'AUTH_4044') {
+                if (isSecondaryAuthPending) {
+                    return new Promise((resolve, reject) => {
+                        secondaryAuthQueue.push({ resolve, reject });
+                    }).then(() => api(originalRequest));
+                }
+
+                isSecondaryAuthPending = true;
+                window.dispatchEvent(new CustomEvent('show-secondary-auth', { detail: { code } }));
+
+                return new Promise((resolve, reject) => {
+                    secondaryAuthQueue.push({ resolve, reject });
+                }).then(() => api(originalRequest));
+            }
             const message = error.response?.data?.message || '접근 권한이 없습니다.';
             window.dispatchEvent(new CustomEvent('show-forbidden', { detail: { message } }));
             return new Promise(() => {});
@@ -71,6 +93,18 @@ const processQueue = (error: unknown) => {
         }
     });
     failedQueue = [];
+};
+
+export const processSecondaryAuthQueue = (error: unknown) => {
+    secondaryAuthQueue.forEach(({ resolve, reject }) => {
+        if (error) {
+            reject(error);
+        } else {
+            resolve(undefined);
+        }
+    });
+    secondaryAuthQueue = [];
+    isSecondaryAuthPending = false;
 };
 
 export default api;

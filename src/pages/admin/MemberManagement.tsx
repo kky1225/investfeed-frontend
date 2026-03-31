@@ -24,7 +24,8 @@ import IconButton from '@mui/material/IconButton';
 import Menu from '@mui/material/Menu';
 import ListItemIcon from '@mui/material/ListItemIcon';
 import ListItemText from '@mui/material/ListItemText';
-import {createMember, fetchMembers, lockAccount, unlockAccount, changeRole} from '../../api/admin/AdminApi';
+import KeyOffIcon from '@mui/icons-material/KeyOff';
+import {createMember, fetchMembers, lockAccount, unlockAccount, changeRole, resetTotp} from '../../api/admin/AdminApi';
 import type {CreateMemberReq, MemberRes} from '../../type/AuthType';
 
 function formatDateTime(dateStr: string | null) {
@@ -74,6 +75,9 @@ export default function MemberManagement() {
     const [roleDialog, setRoleDialog] = useState<{open: boolean; loginId: string; currentRole: string; newRole: string}>({
         open: false, loginId: '', currentRole: '', newRole: ''
     });
+    const [totpResetDialog, setTotpResetDialog] = useState<{ open: boolean; loginId: string }>({
+        open: false, loginId: ''
+    });
     const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
     const [menuTarget, setMenuTarget] = useState<MemberRes | null>(null);
 
@@ -113,6 +117,18 @@ export default function MemberManagement() {
                 message: action === 'lock' ? '계정 잠금에 실패했습니다.' : '잠금 해제에 실패했습니다.',
                 severity: 'error'
             });
+        }
+    };
+
+    const handleResetTotp = async () => {
+        const {loginId} = totpResetDialog;
+        setTotpResetDialog({open: false, loginId: ''});
+        try {
+            await resetTotp(loginId);
+            setSnackbar({open: true, message: `${loginId} 계정의 TOTP가 초기화되었습니다.`, severity: 'success'});
+            await loadMembers();
+        } catch {
+            setSnackbar({open: true, message: 'TOTP 초기화에 실패했습니다.', severity: 'error'});
         }
     };
 
@@ -281,10 +297,19 @@ export default function MemberManagement() {
                         <ListItemText>권한 변경</ListItemText>
                     </MenuItem>
                 )}
+                {menuTarget && menuTarget.totpEnabled && (
+                    <MenuItem onClick={() => {
+                        setTotpResetDialog({ open: true, loginId: menuTarget.loginId });
+                        setAnchorEl(null);
+                    }}>
+                        <ListItemIcon><KeyOffIcon fontSize="small"/></ListItemIcon>
+                        <ListItemText>TOTP 초기화</ListItemText>
+                    </MenuItem>
+                )}
             </Menu>
 
             {/* 잠금/해제 확인 다이얼로그 */}
-            <Dialog open={confirmDialog.open} onClose={() => setConfirmDialog({open: false, loginId: '', action: 'unlock'})}>
+            <Dialog open={confirmDialog.open} onClose={() => setConfirmDialog({open: false, loginId: '', action: 'unlock'})} disableRestoreFocus>
                 <DialogTitle>
                     {confirmDialog.action === 'lock' ? '계정 잠금' : '계정 잠금 해제'}
                 </DialogTitle>
@@ -309,7 +334,7 @@ export default function MemberManagement() {
             </Dialog>
 
             {/* 권한 변경 다이얼로그 */}
-            <Dialog open={roleDialog.open} onClose={() => setRoleDialog({open: false, loginId: '', currentRole: '', newRole: ''})}>
+            <Dialog open={roleDialog.open} onClose={() => setRoleDialog({open: false, loginId: '', currentRole: '', newRole: ''})} disableRestoreFocus>
                 <DialogTitle>권한 변경</DialogTitle>
                 <DialogContent>
                     <DialogContentText>
@@ -329,12 +354,29 @@ export default function MemberManagement() {
                 </DialogContent>
                 <DialogActions>
                     <Button onClick={() => setRoleDialog({open: false, loginId: '', currentRole: '', newRole: ''})}>취소</Button>
-                    <Button
-                        onClick={handleChangeRole}
-                        variant="contained"
-                        disabled={roleDialog.newRole === roleDialog.currentRole}
-                    >
-                        변경
+                    {roleDialog.newRole !== roleDialog.currentRole && (
+                        <Button
+                            onClick={handleChangeRole}
+                            variant="contained"
+                        >
+                            변경
+                        </Button>
+                    )}
+                </DialogActions>
+            </Dialog>
+
+            {/* TOTP 초기화 확인 다이얼로그 */}
+            <Dialog open={totpResetDialog.open} onClose={() => setTotpResetDialog({open: false, loginId: ''})} disableRestoreFocus>
+                <DialogTitle>TOTP 초기화</DialogTitle>
+                <DialogContent>
+                    <DialogContentText>
+                        <strong>{totpResetDialog.loginId}</strong> 계정의 TOTP를 초기화하시겠습니까? 다음 로그인 시 TOTP를 다시 등록해야 합니다.
+                    </DialogContentText>
+                </DialogContent>
+                <DialogActions>
+                    <Button onClick={() => setTotpResetDialog({open: false, loginId: ''})}>취소</Button>
+                    <Button onClick={handleResetTotp} variant="contained" color="error">
+                        초기화
                     </Button>
                 </DialogActions>
             </Dialog>

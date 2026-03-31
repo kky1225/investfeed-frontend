@@ -10,6 +10,9 @@ import Button from "@mui/material/Button";
 import Box from "@mui/material/Box";
 import LockOutlinedIcon from "@mui/icons-material/LockOutlined";
 import Login from "./pages/auth/Login.tsx";
+import SecondaryAuthDialog from "./components/SecondaryAuthDialog.tsx";
+import {useAuth} from "./context/AuthContext.tsx";
+import {processSecondaryAuthQueue} from "./axios.ts";
 import Dashboard from "./pages/dashboard/Dashboard.tsx";
 import MainLayout from "./layout/MainLayout.tsx";
 import Interest from "./pages/interest/Interest.tsx";
@@ -45,8 +48,12 @@ const StockDetailWithKey = () => {
 
 function App() {
     const navigate = useNavigate();
+    const {user} = useAuth();
     const [forbidden, setForbidden] = useState<{ open: boolean; message: string }>({
         open: false, message: ''
+    });
+    const [secondaryAuth, setSecondaryAuth] = useState<{ open: boolean; mode: 'setup' | 'verify' }>({
+        open: false, mode: 'verify'
     });
 
     const handleForbidden = useCallback((e: Event) => {
@@ -54,10 +61,20 @@ function App() {
         setForbidden({ open: true, message });
     }, []);
 
+    const handleSecondaryAuth = useCallback((e: Event) => {
+        const { code } = (e as CustomEvent).detail;
+        const mode = code === 'AUTH_4041' ? 'setup' : 'verify';
+        setSecondaryAuth({ open: true, mode });
+    }, []);
+
     useEffect(() => {
         window.addEventListener('show-forbidden', handleForbidden);
-        return () => window.removeEventListener('show-forbidden', handleForbidden);
-    }, [handleForbidden]);
+        window.addEventListener('show-secondary-auth', handleSecondaryAuth);
+        return () => {
+            window.removeEventListener('show-forbidden', handleForbidden);
+            window.removeEventListener('show-secondary-auth', handleSecondaryAuth);
+        };
+    }, [handleForbidden, handleSecondaryAuth]);
 
     const handleForbiddenClose = () => {
         setForbidden({ open: false, message: '' });
@@ -87,6 +104,23 @@ function App() {
                     <Button variant="contained" onClick={handleForbiddenClose} autoFocus>확인</Button>
                 </DialogActions>
             </Dialog>
+            <SecondaryAuthDialog
+                open={secondaryAuth.open}
+                mode={secondaryAuth.mode}
+                onSuccess={() => {
+                    setSecondaryAuth({open: false, mode: 'verify'});
+                    processSecondaryAuthQueue(null);
+                }}
+                onClose={() => {
+                    setSecondaryAuth({open: false, mode: 'verify'});
+                    processSecondaryAuthQueue(new Error('cancelled'));
+                    if (window.history.length > 1) {
+                        navigate(-1);
+                    } else {
+                        navigate('/');
+                    }
+                }}
+            />
             <Routes>
                 <Route path="/login" Component={Login} />
 

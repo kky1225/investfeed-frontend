@@ -7,11 +7,12 @@ import Typography from '@mui/material/Typography';
 import Menu from '@mui/material/Menu';
 import MenuContent from './MenuContent';
 import CardAlert from './CardAlert';
-import { MouseEvent, useState } from "react";
+import { MouseEvent, useState, lazy, Suspense } from "react";
 import MuiMenuItem from "@mui/material/MenuItem";
 import MenuButton from "./MenuButton.tsx";
 import LogoutRoundedIcon from '@mui/icons-material/LogoutRounded';
 import LockResetIcon from '@mui/icons-material/LockReset';
+import PinIcon from '@mui/icons-material/Pin';
 import VpnKeyIcon from '@mui/icons-material/VpnKey';
 import AccountCircleIcon from '@mui/icons-material/AccountCircle';
 import MoreVertRoundedIcon from '@mui/icons-material/MoreVertRounded';
@@ -22,11 +23,14 @@ import Divider, { dividerClasses } from "@mui/material/Divider";
 import { ListItemText } from '@mui/material';
 import { listClasses } from "@mui/material/List";
 import { paperClasses } from "@mui/material/Paper";
+import Snackbar from '@mui/material/Snackbar';
 import { useAuth } from '../context/AuthContext';
 import { logout } from '../api/auth/AuthApi';
 import { useNavigate } from 'react-router-dom';
 import IconButton from '@mui/material/IconButton';
 import Tooltip from '@mui/material/Tooltip';
+
+const ChangeSecondaryPasswordDialog = lazy(() => import('./ChangeSecondaryPasswordDialog'));
 
 const drawerWidthOpen = 240;
 const drawerWidthClosed = 64;
@@ -53,6 +57,8 @@ const MenuItem = styled(MuiMenuItem)({
 export default function SideMenu() {
     const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
     const [collapsed, setCollapsed] = useState(false);
+    const [changeSecondaryOpen, setChangeSecondaryOpen] = useState(false);
+    const [snackbar, setSnackbar] = useState('');
     const open = Boolean(anchorEl);
     const { user, clearAuth } = useAuth();
     const navigate = useNavigate();
@@ -223,6 +229,23 @@ export default function SideMenu() {
                             <LockResetIcon fontSize="small" />
                         </ListItemIcon>
                     </MenuItem>
+                    {user?.secondaryPasswordEnabled && (
+                        <MenuItem
+                            onClick={() => { handleClose(); setChangeSecondaryOpen(true); }}
+                            sx={{
+                                [`& .${listItemIconClasses.root}`]: {
+                                    ml: 'auto',
+                                    minWidth: 0,
+                                    pl: 1,
+                                },
+                            }}
+                        >
+                            <ListItemText>2차 비밀번호 변경</ListItemText>
+                            <ListItemIcon>
+                                <PinIcon fontSize="small" />
+                            </ListItemIcon>
+                        </MenuItem>
+                    )}
                     <MenuItem
                         onClick={() => { handleClose(); navigate('/settings/api-keys'); }}
                         sx={{
@@ -255,6 +278,22 @@ export default function SideMenu() {
                     </MenuItem>
                 </Menu>
             </Stack>
+            <Suspense>
+                <ChangeSecondaryPasswordDialog
+                    open={changeSecondaryOpen}
+                    onSuccess={() => {
+                        setChangeSecondaryOpen(false);
+                        setSnackbar('2차 비밀번호가 변경되었습니다.');
+                    }}
+                    onClose={() => setChangeSecondaryOpen(false)}
+                />
+            </Suspense>
+            <Snackbar
+                open={!!snackbar}
+                autoHideDuration={3000}
+                onClose={() => setSnackbar('')}
+                message={snackbar}
+            />
         </Drawer>
     );
 }

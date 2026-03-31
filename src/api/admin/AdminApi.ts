@@ -25,3 +25,8 @@ export const changeRole = async (loginId: string, role: string): Promise<ApiResp
     const res = await api.put<ApiResponse<null>>(`/auth/admin/members/${loginId}/role`, {role});
     return res.data;
 };
+
+export const resetTotp = async (loginId: string): Promise<ApiResponse<null>> => {
+    const res = await api.put<ApiResponse<null>>(`/auth/admin/members/${loginId}/totp-reset`);
+    return res.data;
+};

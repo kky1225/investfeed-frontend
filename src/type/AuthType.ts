@@ -12,11 +12,25 @@ export interface SignupReq {
     phone: string;
 }
 
+export interface PreAuthRes {
+    totpRequired: boolean;
+    totpSetupRequired: boolean;
+}
+
+export interface TotpSetupRes {
+    qrCodeImage: string;
+}
+
+export interface TotpVerifyReq {
+    code: string;
+}
+
 export interface TokenRes {
     passwordChangeRequired: boolean;
     role: string;
     nickname: string;
     email: string;
+    secondaryPasswordEnabled: boolean;
 }
 
 export interface ApiResponse<T> {
@@ -35,6 +49,20 @@ export interface AuthUser {
     nickname: string;
     email: string;
     role: string;
+    secondaryPasswordEnabled: boolean;
+}
+
+export interface SecondaryPasswordSetupReq {
+    password: string;
+}
+
+export interface SecondaryPasswordVerifyReq {
+    password: string;
+}
+
+export interface SecondaryPasswordChangeReq {
+    currentPassword: string;
+    newPassword: string;
 }
 
 export interface UpdateProfileReq {
@@ -78,5 +106,7 @@ export interface MemberRes {
     lockedAt: string | null;
     lockExpiresAt: string | null;
     permanentLock: boolean;
+    totpEnabled: boolean;
+    secondaryPasswordEnabled: boolean;
     createdAt: string;
 }
