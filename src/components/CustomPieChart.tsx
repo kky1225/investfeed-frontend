@@ -9,48 +9,12 @@ import Stack from '@mui/material/Stack';
 import LinearProgress, { linearProgressClasses } from '@mui/material/LinearProgress';
 import {Fragment} from "react";
 import {useMediaQuery, useTheme} from "@mui/material";
+import {HoldingStock} from "../type/HoldingType.ts";
 
-const data = [
-    { label: '삼성전자', value: 22100000 },
-    { label: '넥슨게임즈', value: 16100000 },
-    { label: '삼성SDI', value: 10900000 },
-    { label: 'KODEX 2차전지산업레버리지', value: 8000000 },
-    { label: '리졸브AI', value: 3900000 },
-    { label: '그 외', value: 1540000 },
-];
-
-const countries = [
-    {
-        name: '삼성전자',
-        value: 37.1,
-        color: 'hsl(220, 100%, 70%)'
-    },
-    {
-        name: '넥슨게임즈',
-        value: 27.2,
-        color: 'hsl(220, 80%, 70%)'
-    },
-    {
-        name: '삼성SDI',
-        value: 16.8,
-        color: 'hsl(220, 60%, 70%)'
-    },
-    {
-        name: 'KODEX 2차전지산업레버리지',
-        value: 13.2,
-        color: 'hsl(220, 45%, 70%)'
-    },
-    {
-        name: '리졸브AI',
-        value: 4.3,
-        color: 'hsl(220, 30%, 70%)'
-    },
-    {
-        name: '그 외',
-        value: 1.1,
-        color: 'hsl(220, 15%, 70%)'
-    }
-];
+interface CustomPieChartProps {
+    holdings: Array<HoldingStock>;
+    totalEvltAmt: string;
+}
 
 interface StyledTextProps {
     variant: 'primary' | 'secondary';
@@ -127,7 +91,7 @@ const colors = [
     'hsl(220, 15%, 70%)'
 ];
 
-export default function CustomPieChart() {
+export default function CustomPieChart({ holdings, totalEvltAmt }: CustomPieChartProps) {
     const theme = useTheme();
     const isSmallScreen = useMediaQuery(theme.breakpoints.down('sm'));
 
@@ -137,6 +101,17 @@ export default function CustomPieChart() {
     const chartMargin = isSmallScreen
         ? { left: 30, right: 30, top: 40, bottom: 40 }
         : { left: 50, right: 80, top: 80, bottom: 80 };
+
+    const pieData = holdings.map((stock) => ({
+        label: stock.stkNm,
+        value: Math.abs(Number(stock.evltAmt)),
+    }));
+
+    const progressData = holdings.map((stock, index) => ({
+        name: stock.stkNm,
+        value: Math.abs(Number(stock.possRt)),
+        color: colors[index % colors.length],
+    }));
 
     return (
         <Card
@@ -153,7 +128,7 @@ export default function CustomPieChart() {
                         margin={chartMargin}
                         series={[
                             {
-                                data,
+                                data: pieData,
                                 innerRadius,
                                 outerRadius,
                                 paddingAngle: 0,
@@ -163,10 +138,10 @@ export default function CustomPieChart() {
                         height={chartSize}
                         width={chartSize}
                     >
-                        <PieCenterLabel primaryText="63,092,578" secondaryText="Total" small={isSmallScreen} />
+                        <PieCenterLabel primaryText={Number(totalEvltAmt).toLocaleString()} secondaryText="Total" small={isSmallScreen} />
                     </PieChart>
                 </Box>
-                {countries.map((country, index) => (
+                {progressData.map((item, index) => (
                     <Stack
                         key={index}
                         direction="row"
@@ -182,19 +157,19 @@ export default function CustomPieChart() {
                                 }}
                             >
                                 <Typography variant="body2" sx={{ fontWeight: '500' }}>
-                                    {country.name}
+                                    {item.name}
                                 </Typography>
                                 <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-                                    {country.value}%
+                                    {item.value}%
                                 </Typography>
                             </Stack>
                             <LinearProgress
                                 variant="determinate"
                                 aria-label="Number of users by country"
-                                value={country.value}
+                                value={item.value}
                                 sx={{
                                     [`& .${linearProgressClasses.bar}`]: {
-                                        backgroundColor: country.color,
+                                        backgroundColor: item.color,
                                     },
                                 }}
                             />

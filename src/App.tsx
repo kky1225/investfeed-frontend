@@ -40,6 +40,7 @@ import Profile from "./pages/settings/Profile.tsx";
 import ProtectedRoute from "./components/ProtectedRoute.tsx";
 import ChangePassword from "./pages/settings/ChangePassword.tsx";
 import ApiKeyManagement from "./pages/settings/ApiKeyManagement.tsx";
+import HoldingList from "./pages/holding/HoldingList.tsx";
 
 const StockDetailWithKey = () => {
     const { id } = useParams();
@@ -147,6 +148,7 @@ function App() {
                         <Route path="/stock/theme/list" Component={ThemeList} />
                         <Route path="/stock/theme/:themaGrpCd/list" Component={ThemeStockList} />
 
+                        <Route path="/stock/holding/list" Component={HoldingList} />
                         <Route path="/stock/investor/:orgnTp/list/:trdeTp" Component={InvestorList} />
 
                         <Route path="/stock/recommend/list" Component={RecommendList} />

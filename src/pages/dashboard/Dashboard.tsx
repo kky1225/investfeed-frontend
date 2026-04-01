@@ -23,6 +23,8 @@ import DoNotDisturbIcon from '@mui/icons-material/DoNotDisturb';
 import {useNavigate} from "react-router-dom";
 import {ChartDay, DashboardIndexListItem, InvestorTradeRankList} from "../../type/DashboardType.ts";
 import {fetchDashboard} from "../../api/dashboard/DashboardApi.ts";
+import {HoldingStock} from "../../type/HoldingType.ts";
+import {fetchHoldingList} from "../../api/holding/HoldingApi.ts";
 export default function Dashboard() {
     const navigate = useNavigate();
 
@@ -66,6 +68,8 @@ export default function Dashboard() {
     ]);
 
     const [row, setRow] = useState<GridRowsProp[]>([]);
+    const [holdings, setHoldings] = useState<Array<HoldingStock>>([]);
+    const [totalEvltAmt, setTotalEvltAmt] = useState<string>("0");
 
     useEffect(() => {
         let chartTimeout: ReturnType<typeof setTimeout>;
@@ -73,6 +77,7 @@ export default function Dashboard() {
 
         (async () => {
             await dashboard();
+            await holdingList();
 
             const now = Date.now() + chartTimer.current;
             const waitTime = 60_000 - (now % 60_000);
@@ -90,6 +95,25 @@ export default function Dashboard() {
             clearInterval(interval);
         }
     }, []);
+
+    const holdingList = async () => {
+        try {
+            const data = await fetchHoldingList();
+
+            if (data.code !== "0000") {
+                throw new Error(data.msg);
+            }
+
+            const stocks: HoldingStock[] = data.result.holdingList ?? [];
+
+            if (stocks.length > 0) {
+                setHoldings(stocks);
+                setTotalEvltAmt(data.result.totEvltAmt);
+            }
+        } catch (err) {
+            console.error(err);
+        }
+    };
 
     const dashboard = async () => {
         try {
@@ -407,7 +431,7 @@ export default function Dashboard() {
                         투자 비중
                     </Typography>
                     <Stack gap={2} direction={{ xs: 'column', sm: 'row', lg: 'column' }}>
-                        <CustomPieChart />
+                        <CustomPieChart holdings={holdings} totalEvltAmt={totalEvltAmt} />
                     </Stack>
                 </Grid>
             </Grid>
