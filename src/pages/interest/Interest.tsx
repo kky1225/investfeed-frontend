@@ -203,7 +203,7 @@ const Interest = () => {
     const [editGroupName, setEditGroupName] = useState("");
     const [editGroupId, setEditGroupId] = useState<number | null>(null);
 
-    const [deleteGroupOpen, setDeleteGroupOpen] = useState(false);
+    const [deleteGroupTarget, setDeleteGroupTarget] = useState<InterestGroup | null>(null);
 
     const [groupMenu, setGroupMenu] = useState<GroupMenuState | null>(null);
 
@@ -322,11 +322,11 @@ const Interest = () => {
     };
 
     const handleDeleteGroup = async () => {
-        if (!groupMenu) return;
-        await deleteInterestGroup(groupMenu.group.id);
-        const newGroups = groups.filter(g => g.id !== groupMenu.group.id);
+        if (!deleteGroupTarget) return;
+        await deleteInterestGroup(deleteGroupTarget.id);
+        const newGroups = groups.filter(g => g.id !== deleteGroupTarget.id);
         setGroups(newGroups);
-        if (selectedGroup?.id === groupMenu.group.id) {
+        if (selectedGroup?.id === deleteGroupTarget.id) {
             if (newGroups.length > 0) {
                 setSelectedGroup(newGroups[0]);
                 loadItems(newGroups[0].id);
@@ -336,8 +336,7 @@ const Interest = () => {
             }
         }
         setGroupOrderDirty(false);
-        setDeleteGroupOpen(false);
-        setGroupMenu(null);
+        setDeleteGroupTarget(null);
     };
 
     const handleGroupDragEnd = (event: DragEndEvent) => {
@@ -689,7 +688,7 @@ const Interest = () => {
                     이름 변경
                 </MenuItem>
                 <MenuItem sx={{color: "error.main"}} onClick={() => {
-                    setDeleteGroupOpen(true)
+                    setDeleteGroupTarget(groupMenu!.group);
                     setGroupMenu(null);
                 }}>
                     그룹 삭제
@@ -735,18 +734,18 @@ const Interest = () => {
             </Dialog>
 
             {/* 그룹 삭제 확인 다이얼로그 */}
-            <Dialog open={deleteGroupOpen} onClose={() => setDeleteGroupOpen(false)} maxWidth="xs" fullWidth>
+            <Dialog open={Boolean(deleteGroupTarget)} onClose={() => setDeleteGroupTarget(null)} maxWidth="xs" fullWidth>
                 <DialogTitle>그룹 삭제</DialogTitle>
                 <DialogContent>
                     <Typography variant="body2">
-                        <b>{groupMenu?.group.groupNm}</b> 그룹을 삭제하시겠습니까?
+                        <b>{deleteGroupTarget?.groupNm}</b> 그룹을 삭제하시겠습니까?
                         <br/>
                         그룹 내 모든 관심종목도 함께 삭제됩니다.
                     </Typography>
                 </DialogContent>
                 <DialogActions>
-                    <Button onClick={() => setDeleteGroupOpen(false)}>취소</Button>
-                    <Button color="error" onClick={handleDeleteGroup}>삭제</Button>
+                    <Button onClick={() => setDeleteGroupTarget(null)}>취소</Button>
+                    <Button variant="contained" color="error" onClick={handleDeleteGroup}>삭제</Button>
                 </DialogActions>
             </Dialog>
 

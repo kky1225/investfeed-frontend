@@ -82,14 +82,15 @@ export interface CreateMemberReq {
 }
 
 export interface ApiKeyReq {
-    provider: string;
+    brokerId: number;
     appKey: string;
     secretKey: string;
 }
 
 export interface ApiKeyRes {
     id: number;
-    provider: string;
+    brokerId: number;
+    brokerName: string;
     appKey: string;
     createdAt: string;
 }

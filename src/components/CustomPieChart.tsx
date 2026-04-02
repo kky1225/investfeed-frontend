@@ -102,12 +102,14 @@ export default function CustomPieChart({ holdings, totalEvltAmt }: CustomPieChar
         ? { left: 30, right: 30, top: 40, bottom: 40 }
         : { left: 50, right: 80, top: 80, bottom: 80 };
 
-    const pieData = holdings.map((stock) => ({
+    const sorted = [...holdings].sort((a, b) => Math.abs(Number(b.evltAmt)) - Math.abs(Number(a.evltAmt)));
+
+    const pieData = sorted.map((stock) => ({
         label: stock.stkNm,
         value: Math.abs(Number(stock.evltAmt)),
     }));
 
-    const progressData = holdings.map((stock, index) => ({
+    const progressData = sorted.map((stock, index) => ({
         name: stock.stkNm,
         value: Math.abs(Number(stock.possRt)),
         color: colors[index % colors.length],

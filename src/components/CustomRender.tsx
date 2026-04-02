@@ -32,7 +32,7 @@ export function renderTradePricaColor(trade: string) {
 export function renderChip (status: number) {
     const colors = status == 0 ? 'default' : status > 0 ? 'error': 'info';
 
-    return <Chip label={status > 0 ? `${status}%` : `${status}%`} color={colors} />;
+    return <Chip label={`${status}%`} color={colors} />;
 }
 
 export function renderChangeAmount(value: string | number, unit: string = '원') {

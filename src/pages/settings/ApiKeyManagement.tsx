@@ -27,23 +27,21 @@ import {useNavigate} from 'react-router-dom';
 import ColorModeSelect from '../../components/ColorModeSelect';
 import AppTheme from '../../components/AppTheme';
 import {fetchApiKeys, createApiKey, deleteApiKey} from '../../api/auth/AuthApi';
+import {fetchBrokerList} from '../../api/broker/BrokerApi';
 import type {ApiKeyReq, ApiKeyRes} from '../../type/AuthType';
+import type {Broker} from '../../type/BrokerType';
 
 function formatDateTime(dateStr: string) {
     const date = new Date(dateStr);
     return `${date.getFullYear()}.${String(date.getMonth() + 1).padStart(2, '0')}.${String(date.getDate()).padStart(2, '0')} ${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
 }
 
-const providers = [
-    {value: 'KIWOOM', label: '키움증권'},
-    {value: 'UPBIT', label: '업비트'},
-];
-
-const initialForm: ApiKeyReq = {provider: 'KIWOOM', appKey: '', secretKey: ''};
+const initialForm: ApiKeyReq = {brokerId: 0, appKey: '', secretKey: ''};
 
 export default function ApiKeyManagement() {
     const navigate = useNavigate();
     const [apiKeys, setApiKeys] = useState<ApiKeyRes[]>([]);
+    const [apiBrokers, setApiBrokers] = useState<Broker[]>([]);
     const [loading, setLoading] = useState(true);
     const [snackbar, setSnackbar] = useState<{open: boolean; message: string; severity: 'success' | 'error'}>({
         open: false, message: '', severity: 'success'
@@ -51,8 +49,8 @@ export default function ApiKeyManagement() {
     const [formDialog, setFormDialog] = useState(false);
     const [form, setForm] = useState<ApiKeyReq>(initialForm);
     const [formLoading, setFormLoading] = useState(false);
-    const [deleteDialog, setDeleteDialog] = useState<{open: boolean; id: number; provider: string}>({
-        open: false, id: 0, provider: ''
+    const [deleteDialog, setDeleteDialog] = useState<{open: boolean; id: number; brokerName: string}>({
+        open: false, id: 0, brokerName: ''
     });
 
     const loadApiKeys = async () => {
@@ -69,11 +67,32 @@ export default function ApiKeyManagement() {
         }
     };
 
+    const loadBrokers = async () => {
+        try {
+            const data = await fetchBrokerList();
+            const brokers: Broker[] = data.result?.brokers ?? [];
+            setApiBrokers(brokers.filter(b => b.type === 'API'));
+        } catch {
+            // ignore
+        }
+    };
+
     useEffect(() => {
         loadApiKeys();
+        loadBrokers();
     }, []);
 
+    const openFormDialog = () => {
+        const defaultBrokerId = apiBrokers.length > 0 ? apiBrokers[0].id : 0;
+        setForm({...initialForm, brokerId: defaultBrokerId});
+        setFormDialog(true);
+    };
+
     const handleSubmit = async () => {
+        if (!form.brokerId) {
+            setSnackbar({open: true, message: '제공자를 선택해주세요.', severity: 'error'});
+            return;
+        }
         if (!form.appKey || !form.secretKey) {
             setSnackbar({open: true, message: '모든 필드를 입력해주세요.', severity: 'error'});
             return;
@@ -98,15 +117,11 @@ export default function ApiKeyManagement() {
         try {
             await deleteApiKey(deleteDialog.id);
             setSnackbar({open: true, message: 'API Key가 삭제되었습니다.', severity: 'success'});
-            setDeleteDialog({open: false, id: 0, provider: ''});
+            setDeleteDialog({open: false, id: 0, brokerName: ''});
             await loadApiKeys();
         } catch {
             setSnackbar({open: true, message: 'API Key 삭제에 실패했습니다.', severity: 'error'});
         }
-    };
-
-    const getProviderLabel = (value: string) => {
-        return providers.find(p => p.value === value)?.label || value;
     };
 
     return (
@@ -125,10 +140,7 @@ export default function ApiKeyManagement() {
                     variant="contained"
                     sx={{bgcolor: 'text.primary', '&:hover': {bgcolor: 'text.secondary'}}}
                     startIcon={<AddIcon/>}
-                    onClick={() => {
-                        setForm(initialForm);
-                        setFormDialog(true);
-                    }}
+                    onClick={openFormDialog}
                 >
                     등록
                 </Button>
@@ -144,7 +156,7 @@ export default function ApiKeyManagement() {
                         <Card key={apiKey.id} variant="outlined">
                             <CardContent>
                                 <Box sx={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1}}>
-                                    <Chip label={getProviderLabel(apiKey.provider)} size="small" variant="outlined"/>
+                                    <Chip label={apiKey.brokerName} size="small" variant="outlined"/>
                                     <Typography variant="caption" color="text.secondary">
                                         {formatDateTime(apiKey.createdAt)}
                                     </Typography>
@@ -155,7 +167,7 @@ export default function ApiKeyManagement() {
                             </CardContent>
                             <CardActions sx={{justifyContent: 'flex-end'}}>
                                 <Button size="small" color="error" startIcon={<DeleteIcon/>}
-                                    onClick={() => setDeleteDialog({open: true, id: apiKey.id, provider: apiKey.provider})}>
+                                    onClick={() => setDeleteDialog({open: true, id: apiKey.id, brokerName: apiKey.brokerName})}>
                                     삭제
                                 </Button>
                             </CardActions>
@@ -164,7 +176,7 @@ export default function ApiKeyManagement() {
                 </Box>
             )}
 
-            {/* 등록/수정 다이얼로그 */}
+            {/* 등록 다이얼로그 */}
             <Dialog open={formDialog} onClose={() => setFormDialog(false)} maxWidth="sm" fullWidth disableScrollLock>
                 <DialogTitle>API Key 등록</DialogTitle>
                 <DialogContent>
@@ -172,12 +184,12 @@ export default function ApiKeyManagement() {
                         <FormControl fullWidth size="small">
                             <InputLabel>제공자</InputLabel>
                             <Select
-                                value={form.provider}
+                                value={form.brokerId}
                                 label="제공자"
-                                onChange={(e) => setForm({...form, provider: e.target.value})}
+                                onChange={(e) => setForm({...form, brokerId: Number(e.target.value)})}
                             >
-                                {providers.map(p => (
-                                    <MenuItem key={p.value} value={p.value}>{p.label}</MenuItem>
+                                {apiBrokers.map(b => (
+                                    <MenuItem key={b.id} value={b.id}>{b.name}</MenuItem>
                                 ))}
                             </Select>
                         </FormControl>
@@ -205,15 +217,15 @@ export default function ApiKeyManagement() {
             </Dialog>
 
             {/* 삭제 확인 다이얼로그 */}
-            <Dialog open={deleteDialog.open} onClose={() => setDeleteDialog({open: false, id: 0, provider: ''})} disableScrollLock>
+            <Dialog open={deleteDialog.open} onClose={() => setDeleteDialog({open: false, id: 0, brokerName: ''})} disableScrollLock>
                 <DialogTitle>API Key 삭제</DialogTitle>
                 <DialogContent>
                     <DialogContentText>
-                        <strong>{getProviderLabel(deleteDialog.provider)}</strong> API Key를 삭제하시겠습니까?
+                        <strong>{deleteDialog.brokerName}</strong> API Key를 삭제하시겠습니까?
                     </DialogContentText>
                 </DialogContent>
                 <DialogActions>
-                    <Button onClick={() => setDeleteDialog({open: false, id: 0, provider: ''})}>취소</Button>
+                    <Button onClick={() => setDeleteDialog({open: false, id: 0, brokerName: ''})}>취소</Button>
                     <Button onClick={handleDelete} variant="contained"
                         sx={{bgcolor: '#d32f2f', '&:hover': {bgcolor: '#b71c1c'}}}>삭제</Button>
                 </DialogActions>

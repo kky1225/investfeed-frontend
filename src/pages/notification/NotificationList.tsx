@@ -1,4 +1,4 @@
-import {useCallback, useEffect, useState} from 'react';
+import {useState} from 'react';
 import {useNavigate} from 'react-router-dom';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
@@ -15,7 +15,6 @@ import Divider from '@mui/material/Divider';
 import TrendingUpIcon from '@mui/icons-material/TrendingUp';
 import TrendingDownIcon from '@mui/icons-material/TrendingDown';
 import NotificationsNoneIcon from '@mui/icons-material/NotificationsNone';
-import {fetchNotifications, markAsRead, markAllAsRead} from '../../api/notification/NotificationApi';
 import {useNotification} from '../../context/NotificationContext';
 import type {Notification, AssetType} from '../../type/NotificationType';
 
@@ -62,46 +61,28 @@ function getNavigationPath(notification: Notification): string {
 
 export default function NotificationList() {
     const navigate = useNavigate();
-    const {loadNotifications: refreshContext} = useNotification();
-    const [notifications, setNotifications] = useState<Notification[]>([]);
+    const {notifications, handleMarkAsRead, handleMarkAllAsRead} = useNotification();
     const [tabFilter, setTabFilter] = useState<TabFilter>('ALL');
     const [unreadOnly, setUnreadOnly] = useState(false);
 
-    const loadData = useCallback(async () => {
-        const assetType = tabFilter === 'ALL' ? undefined : tabFilter;
-        const res = await fetchNotifications(assetType);
-        setNotifications(res.result ?? []);
-    }, [tabFilter]);
-
-    useEffect(() => {
-        loadData();
-    }, [loadData]);
-
     const handleClick = async (notification: Notification) => {
         if (!notification.isRead) {
-            await markAsRead(notification.id);
-            setNotifications(prev => prev.map(n => n.id === notification.id ? {...n, isRead: true} : n));
-            refreshContext();
+            await handleMarkAsRead(notification.id);
         }
         navigate(getNavigationPath(notification));
     };
 
-    const handleMarkAll = async () => {
-        await markAllAsRead();
-        setNotifications(prev => prev.map(n => ({...n, isRead: true})));
-        refreshContext();
-    };
-
-    const filtered = unreadOnly ? notifications.filter(n => !n.isRead) : notifications;
+    const tabFiltered = tabFilter === 'ALL' ? notifications : notifications.filter(n => n.assetType === tabFilter);
+    const filtered = unreadOnly ? tabFiltered.filter(n => !n.isRead) : tabFiltered;
     const grouped = groupByDate(filtered);
-    const hasUnread = notifications.some(n => !n.isRead);
+    const hasUnread = tabFiltered.some(n => !n.isRead);
 
     return (
         <Box sx={{width: '100%', maxWidth: 700, mx: 'auto'}}>
             <Box sx={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2}}>
                 <Typography variant="h5" fontWeight="bold">알림</Typography>
                 {hasUnread && (
-                    <Button size="small" onClick={handleMarkAll}>모두 읽음</Button>
+                    <Button size="small" onClick={handleMarkAllAsRead}>모두 읽음</Button>
                 )}
             </Box>
 

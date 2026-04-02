@@ -12,10 +12,10 @@ import InsightsRoundedIcon from '@mui/icons-material/InsightsRounded';
 import ChevronRightRoundedIcon from '@mui/icons-material/ChevronRightRounded';
 import Chip from "@mui/material/Chip";
 import {JSX, useEffect, useRef, useState} from "react";
-import CustomPieChart from "../../components/CustomPieChart.tsx";
 import { GridColDef, GridRowsProp } from '@mui/x-data-grid';
 import CustomDataTable from "../../components/CustomDataTable.tsx";
 import InvestorBarChart from "../../components/InvestorBarChart.tsx";
+import ProgramBarChart from "../../components/ProgramBarChart.tsx";
 import CheckIcon from '@mui/icons-material/Check';
 import PriorityHighIcon from '@mui/icons-material/PriorityHigh';
 import RemoveIcon from '@mui/icons-material/Remove';
@@ -23,8 +23,7 @@ import DoNotDisturbIcon from '@mui/icons-material/DoNotDisturb';
 import {useNavigate} from "react-router-dom";
 import {ChartDay, DashboardIndexListItem, InvestorTradeRankList} from "../../type/DashboardType.ts";
 import {fetchDashboard} from "../../api/dashboard/DashboardApi.ts";
-import {HoldingStock} from "../../type/HoldingType.ts";
-import {fetchHoldingList} from "../../api/holding/HoldingApi.ts";
+
 export default function Dashboard() {
     const navigate = useNavigate();
 
@@ -54,22 +53,13 @@ export default function Dashboard() {
 
     const [kospiBarData, setKospiBarData] = useState<Array<number>>([0, 0, 0]);
     const [kosdacBarData, setKosdacBarData] = useState<Array<number>>([0, 0, 0]);
-    const [message, setMessage] = useState<MessageProps[]>([
-        {
-            icon: <RemoveIcon />,
-            title: '-',
-            message: '-'
-        },
-        {
-            icon: <RemoveIcon />,
-            title: '-',
-            message: '-'
-        }
-    ]);
+    const [kospiProgramData, setKospiProgramData] = useState<Array<number>>([0, 0, 0]);
+    const [kosdacProgramData, setKosdacProgramData] = useState<Array<number>>([0, 0, 0]);
+    const defaultMsg: MessageProps = {icon: <RemoveIcon />, title: '-', message: '-'};
+    const [message, setMessage] = useState<MessageProps[]>([defaultMsg, defaultMsg]);
+    const [programMessage, setProgramMessage] = useState<MessageProps[]>([defaultMsg, defaultMsg]);
 
     const [row, setRow] = useState<GridRowsProp[]>([]);
-    const [holdings, setHoldings] = useState<Array<HoldingStock>>([]);
-    const [totalEvltAmt, setTotalEvltAmt] = useState<string>("0");
 
     useEffect(() => {
         let chartTimeout: ReturnType<typeof setTimeout>;
@@ -77,7 +67,6 @@ export default function Dashboard() {
 
         (async () => {
             await dashboard();
-            await holdingList();
 
             const now = Date.now() + chartTimer.current;
             const waitTime = 60_000 - (now % 60_000);
@@ -96,25 +85,6 @@ export default function Dashboard() {
         }
     }, []);
 
-    const holdingList = async () => {
-        try {
-            const data = await fetchHoldingList();
-
-            if (data.code !== "0000") {
-                throw new Error(data.msg);
-            }
-
-            const stocks: HoldingStock[] = data.result.holdingList ?? [];
-
-            if (stocks.length > 0) {
-                setHoldings(stocks);
-                setTotalEvltAmt(data.result.totEvltAmt);
-            }
-        } catch (err) {
-            console.error(err);
-        }
-    };
-
     const dashboard = async () => {
         try {
             const data = await fetchDashboard();
@@ -122,8 +92,6 @@ export default function Dashboard() {
             if(data.code !== "0000") {
                 throw new Error(data.msg);
             }
-
-            console.log(data);
 
             const {
                 indexList,
@@ -164,16 +132,29 @@ export default function Dashboard() {
 
             setIndexDataList(newDashboardIndexDataList);
 
-
             setKospiBarData([Number(indexList[0].ind), Number(indexList[0].frgnr), Number(indexList[0].orgn)]);
-            setKosdacBarData([Number(indexList[1].ind), Number(indexList[1].frgnr), Number(indexList[1].orgn)])
+            setKosdacBarData([Number(indexList[1].ind), Number(indexList[1].frgnr), Number(indexList[1].orgn)]);
 
-            const message: MessageProps[] = [
+            setKospiProgramData([
+                Math.round(Number(indexList[0].dfrtTrdeNetprps) / 100),
+                Math.round(Number(indexList[0].ndiffproTrdeNetprps) / 100),
+                Math.round(Number(indexList[0].allNetprps) / 100),
+            ]);
+            setKosdacProgramData([
+                Math.round(Number(indexList[1].dfrtTrdeNetprps) / 100),
+                Math.round(Number(indexList[1].ndiffproTrdeNetprps) / 100),
+                Math.round(Number(indexList[1].allNetprps) / 100),
+            ]);
+
+            setMessage([
                 checkInvestor(indexList[0].indsNm, Number(indexList[0].frgnr), Number(indexList[0].orgn)),
                 checkInvestor(indexList[1].indsNm, Number(indexList[1].frgnr), Number(indexList[1].orgn))
-            ];
+            ]);
 
-            setMessage(message);
+            setProgramMessage([
+                checkProgram(indexList[0].indsNm, Number(indexList[0].dfrtTrdeNetprps), Number(indexList[0].ndiffproTrdeNetprps)),
+                checkProgram(indexList[1].indsNm, Number(indexList[1].dfrtTrdeNetprps), Number(indexList[1].ndiffproTrdeNetprps))
+            ]);
 
             const ranking = investorTradeRankList.map((item: InvestorTradeRankList) => {
                 return {
@@ -234,9 +215,45 @@ export default function Dashboard() {
         }
     }
 
-    const theme = useTheme();
-    const isSmallScreen = useMediaQuery(theme.breakpoints.down('sm'));
-    const isLargeScreen = useMediaQuery(theme.breakpoints.up('lg'));
+    function checkProgram(name: string, dfrtTrdeNetprps: number, ndiffproTrdeNetprps: number): MessageProps {
+        let message: string;
+        let title: string;
+        let icon: JSX.Element;
+
+        if (dfrtTrdeNetprps == 0) {
+            message = '프로그램 차익 관망, '
+        } else if (dfrtTrdeNetprps > 0) {
+            message = '프로그램 차익 매수, '
+        } else {
+            message = '프로그램 차익 매도, '
+        }
+
+        if (ndiffproTrdeNetprps == 0) {
+            message = message + '비차익 관망 중입니다.'
+        } else if (ndiffproTrdeNetprps > 0) {
+            message = message + '비차익 매수 중입니다.'
+        } else {
+            message = message + '비차익 매도 중입니다.'
+        }
+
+        if (dfrtTrdeNetprps == 0 && ndiffproTrdeNetprps == 0) {
+            title = `${name} 프로그램 중립`
+            icon = <RemoveIcon />
+        } else if (dfrtTrdeNetprps > 0 && ndiffproTrdeNetprps > 0) {
+            title = `${name} 프로그램 양호`
+            icon = <CheckIcon color="success" />;
+        } else if(dfrtTrdeNetprps > 0 || ndiffproTrdeNetprps > 0) {
+            title = `${name} 프로그램 주의`
+            icon = <PriorityHighIcon color="warning" />
+        } else {
+            title = `${name} 프로그램 위험`
+            icon = <DoNotDisturbIcon color="error" />
+        }
+
+        return {message, title, icon}
+    }
+
+    const isSmallScreen = useMediaQuery(useTheme().breakpoints.down('sm'));
 
     function renderStatus(status: number) {
         const colors = status == 0 ? 'default' : status > 0 ? 'error': 'info';
@@ -276,6 +293,68 @@ export default function Dashboard() {
     const indexDateFormat = (cntrTm: string) => {
         return `${cntrTm.slice(0, 4)}.${cntrTm.slice(4, 6)}.${cntrTm.slice(6, 8)}`;
     }
+
+    const renderIndexRow = (
+        label: string,
+        investorData: number[],
+        programData: number[],
+        investorMsg: MessageProps,
+        programMsg: MessageProps,
+    ) => (
+        <>
+            <Grid size={{xs: 12}}>
+                <Typography component="h2" variant="h6">
+                    {label}
+                </Typography>
+            </Grid>
+            <Grid size={{xs: 12, sm: 6, lg: 4}}>
+                <Card variant="outlined" sx={{width: '100%'}}>
+                    <CardContent>
+                        <Typography component="h2" variant="subtitle2" gutterBottom>
+                            투자자별 순매수(억)
+                        </Typography>
+                        <InvestorBarChart data={investorData}/>
+                    </CardContent>
+                </Card>
+            </Grid>
+            <Grid size={{xs: 12, sm: 6, lg: 4}}>
+                <Card variant="outlined" sx={{width: '100%'}}>
+                    <CardContent>
+                        <Typography component="h2" variant="subtitle2" gutterBottom>
+                            프로그램 순매수(억)
+                        </Typography>
+                        <ProgramBarChart data={programData}/>
+                    </CardContent>
+                </Card>
+            </Grid>
+            <Grid size={{xs: 12, sm: 12, lg: 4}}>
+                <Stack spacing={1}>
+                    <Card variant="outlined" sx={{width: '100%'}}>
+                        {investorMsg.icon}
+                        <CardContent>
+                            <Typography gutterBottom variant="h5" component="div">
+                                {investorMsg.title}
+                            </Typography>
+                            <Typography variant="body2" sx={{color: 'text.secondary'}}>
+                                {investorMsg.message}
+                            </Typography>
+                        </CardContent>
+                    </Card>
+                    <Card variant="outlined" sx={{width: '100%'}}>
+                        {programMsg.icon}
+                        <CardContent>
+                            <Typography gutterBottom variant="h5" component="div">
+                                {programMsg.title}
+                            </Typography>
+                            <Typography variant="body2" sx={{color: 'text.secondary'}}>
+                                {programMsg.message}
+                            </Typography>
+                        </CardContent>
+                    </Card>
+                </Stack>
+            </Grid>
+        </>
+    );
 
     return (
         <Box sx={{ width: '100%', maxWidth: { sm: '100%', md: '1700px' } }}>
@@ -321,120 +400,17 @@ export default function Dashboard() {
                         </CardContent>
                     </Card>
                 </Grid>
-                <Grid size={{ xs: 12, md: 12 }}>
-                    <Typography component="h2" variant="h6">
-                        당일 투자자별 순매수 현황(억)
-                    </Typography>
-                </Grid>
-                {isLargeScreen ? (
-                    <>
-                        <Grid size={{ lg: 4 }}>
-                            <Card variant="outlined" sx={{ width: '100%' }}>
-                                <CardContent>
-                                    <Typography component="h2" variant="subtitle2" gutterBottom>
-                                        종합(KOSPI)
-                                    </Typography>
-                                    <InvestorBarChart data={kospiBarData} />
-                                </CardContent>
-                            </Card>
-                        </Grid>
-                        <Grid size={{ lg: 4 }}>
-                            <Card variant="outlined" sx={{ width: '100%' }}>
-                                <CardContent>
-                                    <Typography component="h2" variant="subtitle2" gutterBottom>
-                                        종합(KOSDAQ)
-                                    </Typography>
-                                    <InvestorBarChart data={kosdacBarData} />
-                                </CardContent>
-                            </Card>
-                        </Grid>
-                        <Grid size={{ lg: 4 }}>
-                            {message.map((item: MessageProps, index: number) => (
-                                <Card key={index} variant="outlined" sx={{ width: '100%', mb: 1 }}>
-                                    {item.icon}
-                                    <CardContent>
-                                        <Typography gutterBottom variant="h5" component="div">
-                                            {item.title}
-                                        </Typography>
-                                        <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-                                            {item.message}
-                                        </Typography>
-                                    </CardContent>
-                                </Card>
-                            ))}
-                        </Grid>
-                    </>
-                ) : (
-                    <>
-                        <Grid size={{ xs: 12, sm: 6 }}>
-                            <Card variant="outlined" sx={{ width: '100%' }}>
-                                <CardContent>
-                                    <Typography component="h2" variant="subtitle2" gutterBottom>
-                                        종합(KOSPI)
-                                    </Typography>
-                                    <InvestorBarChart data={kospiBarData} />
-                                </CardContent>
-                            </Card>
-                        </Grid>
-                        {message[0] && (
-                            <Grid size={{ xs: 12, sm: 6 }}>
-                                <Card variant="outlined" sx={{ width: '100%' }}>
-                                    {message[0].icon}
-                                    <CardContent>
-                                        <Typography gutterBottom variant="h5" component="div">
-                                            {message[0].title}
-                                        </Typography>
-                                        <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-                                            {message[0].message}
-                                        </Typography>
-                                    </CardContent>
-                                </Card>
-                            </Grid>
-                        )}
-                        <Grid size={{ xs: 12, sm: 6 }}>
-                            <Card variant="outlined" sx={{ width: '100%' }}>
-                                <CardContent>
-                                    <Typography component="h2" variant="subtitle2" gutterBottom>
-                                        종합(KOSDAQ)
-                                    </Typography>
-                                    <InvestorBarChart data={kosdacBarData} />
-                                </CardContent>
-                            </Card>
-                        </Grid>
-                        {message[1] && (
-                            <Grid size={{ xs: 12, sm: 6 }}>
-                                <Card variant="outlined" sx={{ width: '100%' }}>
-                                    {message[1].icon}
-                                    <CardContent>
-                                        <Typography gutterBottom variant="h5" component="div">
-                                            {message[1].title}
-                                        </Typography>
-                                        <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-                                            {message[1].message}
-                                        </Typography>
-                                    </CardContent>
-                                </Card>
-                            </Grid>
-                        )}
-                    </>
-                )}
             </Grid>
-            <Grid container spacing={2} columns={12}>
-                <Grid size={{ xs: 12, lg: 7 }}>
-                    <Typography component="h2" variant="h6" sx={{ mb: 2 }}>
-                        월간 종합(KOSPI) 기관/외국인 매수 상위 순위
-                    </Typography>
-                    <CustomDataTable rows={row} columns={columns} pageSize={20} />
-                </Grid>
-                <Grid size={{ xs: 12, lg: 5 }}>
-                    <Typography component="h2" variant="h6" sx={{ mb: 2 }}>
-                        투자 비중
-                    </Typography>
-                    <Stack gap={2} direction={{ xs: 'column', sm: 'row', lg: 'column' }}>
-                        <CustomPieChart holdings={holdings} totalEvltAmt={totalEvltAmt} />
-                    </Stack>
-                </Grid>
+
+            <Grid container spacing={2} columns={12} sx={{mb: 2}}>
+                {renderIndexRow('종합(KOSPI)', kospiBarData, kospiProgramData, message[0], programMessage[0])}
+                {renderIndexRow('종합(KOSDAQ)', kosdacBarData, kosdacProgramData, message[1], programMessage[1])}
             </Grid>
+
+            <Typography component="h2" variant="h6" sx={{mb: 2}}>
+                월간 종합(KOSPI) 기관/외국인 매수 상위 순위
+            </Typography>
+            <CustomDataTable rows={row} columns={columns} pageSize={20}/>
         </Box>
     );
 }

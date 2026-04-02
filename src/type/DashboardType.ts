@@ -8,6 +8,9 @@ export interface DashboardIndexListItem {
     ind: string,
     orgn: string,
     frgnr: string,
+    dfrtTrdeNetprps: string,
+    ndiffproTrdeNetprps: string,
+    allNetprps: string,
     chartList: Array<ChartDay>
 }
 
