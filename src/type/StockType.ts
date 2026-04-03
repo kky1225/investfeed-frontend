@@ -32,7 +32,7 @@ export interface StockStreamRes {
     type: string,
     name: string,
     item: string,
-    values: Array<StockStream>
+    values: Record<string, string>
 }
 
 export interface StockStream {

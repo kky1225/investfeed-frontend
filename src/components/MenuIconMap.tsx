@@ -10,8 +10,10 @@ import RecommendIcon from '@mui/icons-material/Recommend';
 import CurrencyBitcoinIcon from '@mui/icons-material/CurrencyBitcoin';
 import NotificationsIcon from '@mui/icons-material/Notifications';
 import AdminPanelSettingsIcon from '@mui/icons-material/AdminPanelSettings';
+import AssuredWorkloadIcon from '@mui/icons-material/AssuredWorkload';
 import SettingsIcon from '@mui/icons-material/Settings';
 import MenuIcon from '@mui/icons-material/Menu';
+import WalletIcon from '@mui/icons-material/Wallet';
 import type {ReactElement} from 'react';
 
 const iconMap: Record<string, ReactElement> = {
@@ -27,8 +29,10 @@ const iconMap: Record<string, ReactElement> = {
     CurrencyBitcoinIcon: <CurrencyBitcoinIcon />,
     NotificationsIcon: <NotificationsIcon />,
     AdminPanelSettingsIcon: <AdminPanelSettingsIcon />,
+    AssuredWorkloadIcon: <AssuredWorkloadIcon />,
     SettingsIcon: <SettingsIcon />,
     MenuIcon: <MenuIcon />,
+    WalletIcon: <WalletIcon />,
 };
 
 export const getMenuIcon = (iconName: string | null): ReactElement => {

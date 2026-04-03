@@ -29,7 +29,7 @@ export default function EditManualHoldingDialog({open, onClose, holding, onUpdat
             setPurPrice(String(holding.purPrice));
             setQuantity(String(holding.quantity));
             setPurAmt(String(holding.purAmt));
-            setPurAmtManual(true);
+            setPurAmtManual(false);
         }
     }, [holding]);
 

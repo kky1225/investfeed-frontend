@@ -1,4 +1,4 @@
-import {useCallback, useEffect, useMemo, useState} from "react";
+import React, {createContext, useCallback, useContext, useEffect, useMemo, useState} from "react";
 import {useNavigate} from "react-router-dom";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
@@ -9,7 +9,8 @@ import DialogTitle from "@mui/material/DialogTitle";
 import DialogContent from "@mui/material/DialogContent";
 import DialogActions from "@mui/material/DialogActions";
 import Typography from "@mui/material/Typography";
-import {DataGrid, GridColDef, GridRenderCellParams} from "@mui/x-data-grid";
+import CircularProgress from "@mui/material/CircularProgress";
+import {DataGrid, GridColDef, GridRenderCellParams, GridRow, GridRowProps} from "@mui/x-data-grid";
 import Menu from "@mui/material/Menu";
 import MenuItem from "@mui/material/MenuItem";
 import ListItemIcon from "@mui/material/ListItemIcon";
@@ -21,15 +22,82 @@ import MoreVertIcon from "@mui/icons-material/MoreVert";
 import PieChartRoundedIcon from "@mui/icons-material/PieChartRounded";
 import KeyboardArrowDownIcon from "@mui/icons-material/KeyboardArrowDown";
 import KeyboardArrowUpIcon from "@mui/icons-material/KeyboardArrowUp";
+import DragIndicatorIcon from "@mui/icons-material/DragIndicator";
+import SaveIcon from "@mui/icons-material/Save";
+import {DndContext, DragEndEvent, PointerSensor, TouchSensor, useSensor, useSensors} from "@dnd-kit/core";
+import {arrayMove, SortableContext, useSortable, verticalListSortingStrategy} from "@dnd-kit/sortable";
+import {CSS} from "@dnd-kit/utilities";
 import CustomPieChart from "../../components/CustomPieChart.tsx";
 import {renderChip, renderTradeColor} from "../../components/CustomRender.tsx";
-import {fetchManualHoldingList, deleteManualHolding} from "../../api/broker/BrokerApi.ts";
+import {fetchManualHoldingList, deleteManualHolding, reorderHoldings} from "../../api/broker/BrokerApi.ts";
 import type {MemberBroker, ManualHolding} from "../../type/BrokerType.ts";
 import type {HoldingStock} from "../../type/HoldingType.ts";
 import HoldingSummaryCard from "./HoldingSummaryCard.tsx";
 import AddManualHoldingDialog from "./AddManualHoldingDialog.tsx";
 import EditManualHoldingDialog from "./EditManualHoldingDialog.tsx";
 import {useHoldingStream, HoldingBuffer} from "./useHoldingStream.ts";
+
+// ─── DataGrid 행 드래그 (Context 패턴) ───────────────────────────────────────
+
+type DragListeners = ReturnType<typeof useSortable>["listeners"];
+type DragAttributes = ReturnType<typeof useSortable>["attributes"];
+
+interface RowDragContextValue {
+    listeners: DragListeners;
+    attributes: DragAttributes;
+}
+
+const RowDragContext = createContext<RowDragContextValue>({
+    listeners: undefined,
+    attributes: {} as DragAttributes,
+});
+
+const DragHandleCell = () => {
+    const {listeners, attributes} = useContext(RowDragContext);
+    return (
+        <Box
+            {...listeners}
+            {...attributes}
+            onClick={(e) => e.stopPropagation()}
+            sx={{
+                display: "flex",
+                alignItems: "center",
+                cursor: "grab",
+                color: "text.disabled",
+                height: "100%",
+                px: 0.5,
+                "&:active": {cursor: "grabbing"},
+            }}
+        >
+            <DragIndicatorIcon sx={{fontSize: 16}}/>
+        </Box>
+    );
+};
+
+const DraggableRow = React.forwardRef<HTMLDivElement, GridRowProps>((props, _ref) => {
+    const {attributes, listeners, setNodeRef, transform, transition, isDragging} = useSortable({
+        id: props.rowId as number,
+    });
+
+    return (
+        <RowDragContext.Provider value={{listeners, attributes}}>
+            <GridRow
+                ref={setNodeRef}
+                {...props}
+                style={{
+                    ...props.style,
+                    transform: CSS.Transform.toString(transform),
+                    transition,
+                    opacity: isDragging ? 0.5 : 1,
+                    zIndex: isDragging ? 1 : undefined,
+                    position: isDragging ? "relative" : undefined,
+                }}
+            />
+        </RowDragContext.Provider>
+    );
+});
+
+// ─── ManualHoldingTab ────────────────────────────────────────────────────────
 
 interface ManualHoldingTabProps {
     broker: MemberBroker;
@@ -51,6 +119,13 @@ export default function ManualHoldingTab({broker}: ManualHoldingTabProps) {
     const [stkCds, setStkCds] = useState<string[]>([]);
     const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
     const [menuTarget, setMenuTarget] = useState<ManualHolding | null>(null);
+    const [orderDirty, setOrderDirty] = useState(false);
+    const [savingOrder, setSavingOrder] = useState(false);
+
+    const sensors = useSensors(
+        useSensor(PointerSensor, {activationConstraint: {distance: 5}}),
+        useSensor(TouchSensor, {activationConstraint: {delay: 200, tolerance: 5}})
+    );
 
     const stripSign = (v: string) => v.replace(/^[+-]/, '');
 
@@ -67,6 +142,7 @@ export default function ManualHoldingTab({broker}: ManualHoldingTabProps) {
             const prftRt = prftRtVal > 0 ? `+${prftRtVal.toFixed(2)}` : prftRtVal.toFixed(2);
 
             return {
+                id: item.id,
                 stkCd: item.stkCd,
                 stkNm: item.stkNm,
                 curPrc,
@@ -117,6 +193,7 @@ export default function ManualHoldingTab({broker}: ManualHoldingTabProps) {
             updateSummary(stocks);
             setDailyPl(String(calcDailyPl(stocks)));
             setStkCds(items.map(i => i.stkCd));
+            setOrderDirty(false);
         } catch (err) {
             console.error(err);
         }
@@ -170,9 +247,33 @@ export default function ManualHoldingTab({broker}: ManualHoldingTabProps) {
         setDeleteTarget(null);
     };
 
+    const handleDragEnd = (event: DragEndEvent) => {
+        const {active, over} = event;
+        if (!over || active.id === over.id) return;
+        const oldIndex = holdings.findIndex(h => h.id === active.id);
+        const newIndex = holdings.findIndex(h => h.id === over.id);
+        setHoldings(prev => arrayMove(prev, oldIndex, newIndex));
+        setManualHoldings(prev => arrayMove(prev, oldIndex, newIndex));
+        setOrderDirty(true);
+    };
+
+    const handleSaveOrder = async () => {
+        setSavingOrder(true);
+        try {
+            await reorderHoldings({orderedIds: holdings.map(h => h.id)});
+            setOrderDirty(false);
+        } finally {
+            setSavingOrder(false);
+        }
+    };
+
     const findManualHolding = (stkCd: string) => manualHoldings.find(h => h.stkCd === stkCd) ?? null;
 
     const columns: GridColDef[] = [
+        {
+            field: '__drag__', headerName: '', width: 40, sortable: false, disableColumnMenu: true,
+            renderCell: () => <DragHandleCell/>,
+        },
         {field: 'stkNm', headerName: '종목명', flex: 1.5, minWidth: 150},
         {field: 'prftRt', headerName: '수익률', flex: 0.8, minWidth: 100, renderCell: (params: {value: number}) => renderChip(params.value as number)},
         {field: 'curPrc', headerName: '현재가', flex: 1, minWidth: 100, valueFormatter: (value: string) => Number(value).toLocaleString()},
@@ -188,7 +289,7 @@ export default function ManualHoldingTab({broker}: ManualHoldingTabProps) {
                 <IconButton size="small" onClick={(e) => {
                     e.stopPropagation();
                     setAnchorEl(e.currentTarget);
-                    setMenuTarget(findManualHolding(params.row.id));
+                    setMenuTarget(findManualHolding(params.row.stkCd));
                 }}>
                     <MoreVertIcon fontSize="small"/>
                 </IconButton>
@@ -196,8 +297,9 @@ export default function ManualHoldingTab({broker}: ManualHoldingTabProps) {
         },
     ];
 
-    const rows = holdings.map((stock, index) => ({
-        id: stock.stkCd || index,
+    const rows = holdings.map(stock => ({
+        id: stock.id,
+        stkCd: stock.stkCd,
         stkNm: stock.stkNm,
         curPrc: stock.curPrc,
         rmndQty: stock.rmndQty,
@@ -229,14 +331,27 @@ export default function ManualHoldingTab({broker}: ManualHoldingTabProps) {
                 >
                     투자 비중 보기
                 </Button>
-                <Button
-                    variant="contained"
-                    size="small"
-                    startIcon={<AddIcon/>}
-                    onClick={() => setAddOpen(true)}
-                >
-                    매수
-                </Button>
+                <Box sx={{display: 'flex', gap: 1, alignItems: 'center'}}>
+                    {orderDirty && (
+                        <Button
+                            variant="contained"
+                            size="small"
+                            startIcon={savingOrder ? <CircularProgress size={12} color="inherit"/> : <SaveIcon/>}
+                            onClick={handleSaveOrder}
+                            disabled={savingOrder}
+                        >
+                            순서 저장
+                        </Button>
+                    )}
+                    <Button
+                        variant="contained"
+                        size="small"
+                        startIcon={<AddIcon/>}
+                        onClick={() => setAddOpen(true)}
+                    >
+                        매수
+                    </Button>
+                </Box>
             </Box>
 
             <Collapse in={showChart}>
@@ -245,24 +360,33 @@ export default function ManualHoldingTab({broker}: ManualHoldingTabProps) {
                 </Box>
             </Collapse>
 
-            <DataGrid
-                rows={rows}
-                columns={columns}
-                onCellClick={(params) => {
-                    if (params.field !== 'actions') {
-                        navigate(`/stock/detail/${params.row.id}`);
-                    }
-                }}
-                getRowClassName={(params) =>
-                    params.indexRelativeToCurrentPage % 2 === 0 ? 'even' : 'odd'
-                }
-                initialState={{
-                    pagination: {paginationModel: {pageSize: 20}},
-                }}
-                pageSizeOptions={[10, 20, 50, 100]}
-                disableColumnResize
-                density="compact"
-            />
+            <DndContext sensors={sensors} onDragEnd={handleDragEnd}>
+                <SortableContext items={holdings.map(h => h.id)} strategy={verticalListSortingStrategy}>
+                    <DataGrid
+                        rows={rows}
+                        columns={columns}
+                        onCellClick={(params) => {
+                            if (params.field !== 'actions' && params.field !== '__drag__') {
+                                navigate(`/stock/detail/${params.row.stkCd}`);
+                            }
+                        }}
+                        getRowClassName={(params) =>
+                            params.indexRelativeToCurrentPage % 2 === 0 ? 'even' : 'odd'
+                        }
+                        initialState={{
+                            pagination: {paginationModel: {pageSize: 20}},
+                        }}
+                        pageSizeOptions={[10, 20, 50, 100]}
+                        disableColumnResize
+                        density="compact"
+                        slots={{row: DraggableRow}}
+                        sx={{
+                            "& .MuiDataGrid-cell[data-field='__drag__']": {padding: 0},
+                            "& .MuiDataGrid-cell[data-field='actions']": {padding: 0},
+                        }}
+                    />
+                </SortableContext>
+            </DndContext>
 
             <Menu
                 anchorEl={anchorEl}

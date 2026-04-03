@@ -23,11 +23,17 @@ import DoNotDisturbIcon from '@mui/icons-material/DoNotDisturb';
 import {useNavigate} from "react-router-dom";
 import {ChartDay, DashboardIndexListItem, InvestorTradeRankList} from "../../type/DashboardType.ts";
 import {fetchDashboard} from "../../api/dashboard/DashboardApi.ts";
+import {fetchTimeNow} from "../../api/time/TimeApi.ts";
+import {MarketType} from "../../type/timeType.ts";
+import {fetchIndexListStream} from "../../api/index/IndexApi.ts";
+import {IndexStreamRes, IndexStream} from "../../type/IndexType.ts";
 
 export default function Dashboard() {
     const navigate = useNavigate();
 
     const chartTimer = useRef<number>(0);
+    const marketTimer = useRef<number>(0);
+
     interface MessageProps {
         icon: JSX.Element,
         title: string,
@@ -63,13 +69,32 @@ export default function Dashboard() {
 
     useEffect(() => {
         let chartTimeout: ReturnType<typeof setTimeout>;
+        let socketTimeout: ReturnType<typeof setTimeout>;
         let interval: ReturnType<typeof setInterval>;
+        let socket: WebSocket;
 
         (async () => {
             await dashboard();
 
+            const marketInfo = await timeNow();
+
             const now = Date.now() + chartTimer.current;
             const waitTime = 60_000 - (now % 60_000);
+
+            if (marketInfo?.isMarketOpen) {
+                await indexListStream();
+                socket = openSocket();
+            } else {
+                socketTimeout = setTimeout(async () => {
+                    socket?.close();
+
+                    const again = await timeNow();
+                    if (again?.isMarketOpen) {
+                        await indexListStream();
+                        socket = openSocket();
+                    }
+                }, marketTimer.current + 200);
+            }
 
             chartTimeout = setTimeout(() => {
                 dashboard();
@@ -80,6 +105,8 @@ export default function Dashboard() {
         })();
 
         return () => {
+            socket?.close();
+            clearTimeout(socketTimeout);
             clearTimeout(chartTimeout);
             clearInterval(interval);
         }
@@ -171,6 +198,89 @@ export default function Dashboard() {
         } catch (err) {
             console.error(err);
         }
+    };
+
+    const timeNow = async () => {
+        try {
+            const startTime = Date.now();
+            const data = await fetchTimeNow({marketType: MarketType.INDEX});
+
+            if (data.code !== "0000") {
+                throw new Error(data.msg);
+            }
+
+            const {time, isMarketOpen, startMarketTime, marketType} = data.result;
+
+            if (marketType !== MarketType.INDEX) {
+                throw new Error(data.msg);
+            }
+
+            const endTime = Date.now();
+            const delayTime = endTime - startTime;
+            const revisionServerTime = time + delayTime / 2;
+
+            chartTimer.current = revisionServerTime - endTime;
+
+            if (!isMarketOpen) {
+                marketTimer.current = startMarketTime - revisionServerTime;
+            }
+
+            return {...data.result};
+        } catch (error) {
+            console.error(error);
+        }
+    };
+
+    const indexListStream = async () => {
+        try {
+            const data = await fetchIndexListStream();
+
+            if (data.code !== "0000") {
+                throw new Error(data.msg);
+            }
+        } catch (error) {
+            console.error(error);
+        }
+    };
+
+    const openSocket = () => {
+        const socket = new WebSocket("ws://localhost:8080/ws");
+
+        socket.onmessage = (event) => {
+            const data = JSON.parse(event.data);
+
+            if (data.trnm === "REAL" && Array.isArray(data.data)) {
+                const indexList = data.data.map((entry: IndexStreamRes) => {
+                    const values = entry.values;
+                    return {
+                        code: entry.item,
+                        value: values["10"],
+                        change: values["11"],
+                        fluRt: values["12"],
+                        trend: values["25"],
+                    };
+                });
+
+                setIndexDataList((prevList) =>
+                    prevList.map((item) => {
+                        const newData = indexList.find((data: IndexStream) => data.code === item.id);
+
+                        if (newData) {
+                            return {
+                                ...item,
+                                value: newData.value.replace(/^[+-]/, ''),
+                                fluRt: newData.fluRt,
+                                trend: ["1", "2"].includes(newData.trend) ? 'up' : ["4", "5"].includes(newData.trend) ? 'down' : item.trend,
+                            };
+                        }
+
+                        return item;
+                    })
+                );
+            }
+        };
+
+        return socket;
     };
 
     function checkInvestor(name: string, frgnr: number, orgn: number): MessageProps {

@@ -1,5 +1,5 @@
 import api from "../../axios.ts";
-import {AddMyBrokerReq, CreateBrokerReq, CreateManualHoldingReq, UpdateManualHoldingReq} from "../../type/BrokerType.ts";
+import {AddMyBrokerReq, CreateBrokerReq, CreateManualHoldingReq, HoldingReorderReq, UpdateManualHoldingReq} from "../../type/BrokerType.ts";
 
 // 관리자용 - 증권사 마스터 관리 (2차 비밀번호 필요)
 export const fetchAdminBrokerList = async () => {
@@ -62,5 +62,10 @@ export const updateManualHolding = async (holdingId: number, req: UpdateManualHo
 
 export const deleteManualHolding = async (holdingId: number) => {
     const res = await api.delete(`/stock/holding/manual/${holdingId}`);
+    return res.data;
+}
+
+export const reorderHoldings = async (req: HoldingReorderReq) => {
+    const res = await api.put(`/stock/holding/manual/reorder`, req);
     return res.data;
 }

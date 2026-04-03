@@ -56,3 +56,7 @@ export interface UpdateManualHoldingReq {
     quantity: number;
     purAmt: number;
 }
+
+export interface HoldingReorderReq {
+    orderedIds: number[];
+}

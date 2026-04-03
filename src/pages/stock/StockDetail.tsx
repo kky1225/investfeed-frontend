@@ -4,6 +4,7 @@ import Grid from "@mui/material/Grid";
 import CardContent from "@mui/material/CardContent";
 import Stack from "@mui/material/Stack";
 import Chip from "@mui/material/Chip";
+import Divider from "@mui/material/Divider";
 import Card from "@mui/material/Card";
 import {useState, MouseEvent, useRef, useEffect, ReactElement, JSX} from "react";
 import CandlestickChartIcon from '@mui/icons-material/CandlestickChart';
@@ -21,7 +22,6 @@ import {useParams} from "react-router-dom";
 import {
     StockChartType,
     StockDetailReq,
-    StockStream,
     StockStreamReq,
     StockStreamRes,
 } from "../../type/StockType.ts";
@@ -119,6 +119,12 @@ const StockDetail = () => {
         barDataList: [],
         dateList: []
     });
+
+    const [expectedPrice, setExpectedPrice] = useState<{
+        value: string;
+        fluRt?: string;
+        trend?: 'up' | 'down' | 'neutral';
+    } | null>(null);
 
     const [investorChartData, setInvestorChartData] = useState<MakeOptional<LineSeriesType, 'type'>[]>([
         {
@@ -281,6 +287,15 @@ const StockDetail = () => {
                 barDataList: barDataList,
                 dateList: dateList
             });
+
+            const expPric = stockInfo.expCntrPric;
+            if (expPric && Number(expPric) !== 0) {
+                setExpectedPrice({
+                    value: Number(expPric.replace(/^[+-]/, '')).toLocaleString(),
+                    fluRt: stockInfo.expCntrFluRt || undefined,
+                    trend: stockInfo.expCntrPreSig ? trendColor(stockInfo.expCntrPreSig) : undefined,
+                });
+            }
 
             setInfo({
                 marketName: stockInfo.marketName || '-',
@@ -682,25 +697,24 @@ const StockDetail = () => {
             const data = JSON.parse(event.data);
 
             if (data.trnm === "REAL" && Array.isArray(data.data)) {
-                const stockList = data.data.map((res: StockStreamRes) => {
+                data.data.forEach((res: StockStreamRes) => {
+                    if (res.item !== req.stkCd) return;
                     const values = res.values;
-                    return {
-                        code: res.item,
-                        value: values["10"],
-                        fluRt: values["12"],
-                        predPre: values["11"],
-                        trend: values["25"],
-                    };
-                });
 
-                stockList.forEach((stock: StockStream) => {
-                    if(stock.code === req.stkCd) {
+                    if (res.type === "0H") {
+                        setExpectedPrice({
+                            value: Number(values["10"]?.replace(/^[+-]/, '') ?? '0').toLocaleString(),
+                            fluRt: values["12"] ?? '0',
+                            trend: trendColor(values["25"] ?? '3'),
+                        });
+                    } else {
+                        setExpectedPrice(null);
                         setStockChartData((old) => ({
                             ...old,
-                            value: Number(stock.value.replace(/^[+-]/, '')).toLocaleString(),
-                            fluRt: stock.fluRt,
-                            predPre: stock.predPre || '0',
-                            trend: trendColor(stock.trend),
+                            value: Number(values["10"]?.replace(/^[+-]/, '') ?? '0').toLocaleString(),
+                            fluRt: values["12"] ?? '0',
+                            predPre: values["11"] || '0',
+                            trend: trendColor(values["25"] ?? '3'),
                         }));
                     }
                 });
@@ -810,6 +824,8 @@ const StockDetail = () => {
 
     const color = labelColors[stockChartData.trend];
     const trendValues = { up: `${stockChartData.fluRt}%`, down: `${stockChartData.fluRt}%`, neutral: `${stockChartData.fluRt}%` };
+
+    const expectedColor = expectedPrice?.trend ? labelColors[expectedPrice.trend] : 'default';
 
     const handleAlignment = (
         _event: MouseEvent<HTMLElement>,
@@ -1009,6 +1025,20 @@ const StockDetail = () => {
                                     </Typography>
                                     {renderChangeAmount(stockChartData.predPre)}
                                     <Chip size="small" color={color} label={trendValues[stockChartData.trend]} />
+                                    {expectedPrice && (
+                                        <>
+                                            <Divider orientation="vertical" flexItem />
+                                            <Typography component="span" sx={{ color: 'text.secondary', fontSize: '0.85em' }}>
+                                                예상
+                                            </Typography>
+                                            <Typography variant="h4" component="p">
+                                                {expectedPrice.value}
+                                            </Typography>
+                                            {expectedPrice.fluRt && (
+                                                <Chip size="small" color={expectedColor} label={`${expectedPrice.fluRt}%`} />
+                                            )}
+                                        </>
+                                    )}
                                 </Stack>
                                 <Typography variant="caption" sx={{ color: 'text.secondary' }}>
                                     {stockChartData.interval}

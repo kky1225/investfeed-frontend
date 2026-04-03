@@ -11,6 +11,7 @@ export interface HoldingListRes {
 }
 
 export interface HoldingStock {
+    id: number,
     stkCd: string,
     stkNm: string,
     curPrc: string,
