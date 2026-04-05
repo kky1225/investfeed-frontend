@@ -36,7 +36,7 @@ const ProgoramLineChart = (
                 {
                     scaleType: 'point',
                     data: date,
-                    tickInterval: (_index: any, i: number) => i % 60 === 0,
+                    tickInterval: (value: string) => value.substring(2, 4) === '00',
                     valueFormatter: (value: string) => `${value.substring(0, 2)}:${value.substring(2, 4)}`
                 },
             ]}

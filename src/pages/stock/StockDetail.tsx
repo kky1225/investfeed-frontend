@@ -15,7 +15,8 @@ import ToggleButton from '@mui/material/ToggleButton';
 import ToggleButtonGroup, {
     toggleButtonGroupClasses,
 } from '@mui/material/ToggleButtonGroup';
-import {Select, SelectChangeEvent, Slider, Tab, Tabs, Tooltip} from "@mui/material";
+import {Accordion, AccordionDetails, AccordionSummary, Select, SelectChangeEvent, Slider, Tab, Tabs, Tooltip} from "@mui/material";
+import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import {styled} from "@mui/material/styles";
 import MenuItem from "@mui/material/MenuItem";
 import {useParams} from "react-router-dom";
@@ -26,7 +27,7 @@ import {
     StockStreamRes,
 } from "../../type/StockType.ts";
 import StockDetailLineChart, {CustomStockDetailLineChartProps} from "../../components/StockDetailLineChart.tsx";
-import {fetchStockDetail, fetchStockStream} from "../../api/stock/StockApi.ts";
+import {fetchStockDetail, fetchStockStream, fetchStockProgramChart} from "../../api/stock/StockApi.ts";
 import InvestorBarChart from "../../components/InvestorBarChart.tsx";
 import RemoveIcon from "@mui/icons-material/Remove";
 import CheckIcon from "@mui/icons-material/Check";
@@ -39,6 +40,7 @@ import {MarketType} from "../../type/timeType.ts";
 import {LineSeriesType} from "@mui/x-charts";
 import { MakeOptional } from '@mui/x-internals/types';
 import InvestorLineChart from "../../components/InvestorLineChart.tsx";
+import ProgramLineChart from "../../components/ProgramLineChart.tsx";
 import * as React from "react";
 import {renderTradeColor, renderChangeAmount} from "../../components/CustomRender.tsx";
 import FavoriteBorderIcon from "@mui/icons-material/FavoriteBorder";
@@ -159,6 +161,10 @@ const StockDetail = () => {
         }
     ]);
     const [investorDateData, setInvestorDateData] = useState<string[]>([]);
+    const [programChartData, setProgramChartData] = useState<number[]>([]);
+    const [programDateData, setProgramDateData] = useState<string[]>([]);
+    const [programChartLoading, setProgramChartLoading] = useState(false);
+    const [programChartLoaded, setProgramChartLoaded] = useState(false);
 
     useEffect(() => {
         let chartTimeout: ReturnType<typeof setTimeout>;
@@ -561,6 +567,16 @@ const StockDetail = () => {
                 }
             });
 
+            if (stockProgramList.length > 0) {
+                const todayProgram = stockProgramList[0];
+                const netQty = Number(todayProgram.prmNetprpsQty);
+                const now = new Date();
+                const hhmm = `${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}`;
+
+                setProgramChartData(prev => [...prev, netQty]);
+                setProgramDateData(prev => [...prev, hhmm]);
+            }
+
             const shortSellingColumns: GridColDef[] = [
                 {
                     field: 'dt',
@@ -676,6 +692,24 @@ const StockDetail = () => {
             }
         } catch (error) {
             console.error(error);
+        }
+    }
+
+    const loadProgramChart = async () => {
+        if (!id || programChartLoaded) return;
+        setProgramChartLoading(true);
+        try {
+            const data = await fetchStockProgramChart(id);
+            if (data.code === "0000" && data.result.length > 0) {
+                const chartList = data.result;
+                setProgramChartData(chartList.map((item: any) => Number(item.prmNetprpsAmt)));
+                setProgramDateData(chartList.map((item: any) => item.tm));
+            }
+            setProgramChartLoaded(true);
+        } catch (e) {
+            console.error(e);
+        } finally {
+            setProgramChartLoading(false);
         }
     }
 
@@ -1274,72 +1308,125 @@ const StockDetail = () => {
                     </Card>
                 </Grid>
                 <Grid size={{ xs: 12, md: 8 }}>
-                    <Typography component="h2" variant="h6" sx={{ mb: 2 }}>
-                        당일 투자자별 순매수(주)
-                    </Typography>
-                    <Grid container spacing={2}>
-                        <Grid size={{ xs: 12, md: 6 }}>
-                            <Card variant="outlined" sx={{ width: '100%' }}>
-                                <CardContent>
-                                    <InvestorBarChart data={barData} />
-                                </CardContent>
-                            </Card>
-                        </Grid>
-                        <Grid size={{ xs: 12, md: 6 }}>
-                            <Card variant="outlined" sx={{ width: '100%' }}>
-                                {message.icon}
-                                <CardContent>
-                                    <Typography gutterBottom variant="h5" component="div">
-                                        {message.title}
-                                    </Typography>
-                                    <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-                                        {message.message}
-                                    </Typography>
-                                </CardContent>
-                            </Card>
-                        </Grid>
-                    </Grid>
+                    <Accordion variant="outlined" defaultExpanded>
+                        <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+                            <Typography component="h2" variant="h6">
+                                당일 투자자별 순매수(주)
+                            </Typography>
+                        </AccordionSummary>
+                        <AccordionDetails>
+                            <Grid container spacing={2}>
+                                <Grid size={{ xs: 12, md: 6 }}>
+                                    <Card variant="outlined" sx={{ width: '100%' }}>
+                                        <CardContent>
+                                            <InvestorBarChart data={barData} />
+                                        </CardContent>
+                                    </Card>
+                                </Grid>
+                                <Grid size={{ xs: 12, md: 6 }}>
+                                    <Card variant="outlined" sx={{ width: '100%' }}>
+                                        {message.icon}
+                                        <CardContent>
+                                            <Typography gutterBottom variant="h5" component="div">
+                                                {message.title}
+                                            </Typography>
+                                            <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+                                                {message.message}
+                                            </Typography>
+                                        </CardContent>
+                                    </Card>
+                                </Grid>
+                            </Grid>
+                        </AccordionDetails>
+                    </Accordion>
                 </Grid>
                 <Grid size={{ xs: 12, md: 4 }}>
-                    <Typography component="h2" variant="h6" sx={{ mb: 2 }}>
-                        일별 시세
-                    </Typography>
-                    <Card variant="outlined" sx={{ width: '100%', overflow: 'visible' }}>
-                        <CardContent sx={{ overflow: 'visible', px: 5, height: 100 }}>
-                            <Slider
-                                aria-label="Custom marks"
-                                track={false}
-                                value={info.curPrc}
-                                valueLabelDisplay="auto"
-                                disabled
-                                max={dayRange[1].value}
-                                min={dayRange[0].value}
-                                marks={dayRange}
-                            />
-                        </CardContent>
-                        <CardContent sx={{ overflow: 'visible', px: 5, height: 100 }}>
-                            <Slider
-                                aria-label="Custom marks"
-                                track={false}
-                                value={info.curPrc}
-                                valueLabelDisplay="auto"
-                                disabled
-                                max={yearRange[1].value}
-                                min={yearRange[0].value}
-                                marks={yearRange}
-                            />
-                        </CardContent>
-                    </Card>
+                    <Accordion variant="outlined" defaultExpanded sx={{ overflow: 'visible' }}>
+                        <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+                            <Typography component="h2" variant="h6">
+                                일별 시세
+                            </Typography>
+                        </AccordionSummary>
+                        <AccordionDetails sx={{ overflow: 'visible' }}>
+                            <Box sx={{ px: 3, height: 100, overflow: 'visible' }}>
+                                <Slider
+                                    aria-label="Custom marks"
+                                    track={false}
+                                    value={info.curPrc}
+                                    valueLabelDisplay="auto"
+                                    disabled
+                                    max={dayRange[1].value}
+                                    min={dayRange[0].value}
+                                    marks={dayRange}
+                                />
+                            </Box>
+                            <Box sx={{ px: 3, height: 100, overflow: 'visible' }}>
+                                <Slider
+                                    aria-label="Custom marks"
+                                    track={false}
+                                    value={info.curPrc}
+                                    valueLabelDisplay="auto"
+                                    disabled
+                                    max={yearRange[1].value}
+                                    min={yearRange[0].value}
+                                    marks={yearRange}
+                                />
+                            </Box>
+                        </AccordionDetails>
+                    </Accordion>
                 </Grid>
                 <Grid size={{ xs: 12, md: 12 }}>
-                    <Typography component="h2" variant="h6" sx={{ mb: 2 }}>
-                        장중 투자자별 순매수(주)
-                    </Typography>
-                    <Card variant="outlined" sx={{ width: '100%' }}>
-                        <CardContent>
+                    <Accordion variant="outlined">
+                        <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+                            <Typography component="h2" variant="h6">
+                                장중 투자자별 순매수(주)
+                            </Typography>
+                        </AccordionSummary>
+                        <AccordionDetails>
                             <InvestorLineChart seriesData={investorChartData} date={investorDateData} />
-                        </CardContent>
-                    </Card>
+                        </AccordionDetails>
+                    </Accordion>
+                </Grid>
+                <Grid size={{ xs: 12, md: 12 }}>
+                    <Accordion
+                        variant="outlined"
+                        onChange={(_e, expanded) => { if (expanded && !programChartLoaded) loadProgramChart(); }}
+                    >
+                        <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+                            <Typography component="h2" variant="h6">
+                                시간별 프로그램 순매수(주)
+                            </Typography>
+                        </AccordionSummary>
+                        <AccordionDetails>
+                            {programChartLoading ? (
+                                <Box sx={{ display: 'flex', justifyContent: 'center', py: 5 }}>
+                                    <CircularProgress />
+                                </Box>
+                            ) : programChartData.length > 0 ? (
+                                <Box sx={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+                                    <Box sx={{ minWidth: 1200 }}>
+                                        <ProgramLineChart
+                                            seriesData={[{
+                                                id: 'organic',
+                                                label: '순매수',
+                                                showMark: false,
+                                                curve: 'linear',
+                                                stackOrder: 'ascending',
+                                                color: 'red',
+                                                data: programChartData,
+                                                area: true,
+                                            }]}
+                                            date={programDateData}
+                                        />
+                                    </Box>
+                                </Box>
+                            ) : (
+                                <Typography variant="body2" color="text.secondary" sx={{ textAlign: 'center', py: 3 }}>
+                                    데이터가 없습니다.
+                                </Typography>
+                            )}
+                        </AccordionDetails>
+                    </Accordion>
                 </Grid>
                 <Grid size={{ xs: 12, md: 12 }}>
                     <Typography component="h2" variant="h6" sx={{ mb: 2 }}>

@@ -11,6 +11,11 @@ export const fetchStockStream = async (req: StockStreamReq) => {
     return res.data;
 }
 
+export const fetchStockProgramChart = async (stkCd: string) => {
+    const res = await api.get(`/stock/program-chart`, {params: {stkCd}});
+    return res.data;
+}
+
 export const fetchStockSearch = async (keyword: string) => {
     const res = await api.get(`/stock/search`, {params: {keyword}});
     return res.data;

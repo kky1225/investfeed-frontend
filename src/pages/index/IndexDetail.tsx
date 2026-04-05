@@ -11,8 +11,13 @@ import StackedLineChartIcon from '@mui/icons-material/StackedLineChart';
 import ToggleButton from '@mui/material/ToggleButton';
 import ToggleButtonGroup, {toggleButtonGroupClasses,} from '@mui/material/ToggleButtonGroup';
 import {styled} from "@mui/material/styles";
-import {Select, SelectChangeEvent, Slider} from "@mui/material";
+import {Accordion, AccordionDetails, AccordionSummary, Select, SelectChangeEvent, Slider, Tab, Tabs} from "@mui/material";
+import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import MenuItem from "@mui/material/MenuItem";
+import {GridColDef} from "@mui/x-data-grid";
+import CustomDataTable from "../../components/CustomDataTable.tsx";
+import {renderTradeColor} from "../../components/CustomRender.tsx";
+import * as React from "react";
 import IndexDetailLineChart, {CustomIndexDetailLineChartProps} from "../../components/IndexDetailLineChart.tsx";
 import InvestorBarChart from "../../components/InvestorBarChart.tsx";
 import {fetchIndexDetail, fetchIndexDetailStream} from "../../api/index/IndexApi.ts";
@@ -189,7 +194,7 @@ const IndexDetail = () => {
             console.log(data);
 
             const {
-                indexInfo, chartList, programChartList
+                indexInfo, chartList, programChartList, programList, investorDailyList
             } = data.result;
 
             let dateList;
@@ -354,7 +359,164 @@ const IndexDetail = () => {
             ];
 
             setProgramChartData(programChartData);
-            setProgramDateData(programChartList.map(item => { return item.cntrTm}))
+            setProgramDateData(programChartList.map(item => { return item.cntrTm}));
+
+            const programColumns: GridColDef[] = [
+                {
+                    field: 'dt',
+                    headerName: '날짜',
+                    flex: 1,
+                    minWidth: 100,
+                    maxWidth: 120
+                },
+                {
+                    field: 'dfrtTrdeTdy',
+                    headerName: '차익',
+                    flex: 1,
+                    minWidth: 100,
+                    renderCell: (params) => renderTradeColor(params.value as number)
+                },
+                {
+                    field: 'ndiffproTrdeTdy',
+                    headerName: '비차익',
+                    flex: 1,
+                    minWidth: 100,
+                    renderCell: (params) => renderTradeColor(params.value as number)
+                },
+                {
+                    field: 'allTdy',
+                    headerName: '전체',
+                    flex: 1,
+                    minWidth: 100,
+                    renderCell: (params) => renderTradeColor(params.value as number)
+                },
+            ];
+
+            const programRow = programList.map((item: {
+                dt: string; dfrtTrdeTdy: string; ndiffproTrdeTdy: string; allTdy: string;
+            }) => {
+                return {
+                    id: item.dt,
+                    dt: `${(item.dt).substring(0, 4)}-${(item.dt).substring(4, 6)}-${(item.dt).substring(6, 8)}`,
+                    dfrtTrdeTdy: Math.round(Number(item.dfrtTrdeTdy) / 100),
+                    ndiffproTrdeTdy: Math.round(Number(item.ndiffproTrdeTdy) / 100),
+                    allTdy: Math.round(Number(item.allTdy) / 100),
+                }
+            });
+
+            const investorColumns: GridColDef[] = [
+                {
+                    field: 'dt',
+                    headerName: '날짜',
+                    flex: 1,
+                    minWidth: 100,
+                    maxWidth: 120
+                },
+                {
+                    field: 'indNetprps',
+                    headerName: '개인',
+                    flex: 1,
+                    minWidth: 100,
+                    renderCell: (params) => renderTradeColor(params.value as number),
+                },
+                {
+                    field: 'frgnrNetprps',
+                    headerName: '외국인',
+                    flex: 1,
+                    minWidth: 100,
+                    renderCell: (params) => renderTradeColor(params.value as number),
+                },
+                {
+                    field: 'orgnNetprps',
+                    headerName: '기관계',
+                    flex: 1,
+                    minWidth: 100,
+                    renderCell: (params) => renderTradeColor(params.value as number),
+                },
+                {
+                    field: 'scNetprps',
+                    headerName: '증권',
+                    flex: 1,
+                    minWidth: 100,
+                    renderCell: (params) => renderTradeColor(params.value as number),
+                },
+                {
+                    field: 'insrncNetprps',
+                    headerName: '보험',
+                    flex: 1,
+                    minWidth: 100,
+                    renderCell: (params) => renderTradeColor(params.value as number),
+                },
+                {
+                    field: 'invtrtNetprps',
+                    headerName: '투신',
+                    flex: 1,
+                    minWidth: 100,
+                    renderCell: (params) => renderTradeColor(params.value as number),
+                },
+                {
+                    field: 'bankNetprps',
+                    headerName: '은행',
+                    flex: 1,
+                    minWidth: 100,
+                    renderCell: (params) => renderTradeColor(params.value as number),
+                },
+                {
+                    field: 'samoFundNetprps',
+                    headerName: '사모펀드',
+                    flex: 1,
+                    minWidth: 100,
+                    renderCell: (params) => renderTradeColor(params.value as number),
+                },
+                {
+                    field: 'endwNetprps',
+                    headerName: '기금',
+                    flex: 1,
+                    minWidth: 100,
+                    renderCell: (params) => renderTradeColor(params.value as number),
+                },
+                {
+                    field: 'etcCorpNetprps',
+                    headerName: '기타법인',
+                    flex: 1,
+                    minWidth: 100,
+                    renderCell: (params) => renderTradeColor(params.value as number),
+                },
+                {
+                    field: 'natnNetprps',
+                    headerName: '국가',
+                    flex: 1,
+                    minWidth: 100,
+                    renderCell: (params) => renderTradeColor(params.value as number),
+                },
+            ];
+
+            const investorRow = (investorDailyList || []).map((item: any) => ({
+                id: item.dt,
+                dt: `${(item.dt).substring(0, 4)}-${(item.dt).substring(4, 6)}-${(item.dt).substring(6, 8)}`,
+                indNetprps: Number(item.indNetprps),
+                frgnrNetprps: Number(item.frgnrNetprps),
+                orgnNetprps: Number(item.orgnNetprps),
+                scNetprps: Number(item.scNetprps),
+                insrncNetprps: Number(item.insrncNetprps),
+                invtrtNetprps: Number(item.invtrtNetprps),
+                bankNetprps: Number(item.bankNetprps),
+                samoFundNetprps: Number(item.samoFundNetprps),
+                endwNetprps: Number(item.endwNetprps),
+                etcCorpNetprps: Number(item.etcCorpNetprps),
+                natnNetprps: Number(item.natnNetprps),
+            }));
+
+            setTabData({
+                investor: {
+                    col: investorColumns,
+                    row: investorRow
+                },
+                program: {
+                    col: programColumns,
+                    row: programRow
+                }
+            });
         } catch(error) {
             console.error(error);
         }
@@ -644,6 +806,14 @@ const IndexDetail = () => {
         }
     ]);
     const [programDateData, setProgramDateData] = useState<string[]>([]);
+    const [tabValue, setTabValue] = useState<'investor' | 'program'>('investor');
+    const [tabData, setTabData] = useState<any>({
+        investor: { col: [], row: [] },
+        program: { col: [], row: [] }
+    });
+    const handleTabChange = (_event: React.SyntheticEvent, newValue: 'investor' | 'program') => {
+        setTabValue(newValue);
+    };
 
     return (
         <Box sx={{ width: '100%', maxWidth: { sm: '100%', md: '1700px' } }}>
@@ -831,92 +1001,116 @@ const IndexDetail = () => {
                     </Card>
                 </Grid>
                 <Grid size={{ xs: 12, md: 8 }}>
-                    <Typography component="h2" variant="h6" sx={{ mb: 2 }}>
-                        당일 투자자별 순매수(억)
-                    </Typography>
-                    <Grid container spacing={2}>
-                        <Grid size={{ xs: 12, md: 6 }}>
-                            <Card variant="outlined" sx={{ width: '100%' }}>
-                                <CardContent>
-                                    <InvestorBarChart data={indexBarData} />
-                                </CardContent>
-                            </Card>
-                            <Card variant="outlined" sx={{ width: '100%', mt: 2 }}>
-                                {indexMessage.icon}
-                                <CardContent>
-                                    <Typography gutterBottom variant="h5" component="div">
-                                        {indexMessage.title}
-                                    </Typography>
-                                    <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-                                        {indexMessage.message}
-                                    </Typography>
-                                </CardContent>
-                            </Card>
-                        </Grid>
-                        <Grid size={{ xs: 12, md: 6 }}>
-                            <Card variant="outlined" sx={{ width: '100%' }}>
-                                <CardContent>
-                                    <ProgramBarChart data={programBarData} />
-                                </CardContent>
-                            </Card>
-                            <Card variant="outlined" sx={{ width: '100%', mt: 2 }}>
-                                {programMessage.icon}
-                                <CardContent>
-                                    <Typography gutterBottom variant="h5" component="div">
-                                        {programMessage.title}
-                                    </Typography>
-                                    <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-                                        {programMessage.message}
-                                    </Typography>
-                                </CardContent>
-                            </Card>
-                        </Grid>
-                    </Grid>
+                    <Accordion variant="outlined" defaultExpanded>
+                        <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+                            <Typography component="h2" variant="h6">
+                                당일 투자자별 순매수(억)
+                            </Typography>
+                        </AccordionSummary>
+                        <AccordionDetails>
+                            <Grid container spacing={2}>
+                                <Grid size={{ xs: 12, md: 6 }}>
+                                    <Card variant="outlined" sx={{ width: '100%' }}>
+                                        <CardContent>
+                                            <InvestorBarChart data={indexBarData} />
+                                        </CardContent>
+                                    </Card>
+                                    <Card variant="outlined" sx={{ width: '100%', mt: 2 }}>
+                                        {indexMessage.icon}
+                                        <CardContent>
+                                            <Typography gutterBottom variant="h5" component="div">
+                                                {indexMessage.title}
+                                            </Typography>
+                                            <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+                                                {indexMessage.message}
+                                            </Typography>
+                                        </CardContent>
+                                    </Card>
+                                </Grid>
+                                <Grid size={{ xs: 12, md: 6 }}>
+                                    <Card variant="outlined" sx={{ width: '100%' }}>
+                                        <CardContent>
+                                            <ProgramBarChart data={programBarData} />
+                                        </CardContent>
+                                    </Card>
+                                    <Card variant="outlined" sx={{ width: '100%', mt: 2 }}>
+                                        {programMessage.icon}
+                                        <CardContent>
+                                            <Typography gutterBottom variant="h5" component="div">
+                                                {programMessage.title}
+                                            </Typography>
+                                            <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+                                                {programMessage.message}
+                                            </Typography>
+                                        </CardContent>
+                                    </Card>
+                                </Grid>
+                            </Grid>
+                        </AccordionDetails>
+                    </Accordion>
                 </Grid>
                 <Grid size={{ xs: 12, md: 4 }}>
-                    <Typography component="h2" variant="h6" sx={{ mb: 2 }}>
-                        일별 시세
-                    </Typography>
-                    <Card variant="outlined" sx={{ width: '100%', overflow: 'visible' }}>
-                        <CardContent sx={{ overflow: 'visible', px: 5, height: 100 }}>
-                            <Slider
-                                aria-label="Custom marks"
-                                track={false}
-                                value={info.curPrc}
-                                valueLabelDisplay="auto"
-                                disabled
-                                max={dayRange[1].value}
-                                min={dayRange[0].value}
-                                marks={dayRange}
-                            />
-                        </CardContent>
-                        <CardContent sx={{ overflow: 'visible', px: 5, height: 100 }}>
-                            <Slider
-                                aria-label="Custom marks"
-                                track={false}
-                                value={info.curPrc}
-                                valueLabelDisplay="auto"
-                                disabled
-                                max={yearRange[1].value}
-                                min={yearRange[0].value}
-                                marks={yearRange}
-                            />
-                        </CardContent>
-                    </Card>
+                    <Accordion variant="outlined" defaultExpanded sx={{ overflow: 'visible' }}>
+                        <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+                            <Typography component="h2" variant="h6">
+                                일별 시세
+                            </Typography>
+                        </AccordionSummary>
+                        <AccordionDetails sx={{ overflow: 'visible' }}>
+                            <Box sx={{ px: 3, height: 100, overflow: 'visible' }}>
+                                <Slider
+                                    aria-label="Custom marks"
+                                    track={false}
+                                    value={info.curPrc}
+                                    valueLabelDisplay="auto"
+                                    disabled
+                                    max={dayRange[1].value}
+                                    min={dayRange[0].value}
+                                    marks={dayRange}
+                                />
+                            </Box>
+                            <Box sx={{ px: 3, height: 100, overflow: 'visible' }}>
+                                <Slider
+                                    aria-label="Custom marks"
+                                    track={false}
+                                    value={info.curPrc}
+                                    valueLabelDisplay="auto"
+                                    disabled
+                                    max={yearRange[1].value}
+                                    min={yearRange[0].value}
+                                    marks={yearRange}
+                                />
+                            </Box>
+                        </AccordionDetails>
+                    </Accordion>
                 </Grid>
                 <Grid size={{ xs: 12, md: 12 }}>
-                    <Typography component="h2" variant="h6" sx={{ mb: 2 }}>
-                        시간별 프로그램 순매수(억)
-                    </Typography>
-                    <Card variant="outlined" sx={{ width: '100%' }}>
-                        <CardContent>
+                    <Accordion variant="outlined">
+                        <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+                            <Typography component="h2" variant="h6">
+                                시간별 프로그램 순매수(억)
+                            </Typography>
+                        </AccordionSummary>
+                        <AccordionDetails>
                             <Box sx={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
                                 <Box sx={{ minWidth: 1200 }}>
                                     <ProgramLineChart seriesData={programChartData} date={programDateData} />
                                 </Box>
                             </Box>
-                        </CardContent>
-                    </Card>
+                        </AccordionDetails>
+                    </Accordion>
+                </Grid>
+                <Grid size={{ xs: 12, md: 12 }}>
+                    <Typography component="h2" variant="h6" sx={{ mb: 2 }}>
+                        일별 거래 추이
+                    </Typography>
+                    <Box sx={{ borderBottom: 1, borderColor: 'divider' }}>
+                        <Tabs value={tabValue} onChange={handleTabChange} aria-label="index tabs">
+                            <Tab label="투자자별" value='investor' />
+                            <Tab label="프로그램" value='program' />
+                        </Tabs>
+                    </Box>
+                    <CustomDataTable rows={tabData[tabValue].row} columns={tabData[tabValue].col} pageSize={20} />
                 </Grid>
             </Grid>
         </Box>
