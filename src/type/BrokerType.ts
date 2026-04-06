@@ -60,3 +60,7 @@ export interface UpdateManualHoldingReq {
 export interface HoldingReorderReq {
     orderedIds: number[];
 }
+
+export interface UpdateBalanceReq {
+    balance: number;
+}

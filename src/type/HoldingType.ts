@@ -7,6 +7,7 @@ export interface HoldingListRes {
     totEvltAmt: string,
     totEvltPl: string,
     totPrftRt: string,
+    balance: string,
     holdingList: Array<HoldingStock>
 }
 

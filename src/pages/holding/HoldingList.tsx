@@ -92,6 +92,7 @@ const HoldingList = () => {
     const [totEvltAmt, setTotEvltAmt] = useState("0");
     const [totEvltPl, setTotEvltPl] = useState("0");
     const [totPrftRt, setTotPrftRt] = useState("0");
+    const [balance, setBalance] = useState("0");
     const [dailyPl, setDailyPl] = useState("0");
     const [showChart, setShowChart] = useState(false);
     const [stkCds, setStkCds] = useState<string[]>([]);
@@ -114,6 +115,7 @@ const HoldingList = () => {
                 setTotEvltAmt(result.totEvltAmt);
                 setTotEvltPl(result.totEvltPl);
                 setTotPrftRt(result.totPrftRt);
+                setBalance(result.balance ?? "0");
 
                 const stocks: HoldingStock[] = result.holdingList ?? [];
                 if (stocks.length > 0) {
@@ -217,6 +219,7 @@ const HoldingList = () => {
                 totEvltAmt={totEvltAmt}
                 totEvltPl={totEvltPl}
                 totPrftRt={totPrftRt}
+                balance={balance}
                 dailyPl={dailyPl}
             />
 

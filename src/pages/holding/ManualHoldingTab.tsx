@@ -29,7 +29,7 @@ import {arrayMove, SortableContext, useSortable, verticalListSortingStrategy} fr
 import {CSS} from "@dnd-kit/utilities";
 import CustomPieChart from "../../components/CustomPieChart.tsx";
 import {renderChip, renderTradeColor} from "../../components/CustomRender.tsx";
-import {fetchManualHoldingList, deleteManualHolding, reorderHoldings} from "../../api/broker/BrokerApi.ts";
+import {fetchManualHoldingList, deleteManualHolding, reorderHoldings, updateBrokerBalance} from "../../api/broker/BrokerApi.ts";
 import type {MemberBroker, ManualHolding} from "../../type/BrokerType.ts";
 import type {HoldingStock} from "../../type/HoldingType.ts";
 import HoldingSummaryCard from "./HoldingSummaryCard.tsx";
@@ -111,6 +111,7 @@ export default function ManualHoldingTab({broker}: ManualHoldingTabProps) {
     const [totEvltAmt, setTotEvltAmt] = useState("0");
     const [totEvltPl, setTotEvltPl] = useState("0");
     const [totPrftRt, setTotPrftRt] = useState("0");
+    const [balance, setBalance] = useState("0");
     const [dailyPl, setDailyPl] = useState("0");
     const [showChart, setShowChart] = useState(false);
     const [addOpen, setAddOpen] = useState(false);
@@ -186,6 +187,7 @@ export default function ManualHoldingTab({broker}: ManualHoldingTabProps) {
         try {
             const data = await fetchManualHoldingList(broker.id);
             const items: ManualHolding[] = data.result?.holdings ?? [];
+            setBalance(String(data.result?.balance ?? 0));
             setManualHoldings(items);
 
             const stocks = toHoldingStocks(items);
@@ -267,6 +269,15 @@ export default function ManualHoldingTab({broker}: ManualHoldingTabProps) {
         }
     };
 
+    const handleBalanceUpdate = async (newBalance: number) => {
+        try {
+            await updateBrokerBalance(broker.id, {balance: newBalance});
+            setBalance(String(newBalance));
+        } catch (err) {
+            console.error(err);
+        }
+    };
+
     const findManualHolding = (stkCd: string) => manualHoldings.find(h => h.stkCd === stkCd) ?? null;
 
     const columns: GridColDef[] = [
@@ -318,6 +329,9 @@ export default function ManualHoldingTab({broker}: ManualHoldingTabProps) {
                 totEvltAmt={totEvltAmt}
                 totEvltPl={totEvltPl}
                 totPrftRt={totPrftRt}
+                balance={balance}
+                editable={true}
+                onBalanceUpdate={handleBalanceUpdate}
                 dailyPl={dailyPl}
             />
 
