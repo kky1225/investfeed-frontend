@@ -1,6 +1,7 @@
 import {useState} from "react";
 import Box from "@mui/material/Box";
 import Typography from "@mui/material/Typography";
+import BlindText from "../../components/BlindText.tsx";
 import Stack from "@mui/material/Stack";
 import Card from "@mui/material/Card";
 import CardContent from "@mui/material/CardContent";
@@ -54,7 +55,7 @@ export default function HoldingSummaryCard({totPurAmt, totEvltAmt, totEvltPl, to
                         총 평가금액
                     </Typography>
                     <Typography variant="h4" sx={{fontWeight: 700, mb: 2}}>
-                        {Number(totEvltAmt).toLocaleString()}원
+                        <BlindText>{Number(totEvltAmt).toLocaleString()}원</BlindText>
                     </Typography>
 
                     <Divider sx={{mb: 2}}/>
@@ -64,20 +65,20 @@ export default function HoldingSummaryCard({totPurAmt, totEvltAmt, totEvltPl, to
                         <Box>
                             <Typography variant="body2" sx={{color: 'text.secondary'}}>투자 원금</Typography>
                             <Typography variant="body1" sx={{fontWeight: 600}}>
-                                {Number(totPurAmt).toLocaleString()}원
+                                <BlindText>{Number(totPurAmt).toLocaleString()}원</BlindText>
                             </Typography>
                         </Box>
                         <Box>
                             <Typography variant="body2" sx={{color: 'text.secondary'}}>총 수익</Typography>
                             <Typography variant="body1" sx={{fontWeight: 600, color: profitColor}}>
-                                {Number(totEvltPl) > 0 ? '+' : ''}{Number(totEvltPl).toLocaleString()}원 ({Number(totPrftRt) > 0 ? '+' : ''}{totPrftRt}%)
+                                <BlindText>{Number(totEvltPl) > 0 ? '+' : ''}{Number(totEvltPl).toLocaleString()}원 ({Number(totPrftRt) > 0 ? '+' : ''}{totPrftRt}%)</BlindText>
                             </Typography>
                         </Box>
                         {dailyPl !== undefined && (
                             <Box>
                                 <Typography variant="body2" sx={{color: 'text.secondary'}}>일간 수익</Typography>
                                 <Typography variant="body1" sx={{fontWeight: 600, color: dailyPlColor}}>
-                                    {Number(dailyPl) > 0 ? '+' : ''}{Number(dailyPl).toLocaleString()}원
+                                    <BlindText>{Number(dailyPl) > 0 ? '+' : ''}{Number(dailyPl).toLocaleString()}원</BlindText>
                                 </Typography>
                             </Box>
                         )}
@@ -92,7 +93,7 @@ export default function HoldingSummaryCard({totPurAmt, totEvltAmt, totEvltPl, to
                                     <Typography variant="body2" sx={{color: 'text.secondary'}}>예수금</Typography>
                                     <Box sx={{display: 'flex', alignItems: 'center', gap: 0.5}}>
                                         <Typography variant="body1" sx={{fontWeight: 600}}>
-                                            {Number(balance).toLocaleString()}원
+                                            <BlindText>{Number(balance).toLocaleString()}원</BlindText>
                                         </Typography>
                                         {editable && (
                                             <EditIcon
@@ -106,7 +107,7 @@ export default function HoldingSummaryCard({totPurAmt, totEvltAmt, totEvltPl, to
                                     <Box>
                                         <Typography variant="body2" sx={{color: 'text.secondary'}}>총 자산</Typography>
                                         <Typography variant="body1" sx={{fontWeight: 600}}>
-                                            {totalAsset.toLocaleString()}원
+                                            <BlindText>{totalAsset.toLocaleString()}원</BlindText>
                                         </Typography>
                                     </Box>
                                 )}

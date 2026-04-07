@@ -1,10 +1,11 @@
-import {useState} from 'react';
+import {useEffect, useState} from 'react';
 import {useNavigate} from 'react-router-dom';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
 import Tabs from '@mui/material/Tabs';
 import Tab from '@mui/material/Tab';
 import List from '@mui/material/List';
+import ListItem from '@mui/material/ListItem';
 import ListItemButton from '@mui/material/ListItemButton';
 import ListItemText from '@mui/material/ListItemText';
 import Chip from '@mui/material/Chip';
@@ -12,11 +13,19 @@ import Button from '@mui/material/Button';
 import FormControlLabel from '@mui/material/FormControlLabel';
 import Switch from '@mui/material/Switch';
 import Divider from '@mui/material/Divider';
+import Dialog from '@mui/material/Dialog';
+import DialogTitle from '@mui/material/DialogTitle';
+import DialogContent from '@mui/material/DialogContent';
+import DialogActions from '@mui/material/DialogActions';
+import IconButton from '@mui/material/IconButton';
 import TrendingUpIcon from '@mui/icons-material/TrendingUp';
 import TrendingDownIcon from '@mui/icons-material/TrendingDown';
 import NotificationsNoneIcon from '@mui/icons-material/NotificationsNone';
+import NotificationsActiveIcon from '@mui/icons-material/NotificationsActive';
+import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
 import {useNotification} from '../../context/NotificationContext';
-import type {Notification, AssetType} from '../../type/NotificationType';
+import {fetchPriceTargets, deletePriceTarget} from '../../api/notification/NotificationApi';
+import type {Notification, AssetType, PriceTarget} from '../../type/NotificationType';
 
 type TabFilter = 'ALL' | AssetType;
 
@@ -64,6 +73,28 @@ export default function NotificationList() {
     const {notifications, handleMarkAsRead, handleMarkAllAsRead} = useNotification();
     const [tabFilter, setTabFilter] = useState<TabFilter>('ALL');
     const [unreadOnly, setUnreadOnly] = useState(false);
+    const [priceTargets, setPriceTargets] = useState<PriceTarget[]>([]);
+    const [priceTargetDialogOpen, setPriceTargetDialogOpen] = useState(false);
+
+    useEffect(() => {
+        (async () => {
+            try {
+                const res = await fetchPriceTargets();
+                setPriceTargets(res.result ?? []);
+            } catch (e) {
+                console.error(e);
+            }
+        })();
+    }, []);
+
+    const handleDeletePriceTarget = async (id: number) => {
+        try {
+            await deletePriceTarget(id);
+            setPriceTargets(prev => prev.filter(p => p.id !== id));
+        } catch (e) {
+            console.error(e);
+        }
+    };
 
     const handleClick = async (notification: Notification) => {
         if (!notification.isRead) {
@@ -81,10 +112,64 @@ export default function NotificationList() {
         <Box sx={{width: '100%', maxWidth: 700, mx: 'auto'}}>
             <Box sx={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2}}>
                 <Typography variant="h5" fontWeight="bold">알림</Typography>
-                {hasUnread && (
-                    <Button size="small" onClick={handleMarkAllAsRead}>모두 읽음</Button>
-                )}
+                <Box sx={{display: 'flex', gap: 1}}>
+                    <Button
+                        size="small"
+                        startIcon={<NotificationsActiveIcon/>}
+                        onClick={() => setPriceTargetDialogOpen(true)}
+                    >
+                        목표가 관리{priceTargets.length > 0 ? ` (${priceTargets.length})` : ''}
+                    </Button>
+                    {hasUnread && (
+                        <Button size="small" onClick={handleMarkAllAsRead}>모두 읽음</Button>
+                    )}
+                </Box>
             </Box>
+
+            <Dialog open={priceTargetDialogOpen} onClose={() => setPriceTargetDialogOpen(false)} maxWidth="xs" fullWidth>
+                <DialogTitle>목표가 알림 관리</DialogTitle>
+                <DialogContent sx={{p: 0}}>
+                    {priceTargets.length === 0 ? (
+                        <Box sx={{py: 4, textAlign: 'center'}}>
+                            <Typography variant="body2" color="text.secondary">
+                                등록된 목표가 알림이 없습니다.
+                            </Typography>
+                        </Box>
+                    ) : (
+                        <List dense disablePadding>
+                            {priceTargets.map(target => (
+                                <ListItem
+                                    key={target.id}
+                                    secondaryAction={
+                                        <IconButton size="small" onClick={() => handleDeletePriceTarget(target.id)}>
+                                            <DeleteOutlineIcon fontSize="small" color="error"/>
+                                        </IconButton>
+                                    }
+                                    sx={{px: 2}}
+                                >
+                                    <ListItemText
+                                        primary={
+                                            <Box sx={{display: 'flex', alignItems: 'center', gap: 0.5}}>
+                                                <Chip
+                                                    label={target.assetType === 'STOCK' ? '주식' : '코인'}
+                                                    size="small"
+                                                    color="default"
+                                                    sx={{fontSize: '0.6rem', height: 18}}
+                                                />
+                                                <Typography variant="body2">{target.assetName}</Typography>
+                                            </Box>
+                                        }
+                                        secondary={`${target.targetPrice.toLocaleString()}원 ${target.direction === 'ABOVE' ? '이상' : '이하'}`}
+                                    />
+                                </ListItem>
+                            ))}
+                        </List>
+                    )}
+                </DialogContent>
+                <DialogActions>
+                    <Button onClick={() => setPriceTargetDialogOpen(false)}>닫기</Button>
+                </DialogActions>
+            </Dialog>
 
             <Box sx={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1}}>
                 <Tabs
@@ -133,7 +218,7 @@ export default function NotificationList() {
                                     }}
                                 >
                                     <Box sx={{mr: 1.5, display: 'flex', alignItems: 'center'}}>
-                                        {notification.direction === 'UP' ? (
+                                        {(notification.direction === 'UP' || notification.direction === 'UPPER_LIMIT' || notification.direction === 'HIGH_52W' || notification.direction === 'TARGET_ABOVE') ? (
                                             <TrendingUpIcon color={notification.isRead ? 'disabled' : 'error'} fontSize="small"/>
                                         ) : (
                                             <TrendingDownIcon color={notification.isRead ? 'disabled' : 'primary'} fontSize="small"/>
@@ -155,9 +240,17 @@ export default function NotificationList() {
                                         }
                                         secondary={
                                             <Box component="span" sx={{display: 'flex', justifyContent: 'space-between', mt: 0.5}}>
-                                                <Typography variant="caption" component="span" color={notification.isRead ? 'text.disabled' : (notification.direction === 'UP' ? 'error' : 'primary')}>
-                                                    {notification.direction === 'UP' ? '+' : '-'}{notification.threshold}% 도달
-                                                    ({notification.fluRt > 0 ? '+' : ''}{notification.fluRt.toFixed(2)}%)
+                                                <Typography variant="caption" component="span" color={
+                                                    notification.isRead ? 'text.disabled' :
+                                                    (notification.direction === 'UP' || notification.direction === 'UPPER_LIMIT' || notification.direction === 'HIGH_52W' || notification.direction === 'TARGET_ABOVE') ? 'error' : 'primary'
+                                                }>
+                                                    {notification.direction === 'HIGH_52W' ? '52주 신고가 달성' :
+                                                     notification.direction === 'LOW_52W' ? '52주 신저가 달성' :
+                                                     notification.direction === 'UPPER_LIMIT' ? '상한가 도달' :
+                                                     notification.direction === 'LOWER_LIMIT' ? '하한가 도달' :
+                                                     notification.direction === 'TARGET_ABOVE' ? `목표가 ${notification.threshold.toLocaleString()}원 이상 도달 (현재 ${notification.fluRt.toLocaleString()}원)` :
+                                                     notification.direction === 'TARGET_BELOW' ? `목표가 ${notification.threshold.toLocaleString()}원 이하 도달 (현재 ${notification.fluRt.toLocaleString()}원)` :
+                                                     `${notification.direction === 'UP' ? '+' : '-'}${notification.threshold}% 도달 (${notification.fluRt > 0 ? '+' : ''}${notification.fluRt.toFixed(2)}%)`}
                                                 </Typography>
                                                 <Typography variant="caption" component="span" color="text.disabled">
                                                     {formatTime(notification.createdAt)}

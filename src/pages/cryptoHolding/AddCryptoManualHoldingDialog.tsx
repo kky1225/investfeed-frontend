@@ -168,11 +168,10 @@ export default function AddCryptoManualHoldingDialog({open, onClose, brokerId, o
                     />
                     <TextField
                         label="매수단가"
-                        type="number"
                         size="small"
-                        value={purPrice}
-                        onChange={e => setPurPrice(e.target.value)}
-                        slotProps={{htmlInput: {min: 0}}}
+                        value={purPrice ? Number(purPrice).toLocaleString() : ''}
+                        onChange={e => setPurPrice(e.target.value.replace(/,/g, '').replace(/[^0-9]/g, ''))}
+                        slotProps={{htmlInput: {inputMode: 'numeric'}}}
                     />
                     <TextField
                         label="수량"
@@ -184,15 +183,14 @@ export default function AddCryptoManualHoldingDialog({open, onClose, brokerId, o
                     />
                     <TextField
                         label="투자원금"
-                        type="number"
                         size="small"
-                        value={purAmt}
+                        value={purAmt ? Number(purAmt).toLocaleString() : ''}
                         onChange={e => {
-                            setPurAmt(e.target.value);
+                            setPurAmt(e.target.value.replace(/,/g, '').replace(/[^0-9]/g, ''));
                             setPurAmtManual(true);
                         }}
                         helperText="거래소 앱에 표시된 실제 투자원금을 직접 입력해주세요. 미입력 시 매수단가 x 수량으로 자동 계산됩니다."
-                        slotProps={{htmlInput: {min: 0}}}
+                        slotProps={{htmlInput: {inputMode: 'numeric'}}}
                     />
                     {error && (
                         <Typography variant="caption" color="error">{error}</Typography>

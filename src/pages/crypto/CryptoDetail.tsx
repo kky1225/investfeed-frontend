@@ -11,13 +11,16 @@ import StackedLineChartIcon from '@mui/icons-material/StackedLineChart';
 import ToggleButton from '@mui/material/ToggleButton';
 import ToggleButtonGroup, {toggleButtonGroupClasses,} from '@mui/material/ToggleButtonGroup';
 import {styled} from "@mui/material/styles";
-import {Select, SelectChangeEvent, Slider} from "@mui/material";
+경import {Select, SelectChangeEvent, Slider, Tooltip} from "@mui/material";
 import MenuItem from "@mui/material/MenuItem";
 import CryptoDetailLineChart, {CryptoDetailLineChartProps} from "../../components/CryptoDetailLineChart.tsx";
 import {fetchCryptoDetail, fetchCryptoDetailStream} from "../../api/crypto/CryptoApi.ts";
 import {CryptoChart, CryptoChartType, CryptoDetailReq} from "../../type/CryptoType.ts";
 import {useParams} from "react-router-dom";
 import {renderChangeAmount} from "../../components/CustomRender.tsx";
+import IconButton from "@mui/material/IconButton";
+import NotificationsActiveIcon from "@mui/icons-material/NotificationsActive";
+import PriceTargetDialog from "../../components/PriceTargetDialog.tsx";
 
 interface CryptoTickerData {
     market: string;
@@ -62,6 +65,7 @@ const CryptoDetail = () => {
         chartType: CryptoChartType.DAY
     });
 
+    const [priceTargetOpen, setPriceTargetOpen] = useState(false);
     const [chartData, setChartData] = useState<CryptoDetailLineChartProps>({
         id: '-',
         title: '-',
@@ -165,6 +169,7 @@ const CryptoDetail = () => {
             let barDataList: number[];
 
             switch (req.chartType) {
+                case CryptoChartType.MINUTE_1:
                 case CryptoChartType.MINUTE_3:
                 case CryptoChartType.MINUTE_5:
                 case CryptoChartType.MINUTE_10:
@@ -409,9 +414,16 @@ const CryptoDetail = () => {
                 <Grid size={{ xs: 12, md: 12 }}>
                     <Card variant="outlined" sx={{ width: '100%' }}>
                         <CardContent>
-                            <Typography component="h2" variant="subtitle2" gutterBottom>
-                                {chartData.title}
-                            </Typography>
+                            <Box sx={{display: 'flex', alignItems: 'center', justifyContent: 'space-between'}}>
+                                <Typography component="h2" variant="subtitle2" gutterBottom>
+                                    {chartData.title}
+                                </Typography>
+                                <Tooltip title="목표가 알림">
+                                    <IconButton size="small" onClick={() => setPriceTargetOpen(true)} sx={{mb: "3px"}}>
+                                        <NotificationsActiveIcon fontSize="small" />
+                                    </IconButton>
+                                </Tooltip>
+                            </Box>
                             <Stack sx={{ justifyContent: 'space-between' }}>
                                 <Stack
                                     direction="row"
@@ -473,6 +485,7 @@ const CryptoDetail = () => {
                                             justifyContent: 'center',
                                         }}
                                     >
+                                        <MenuItem value="1">1분</MenuItem>
                                         <MenuItem value="3">3분</MenuItem>
                                         <MenuItem value="5">5분</MenuItem>
                                         <MenuItem value="10">10분</MenuItem>
@@ -622,6 +635,14 @@ const CryptoDetail = () => {
                     </Card>
                 </Grid>
             </Grid>
+            <PriceTargetDialog
+                open={priceTargetOpen}
+                onClose={() => setPriceTargetOpen(false)}
+                assetType="CRYPTO"
+                assetCode={id ?? ""}
+                assetName={chartData.title}
+                currentPrice={chartData.value.replace(/,/g, '')}
+            />
         </Box>
     )
 }

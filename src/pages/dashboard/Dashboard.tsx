@@ -52,7 +52,7 @@ export default function Dashboard() {
     }
 
     const [indexDataList, setIndexDataList] = useState<StatCardProps[]>(
-        Array.from({ length: 3}, () => ({
+        Array.from({ length: 4}, () => ({
             ...DEFAULT_INDEX_DATA,
         }))
     );
@@ -163,7 +163,7 @@ export default function Dashboard() {
             setIndexDataList(newDashboardIndexDataList);
 
             setKospiBarData([Number(indexList[0].ind), Number(indexList[0].frgnr), Number(indexList[0].orgn)]);
-            setKosdacBarData([Number(indexList[1].ind), Number(indexList[1].frgnr), Number(indexList[1].orgn)]);
+            setKosdacBarData([Number(indexList[2].ind), Number(indexList[2].frgnr), Number(indexList[2].orgn)]);
 
             setKospiProgramData([
                 Math.round(Number(indexList[0].dfrtTrdeNetprps) / 100),
@@ -171,19 +171,19 @@ export default function Dashboard() {
                 Math.round(Number(indexList[0].allNetprps) / 100),
             ]);
             setKosdacProgramData([
-                Math.round(Number(indexList[1].dfrtTrdeNetprps) / 100),
-                Math.round(Number(indexList[1].ndiffproTrdeNetprps) / 100),
-                Math.round(Number(indexList[1].allNetprps) / 100),
+                Math.round(Number(indexList[2].dfrtTrdeNetprps) / 100),
+                Math.round(Number(indexList[2].ndiffproTrdeNetprps) / 100),
+                Math.round(Number(indexList[2].allNetprps) / 100),
             ]);
 
             setMessage([
                 checkInvestor(indexList[0].indsNm, Number(indexList[0].frgnr), Number(indexList[0].orgn)),
-                checkInvestor(indexList[1].indsNm, Number(indexList[1].frgnr), Number(indexList[1].orgn))
+                checkInvestor(indexList[2].indsNm, Number(indexList[2].frgnr), Number(indexList[2].orgn))
             ]);
 
             setProgramMessage([
                 checkProgram(indexList[0].indsNm, Number(indexList[0].dfrtTrdeNetprps), Number(indexList[0].ndiffproTrdeNetprps)),
-                checkProgram(indexList[1].indsNm, Number(indexList[1].dfrtTrdeNetprps), Number(indexList[1].ndiffproTrdeNetprps))
+                checkProgram(indexList[2].indsNm, Number(indexList[2].dfrtTrdeNetprps), Number(indexList[2].ndiffproTrdeNetprps))
             ]);
 
             const ranking = investorTradeRankList.map((item: InvestorTradeRankList) => {
@@ -492,7 +492,7 @@ export default function Dashboard() {
                         <StatCard {...card} />
                     </Grid>
                 ))}
-                <Grid size={{ xs: 12, sm: 6, lg: 3 }}>
+                {/* <Grid size={{ xs: 12, sm: 6, lg: 3 }}>
                     <Card sx={{ height: '100%' }}>
                         <CardContent>
                             <InsightsRoundedIcon />
@@ -519,7 +519,7 @@ export default function Dashboard() {
                             </Button>
                         </CardContent>
                     </Card>
-                </Grid>
+                </Grid> */}
             </Grid>
 
             <Grid container spacing={2} columns={12} sx={{mb: 2}}>

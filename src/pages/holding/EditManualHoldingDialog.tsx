@@ -83,31 +83,28 @@ export default function EditManualHoldingDialog({open, onClose, holding, onUpdat
                     <TextField
                         autoFocus
                         label="매수단가"
-                        type="number"
                         size="small"
-                        value={purPrice}
-                        onChange={e => setPurPrice(e.target.value)}
-                        slotProps={{htmlInput: {min: 0}}}
+                        value={purPrice ? Number(purPrice).toLocaleString() : ''}
+                        onChange={e => setPurPrice(e.target.value.replace(/,/g, '').replace(/[^0-9]/g, ''))}
+                        slotProps={{htmlInput: {inputMode: 'numeric'}}}
                     />
                     <TextField
                         label="수량"
-                        type="number"
                         size="small"
-                        value={quantity}
-                        onChange={e => setQuantity(e.target.value)}
-                        slotProps={{htmlInput: {min: 1}}}
+                        value={quantity ? Number(quantity).toLocaleString() : ''}
+                        onChange={e => setQuantity(e.target.value.replace(/,/g, '').replace(/[^0-9]/g, ''))}
+                        slotProps={{htmlInput: {inputMode: 'numeric'}}}
                     />
                     <TextField
                         label="투자원금"
                         size="small"
-                        type="number"
-                        value={purAmt}
+                        value={purAmt ? Number(purAmt).toLocaleString() : ''}
                         onChange={e => {
-                            setPurAmt(e.target.value);
+                            setPurAmt(e.target.value.replace(/,/g, '').replace(/[^0-9]/g, ''));
                             setPurAmtManual(true);
                         }}
                         helperText="증권사 앱에 표시된 실제 투자원금을 직접 입력해주세요."
-                        slotProps={{htmlInput: {min: 0}}}
+                        slotProps={{htmlInput: {inputMode: 'numeric'}}}
                     />
                     {error && (
                         <Typography variant="caption" color="error">{error}</Typography>

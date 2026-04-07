@@ -19,6 +19,7 @@ import {fetchHoldingList, reorderApiHoldings} from "../../api/holding/HoldingApi
 import {renderChip, renderTradeColor} from "../../components/CustomRender.tsx";
 import HoldingSummaryCard from "./HoldingSummaryCard.tsx";
 import {useHoldingStream, HoldingBuffer} from "./useHoldingStream.ts";
+import {useBlindMode} from "../../context/BlindModeContext.tsx";
 
 // ─── DataGrid 행 드래그 (Context 패턴) ───────────────────────────────────────
 
@@ -95,6 +96,8 @@ const HoldingList = () => {
     const [balance, setBalance] = useState("0");
     const [dailyPl, setDailyPl] = useState("0");
     const [showChart, setShowChart] = useState(false);
+    const {isBlind} = useBlindMode();
+    const [showList, setShowList] = useState(!isBlind);
     const [stkCds, setStkCds] = useState<string[]>([]);
     const [orderDirty, setOrderDirty] = useState(false);
     const [savingOrder, setSavingOrder] = useState(false);
@@ -103,6 +106,10 @@ const HoldingList = () => {
         useSensor(PointerSensor, {activationConstraint: {distance: 5}}),
         useSensor(TouchSensor, {activationConstraint: {delay: 200, tolerance: 5}})
     );
+
+    useEffect(() => {
+        setShowList(!isBlind);
+    }, [isBlind]);
 
     useEffect(() => {
         (async () => {
@@ -252,6 +259,17 @@ const HoldingList = () => {
                 </Box>
             </Collapse>
 
+            <Box sx={{display: 'flex', justifyContent: 'flex-end', mb: 1}}>
+                <Button
+                    size="small"
+                    endIcon={showList ? <KeyboardArrowUpIcon/> : <KeyboardArrowDownIcon/>}
+                    onClick={() => setShowList(!showList)}
+                >
+                    {showList ? '종목 접기' : '종목 펼치기'}
+                </Button>
+            </Box>
+
+            <Collapse in={showList}>
             <DndContext sensors={sensors} onDragEnd={handleDragEnd}>
                 <SortableContext items={holdings.map(h => h.id)} strategy={verticalListSortingStrategy}>
                     <DataGrid
@@ -278,6 +296,7 @@ const HoldingList = () => {
                     />
                 </SortableContext>
             </DndContext>
+            </Collapse>
         </Box>
     );
 };

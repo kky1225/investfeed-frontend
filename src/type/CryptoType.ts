@@ -29,6 +29,7 @@ export interface CryptoDetailReq {
 }
 
 export enum CryptoChartType {
+    MINUTE_1 = "MINUTE_1",
     MINUTE_3 = "MINUTE_3",
     MINUTE_5 = "MINUTE_5",
     MINUTE_10 = "MINUTE_10",

@@ -18,6 +18,7 @@ import type {MemberBroker} from "../../type/BrokerType.ts";
 import HoldingList from "./HoldingList.tsx";
 import ManualHoldingTab from "./ManualHoldingTab.tsx";
 import AddBrokerDialog from "./AddBrokerDialog.tsx";
+import BlindToggle from "../../components/BlindToggle.tsx";
 
 export default function HoldingPage() {
     const navigate = useNavigate();
@@ -85,9 +86,12 @@ export default function HoldingPage() {
 
     return (
         <Box sx={{width: '100%', maxWidth: {sm: '100%', md: '1700px'}}}>
-            <Typography component="h2" variant="h6" sx={{mb: 2}}>
-                보유 주식
-            </Typography>
+            <Box sx={{display: 'flex', alignItems: 'center', gap: 1, mb: 2}}>
+                <Typography component="h2" variant="h6">
+                    보유 주식
+                </Typography>
+                <BlindToggle/>
+            </Box>
 
             <Box sx={{display: 'flex', alignItems: 'center', mb: 2, borderBottom: 1, borderColor: 'divider'}}>
                 <Tabs

@@ -7,6 +7,27 @@ export interface AssetDashboardRes {
     totalCash: number;
     stockSummary: AssetGroupSummary;
     cryptoSummary: AssetGroupSummary;
+    brokerSummaries: BrokerSummaryItem[];
+}
+
+export interface BrokerSummaryItem {
+    brokerName: string;
+    market: string;
+    type: string;
+    evltAmt: number;
+    purAmt: number;
+    evltPl: number;
+    prftRt: string;
+    cash: number;
+    holdingCount: number;
+    holdings: BrokerHoldingItem[];
+}
+
+export interface BrokerHoldingItem {
+    stkCd: string;
+    curPrc: string;
+    purAmt: number;
+    quantity: number;
 }
 
 export interface AssetGroupSummary {

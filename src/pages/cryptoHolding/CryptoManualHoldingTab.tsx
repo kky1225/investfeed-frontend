@@ -36,6 +36,7 @@ import HoldingSummaryCard from "../holding/HoldingSummaryCard.tsx";
 import AddCryptoManualHoldingDialog from "./AddCryptoManualHoldingDialog.tsx";
 import EditCryptoManualHoldingDialog from "./EditCryptoManualHoldingDialog.tsx";
 import {useCryptoHoldingStream, CryptoHoldingBuffer} from "./useCryptoHoldingStream.ts";
+import {useBlindMode} from "../../context/BlindModeContext.tsx";
 
 // ─── DataGrid 행 드래그 (Context 패턴) ───────────────────────────────────────
 
@@ -114,6 +115,8 @@ export default function CryptoManualHoldingTab({broker}: CryptoManualHoldingTabP
     const [balance, setBalance] = useState("0");
     const [dailyPl, setDailyPl] = useState("0");
     const [showChart, setShowChart] = useState(false);
+    const {isBlind} = useBlindMode();
+    const [showList, setShowList] = useState(!isBlind);
     const [addOpen, setAddOpen] = useState(false);
     const [editTarget, setEditTarget] = useState<ManualHolding | null>(null);
     const [deleteTarget, setDeleteTarget] = useState<ManualHolding | null>(null);
@@ -200,6 +203,10 @@ export default function CryptoManualHoldingTab({broker}: CryptoManualHoldingTabP
             console.error(err);
         }
     }, [broker.id, toHoldingStocks, updateSummary]);
+
+    useEffect(() => {
+        setShowList(!isBlind);
+    }, [isBlind]);
 
     useEffect(() => {
         loadData();
@@ -374,6 +381,17 @@ export default function CryptoManualHoldingTab({broker}: CryptoManualHoldingTabP
                 </Box>
             </Collapse>
 
+            <Box sx={{display: 'flex', justifyContent: 'flex-end', mb: 1}}>
+                <Button
+                    size="small"
+                    endIcon={showList ? <KeyboardArrowUpIcon/> : <KeyboardArrowDownIcon/>}
+                    onClick={() => setShowList(!showList)}
+                >
+                    {showList ? '종목 접기' : '종목 펼치기'}
+                </Button>
+            </Box>
+
+            <Collapse in={showList}>
             <DndContext sensors={sensors} onDragEnd={handleDragEnd}>
                 <SortableContext items={holdings.map(h => h.id)} strategy={verticalListSortingStrategy}>
                     <DataGrid
@@ -401,6 +419,7 @@ export default function CryptoManualHoldingTab({broker}: CryptoManualHoldingTabP
                     />
                 </SortableContext>
             </DndContext>
+            </Collapse>
 
             <Menu
                 anchorEl={anchorEl}

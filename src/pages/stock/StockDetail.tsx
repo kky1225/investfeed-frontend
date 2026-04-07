@@ -58,6 +58,8 @@ import ListItemText from "@mui/material/ListItemText";
 import Snackbar from "@mui/material/Snackbar";
 import Alert from "@mui/material/Alert";
 import {addInterestItem, fetchInterestGroups} from "../../api/interest/InterestApi.ts";
+import NotificationsActiveIcon from "@mui/icons-material/NotificationsActive";
+import PriceTargetDialog from "../../components/PriceTargetDialog.tsx";
 import {InterestGroup} from "../../type/InterestType.ts";
 
 const StyledToggleButtonGroup = styled(ToggleButtonGroup)(({ theme }) => ({
@@ -165,6 +167,7 @@ const StockDetail = () => {
     const [programDateData, setProgramDateData] = useState<string[]>([]);
     const [programChartLoading, setProgramChartLoading] = useState(false);
     const [programChartLoaded, setProgramChartLoaded] = useState(false);
+    const [priceTargetOpen, setPriceTargetOpen] = useState(false);
 
     useEffect(() => {
         let chartTimeout: ReturnType<typeof setTimeout>;
@@ -1049,6 +1052,11 @@ const StockDetail = () => {
                                             }
                                         </IconButton>
                                     </Tooltip>
+                                    <Tooltip title="목표가 알림">
+                                        <IconButton size="small" onClick={() => setPriceTargetOpen(true)} sx={{mb: "3px"}}>
+                                            <NotificationsActiveIcon fontSize="small" />
+                                        </IconButton>
+                                    </Tooltip>
                                 </Stack>
                             </Box>
                             <Stack sx={{ justifyContent: 'space-between' }}>
@@ -1507,6 +1515,15 @@ const StockDetail = () => {
                     {snackbar.message}
                 </Alert>
             </Snackbar>
+
+            <PriceTargetDialog
+                open={priceTargetOpen}
+                onClose={() => setPriceTargetOpen(false)}
+                assetType="STOCK"
+                assetCode={id ?? ""}
+                assetName={stockChartData.title}
+                currentPrice={stockChartData.value}
+            />
         </Box>
     )
 }

@@ -5,8 +5,10 @@ import CircularProgress from "@mui/material/CircularProgress";
 import {fetchAssetDashboard} from "../../api/asset/AssetDashboardApi.ts";
 import type {AssetDashboardRes} from "../../type/AssetDashboardType.ts";
 import AssetSummaryCard from "./AssetSummaryCard.tsx";
+import BrokerSummaryCards from "./BrokerSummaryCards.tsx";
 import AssetAllocationChart from "./AssetAllocationChart.tsx";
 import AssetGroupDetail from "./AssetGroupDetail.tsx";
+import BlindToggle from "../../components/BlindToggle.tsx";
 
 export default function AssetDashboard() {
     const [data, setData] = useState<AssetDashboardRes | null>(null);
@@ -81,9 +83,12 @@ export default function AssetDashboard() {
     return (
         <Box sx={{width: '100%', maxWidth: {sm: '100%', md: '1700px'}}}>
             <Box sx={{display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', mb: 2}}>
-                <Typography component="h2" variant="h6">
-                    통합 자산 대시보드
-                </Typography>
+                <Box sx={{display: 'flex', alignItems: 'center', gap: 1}}>
+                    <Typography component="h2" variant="h6">
+                        통합 자산 대시보드
+                    </Typography>
+                    <BlindToggle/>
+                </Box>
                 {lastUpdated && (
                     <Typography variant="caption" color="text.secondary">
                         {lastUpdated.toLocaleTimeString('ko-KR', {hour: '2-digit', minute: '2-digit'})} 기준
@@ -99,6 +104,8 @@ export default function AssetDashboard() {
                 totalPrftRt={data.totalPrftRt}
                 totalCash={data.totalCash}
             />
+
+            <BrokerSummaryCards brokerSummaries={data.brokerSummaries}/>
 
             <AssetAllocationChart
                 stockTotal={stockTotal}

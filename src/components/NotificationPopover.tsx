@@ -101,7 +101,7 @@ export default function NotificationPopover({anchorEl, open, onClose}: Notificat
                             }}
                         >
                             <Box sx={{mr: 1.5, display: 'flex', alignItems: 'center'}}>
-                                {notification.direction === 'UP' ? (
+                                {(notification.direction === 'UP' || notification.direction === 'UPPER_LIMIT' || notification.direction === 'HIGH_52W' || notification.direction === 'TARGET_ABOVE') ? (
                                     <TrendingUpIcon color="error" fontSize="small"/>
                                 ) : (
                                     <TrendingDownIcon color="primary" fontSize="small"/>
@@ -123,9 +123,16 @@ export default function NotificationPopover({anchorEl, open, onClose}: Notificat
                                 }
                                 secondary={
                                     <Box component="span" sx={{display: 'flex', justifyContent: 'space-between', mt: 0.5}}>
-                                        <Typography variant="caption" color={notification.direction === 'UP' ? 'error' : 'primary'}>
-                                            {notification.direction === 'UP' ? '+' : '-'}{notification.threshold}% 도달
-                                            ({notification.fluRt > 0 ? '+' : ''}{notification.fluRt.toFixed(2)}%)
+                                        <Typography variant="caption" color={
+                                            (notification.direction === 'UP' || notification.direction === 'UPPER_LIMIT' || notification.direction === 'HIGH_52W' || notification.direction === 'TARGET_ABOVE') ? 'error' : 'primary'
+                                        }>
+                                            {notification.direction === 'HIGH_52W' ? '52주 신고가 달성' :
+                                             notification.direction === 'LOW_52W' ? '52주 신저가 달성' :
+                                             notification.direction === 'UPPER_LIMIT' ? '상한가 도달' :
+                                             notification.direction === 'LOWER_LIMIT' ? '하한가 도달' :
+                                             notification.direction === 'TARGET_ABOVE' ? `목표가 ${notification.threshold.toLocaleString()}원 이상 도달 (현재 ${notification.fluRt.toLocaleString()}원)` :
+                                             notification.direction === 'TARGET_BELOW' ? `목표가 ${notification.threshold.toLocaleString()}원 이하 도달 (현재 ${notification.fluRt.toLocaleString()}원)` :
+                                             `${notification.direction === 'UP' ? '+' : '-'}${notification.threshold}% 도달 (${notification.fluRt > 0 ? '+' : ''}${notification.fluRt.toFixed(2)}%)`}
                                         </Typography>
                                         <Typography variant="caption" color="text.secondary">
                                             {formatTime(notification.createdAt)}
