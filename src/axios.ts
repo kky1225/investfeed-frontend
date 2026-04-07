@@ -19,8 +19,9 @@ api.interceptors.response.use(
         const originalRequest = error.config;
 
         const isLoginRequest = originalRequest.url?.startsWith('/auth/login');
+        const isReissueRequest = originalRequest.url?.startsWith('/auth/reissue');
 
-        if (error.response?.status === 401 && !originalRequest._retry && !isLoginRequest) {
+        if (error.response?.status === 401 && !originalRequest._retry && !isLoginRequest && !isReissueRequest) {
             if (isRefreshing) {
                 return new Promise((resolve, reject) => {
                     failedQueue.push({ resolve, reject });

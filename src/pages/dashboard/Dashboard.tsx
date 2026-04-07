@@ -66,6 +66,7 @@ export default function Dashboard() {
     const [programMessage, setProgramMessage] = useState<MessageProps[]>([defaultMsg, defaultMsg]);
 
     const [row, setRow] = useState<GridRowsProp[]>([]);
+    const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
 
     useEffect(() => {
         let chartTimeout: ReturnType<typeof setTimeout>;
@@ -119,6 +120,8 @@ export default function Dashboard() {
             if(data.code !== "0000") {
                 throw new Error(data.msg);
             }
+
+            setLastUpdated(new Date());
 
             const {
                 indexList,
@@ -468,9 +471,16 @@ export default function Dashboard() {
 
     return (
         <Box sx={{ width: '100%', maxWidth: { sm: '100%', md: '1700px' } }}>
-            <Typography component="h2" variant="h6" sx={{ mb: 2 }}>
-                주요 지수
-            </Typography>
+            <Box sx={{display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', mb: 2}}>
+                <Typography component="h2" variant="h6">
+                    주요 지수
+                </Typography>
+                {lastUpdated && (
+                    <Typography variant="caption" color="text.secondary">
+                        {lastUpdated.toLocaleTimeString('ko-KR', {hour: '2-digit', minute: '2-digit'})} 기준
+                    </Typography>
+                )}
+            </Box>
             <Grid
                 container
                 spacing={2}

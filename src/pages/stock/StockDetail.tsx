@@ -573,8 +573,14 @@ const StockDetail = () => {
                 const now = new Date();
                 const hhmm = `${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}`;
 
-                setProgramChartData(prev => [...prev, netQty]);
-                setProgramDateData(prev => [...prev, hhmm]);
+                setProgramChartData(prev => {
+                    if (prev.length === 0) return prev;
+                    return [...prev, netQty];
+                });
+                setProgramDateData(prev => {
+                    if (prev.length === 0) return prev;
+                    return [...prev, hhmm];
+                });
             }
 
             const shortSellingColumns: GridColDef[] = [

@@ -247,6 +247,14 @@ export const dataDisplayCustomizations: Components<Theme> = {
             }),
         },
     },
+    MuiDataGrid: {
+        defaultProps: {
+            localeText: {
+                noRowsLabel: '데이터가 없습니다.',
+                noResultsOverlayLabel: '검색 결과가 없습니다.',
+            },
+        },
+    },
     MuiTablePagination: {
         styleOverrides: {
             actions: {

@@ -115,6 +115,26 @@ export default function CustomPieChart({ holdings, totalEvltAmt }: CustomPieChar
         color: colors[index % colors.length],
     }));
 
+    if (pieData.length === 0 || pieData.every(d => d.value === 0)) {
+        return (
+            <Card
+                variant="outlined"
+                sx={{ display: 'flex', flexDirection: 'column', gap: '8px', flexGrow: 1 }}
+            >
+                <CardContent>
+                    <Typography component="h2" variant="subtitle2">
+                        보유 종목
+                    </Typography>
+                    <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', py: 4 }}>
+                        <Typography variant="body2" color="text.secondary">
+                            보유 종목이 없습니다.
+                        </Typography>
+                    </Box>
+                </CardContent>
+            </Card>
+        );
+    }
+
     return (
         <Card
             variant="outlined"
@@ -122,7 +142,7 @@ export default function CustomPieChart({ holdings, totalEvltAmt }: CustomPieChar
         >
             <CardContent>
                 <Typography component="h2" variant="subtitle2">
-                    보유 주식
+                    보유 종목
                 </Typography>
                 <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                     <PieChart

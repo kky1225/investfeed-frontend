@@ -11,7 +11,6 @@ import Box from "@mui/material/Box";
 import LockOutlinedIcon from "@mui/icons-material/LockOutlined";
 import Login from "./pages/auth/Login.tsx";
 import SecondaryAuthDialog from "./components/SecondaryAuthDialog.tsx";
-import {useAuth} from "./context/AuthContext.tsx";
 import {processSecondaryAuthQueue} from "./axios.ts";
 import Dashboard from "./pages/dashboard/Dashboard.tsx";
 import MainLayout from "./layout/MainLayout.tsx";
@@ -42,6 +41,8 @@ import ProtectedRoute from "./components/ProtectedRoute.tsx";
 import ChangePassword from "./pages/settings/ChangePassword.tsx";
 import ApiKeyManagement from "./pages/settings/ApiKeyManagement.tsx";
 import HoldingPage from "./pages/holding/HoldingPage.tsx";
+import CryptoHoldingPage from "./pages/cryptoHolding/CryptoHoldingPage.tsx";
+import AssetDashboard from "./pages/assetDashboard/AssetDashboard.tsx";
 
 const StockDetailWithKey = () => {
     const { id } = useParams();
@@ -50,7 +51,6 @@ const StockDetailWithKey = () => {
 
 function App() {
     const navigate = useNavigate();
-    const {user} = useAuth();
     const [forbidden, setForbidden] = useState<{ open: boolean; message: string }>({
         open: false, message: ''
     });
@@ -133,6 +133,7 @@ function App() {
                     <Route element={<MainLayout />}>
                         <Route path="/" Component={MarketIndexList} />
                         <Route path="/stock/dashboard" Component={Dashboard} />
+                        <Route path="/dashboard" Component={AssetDashboard} />
                         <Route path="/stock/interest" Component={Interest} />
                         <Route path="/stock/interest/list/:groupId?" Component={Interest} />
                         <Route path="/stock/index/list" Component={IndexList} />
@@ -150,6 +151,7 @@ function App() {
                         <Route path="/stock/theme/:themaGrpCd/list" Component={ThemeStockList} />
 
                         <Route path="/stock/holding/list/:brokerId?" Component={HoldingPage} />
+                        <Route path="/crypto/holding/list/:brokerId?" Component={CryptoHoldingPage} />
                         <Route path="/stock/investor/:orgnTp/list/:trdeTp" Component={InvestorList} />
 
                         <Route path="/stock/recommend/list" Component={RecommendList} />
