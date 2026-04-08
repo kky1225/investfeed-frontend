@@ -123,15 +123,15 @@ export default function HoldingSummaryCard({totPurAmt, totEvltAmt, totEvltPl, to
                 <DialogContent>
                     <TextField
                         fullWidth
-                        type="number"
                         label="예수금"
-                        value={editValue}
-                        onChange={(e) => setEditValue(e.target.value)}
+                        value={editValue ? Number(editValue).toLocaleString() : ''}
+                        onChange={(e) => setEditValue(e.target.value.replace(/,/g, '').replace(/[^0-9]/g, ''))}
                         onKeyDown={(e) => {
                             if (e.key === 'Enter') handleDialogConfirm();
                         }}
                         autoFocus
                         sx={{mt: 1}}
+                        slotProps={{htmlInput: {inputMode: 'numeric'}}}
                     />
                 </DialogContent>
                 <DialogActions>

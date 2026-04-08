@@ -25,6 +25,7 @@ import {
     StockDetailReq,
     StockStreamReq,
     StockStreamRes,
+    StockDividendItem,
 } from "../../type/StockType.ts";
 import StockDetailLineChart, {CustomStockDetailLineChartProps} from "../../components/StockDetailLineChart.tsx";
 import {fetchStockDetail, fetchStockStream, fetchStockProgramChart} from "../../api/stock/StockApi.ts";
@@ -167,6 +168,8 @@ const StockDetail = () => {
     const [programDateData, setProgramDateData] = useState<string[]>([]);
     const [programChartLoading, setProgramChartLoading] = useState(false);
     const [programChartLoaded, setProgramChartLoaded] = useState(false);
+    const [dividendData, setDividendData] = useState<StockDividendItem[]>([]);
+    const [dividendYield, setDividendYield] = useState<number | null>(null);
     const [priceTargetOpen, setPriceTargetOpen] = useState(false);
 
     useEffect(() => {
@@ -323,6 +326,19 @@ const StockDetail = () => {
                 roe: Number(stockInfo.roe),
                 pbr: Number(stockInfo.pbr)
             });
+
+            const dvdList = data.result.dividendList || [];
+            if (dvdList.length > 0) {
+                setDividendData(dvdList);
+                const lastYear = (new Date().getFullYear() - 1).toString();
+                const lastYearAmt = dvdList
+                    .filter((d: StockDividendItem) => d.dvdnBasDt?.substring(0, 4) === lastYear)
+                    .reduce((sum: number, d: StockDividendItem) => sum + Number(d.stckGenrDvdnAmt || 0), 0);
+                const curPrc = Number(stockInfo.curPrc.replace(/^[+-]/, ''));
+                if (lastYearAmt > 0 && curPrc > 0) {
+                    setDividendYield(Math.round(lastYearAmt / curPrc * 10000) / 100);
+                }
+            }
 
             setBarData([
                 Number(stockInvestorList[0].indInvsr.toLocaleString()),
@@ -721,6 +737,7 @@ const StockDetail = () => {
             setProgramChartLoading(false);
         }
     }
+
 
     const stockStream = async (req: StockStreamReq) => {
         try {
@@ -1317,12 +1334,22 @@ const StockDetail = () => {
                                         {info.pbr.toLocaleString()}
                                     </Typography>
                                 </Grid>
+                                <Grid size={{xs: 12, md: 3}}>
+                                    <Typography variant="subtitle2" gutterBottom fontWeight={600}>
+                                        배당수익률
+                                    </Typography>
+                                </Grid>
+                                <Grid size={{xs: 12, md: 3}}>
+                                    <Typography variant="subtitle2" gutterBottom>
+                                        {dividendYield !== null ? `${dividendYield}%` : '-'}
+                                    </Typography>
+                                </Grid>
                             </Grid>
                         </CardContent>
                     </Card>
                 </Grid>
                 <Grid size={{ xs: 12, md: 8 }}>
-                    <Accordion variant="outlined" defaultExpanded>
+                    <Accordion variant="outlined" defaultExpanded slotProps={{ transition: { unmountOnExit: true } }}>
                         <AccordionSummary expandIcon={<ExpandMoreIcon />}>
                             <Typography component="h2" variant="h6">
                                 당일 투자자별 순매수(주)
@@ -1355,7 +1382,7 @@ const StockDetail = () => {
                     </Accordion>
                 </Grid>
                 <Grid size={{ xs: 12, md: 4 }}>
-                    <Accordion variant="outlined" defaultExpanded sx={{ overflow: 'visible' }}>
+                    <Accordion variant="outlined" defaultExpanded slotProps={{ transition: { unmountOnExit: true } }} sx={{ overflow: 'visible' }}>
                         <AccordionSummary expandIcon={<ExpandMoreIcon />}>
                             <Typography component="h2" variant="h6">
                                 일별 시세
@@ -1390,7 +1417,7 @@ const StockDetail = () => {
                     </Accordion>
                 </Grid>
                 <Grid size={{ xs: 12, md: 12 }}>
-                    <Accordion variant="outlined">
+                    <Accordion variant="outlined" slotProps={{ transition: { unmountOnExit: true } }}>
                         <AccordionSummary expandIcon={<ExpandMoreIcon />}>
                             <Typography component="h2" variant="h6">
                                 장중 투자자별 순매수(주)
@@ -1404,6 +1431,7 @@ const StockDetail = () => {
                 <Grid size={{ xs: 12, md: 12 }}>
                     <Accordion
                         variant="outlined"
+                        slotProps={{ transition: { unmountOnExit: true } }}
                         onChange={(_e, expanded) => { if (expanded && !programChartLoaded) loadProgramChart(); }}
                     >
                         <AccordionSummary expandIcon={<ExpandMoreIcon />}>
@@ -1437,6 +1465,74 @@ const StockDetail = () => {
                             ) : (
                                 <Typography variant="body2" color="text.secondary" sx={{ textAlign: 'center', py: 3 }}>
                                     데이터가 없습니다.
+                                </Typography>
+                            )}
+                        </AccordionDetails>
+                    </Accordion>
+                </Grid>
+                <Grid size={{ xs: 12, md: 12 }}>
+                    <Accordion
+                        variant="outlined"
+                        slotProps={{ transition: { unmountOnExit: true } }}
+                    >
+                        <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+                            <Typography component="h2" variant="h6">
+                                배당 정보
+                            </Typography>
+                        </AccordionSummary>
+                        <AccordionDetails>
+                            {dividendData.length > 0 ? (
+                                <Grid container spacing={2}>
+                                    {Object.entries(
+                                        dividendData.reduce((acc, item) => {
+                                            const year = item.dvdnBasDt ? item.dvdnBasDt.substring(0, 4) : '기타';
+                                            if (!acc[year]) acc[year] = [];
+                                            acc[year].push(item);
+                                            return acc;
+                                        }, {} as Record<string, typeof dividendData>)
+                                    ).sort(([a], [b]) => b.localeCompare(a)).map(([year, items]) => {
+                                        const totalAmt = items.reduce((sum, item) => sum + Number(item.stckGenrDvdnAmt || 0), 0);
+                                        return (
+                                            <Grid key={year} size={{ xs: 12, sm: 6, md: 4 }}>
+                                                <Card variant="outlined" sx={{ height: '100%' }}>
+                                                    <CardContent>
+                                                        <Typography variant="subtitle1" fontWeight={600} sx={{ mb: 0.5 }}>
+                                                            {year}년
+                                                        </Typography>
+                                                        <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                                                            {items.length}건 / 합계 {totalAmt.toLocaleString()}원
+                                                        </Typography>
+                                                        <Divider sx={{ mb: 1 }} />
+                                                        {items.map((item, i) => (
+                                                            <Box key={`${item.dvdnBasDt}_${i}`} sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', py: 0.3 }}>
+                                                                <Typography variant="body2">
+                                                                    {item.dvdnBasDt ? `${item.dvdnBasDt.substring(4, 6)}-${item.dvdnBasDt.substring(6, 8)}` : ''} {item.stckDvdnRcdNm}
+                                                                </Typography>
+                                                                <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
+                                                                    <Typography variant="body2" fontWeight={600}>
+                                                                        {Number(item.stckGenrDvdnAmt || 0).toLocaleString()}원
+                                                                    </Typography>
+                                                                    {item.cashDvdnPayDt ? (
+                                                                        item.cashDvdnPayDt > new Date().toISOString().replace(/-/g, '').substring(0, 8)
+                                                                            ? <Typography variant="caption" color="text.secondary">(미지급)</Typography>
+                                                                            : <Typography variant="caption" color="text.secondary">
+                                                                                ({item.cashDvdnPayDt.substring(4, 6)}-{item.cashDvdnPayDt.substring(6, 8)} 지급)
+                                                                              </Typography>
+                                                                    ) : (
+                                                                        <Typography variant="caption" color="text.secondary">(미지급)</Typography>
+                                                                    )}
+                                                                </Box>
+                                                            </Box>
+                                                        ))}
+                                                    </CardContent>
+                                                </Card>
+                                            </Grid>
+                                        );
+                                    })}
+                                </Grid>
+                            ) : (
+                                <Typography variant="body2" color="text.secondary" sx={{ textAlign: 'center', py: 3 }}>
+                                    배당 정보가 없습니다.
                                 </Typography>
                             )}
                         </AccordionDetails>

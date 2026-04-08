@@ -11,7 +11,7 @@ import StackedLineChartIcon from '@mui/icons-material/StackedLineChart';
 import ToggleButton from '@mui/material/ToggleButton';
 import ToggleButtonGroup, {toggleButtonGroupClasses,} from '@mui/material/ToggleButtonGroup';
 import {styled} from "@mui/material/styles";
-경import {Select, SelectChangeEvent, Slider, Tooltip} from "@mui/material";
+import {Select, SelectChangeEvent, Slider, Tooltip} from "@mui/material";
 import MenuItem from "@mui/material/MenuItem";
 import CryptoDetailLineChart, {CryptoDetailLineChartProps} from "../../components/CryptoDetailLineChart.tsx";
 import {fetchCryptoDetail, fetchCryptoDetailStream} from "../../api/crypto/CryptoApi.ts";

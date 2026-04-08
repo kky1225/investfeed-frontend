@@ -42,3 +42,10 @@ export interface StockStream {
     predPre: string,
     trend: string,
 }
+
+export interface StockDividendItem {
+    dvdnBasDt: string,
+    stckDvdnRcdNm: string,
+    stckGenrDvdnAmt: string,
+    cashDvdnPayDt: string,
+}
