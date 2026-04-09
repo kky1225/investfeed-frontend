@@ -8,12 +8,14 @@ import Divider from "@mui/material/Divider";
 import Grid from "@mui/material/Grid";
 import LinkIcon from "@mui/icons-material/Link";
 import type {BrokerSummaryItem, BrokerHoldingItem} from "../../type/AssetDashboardType.ts";
+import type {BrokerRealizedPnlItem} from "../../type/RealizedPnlType.ts";
 import {useHoldingStream, HoldingBuffer} from "../holding/useHoldingStream.ts";
 import {useCryptoHoldingStream, CryptoHoldingBuffer} from "../cryptoHolding/useCryptoHoldingStream.ts";
 import BlindText from "../../components/BlindText.tsx";
 
 interface BrokerSummaryCardsProps {
     brokerSummaries: BrokerSummaryItem[];
+    brokerPnlList?: BrokerRealizedPnlItem[];
 }
 
 interface BrokerState {
@@ -23,7 +25,7 @@ interface BrokerState {
     prftRt: string;
 }
 
-export default function BrokerSummaryCards({brokerSummaries}: BrokerSummaryCardsProps) {
+export default function BrokerSummaryCards({brokerSummaries, brokerPnlList}: BrokerSummaryCardsProps) {
     const [brokerStates, setBrokerStates] = useState<Map<string, BrokerState>>(() => {
         const map = new Map<string, BrokerState>();
         brokerSummaries.forEach(b => {
@@ -179,6 +181,30 @@ export default function BrokerSummaryCards({brokerSummaries}: BrokerSummaryCards
                                             </Typography>
                                         </Box>
                                     </Box>
+
+                                    {(() => {
+                                        const pnl = brokerPnlList?.find(p => p.brokerName === broker.brokerName);
+                                        if (!pnl || pnl.allTimePnl === 0) return null;
+                                        const pnlColor = pnl.allTimePnl > 0 ? 'error.main' : pnl.allTimePnl < 0 ? 'info.main' : 'text.primary';
+                                        return (
+                                            <>
+                                                <Box sx={{display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1, mt: 1}}>
+                                                    <Box>
+                                                        <Typography variant="caption" sx={{color: 'text.secondary'}}>실현손익</Typography>
+                                                        <Typography variant="body2" sx={{fontWeight: 600, color: pnlColor}}>
+                                                            <BlindText>{pnl.allTimePnl > 0 ? '+' : ''}{pnl.allTimePnl.toLocaleString()}원</BlindText>
+                                                        </Typography>
+                                                    </Box>
+                                                    <Box>
+                                                        <Typography variant="caption" sx={{color: 'text.secondary'}}>올해 실현손익</Typography>
+                                                        <Typography variant="body2" sx={{fontWeight: 600, color: pnl.ytdPnl > 0 ? 'error.main' : pnl.ytdPnl < 0 ? 'info.main' : 'text.primary'}}>
+                                                            <BlindText>{pnl.ytdPnl > 0 ? '+' : ''}{pnl.ytdPnl.toLocaleString()}원</BlindText>
+                                                        </Typography>
+                                                    </Box>
+                                                </Box>
+                                            </>
+                                        );
+                                    })()}
 
                                     <Divider sx={{my: 1.5}}/>
 

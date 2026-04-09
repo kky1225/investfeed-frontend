@@ -244,8 +244,8 @@ export default function NotificationList() {
                                                     notification.isRead ? 'text.disabled' :
                                                     (notification.direction === 'UP' || notification.direction === 'UPPER_LIMIT' || notification.direction === 'HIGH_52W' || notification.direction === 'TARGET_ABOVE') ? 'error' : 'primary'
                                                 }>
-                                                    {notification.direction === 'HIGH_52W' ? '52주 신고가 달성' :
-                                                     notification.direction === 'LOW_52W' ? '52주 신저가 달성' :
+                                                    {notification.direction === 'HIGH_52W' ? `52주 신고가 달성 (${notification.fluRt.toLocaleString()}원)` :
+                                                     notification.direction === 'LOW_52W' ? `52주 신저가 달성 (${notification.fluRt.toLocaleString()}원)` :
                                                      notification.direction === 'UPPER_LIMIT' ? '상한가 도달' :
                                                      notification.direction === 'LOWER_LIMIT' ? '하한가 도달' :
                                                      notification.direction === 'TARGET_ABOVE' ? `목표가 ${notification.threshold.toLocaleString()}원 이상 도달 (현재 ${notification.fluRt.toLocaleString()}원)` :

@@ -412,6 +412,7 @@ export default function CryptoManualHoldingTab({broker}: CryptoManualHoldingTabP
                         disableColumnResize
                         density="compact"
                         slots={{row: DraggableRow}}
+                        localeText={{noRowsLabel: '데이터가 없습니다.'}}
                         sx={{
                             "& .MuiDataGrid-cell[data-field='__drag__']": {padding: 0},
                             "& .MuiDataGrid-cell[data-field='actions']": {padding: 0},

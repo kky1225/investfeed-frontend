@@ -19,6 +19,7 @@ import HoldingList from "./HoldingList.tsx";
 import ManualHoldingTab from "./ManualHoldingTab.tsx";
 import AddBrokerDialog from "./AddBrokerDialog.tsx";
 import BlindToggle from "../../components/BlindToggle.tsx";
+import RealizedPnlTab from "./RealizedPnlTab.tsx";
 
 export default function HoldingPage() {
     const navigate = useNavigate();
@@ -27,6 +28,7 @@ export default function HoldingPage() {
     const [selectedTab, setSelectedTab] = useState(0);
     const [addBrokerOpen, setAddBrokerOpen] = useState(false);
     const [deleteTarget, setDeleteTarget] = useState<MemberBroker | null>(null);
+    const [mainTab, setMainTab] = useState(0);
 
     const loadMyBrokers = async () => {
         try {
@@ -88,49 +90,61 @@ export default function HoldingPage() {
         <Box sx={{width: '100%', maxWidth: {sm: '100%', md: '1700px'}}}>
             <Box sx={{display: 'flex', alignItems: 'center', gap: 1, mb: 2}}>
                 <Typography component="h2" variant="h6">
-                    보유 주식
+                    주식 계좌
                 </Typography>
                 <BlindToggle/>
             </Box>
 
-            <Box sx={{display: 'flex', alignItems: 'center', mb: 2, borderBottom: 1, borderColor: 'divider'}}>
-                <Tabs
-                    value={selectedTab}
-                    onChange={handleTabChange}
-                    variant="scrollable"
-                    scrollButtons="auto"
-                    sx={{flexGrow: 1}}
-                >
-                    {myBrokers.map((broker) => (
-                        <Tab
-                            key={broker.id}
-                            label={
-                                <Stack direction="row" alignItems="center" spacing={0.5}>
-                                    <span>{broker.name}</span>
-                                    {broker.type === "API" && <LinkIcon fontSize="small" sx={{fontSize: 16}}/>}
-                                    <CloseIcon
-                                        onClick={(e) => {
-                                            e.stopPropagation();
-                                            setDeleteTarget(broker);
-                                        }}
-                                        sx={{fontSize: 18, ml: 0.5, cursor: 'pointer', color: 'text.disabled', '&:hover': {color: 'error.main'}}}
-                                    />
-                                </Stack>
-                            }
-                        />
-                    ))}
-                </Tabs>
-                <Button
-                    size="small"
-                    startIcon={<AddIcon/>}
-                    onClick={() => setAddBrokerOpen(true)}
-                    sx={{ml: 1, whiteSpace: 'nowrap', flexShrink: 0}}
-                >
-                    추가
-                </Button>
-            </Box>
+            {/* 상위 탭: 주식 계좌 | 실현손익 */}
+            <Tabs value={mainTab} onChange={(_, v) => setMainTab(v)} sx={{mb: 2}}>
+                <Tab label="주식 계좌"/>
+                <Tab label="실현손익"/>
+            </Tabs>
 
-            {renderTabContent()}
+            {mainTab === 1 ? (
+                <RealizedPnlTab myBrokers={myBrokers}/>
+            ) : (
+                <>
+                    <Box sx={{display: 'flex', alignItems: 'center', mb: 2, borderBottom: 1, borderColor: 'divider'}}>
+                        <Tabs
+                            value={selectedTab}
+                            onChange={handleTabChange}
+                            variant="scrollable"
+                            scrollButtons="auto"
+                            sx={{flexGrow: 1}}
+                        >
+                            {myBrokers.map((broker) => (
+                                <Tab
+                                    key={broker.id}
+                                    label={
+                                        <Stack direction="row" alignItems="center" spacing={0.5}>
+                                            <span>{broker.name}</span>
+                                            {broker.type === "API" && <LinkIcon fontSize="small" sx={{fontSize: 16}}/>}
+                                            <CloseIcon
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    setDeleteTarget(broker);
+                                                }}
+                                                sx={{fontSize: 18, ml: 0.5, cursor: 'pointer', color: 'text.disabled', '&:hover': {color: 'error.main'}}}
+                                            />
+                                        </Stack>
+                                    }
+                                />
+                            ))}
+                        </Tabs>
+                        <Button
+                            size="small"
+                            startIcon={<AddIcon/>}
+                            onClick={() => setAddBrokerOpen(true)}
+                            sx={{ml: 1, whiteSpace: 'nowrap', flexShrink: 0}}
+                        >
+                            추가
+                        </Button>
+                    </Box>
+
+                    {renderTabContent()}
+                </>
+            )}
 
             <AddBrokerDialog
                 open={addBrokerOpen}

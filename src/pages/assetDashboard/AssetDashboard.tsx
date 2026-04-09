@@ -2,16 +2,24 @@ import {useEffect, useRef, useState} from "react";
 import Box from "@mui/material/Box";
 import Typography from "@mui/material/Typography";
 import CircularProgress from "@mui/material/CircularProgress";
+import Card from "@mui/material/Card";
+import CardContent from "@mui/material/CardContent";
+import Divider from "@mui/material/Divider";
+import Stack from "@mui/material/Stack";
 import {fetchAssetDashboard} from "../../api/asset/AssetDashboardApi.ts";
+import {fetchRealizedPnlDashboard} from "../../api/realizedPnl/RealizedPnlApi.ts";
 import type {AssetDashboardRes} from "../../type/AssetDashboardType.ts";
+import type {RealizedPnlDashboardItem} from "../../type/RealizedPnlType.ts";
 import AssetSummaryCard from "./AssetSummaryCard.tsx";
 import BrokerSummaryCards from "./BrokerSummaryCards.tsx";
 import AssetAllocationChart from "./AssetAllocationChart.tsx";
 import AssetGroupDetail from "./AssetGroupDetail.tsx";
 import BlindToggle from "../../components/BlindToggle.tsx";
+import BlindText from "../../components/BlindText.tsx";
 
 export default function AssetDashboard() {
     const [data, setData] = useState<AssetDashboardRes | null>(null);
+    const [pnlData, setPnlData] = useState<RealizedPnlDashboardItem | null>(null);
     const [selectedGroup, setSelectedGroup] = useState<'stock' | 'crypto' | null>(null);
     const [loading, setLoading] = useState(true);
     const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
@@ -28,6 +36,14 @@ export default function AssetDashboard() {
             }
         } catch (err) {
             console.error(err);
+        }
+        try {
+            const pnlRes = await fetchRealizedPnlDashboard();
+            if (pnlRes.code === "0000") {
+                setPnlData(pnlRes.result);
+            }
+        } catch {
+            // 실현손익 조회 실패 시 무시
         }
     };
 
@@ -105,7 +121,46 @@ export default function AssetDashboard() {
                 totalCash={data.totalCash}
             />
 
-            <BrokerSummaryCards brokerSummaries={data.brokerSummaries}/>
+            {pnlData && (
+                <Card variant="outlined" sx={{mb: 3}}>
+                    <CardContent>
+                        <Typography variant="body2" sx={{color: 'text.secondary', mb: 1.5, fontWeight: 600}}>
+                            실현손익
+                        </Typography>
+                        <Stack direction="row" spacing={4} divider={<Divider orientation="vertical" flexItem/>}>
+                            <Box>
+                                <Typography variant="body2" sx={{color: 'text.secondary'}}>당월</Typography>
+                                <Typography variant="body1" sx={{
+                                    fontWeight: 600,
+                                    color: pnlData.currentMonthPnl > 0 ? 'error.main' : pnlData.currentMonthPnl < 0 ? 'info.main' : 'text.primary'
+                                }}>
+                                    <BlindText>{pnlData.currentMonthPnl > 0 ? '+' : ''}{pnlData.currentMonthPnl.toLocaleString()}원</BlindText>
+                                </Typography>
+                            </Box>
+                            <Box>
+                                <Typography variant="body2" sx={{color: 'text.secondary'}}>올해</Typography>
+                                <Typography variant="body1" sx={{
+                                    fontWeight: 600,
+                                    color: pnlData.ytdPnl > 0 ? 'error.main' : pnlData.ytdPnl < 0 ? 'info.main' : 'text.primary'
+                                }}>
+                                    <BlindText>{pnlData.ytdPnl > 0 ? '+' : ''}{pnlData.ytdPnl.toLocaleString()}원</BlindText>
+                                </Typography>
+                            </Box>
+                            <Box>
+                                <Typography variant="body2" sx={{color: 'text.secondary'}}>전체</Typography>
+                                <Typography variant="body1" sx={{
+                                    fontWeight: 600,
+                                    color: pnlData.allTimePnl > 0 ? 'error.main' : pnlData.allTimePnl < 0 ? 'info.main' : 'text.primary'
+                                }}>
+                                    <BlindText>{pnlData.allTimePnl > 0 ? '+' : ''}{pnlData.allTimePnl.toLocaleString()}원</BlindText>
+                                </Typography>
+                            </Box>
+                        </Stack>
+                    </CardContent>
+                </Card>
+            )}
+
+            <BrokerSummaryCards brokerSummaries={data.brokerSummaries} brokerPnlList={pnlData?.brokerPnlList}/>
 
             <AssetAllocationChart
                 stockTotal={stockTotal}
