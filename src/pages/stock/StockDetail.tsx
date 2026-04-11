@@ -29,6 +29,7 @@ import {
 } from "../../type/StockType.ts";
 import StockDetailLineChart, {CustomStockDetailLineChartProps} from "../../components/StockDetailLineChart.tsx";
 import {fetchStockDetail, fetchStockStream, fetchStockProgramChart} from "../../api/stock/StockApi.ts";
+import {fetchNews} from "../../api/news/NewsApi.ts";
 import InvestorBarChart from "../../components/InvestorBarChart.tsx";
 import RemoveIcon from "@mui/icons-material/Remove";
 import CheckIcon from "@mui/icons-material/Check";
@@ -860,7 +861,11 @@ const StockDetail = () => {
         }
     ]);
 
-    const [tabValue, setTabValue] = useState<'investor' | 'program' | 'shortSelling'>('investor');
+    const [tabValue, setTabValue] = useState<'investor' | 'program' | 'shortSelling' | 'news'>('investor');
+    const [newsItems, setNewsItems] = useState<{title: string; link: string; description: string; pubDate: string}[]>([]);
+    const [newsPage, setNewsPage] = useState(1);
+    const [newsTotal, setNewsTotal] = useState(0);
+    const [newsLoaded, setNewsLoaded] = useState(false);
     const [tabData, setTabData] = useState({
         investor: {
             col: [],
@@ -991,8 +996,29 @@ const StockDetail = () => {
     }
 
     const handleChange = (_event: React.SyntheticEvent, newValue: string) => {
-        if (newValue === 'investor' || newValue === 'program' || newValue === 'shortSelling') {
+        if (newValue === 'investor' || newValue === 'program' || newValue === 'shortSelling' || newValue === 'news') {
             setTabValue(newValue);
+            if (newValue === 'news' && !newsLoaded && stockChartData.title) {
+                loadNews(stockChartData.title, 1);
+            }
+        }
+    };
+
+    const loadNews = async (stkNm: string, page: number) => {
+        try {
+            const res = await fetchNews({query: stkNm, page});
+            if (res.result) {
+                if (page === 1) {
+                    setNewsItems(res.result.items ?? []);
+                } else {
+                    setNewsItems(prev => [...prev, ...(res.result.items ?? [])]);
+                }
+                setNewsTotal(res.result.total ?? 0);
+                setNewsPage(page);
+                setNewsLoaded(true);
+            }
+        } catch (e) {
+            console.error(e);
         }
     };
 
@@ -1547,9 +1573,42 @@ const StockDetail = () => {
                             <Tab label="투자자별" value='investor' />
                             <Tab label="프로그램" value='program' />
                             <Tab label="공매도" value='shortSelling' />
+                            <Tab label="뉴스" value='news' />
                         </Tabs>
                     </Box>
-                    <CustomDataTable rows={tabData[tabValue].row} columns={tabData[tabValue].col} pageSize={20} />
+                    {tabValue !== 'news' ? (
+                        <CustomDataTable rows={tabData[tabValue].row} columns={tabData[tabValue].col} pageSize={20} />
+                    ) : (
+                        <Box sx={{mt: 2}}>
+                            {newsItems.length > 0 ? (
+                                <>
+                                    {newsItems.map((item, index) => (
+                                        <Box key={index} sx={{py: 1.5, borderBottom: '1px solid', borderColor: 'divider', cursor: 'pointer', '&:hover': {bgcolor: 'action.hover'}}}
+                                            onClick={() => window.open(item.link, '_blank')}>
+                                            <Typography variant="body2" sx={{fontWeight: 600, mb: 0.5}}>{item.title}</Typography>
+                                            <Typography variant="caption" color="text.secondary" sx={{display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden'}}>
+                                                {item.description}
+                                            </Typography>
+                                            <Typography variant="caption" color="text.disabled" sx={{display: 'block', mt: 0.5}}>
+                                                {item.pubDate}
+                                            </Typography>
+                                        </Box>
+                                    ))}
+                                    {newsItems.length < newsTotal && (
+                                        <Box sx={{textAlign: 'center', mt: 2}}>
+                                            <Button size="small" onClick={() => loadNews(stockChartData.title, newsPage + 1)}>
+                                                더보기
+                                            </Button>
+                                        </Box>
+                                    )}
+                                </>
+                            ) : newsLoaded ? (
+                                <Typography variant="body2" color="text.secondary" sx={{py: 2, textAlign: 'center'}}>
+                                    관련 뉴스가 없습니다.
+                                </Typography>
+                            ) : null}
+                        </Box>
+                    )}
                 </Grid>
             </Grid>
 

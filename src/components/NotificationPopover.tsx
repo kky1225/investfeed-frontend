@@ -32,13 +32,18 @@ function formatTime(createdAt: string) {
 }
 
 function getNavigationPath(notification: Notification): string {
+    if (notification.type === 'GOAL') {
+        return '/dashboard';
+    }
+    if (notification.type === 'REBALANCING') {
+        return '/rebalancing';
+    }
     if (notification.type === 'PRICE') {
         if (notification.assetType === 'STOCK') {
             return `/stock/detail/${notification.assetCode}`;
         }
         return `/crypto/detail/${notification.assetCode}`;
     }
-    // TRADE 타입은 추후 매매 페이지로 이동
     return `/stock/detail/${notification.assetCode}`;
 }
 
@@ -101,7 +106,7 @@ export default function NotificationPopover({anchorEl, open, onClose}: Notificat
                             }}
                         >
                             <Box sx={{mr: 1.5, display: 'flex', alignItems: 'center'}}>
-                                {(notification.direction === 'UP' || notification.direction === 'UPPER_LIMIT' || notification.direction === 'HIGH_52W' || notification.direction === 'TARGET_ABOVE') ? (
+                                {(notification.direction === 'UP' || notification.direction === 'UPPER_LIMIT' || notification.direction === 'HIGH_52W' || notification.direction === 'TARGET_ABOVE' || notification.direction === 'GOAL_ACHIEVED' || notification.direction === 'REBALANCING_ASSET' || notification.direction === 'REBALANCING_STOCK') ? (
                                     <TrendingUpIcon color="error" fontSize="small"/>
                                 ) : (
                                     <TrendingDownIcon color="primary" fontSize="small"/>
@@ -111,7 +116,7 @@ export default function NotificationPopover({anchorEl, open, onClose}: Notificat
                                 primary={
                                     <Box component="span" sx={{display: 'flex', alignItems: 'center', gap: 0.5}}>
                                         <Chip
-                                            label={notification.assetType === 'STOCK' ? '주식' : '코인'}
+                                            label={notification.assetType === 'STOCK' ? '주식' : notification.assetType === 'CRYPTO' ? '코인' : '전체'}
                                             size="small"
                                             color="default"
                                             sx={{fontSize: '0.6rem', height: 18}}
@@ -124,9 +129,12 @@ export default function NotificationPopover({anchorEl, open, onClose}: Notificat
                                 secondary={
                                     <Box component="span" sx={{display: 'flex', justifyContent: 'space-between', mt: 0.5}}>
                                         <Typography variant="caption" color={
-                                            (notification.direction === 'UP' || notification.direction === 'UPPER_LIMIT' || notification.direction === 'HIGH_52W' || notification.direction === 'TARGET_ABOVE') ? 'error' : 'primary'
+                                            (notification.direction === 'UP' || notification.direction === 'UPPER_LIMIT' || notification.direction === 'HIGH_52W' || notification.direction === 'TARGET_ABOVE' || notification.direction === 'GOAL_ACHIEVED' || notification.direction === 'REBALANCING_ASSET' || notification.direction === 'REBALANCING_STOCK') ? 'error' : 'primary'
                                         }>
-                                            {notification.direction === 'HIGH_52W' ? `52주 신고가 달성 (${notification.fluRt.toLocaleString()}원)` :
+                                            {notification.direction === 'REBALANCING_ASSET' ? `비중 초과 (현재 ${notification.fluRt}%)` :
+                                             notification.direction === 'REBALANCING_STOCK' ? `비중 초과 (현재 ${notification.fluRt}%)` :
+                                             notification.direction === 'GOAL_ACHIEVED' ? `목표 달성 (${notification.threshold.toLocaleString()}원)` :
+                                             notification.direction === 'HIGH_52W' ? `52주 신고가 달성 (${notification.fluRt.toLocaleString()}원)` :
                                              notification.direction === 'LOW_52W' ? `52주 신저가 달성 (${notification.fluRt.toLocaleString()}원)` :
                                              notification.direction === 'UPPER_LIMIT' ? '상한가 도달' :
                                              notification.direction === 'LOWER_LIMIT' ? '하한가 도달' :

@@ -7,19 +7,19 @@ import CardContent from "@mui/material/CardContent";
 import Divider from "@mui/material/Divider";
 import Stack from "@mui/material/Stack";
 import {fetchAssetDashboard} from "../../api/asset/AssetDashboardApi.ts";
-import {fetchRealizedPnlDashboard} from "../../api/realizedPnl/RealizedPnlApi.ts";
 import type {AssetDashboardRes} from "../../type/AssetDashboardType.ts";
-import type {RealizedPnlDashboardItem} from "../../type/RealizedPnlType.ts";
 import AssetSummaryCard from "./AssetSummaryCard.tsx";
 import BrokerSummaryCards from "./BrokerSummaryCards.tsx";
 import AssetAllocationChart from "./AssetAllocationChart.tsx";
 import AssetGroupDetail from "./AssetGroupDetail.tsx";
 import BlindToggle from "../../components/BlindToggle.tsx";
 import BlindText from "../../components/BlindText.tsx";
+import LinearProgress from "@mui/material/LinearProgress";
+import Chip from "@mui/material/Chip";
+import {goalTypeLabel} from "../../type/GoalType.ts";
 
 export default function AssetDashboard() {
     const [data, setData] = useState<AssetDashboardRes | null>(null);
-    const [pnlData, setPnlData] = useState<RealizedPnlDashboardItem | null>(null);
     const [selectedGroup, setSelectedGroup] = useState<'stock' | 'crypto' | null>(null);
     const [loading, setLoading] = useState(true);
     const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
@@ -36,14 +36,6 @@ export default function AssetDashboard() {
             }
         } catch (err) {
             console.error(err);
-        }
-        try {
-            const pnlRes = await fetchRealizedPnlDashboard();
-            if (pnlRes.code === "0000") {
-                setPnlData(pnlRes.result);
-            }
-        } catch {
-            // 실현손익 조회 실패 시 무시
         }
     };
 
@@ -121,7 +113,7 @@ export default function AssetDashboard() {
                 totalCash={data.totalCash}
             />
 
-            {pnlData && (
+            {data?.realizedPnl && (
                 <Card variant="outlined" sx={{mb: 3}}>
                     <CardContent>
                         <Typography variant="body2" sx={{color: 'text.secondary', mb: 1.5, fontWeight: 600}}>
@@ -132,27 +124,27 @@ export default function AssetDashboard() {
                                 <Typography variant="body2" sx={{color: 'text.secondary'}}>당월</Typography>
                                 <Typography variant="body1" sx={{
                                     fontWeight: 600,
-                                    color: pnlData.currentMonthPnl > 0 ? 'error.main' : pnlData.currentMonthPnl < 0 ? 'info.main' : 'text.primary'
+                                    color: data?.realizedPnl.currentMonthPnl > 0 ? 'error.main' : data?.realizedPnl.currentMonthPnl < 0 ? 'info.main' : 'text.primary'
                                 }}>
-                                    <BlindText>{pnlData.currentMonthPnl > 0 ? '+' : ''}{pnlData.currentMonthPnl.toLocaleString()}원</BlindText>
+                                    <BlindText>{data?.realizedPnl.currentMonthPnl > 0 ? '+' : ''}{data?.realizedPnl.currentMonthPnl.toLocaleString()}원</BlindText>
                                 </Typography>
                             </Box>
                             <Box>
                                 <Typography variant="body2" sx={{color: 'text.secondary'}}>올해</Typography>
                                 <Typography variant="body1" sx={{
                                     fontWeight: 600,
-                                    color: pnlData.ytdPnl > 0 ? 'error.main' : pnlData.ytdPnl < 0 ? 'info.main' : 'text.primary'
+                                    color: data?.realizedPnl.ytdPnl > 0 ? 'error.main' : data?.realizedPnl.ytdPnl < 0 ? 'info.main' : 'text.primary'
                                 }}>
-                                    <BlindText>{pnlData.ytdPnl > 0 ? '+' : ''}{pnlData.ytdPnl.toLocaleString()}원</BlindText>
+                                    <BlindText>{data?.realizedPnl.ytdPnl > 0 ? '+' : ''}{data?.realizedPnl.ytdPnl.toLocaleString()}원</BlindText>
                                 </Typography>
                             </Box>
                             <Box>
                                 <Typography variant="body2" sx={{color: 'text.secondary'}}>전체</Typography>
                                 <Typography variant="body1" sx={{
                                     fontWeight: 600,
-                                    color: pnlData.allTimePnl > 0 ? 'error.main' : pnlData.allTimePnl < 0 ? 'info.main' : 'text.primary'
+                                    color: data?.realizedPnl.allTimePnl > 0 ? 'error.main' : data?.realizedPnl.allTimePnl < 0 ? 'info.main' : 'text.primary'
                                 }}>
-                                    <BlindText>{pnlData.allTimePnl > 0 ? '+' : ''}{pnlData.allTimePnl.toLocaleString()}원</BlindText>
+                                    <BlindText>{data?.realizedPnl.allTimePnl > 0 ? '+' : ''}{data?.realizedPnl.allTimePnl.toLocaleString()}원</BlindText>
                                 </Typography>
                             </Box>
                         </Stack>
@@ -160,7 +152,48 @@ export default function AssetDashboard() {
                 </Card>
             )}
 
-            <BrokerSummaryCards brokerSummaries={data.brokerSummaries} brokerPnlList={pnlData?.brokerPnlList}/>
+            {/* 투자 목표 (표시만) */}
+            {(data?.goals ?? []).length > 0 && (
+                <Card variant="outlined" sx={{mb: 3}}>
+                    <CardContent>
+                        <Typography variant="body2" sx={{color: 'text.secondary', fontWeight: 600, mb: 1.5}}>
+                            투자 목표
+                        </Typography>
+                        <Stack spacing={2}>
+                            {(data?.goals ?? []).map((goal) => {
+                                const rate = Math.min(goal.achievementRate, 100);
+                                const isOver = goal.achievementRate >= 100;
+                                return (
+                                    <Box key={goal.id}>
+                                        <Box sx={{display: 'flex', alignItems: 'center', gap: 1, mb: 0.5}}>
+                                            <Typography variant="body2" sx={{fontWeight: 600}}>
+                                                {goalTypeLabel[goal.type]}
+                                            </Typography>
+                                            {goal.isAchieved && <Chip label="달성 완료" size="small" color="success" variant="outlined"/>}
+                                        </Box>
+                                        <Box sx={{display: 'flex', alignItems: 'center', gap: 1, mb: 0.5}}>
+                                            <LinearProgress
+                                                variant="determinate"
+                                                value={rate}
+                                                color={isOver ? 'success' : 'primary'}
+                                                sx={{flex: 1, height: 8, borderRadius: 4}}
+                                            />
+                                            <Typography variant="caption" sx={{fontWeight: 600, minWidth: 45, textAlign: 'right'}}>
+                                                {goal.achievementRate.toFixed(1)}%
+                                            </Typography>
+                                        </Box>
+                                        <Typography variant="caption" color="text.secondary">
+                                            <BlindText>{goal.currentAmount.toLocaleString()}원 / {goal.targetAmount.toLocaleString()}원</BlindText>
+                                        </Typography>
+                                    </Box>
+                                );
+                            })}
+                        </Stack>
+                    </CardContent>
+                </Card>
+            )}
+
+            <BrokerSummaryCards brokerSummaries={data.brokerSummaries} brokerPnlList={data?.realizedPnl?.brokerPnlList}/>
 
             <AssetAllocationChart
                 stockTotal={stockTotal}

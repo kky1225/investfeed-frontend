@@ -1,4 +1,5 @@
 import api from "../../axios.ts";
+import type {NotificationSettingReq} from "../../type/NotificationSettingType.ts";
 
 export const fetchNotifications = async (assetType?: string) => {
     const params = assetType ? {assetType} : {};
@@ -33,5 +34,15 @@ export const fetchPriceTargets = async () => {
 
 export const deletePriceTarget = async (id: number) => {
     const res = await api.delete(`/notifications/price-targets/${id}`);
+    return res.data;
+};
+
+export const fetchNotificationSetting = async () => {
+    const res = await api.post("/notifications/settings");
+    return res.data;
+};
+
+export const saveNotificationSetting = async (req: NotificationSettingReq) => {
+    const res = await api.put("/notifications/settings", req);
     return res.data;
 };

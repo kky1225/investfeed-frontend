@@ -52,8 +52,3 @@ export const deleteCryptoManualPnl = async (id: number) => {
     return res.data;
 };
 
-// 통합 실현손익
-export const fetchRealizedPnlDashboard = async () => {
-    const res = await api.post('/realizedpnl/dashboard');
-    return res.data;
-};

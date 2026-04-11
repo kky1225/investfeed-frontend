@@ -14,6 +14,8 @@ import AssuredWorkloadIcon from '@mui/icons-material/AssuredWorkload';
 import SettingsIcon from '@mui/icons-material/Settings';
 import MenuIcon from '@mui/icons-material/Menu';
 import WalletIcon from '@mui/icons-material/Wallet';
+import FlagIcon from '@mui/icons-material/Flag';
+import FormatListBulletedIcon from '@mui/icons-material/FormatListBulleted';
 import type {ReactElement} from 'react';
 
 const iconMap: Record<string, ReactElement> = {
@@ -33,6 +35,8 @@ const iconMap: Record<string, ReactElement> = {
     SettingsIcon: <SettingsIcon />,
     MenuIcon: <MenuIcon />,
     WalletIcon: <WalletIcon />,
+    FlagIcon: <FlagIcon />,
+    FormatListBulletedIcon: <FormatListBulletedIcon />,
 };
 
 export const getMenuIcon = (iconName: string | null): ReactElement => {

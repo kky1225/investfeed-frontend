@@ -18,6 +18,7 @@ import DialogTitle from '@mui/material/DialogTitle';
 import DialogContent from '@mui/material/DialogContent';
 import DialogActions from '@mui/material/DialogActions';
 import IconButton from '@mui/material/IconButton';
+import SettingsIcon from '@mui/icons-material/Settings';
 import TrendingUpIcon from '@mui/icons-material/TrendingUp';
 import TrendingDownIcon from '@mui/icons-material/TrendingDown';
 import NotificationsNoneIcon from '@mui/icons-material/NotificationsNone';
@@ -59,6 +60,12 @@ function groupByDate(notifications: Notification[]): Map<string, Notification[]>
 }
 
 function getNavigationPath(notification: Notification): string {
+    if (notification.type === 'GOAL') {
+        return '/dashboard';
+    }
+    if (notification.type === 'REBALANCING') {
+        return '/rebalancing';
+    }
     if (notification.type === 'PRICE') {
         if (notification.assetType === 'STOCK') {
             return `/stock/detail/${notification.assetCode}`;
@@ -120,6 +127,9 @@ export default function NotificationList() {
                     >
                         목표가 관리{priceTargets.length > 0 ? ` (${priceTargets.length})` : ''}
                     </Button>
+                    <IconButton size="small" onClick={() => navigate('/notification/settings')} title="알림 설정">
+                        <SettingsIcon fontSize="small"/>
+                    </IconButton>
                     {hasUnread && (
                         <Button size="small" onClick={handleMarkAllAsRead}>모두 읽음</Button>
                     )}
@@ -218,7 +228,7 @@ export default function NotificationList() {
                                     }}
                                 >
                                     <Box sx={{mr: 1.5, display: 'flex', alignItems: 'center'}}>
-                                        {(notification.direction === 'UP' || notification.direction === 'UPPER_LIMIT' || notification.direction === 'HIGH_52W' || notification.direction === 'TARGET_ABOVE') ? (
+                                        {(notification.direction === 'UP' || notification.direction === 'UPPER_LIMIT' || notification.direction === 'HIGH_52W' || notification.direction === 'TARGET_ABOVE' || notification.direction === 'GOAL_ACHIEVED' || notification.direction === 'REBALANCING_ASSET' || notification.direction === 'REBALANCING_STOCK') ? (
                                             <TrendingUpIcon color={notification.isRead ? 'disabled' : 'error'} fontSize="small"/>
                                         ) : (
                                             <TrendingDownIcon color={notification.isRead ? 'disabled' : 'primary'} fontSize="small"/>
@@ -228,7 +238,7 @@ export default function NotificationList() {
                                         primary={
                                             <Box component="span" sx={{display: 'flex', alignItems: 'center', gap: 0.5}}>
                                                 <Chip
-                                                    label={notification.assetType === 'STOCK' ? '주식' : '코인'}
+                                                    label={notification.assetType === 'STOCK' ? '주식' : notification.assetType === 'CRYPTO' ? '코인' : '전체'}
                                                     size="small"
                                                     color="default"
                                                     sx={{fontSize: '0.6rem', height: 18}}
@@ -242,9 +252,12 @@ export default function NotificationList() {
                                             <Box component="span" sx={{display: 'flex', justifyContent: 'space-between', mt: 0.5}}>
                                                 <Typography variant="caption" component="span" color={
                                                     notification.isRead ? 'text.disabled' :
-                                                    (notification.direction === 'UP' || notification.direction === 'UPPER_LIMIT' || notification.direction === 'HIGH_52W' || notification.direction === 'TARGET_ABOVE') ? 'error' : 'primary'
+                                                    (notification.direction === 'UP' || notification.direction === 'UPPER_LIMIT' || notification.direction === 'HIGH_52W' || notification.direction === 'TARGET_ABOVE' || notification.direction === 'GOAL_ACHIEVED' || notification.direction === 'REBALANCING_ASSET' || notification.direction === 'REBALANCING_STOCK') ? 'error' : 'primary'
                                                 }>
-                                                    {notification.direction === 'HIGH_52W' ? `52주 신고가 달성 (${notification.fluRt.toLocaleString()}원)` :
+                                                    {notification.direction === 'REBALANCING_ASSET' ? `비중 초과 (현재 ${notification.fluRt}%)` :
+                                                     notification.direction === 'REBALANCING_STOCK' ? `비중 초과 (현재 ${notification.fluRt}%)` :
+                                                     notification.direction === 'GOAL_ACHIEVED' ? `목표 달성 (${notification.threshold.toLocaleString()}원)` :
+                                                     notification.direction === 'HIGH_52W' ? `52주 신고가 달성 (${notification.fluRt.toLocaleString()}원)` :
                                                      notification.direction === 'LOW_52W' ? `52주 신저가 달성 (${notification.fluRt.toLocaleString()}원)` :
                                                      notification.direction === 'UPPER_LIMIT' ? '상한가 도달' :
                                                      notification.direction === 'LOWER_LIMIT' ? '하한가 도달' :

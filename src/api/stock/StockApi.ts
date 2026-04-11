@@ -6,6 +6,11 @@ export const fetchStockDetail = async (req: StockDetailReq) => {
     return res.data;
 }
 
+export const fetchStockChart = async (req: StockDetailReq) => {
+    const res = await api.get(`/stock/chart`, {params: req});
+    return res.data;
+}
+
 export const fetchStockStream = async (req: StockStreamReq) => {
     const res = await api.post(`/stock/stream`, req);
     return res.data;

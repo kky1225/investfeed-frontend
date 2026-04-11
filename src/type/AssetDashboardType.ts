@@ -1,3 +1,6 @@
+import type {RealizedPnlDashboardItem} from './RealizedPnlType.ts';
+import type {InvestmentGoalRes} from './GoalType.ts';
+
 export interface AssetDashboardRes {
     totalAsset: number;
     totalEvltAmt: number;
@@ -8,6 +11,8 @@ export interface AssetDashboardRes {
     stockSummary: AssetGroupSummary;
     cryptoSummary: AssetGroupSummary;
     brokerSummaries: BrokerSummaryItem[];
+    realizedPnl?: RealizedPnlDashboardItem;
+    goals?: InvestmentGoalRes[];
 }
 
 export interface BrokerSummaryItem {

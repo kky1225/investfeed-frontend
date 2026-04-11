@@ -27,6 +27,10 @@ import DeleteIcon from '@mui/icons-material/Delete';
 import SecurityIcon from '@mui/icons-material/Security';
 import SaveIcon from '@mui/icons-material/Save';
 import DragIndicatorIcon from '@mui/icons-material/DragIndicator';
+import MoreVertIcon from '@mui/icons-material/MoreVert';
+import Menu from '@mui/material/Menu';
+import ListItemIcon from '@mui/material/ListItemIcon';
+import ListItemText from '@mui/material/ListItemText';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import ExpandLessIcon from '@mui/icons-material/ExpandLess';
 import UnfoldMoreIcon from '@mui/icons-material/UnfoldMore';
@@ -91,7 +95,7 @@ const getParentIds = (items: FlatMenuItem[]): Set<number> => {
 // 드래그 + 드롭 가능한 트리 아이템
 function TreeMenuItem({
     item, hasChildren, isCollapsed, dropIndicator, isDragActive,
-    onToggle, onEdit, onDelete, onPermission,
+    onToggle, onMenuClick,
 }: {
     item: FlatMenuItem;
     hasChildren: boolean;
@@ -99,9 +103,7 @@ function TreeMenuItem({
     dropIndicator: DropPosition | null;
     isDragActive: boolean;
     onToggle: (id: number) => void;
-    onEdit: (item: FlatMenuItem) => void;
-    onDelete: (item: FlatMenuItem) => void;
-    onPermission: (item: FlatMenuItem) => void;
+    onMenuClick: (event: React.MouseEvent<HTMLElement>, item: FlatMenuItem) => void;
 }) {
     const {attributes, listeners, setNodeRef: setDragRef, isDragging} = useDraggable({id: item.id});
     const {setNodeRef: setDropRef} = useDroppable({id: item.id});
@@ -171,17 +173,9 @@ function TreeMenuItem({
                     )}
                 </Box>
                 {!isDragActive && (
-                    <Stack direction="row" spacing={0.5}>
-                        <Tooltip title="권한 설정">
-                            <IconButton size="small" onClick={() => onPermission(item)}><SecurityIcon fontSize="small" /></IconButton>
-                        </Tooltip>
-                        <Tooltip title="수정">
-                            <IconButton size="small" onClick={() => onEdit(item)}><EditIcon fontSize="small" /></IconButton>
-                        </Tooltip>
-                        <Tooltip title="삭제">
-                            <IconButton size="small" color="error" onClick={() => onDelete(item)}><DeleteIcon fontSize="small" /></IconButton>
-                        </Tooltip>
-                    </Stack>
+                    <IconButton size="small" onClick={(e) => onMenuClick(e, item)}>
+                        <MoreVertIcon fontSize="small"/>
+                    </IconButton>
                 )}
             </Paper>
         </Box>
@@ -217,6 +211,8 @@ export default function MenuManagement() {
         name: '', url: '', icon: '', parentId: '', visible: true
     });
     const [deleteDialog, setDeleteDialog] = useState<{open: boolean; item: FlatMenuItem | null}>({open: false, item: null});
+    const [menuAnchorEl, setMenuAnchorEl] = useState<HTMLElement | null>(null);
+    const [menuTargetItem, setMenuTargetItem] = useState<FlatMenuItem | null>(null);
     const [permDialog, setPermDialog] = useState<{open: boolean; item: FlatMenuItem | null}>({open: false, item: null});
     const [permForm, setPermForm] = useState<{USER: boolean; ADMIN: boolean; GUEST: boolean}>({USER: true, ADMIN: true, GUEST: true});
 
@@ -526,9 +522,7 @@ export default function MenuManagement() {
                                 dropIndicator={dropTarget?.id === item.id ? dropTarget.position : null}
                                 isDragActive={!!activeItem}
                                 onToggle={handleToggleCollapse}
-                                onEdit={handleOpenEdit}
-                                onDelete={item => setDeleteDialog({open: true, item})}
-                                onPermission={handleOpenPermission}
+                                onMenuClick={(e, item) => { setMenuAnchorEl(e.currentTarget); setMenuTargetItem(item); }}
                             />
                         ))}
                     </Stack>
@@ -578,6 +572,22 @@ export default function MenuManagement() {
                     <Button onClick={handleSaveMenu} variant="contained">{editDialog.mode === 'create' ? '생성' : '수정'}</Button>
                 </DialogActions>
             </Dialog>
+
+            {/* 메뉴 아이템 관리 팝오버 */}
+            <Menu anchorEl={menuAnchorEl} open={Boolean(menuAnchorEl)} onClose={() => setMenuAnchorEl(null)}>
+                <MenuItem onClick={() => { if (menuTargetItem) handleOpenPermission(menuTargetItem); setMenuAnchorEl(null); }}>
+                    <ListItemIcon><SecurityIcon fontSize="small"/></ListItemIcon>
+                    <ListItemText>권한 설정</ListItemText>
+                </MenuItem>
+                <MenuItem onClick={() => { if (menuTargetItem) handleOpenEdit(menuTargetItem); setMenuAnchorEl(null); }}>
+                    <ListItemIcon><EditIcon fontSize="small"/></ListItemIcon>
+                    <ListItemText>수정</ListItemText>
+                </MenuItem>
+                <MenuItem onClick={() => { if (menuTargetItem) setDeleteDialog({open: true, item: menuTargetItem}); setMenuAnchorEl(null); }}>
+                    <ListItemIcon><DeleteIcon fontSize="small" color="error"/></ListItemIcon>
+                    <ListItemText>삭제</ListItemText>
+                </MenuItem>
+            </Menu>
 
             {/* 삭제 확인 다이얼로그 */}
             <Dialog open={deleteDialog.open} onClose={() => setDeleteDialog({open: false, item: null})}>

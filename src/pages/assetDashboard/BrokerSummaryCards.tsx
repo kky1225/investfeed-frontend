@@ -184,15 +184,14 @@ export default function BrokerSummaryCards({brokerSummaries, brokerPnlList}: Bro
 
                                     {(() => {
                                         const pnl = brokerPnlList?.find(p => p.brokerName === broker.brokerName);
-                                        if (!pnl || pnl.allTimePnl === 0) return null;
-                                        const pnlColor = pnl.allTimePnl > 0 ? 'error.main' : pnl.allTimePnl < 0 ? 'info.main' : 'text.primary';
+                                        if (!pnl) return null;
                                         return (
                                             <>
                                                 <Box sx={{display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1, mt: 1}}>
                                                     <Box>
-                                                        <Typography variant="caption" sx={{color: 'text.secondary'}}>실현손익</Typography>
-                                                        <Typography variant="body2" sx={{fontWeight: 600, color: pnlColor}}>
-                                                            <BlindText>{pnl.allTimePnl > 0 ? '+' : ''}{pnl.allTimePnl.toLocaleString()}원</BlindText>
+                                                        <Typography variant="caption" sx={{color: 'text.secondary'}}>당월 실현손익</Typography>
+                                                        <Typography variant="body2" sx={{fontWeight: 600, color: pnl.currentMonthPnl > 0 ? 'error.main' : pnl.currentMonthPnl < 0 ? 'info.main' : 'text.primary'}}>
+                                                            <BlindText>{pnl.currentMonthPnl > 0 ? '+' : ''}{pnl.currentMonthPnl.toLocaleString()}원</BlindText>
                                                         </Typography>
                                                     </Box>
                                                     <Box>

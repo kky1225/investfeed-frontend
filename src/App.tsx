@@ -43,6 +43,10 @@ import ApiKeyManagement from "./pages/settings/ApiKeyManagement.tsx";
 import HoldingPage from "./pages/holding/HoldingPage.tsx";
 import CryptoHoldingPage from "./pages/cryptoHolding/CryptoHoldingPage.tsx";
 import AssetDashboard from "./pages/assetDashboard/AssetDashboard.tsx";
+import MultiViewPage from "./pages/multiView/MultiViewPage.tsx";
+import RebalancingPage from "./pages/rebalancing/RebalancingPage.tsx";
+import GoalPage from "./pages/goal/GoalPage.tsx";
+import NotificationSettingPage from "./pages/notificationSetting/NotificationSettingPage.tsx";
 
 const StockDetailWithKey = () => {
     const { id } = useParams();
@@ -161,7 +165,11 @@ function App() {
                         <Route path="/crypto/detail/:id" Component={CryptoDetail} />
 
                         <Route path="/crypto/interest/list/:groupId?" Component={CryptoInterest} />
+                        <Route path="/multi-view" Component={MultiViewPage} />
+                        <Route path="/rebalancing" Component={RebalancingPage} />
+                        <Route path="/goal" Component={GoalPage} />
                         <Route path="/notification/list" Component={NotificationList} />
+                        <Route path="/notification/settings" Component={NotificationSettingPage} />
 
                         <Route path="/admin/members" Component={MemberManagement} />
                         <Route path="/admin/menus" Component={MenuManagement} />
