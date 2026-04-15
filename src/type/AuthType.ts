@@ -3,15 +3,6 @@ export interface LoginReq {
     password: string;
 }
 
-export interface SignupReq {
-    loginId: string;
-    password: string;
-    email: string;
-    nickname: string;
-    name: string;
-    phone: string;
-}
-
 export interface PreAuthRes {
     totpRequired: boolean;
     totpSetupRequired: boolean;

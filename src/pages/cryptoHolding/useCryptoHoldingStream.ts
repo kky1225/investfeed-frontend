@@ -23,16 +23,14 @@ export function useCryptoHoldingStream(
             ws.onmessage = (event) => {
                 const data = JSON.parse(event.data);
 
-                if (data.trnm === "REAL" && Array.isArray(data.data)) {
-                    data.data.forEach((res: { type: string; item: string; values: Record<string, string> }) => {
-                        if (res.type === "CRYPTO_TICKER") {
-                            const market = res.item;
-                            const prev = bufferMapRef.current.get(market) ?? {};
-                            bufferMapRef.current.set(market, {
-                                ...prev,
-                                curPrc: res.values["trade_price"] ?? prev.curPrc,
-                            });
-                        }
+                if (data.type === "CRYPTO_TICKER" && data.data) {
+                    const ticker = data.data;
+                    const market: string = ticker.market;
+                    if (!market) return;
+                    const prev = bufferMapRef.current.get(market) ?? {};
+                    bufferMapRef.current.set(market, {
+                        ...prev,
+                        curPrc: ticker.tradePrice != null ? String(ticker.tradePrice) : prev.curPrc,
                     });
                 }
             };

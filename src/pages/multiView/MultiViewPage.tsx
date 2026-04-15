@@ -161,20 +161,19 @@ export default function MultiViewPage() {
             const ws = new WebSocket("ws://localhost:8080/ws");
             ws.onmessage = (event) => {
                 const data = JSON.parse(event.data);
-                if (data.trnm === "REAL" && Array.isArray(data.data)) {
-                    data.data.forEach((res: {type: string; item: string; values: Record<string, string>}) => {
-                        if (res.type === "CRYPTO_TICKER") {
-                            const tradePrice = res.values["trade_price"] ?? '0';
-                            const changeRate = res.values["signed_change_rate"] ?? '0';
-                            const changePrice = res.values["signed_change_price"] ?? '0';
-                            const rate = Number(changeRate) * 100;
-                            cryptoBufferRef.current.set(res.item, {
-                                value: tradePrice,
-                                fluRt: rate.toFixed(2),
-                                predPre: changePrice,
-                                trend: rate > 0 ? 'up' : rate < 0 ? 'down' : 'neutral',
-                            });
-                        }
+                if (data.type === "CRYPTO_TICKER" && data.data) {
+                    const ticker = data.data;
+                    const market: string = ticker.market;
+                    if (!market) return;
+                    const tradePrice = ticker.tradePrice != null ? String(ticker.tradePrice) : '0';
+                    const changeRate = ticker.signedChangeRate != null ? Number(ticker.signedChangeRate) : 0;
+                    const changePrice = ticker.signedChangePrice != null ? String(ticker.signedChangePrice) : '0';
+                    const rate = changeRate * 100;
+                    cryptoBufferRef.current.set(market, {
+                        value: tradePrice,
+                        fluRt: rate.toFixed(2),
+                        predPre: changePrice,
+                        trend: rate > 0 ? 'up' : rate < 0 ? 'down' : 'neutral',
                     });
                 }
             };

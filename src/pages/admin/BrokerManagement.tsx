@@ -40,6 +40,7 @@ export default function BrokerManagement() {
     const [type, setType] = useState<BrokerType>('MANUAL');
     const [market, setMarket] = useState<BrokerMarket>('STOCK');
     const [formLoading, setFormLoading] = useState(false);
+    const [formErrors, setFormErrors] = useState<{name?: string}>({});
 
     const [deleteTarget, setDeleteTarget] = useState<Broker | null>(null);
     const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
@@ -68,6 +69,7 @@ export default function BrokerManagement() {
         setName('');
         setType('MANUAL');
         setMarket('STOCK');
+        setFormErrors({});
     };
 
     const openCreateForm = () => {
@@ -85,10 +87,13 @@ export default function BrokerManagement() {
     };
 
     const handleSubmit = async () => {
-        if (!name.trim()) {
-            setSnackbar({open: true, message: '증권사명을 입력해주세요.', severity: 'error'});
+        const errors: {name?: string} = {};
+        if (!name.trim()) errors.name = '증권사명을 입력해주세요.';
+        if (Object.keys(errors).length > 0) {
+            setFormErrors(errors);
             return;
         }
+        setFormErrors({});
         setFormLoading(true);
         try {
             if (formMode === 'create') {
@@ -100,7 +105,12 @@ export default function BrokerManagement() {
             }
             resetForm();
             await loadBrokers();
-        } catch {
+        } catch (err) {
+            const axiosErr = err as {response?: {status?: number; data?: {code?: string; result?: Record<string, string>}}};
+            if (axiosErr.response?.status === 400 && axiosErr.response?.data?.code === 'VALIDATION_4001') {
+                setFormErrors(axiosErr.response.data.result ?? {});
+                return;
+            }
             setSnackbar({open: true, message: formMode === 'create' ? '증권사 등록에 실패했습니다.' : '증권사 수정에 실패했습니다.', severity: 'error'});
         } finally {
             setFormLoading(false);
@@ -225,10 +235,11 @@ export default function BrokerManagement() {
                 <DialogContent>
                     <Box sx={{display: 'flex', flexDirection: 'column', gap: 2, mt: 1}}>
                         <TextField
-                            autoFocus fullWidth label="증권사명"
+                            autoFocus fullWidth required size="small" label="증권사명"
                             value={name}
-                            onChange={e => setName(e.target.value)}
+                            onChange={e => { setName(e.target.value); if (formErrors.name) setFormErrors(prev => ({...prev, name: undefined})); }}
                             onKeyDown={e => e.key === "Enter" && !e.nativeEvent.isComposing && handleSubmit()}
+                            error={!!formErrors.name} helperText={formErrors.name}
                             slotProps={{htmlInput: {maxLength: 20}}}
                         />
                         <Box>
@@ -261,7 +272,7 @@ export default function BrokerManagement() {
                 </DialogContent>
                 <DialogActions>
                     <Button onClick={resetForm}>취소</Button>
-                    <Button onClick={handleSubmit} variant="contained" disabled={formLoading || !name.trim()}>
+                    <Button onClick={handleSubmit} variant="contained" disabled={formLoading}>
                         {formLoading ? '처리 중...' : formMode === 'create' ? '등록' : '수정'}
                     </Button>
                 </DialogActions>

@@ -42,6 +42,7 @@ export default function RebalancingPage() {
     const [cashDirection, setCashDirection] = useState<RatioDirection>("MIN");
     const [maxStockRatio, setMaxStockRatio] = useState("");
     const [error, setError] = useState("");
+    const [fieldErrors, setFieldErrors] = useState<{stockRatio?: boolean; cryptoRatio?: boolean; cashRatio?: boolean; maxStockRatio?: boolean}>({});
     const [deleteOpen, setDeleteOpen] = useState(false);
     const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
     const [editMode, setEditMode] = useState(false);
@@ -99,14 +100,23 @@ export default function RebalancingPage() {
     }, []);
 
     const handleSave = async () => {
-        if (!stockRatio || !cryptoRatio || !cashRatio || !maxStockRatio) {
+        const fieldErrs: {stockRatio?: boolean; cryptoRatio?: boolean; cashRatio?: boolean; maxStockRatio?: boolean} = {};
+        if (!stockRatio) fieldErrs.stockRatio = true;
+        if (!cryptoRatio) fieldErrs.cryptoRatio = true;
+        if (!cashRatio) fieldErrs.cashRatio = true;
+        if (!maxStockRatio) fieldErrs.maxStockRatio = true;
+        if (Object.keys(fieldErrs).length > 0) {
+            setFieldErrors(fieldErrs);
             setError("모든 비중을 입력해주세요.");
             return;
         }
         if (Number(maxStockRatio) <= 0 || Number(maxStockRatio) > 100) {
+            setFieldErrors({maxStockRatio: true});
             setError("종목 최대 비중을 1~100% 사이로 입력해주세요.");
             return;
         }
+        setFieldErrors({});
+        setError("");
         try {
             await saveRebalancingSetting({
                 stockRatio: Number(stockRatio), stockDirection,
@@ -114,10 +124,21 @@ export default function RebalancingPage() {
                 cashRatio: Number(cashRatio), cashDirection,
                 maxStockRatio: Number(maxStockRatio)
             });
-            setError("");
             setEditMode(false);
             await loadStatus();
-        } catch {
+        } catch (err) {
+            const axiosErr = err as {response?: {status?: number; data?: {code?: string; result?: Record<string, string>}}};
+            if (axiosErr.response?.status === 400 && axiosErr.response?.data?.code === 'VALIDATION_4001') {
+                const result = axiosErr.response.data.result ?? {};
+                const serverFieldErrs: typeof fieldErrs = {};
+                const messages: string[] = [];
+                (['stockRatio', 'cryptoRatio', 'cashRatio', 'maxStockRatio'] as const).forEach(key => {
+                    if (result[key]) { serverFieldErrs[key] = true; messages.push(result[key]); }
+                });
+                setFieldErrors(serverFieldErrs);
+                setError(messages.join(' ') || '입력값을 확인해주세요.');
+                return;
+            }
             setError("설정 저장에 실패했습니다.");
         }
     };
@@ -207,14 +228,16 @@ export default function RebalancingPage() {
                         <>
                             <Grid container spacing={2} sx={{mb: 2}}>
                                 {[
-                                    {label: '주식', ratio: stockRatio, setRatio: setStockRatio, direction: stockDirection, setDirection: setStockDirection},
-                                    {label: '코인', ratio: cryptoRatio, setRatio: setCryptoRatio, direction: cryptoDirection, setDirection: setCryptoDirection},
-                                    {label: '현금', ratio: cashRatio, setRatio: setCashRatio, direction: cashDirection, setDirection: setCashDirection},
+                                    {label: '주식', key: 'stockRatio' as const, ratio: stockRatio, setRatio: setStockRatio, direction: stockDirection, setDirection: setStockDirection},
+                                    {label: '코인', key: 'cryptoRatio' as const, ratio: cryptoRatio, setRatio: setCryptoRatio, direction: cryptoDirection, setDirection: setCryptoDirection},
+                                    {label: '현금', key: 'cashRatio' as const, ratio: cashRatio, setRatio: setCashRatio, direction: cashDirection, setDirection: setCashDirection},
                                 ].map((item) => (
                                     <Grid key={item.label} size={{xs: 6, md: 3}}>
                                         <Box sx={{p: 2, borderRadius: 2, border: '1px solid', borderColor: 'divider', textAlign: 'center'}}>
                                             <Typography variant="caption" color="text.secondary" sx={{mb: 1, display: 'block'}}>{item.label}</Typography>
-                                            <TextField size="small" value={item.ratio} onChange={(e) => item.setRatio(e.target.value.replace(/[^0-9]/g, ''))}
+                                            <TextField size="small" value={item.ratio}
+                                                onChange={(e) => { item.setRatio(e.target.value.replace(/[^0-9]/g, '')); if (fieldErrors[item.key]) setFieldErrors(prev => ({...prev, [item.key]: undefined})); }}
+                                                error={!!fieldErrors[item.key]}
                                                 sx={{width: 80, mb: 1}} slotProps={{htmlInput: {inputMode: 'numeric', maxLength: 3, style: {textAlign: 'center', fontWeight: 700, fontSize: '1.2rem'}}}}/>
                                             <Typography variant="body2" sx={{mb: 1}}>%</Typography>
                                             <TextField select size="small" value={item.direction} onChange={(e) => item.setDirection(e.target.value as RatioDirection)}
@@ -228,7 +251,9 @@ export default function RebalancingPage() {
                                 <Grid size={{xs: 6, md: 3}}>
                                     <Box sx={{p: 2, borderRadius: 2, border: '1px solid', borderColor: 'divider', textAlign: 'center'}}>
                                         <Typography variant="caption" color="text.secondary" sx={{mb: 1, display: 'block'}}>종목 최대</Typography>
-                                        <TextField size="small" value={maxStockRatio} onChange={(e) => setMaxStockRatio(e.target.value.replace(/[^0-9]/g, ''))}
+                                        <TextField size="small" value={maxStockRatio}
+                                            onChange={(e) => { setMaxStockRatio(e.target.value.replace(/[^0-9]/g, '')); if (fieldErrors.maxStockRatio) setFieldErrors(prev => ({...prev, maxStockRatio: undefined})); }}
+                                            error={!!fieldErrors.maxStockRatio}
                                             sx={{width: 80, mb: 1}} slotProps={{htmlInput: {inputMode: 'numeric', maxLength: 3, style: {textAlign: 'center', fontWeight: 700, fontSize: '1.2rem'}}}}/>
                                         <Typography variant="body2" sx={{mb: 1}}>%</Typography>
                                         <Chip label="이하" size="small" color="info" variant="outlined" sx={{fontSize: 11}}/>
@@ -282,7 +307,7 @@ export default function RebalancingPage() {
                                             </Box>
                                             <LinearProgress
                                                 variant="determinate"
-                                                value={!isViolation && item.direction === 'MAX' ? 100 : Math.min(item.current, 100)}
+                                                value={!isViolation ? 100 : Math.min(item.current, 100)}
                                                 color={isViolation ? 'error' : 'success'}
                                                 sx={{height: 8, borderRadius: 4}}
                                             />

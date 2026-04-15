@@ -6,7 +6,6 @@ import DialogActions from "@mui/material/DialogActions";
 import Button from "@mui/material/Button";
 import TextField from "@mui/material/TextField";
 import Box from "@mui/material/Box";
-import Typography from "@mui/material/Typography";
 import type {RealizedPnlItem} from "../../type/RealizedPnlType.ts";
 
 interface EditManualPnlDialogProps {
@@ -20,7 +19,7 @@ interface EditManualPnlDialogProps {
 export default function EditManualPnlDialog({open, onClose, item, onUpdated, updateFn}: EditManualPnlDialogProps) {
     const [realizedPnl, setRealizedPnl] = useState("");
     const [isNegative, setIsNegative] = useState(false);
-    const [error, setError] = useState("");
+    const [formErrors, setFormErrors] = useState<{realizedPnl?: string}>({});
 
     useEffect(() => {
         if (item) {
@@ -33,23 +32,31 @@ export default function EditManualPnlDialog({open, onClose, item, onUpdated, upd
     const handleClose = () => {
         setRealizedPnl("");
         setIsNegative(false);
-        setError("");
+        setFormErrors({});
         onClose();
     };
 
     const handleSubmit = async () => {
         if (!item) return;
-        if (!realizedPnl) {
-            setError("실현손익을 입력해주세요.");
+        const errors: {realizedPnl?: string} = {};
+        if (!realizedPnl) errors.realizedPnl = "실현손익을 입력해주세요.";
+        if (Object.keys(errors).length > 0) {
+            setFormErrors(errors);
             return;
         }
+        setFormErrors({});
         try {
             const pnlValue = Number(realizedPnl) * (isNegative ? -1 : 1);
             await updateFn(item.id, {realizedPnl: pnlValue});
             onUpdated();
             handleClose();
-        } catch {
-            setError("실현손익 수정에 실패했습니다.");
+        } catch (err) {
+            const axiosErr = err as {response?: {status?: number; data?: {code?: string; result?: Record<string, string>}}};
+            if (axiosErr.response?.status === 400 && axiosErr.response?.data?.code === 'VALIDATION_4001') {
+                setFormErrors((axiosErr.response.data.result ?? {}) as typeof formErrors);
+                return;
+            }
+            setFormErrors({realizedPnl: "실현손익 수정에 실패했습니다."});
         }
     };
 
@@ -78,23 +85,21 @@ export default function EditManualPnlDialog({open, onClose, item, onUpdated, upd
                             손실
                         </Button>
                         <TextField
-                            label="실현손익"
+                            label="실현손익" required
                             size="small"
                             value={realizedPnl ? Number(realizedPnl).toLocaleString() : ''}
-                            onChange={(e) => setRealizedPnl(e.target.value.replace(/,/g, '').replace(/[^0-9]/g, ''))}
+                            onChange={(e) => { setRealizedPnl(e.target.value.replace(/,/g, '').replace(/[^0-9]/g, '')); if (formErrors.realizedPnl) setFormErrors(prev => ({...prev, realizedPnl: undefined})); }}
+                            error={!!formErrors.realizedPnl} helperText={formErrors.realizedPnl}
                             slotProps={{htmlInput: {inputMode: 'numeric'}}}
                             autoFocus
                             sx={{flex: 1}}
                         />
                     </Box>
-                    {error && (
-                        <Typography variant="caption" color="error">{error}</Typography>
-                    )}
                 </Box>
             </DialogContent>
             <DialogActions>
                 <Button onClick={handleClose}>취소</Button>
-                <Button onClick={handleSubmit} disabled={!realizedPnl}>저장</Button>
+                <Button onClick={handleSubmit}>저장</Button>
             </DialogActions>
         </Dialog>
     );

@@ -393,6 +393,9 @@ MuiOutlinedInput: {
                 outline: `3px solid ${alpha(brand[500], 0.5)}`,
                 borderColor: brand[400],
             },
+            [`&.${outlinedInputClasses.error}`]: {
+                borderColor: (theme.vars || theme).palette.error.main,
+            },
             ...theme.applyStyles('dark', {
                 '&:hover': {
                     borderColor: gray[500],

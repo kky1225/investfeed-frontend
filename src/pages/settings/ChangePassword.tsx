@@ -137,8 +137,14 @@ export default function ChangePassword(props: { disableCustomTheme?: boolean }) 
                 onConfirm: forceLogout,
             });
         } catch (err: unknown) {
-            const axiosErr = err as { response?: { data?: { code?: string } } };
+            const axiosErr = err as { response?: { status?: number; data?: { code?: string; result?: Record<string, string> } } };
             const code = axiosErr.response?.data?.code ?? '';
+            if (axiosErr.response?.status === 400 && code === 'VALIDATION_4001') {
+                const result = axiosErr.response?.data?.result ?? {};
+                if (result.currentPassword) setCurrentPasswordError(result.currentPassword);
+                if (result.newPassword) setNewPasswordError(result.newPassword);
+                return;
+            }
             if (code === 'AUTH_4010') {
                 setDialog({
                     title: '인증 오류',
@@ -200,7 +206,7 @@ export default function ChangePassword(props: { disableCustomTheme?: boolean }) 
                                 fullWidth
                                 variant="outlined"
                                 value={currentPassword}
-                                onChange={(e) => setCurrentPassword(e.target.value)}
+                                onChange={(e) => { setCurrentPassword(e.target.value); if (currentPasswordError) setCurrentPasswordError(''); }}
                             />
                         </FormControl>
                         <FormControl>
@@ -216,7 +222,7 @@ export default function ChangePassword(props: { disableCustomTheme?: boolean }) 
                                 fullWidth
                                 variant="outlined"
                                 value={newPassword}
-                                onChange={(e) => setNewPassword(e.target.value)}
+                                onChange={(e) => { setNewPassword(e.target.value); if (newPasswordError) setNewPasswordError(''); }}
                             />
                         </FormControl>
                         <FormControl>
@@ -232,7 +238,7 @@ export default function ChangePassword(props: { disableCustomTheme?: boolean }) 
                                 fullWidth
                                 variant="outlined"
                                 value={confirmPassword}
-                                onChange={(e) => setConfirmPassword(e.target.value)}
+                                onChange={(e) => { setConfirmPassword(e.target.value); if (confirmPasswordError) setConfirmPasswordError(''); }}
                             />
                         </FormControl>
                         <Button

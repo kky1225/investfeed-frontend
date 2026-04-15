@@ -210,6 +210,7 @@ export default function MenuManagement() {
     const [editForm, setEditForm] = useState<{name: string; url: string; icon: string; parentId: string; visible: boolean}>({
         name: '', url: '', icon: '', parentId: '', visible: true
     });
+    const [editErrors, setEditErrors] = useState<{name?: string}>({});
     const [deleteDialog, setDeleteDialog] = useState<{open: boolean; item: FlatMenuItem | null}>({open: false, item: null});
     const [menuAnchorEl, setMenuAnchorEl] = useState<HTMLElement | null>(null);
     const [menuTargetItem, setMenuTargetItem] = useState<FlatMenuItem | null>(null);
@@ -421,10 +422,13 @@ export default function MenuManagement() {
     };
 
     const handleSaveMenu = async () => {
-        if (!editForm.name) {
-            setSnackbar({open: true, message: '메뉴명을 입력해주세요.', severity: 'error'});
+        const errors: {name?: string} = {};
+        if (!editForm.name.trim()) errors.name = '메뉴명을 입력해주세요.';
+        if (Object.keys(errors).length > 0) {
+            setEditErrors(errors);
             return;
         }
+        setEditErrors({});
         try {
             if (editDialog.mode === 'create') {
                 await createMenu({
@@ -442,8 +446,13 @@ export default function MenuManagement() {
             }
             setEditDialog({open: false, mode: 'create'});
             await reloadMenus();
-        } catch (error: any) {
-            setSnackbar({open: true, message: error?.response?.data?.message || '메뉴 저장에 실패했습니다.', severity: 'error'});
+        } catch (err) {
+            const axiosErr = err as {response?: {status?: number; data?: {code?: string; message?: string; result?: Record<string, string>}}};
+            if (axiosErr.response?.status === 400 && axiosErr.response?.data?.code === 'VALIDATION_4001') {
+                setEditErrors((axiosErr.response.data.result ?? {}) as {name?: string});
+                return;
+            }
+            setSnackbar({open: true, message: axiosErr.response?.data?.message || '메뉴 저장에 실패했습니다.', severity: 'error'});
         }
     };
 
@@ -533,12 +542,13 @@ export default function MenuManagement() {
             )}
 
             {/* 메뉴 생성/수정 다이얼로그 */}
-            <Dialog open={editDialog.open} onClose={() => setEditDialog({open: false, mode: 'create'})} maxWidth="sm" fullWidth>
+            <Dialog open={editDialog.open} onClose={() => { setEditDialog({open: false, mode: 'create'}); setEditErrors({}); }} maxWidth="sm" fullWidth>
                 <DialogTitle>{editDialog.mode === 'create' ? '메뉴 추가' : '메뉴 수정'}</DialogTitle>
                 <DialogContent>
                     <Box sx={{display: 'flex', flexDirection: 'column', gap: 2, mt: 1}}>
                         <TextField label="메뉴명" required fullWidth size="small" value={editForm.name}
-                            onChange={e => setEditForm({...editForm, name: e.target.value})} />
+                            onChange={e => { setEditForm({...editForm, name: e.target.value}); if (editErrors.name) setEditErrors(prev => ({...prev, name: undefined})); }}
+                            error={!!editErrors.name} helperText={editErrors.name}/>
                         <TextField label="URL" fullWidth size="small" placeholder="예: /dashboard" value={editForm.url}
                             onChange={e => setEditForm({...editForm, url: e.target.value})}
                             helperText="하위 메뉴가 있는 대메뉴는 비워두세요" />
@@ -568,7 +578,7 @@ export default function MenuManagement() {
                     </Box>
                 </DialogContent>
                 <DialogActions>
-                    <Button onClick={() => setEditDialog({open: false, mode: 'create'})}>취소</Button>
+                    <Button onClick={() => { setEditDialog({open: false, mode: 'create'}); setEditErrors({}); }}>취소</Button>
                     <Button onClick={handleSaveMenu} variant="contained">{editDialog.mode === 'create' ? '생성' : '수정'}</Button>
                 </DialogActions>
             </Dialog>

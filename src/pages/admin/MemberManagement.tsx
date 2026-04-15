@@ -12,6 +12,7 @@ import DialogContentText from '@mui/material/DialogContentText';
 import DialogActions from '@mui/material/DialogActions';
 import TextField from '@mui/material/TextField';
 import FormControl from '@mui/material/FormControl';
+import FormHelperText from '@mui/material/FormHelperText';
 import InputLabel from '@mui/material/InputLabel';
 import Select from '@mui/material/Select';
 import MenuItem from '@mui/material/MenuItem';
@@ -72,6 +73,7 @@ export default function MemberManagement() {
     const [createDialog, setCreateDialog] = useState(false);
     const [createForm, setCreateForm] = useState<CreateMemberReq>(initialCreateForm);
     const [createLoading, setCreateLoading] = useState(false);
+    const [createErrors, setCreateErrors] = useState<Partial<Record<keyof CreateMemberReq, string>>>({});
     const [roleDialog, setRoleDialog] = useState<{open: boolean; loginId: string; currentRole: string; newRole: string}>({
         open: false, loginId: '', currentRole: '', newRole: ''
     });
@@ -145,11 +147,18 @@ export default function MemberManagement() {
     };
 
     const handleCreateMember = async () => {
-        if (!createForm.loginId || !createForm.email || !createForm.nickname || !createForm.name || !createForm.phone) {
-            setSnackbar({open: true, message: '모든 필드를 입력해주세요.', severity: 'error'});
+        const errors: Partial<Record<keyof CreateMemberReq, string>> = {};
+        if (!createForm.loginId.trim()) errors.loginId = '아이디를 입력해주세요.';
+        if (!createForm.email.trim()) errors.email = '이메일을 입력해주세요.';
+        if (!createForm.nickname.trim()) errors.nickname = '닉네임을 입력해주세요.';
+        if (!createForm.name.trim()) errors.name = '이름을 입력해주세요.';
+        if (!createForm.phone.trim()) errors.phone = '전화번호를 입력해주세요.';
+        if (!createForm.role) errors.role = '역할을 선택해주세요.';
+        if (Object.keys(errors).length > 0) {
+            setCreateErrors(errors);
             return;
         }
-
+        setCreateErrors({});
         setCreateLoading(true);
         try {
             await createMember(createForm);
@@ -157,8 +166,13 @@ export default function MemberManagement() {
             setCreateDialog(false);
             setCreateForm(initialCreateForm);
             await loadMembers();
-        } catch (error: any) {
-            const message = error?.response?.data?.message || '회원 생성에 실패했습니다.';
+        } catch (err) {
+            const axiosErr = err as {response?: {status?: number; data?: {code?: string; message?: string; result?: Record<string, string>}}};
+            if (axiosErr.response?.status === 400 && axiosErr.response?.data?.code === 'VALIDATION_4001') {
+                setCreateErrors((axiosErr.response.data.result ?? {}) as Partial<Record<keyof CreateMemberReq, string>>);
+                return;
+            }
+            const message = axiosErr.response?.data?.message || '회원 생성에 실패했습니다.';
             setSnackbar({open: true, message, severity: 'error'});
         } finally {
             setCreateLoading(false);
@@ -382,45 +396,51 @@ export default function MemberManagement() {
             </Dialog>
 
             {/* 회원 생성 다이얼로그 */}
-            <Dialog open={createDialog} onClose={() => { setCreateDialog(false); setCreateForm(initialCreateForm); }} maxWidth="sm" fullWidth>
+            <Dialog open={createDialog} onClose={() => { setCreateDialog(false); setCreateForm(initialCreateForm); setCreateErrors({}); }} maxWidth="sm" fullWidth>
                 <DialogTitle>회원 추가</DialogTitle>
                 <DialogContent>
                     <Box sx={{display: 'flex', flexDirection: 'column', gap: 2, mt: 1}}>
                         <TextField
                             label="아이디" required fullWidth size="small"
                             value={createForm.loginId}
-                            onChange={(e) => setCreateForm({...createForm, loginId: e.target.value})}
+                            onChange={(e) => { setCreateForm({...createForm, loginId: e.target.value}); if (createErrors.loginId) setCreateErrors(prev => ({...prev, loginId: undefined})); }}
+                            error={!!createErrors.loginId} helperText={createErrors.loginId}
                         />
                         <TextField
                             label="이름" required fullWidth size="small"
                             value={createForm.name}
-                            onChange={(e) => setCreateForm({...createForm, name: e.target.value})}
+                            onChange={(e) => { setCreateForm({...createForm, name: e.target.value}); if (createErrors.name) setCreateErrors(prev => ({...prev, name: undefined})); }}
+                            error={!!createErrors.name} helperText={createErrors.name}
                         />
                         <TextField
                             label="닉네임" required fullWidth size="small"
                             value={createForm.nickname}
-                            onChange={(e) => setCreateForm({...createForm, nickname: e.target.value})}
+                            onChange={(e) => { setCreateForm({...createForm, nickname: e.target.value}); if (createErrors.nickname) setCreateErrors(prev => ({...prev, nickname: undefined})); }}
+                            error={!!createErrors.nickname} helperText={createErrors.nickname}
                         />
                         <TextField
                             label="이메일" required fullWidth size="small" type="email"
                             value={createForm.email}
-                            onChange={(e) => setCreateForm({...createForm, email: e.target.value})}
+                            onChange={(e) => { setCreateForm({...createForm, email: e.target.value}); if (createErrors.email) setCreateErrors(prev => ({...prev, email: undefined})); }}
+                            error={!!createErrors.email} helperText={createErrors.email}
                         />
                         <TextField
                             label="전화번호" required fullWidth size="small"
                             value={createForm.phone}
-                            onChange={(e) => setCreateForm({...createForm, phone: e.target.value})}
+                            onChange={(e) => { setCreateForm({...createForm, phone: e.target.value}); if (createErrors.phone) setCreateErrors(prev => ({...prev, phone: undefined})); }}
+                            error={!!createErrors.phone} helperText={createErrors.phone}
                         />
-                        <FormControl fullWidth size="small">
+                        <FormControl fullWidth size="small" required error={!!createErrors.role}>
                             <InputLabel>역할</InputLabel>
                             <Select
                                 value={createForm.role}
                                 label="역할"
-                                onChange={(e) => setCreateForm({...createForm, role: e.target.value})}
+                                onChange={(e) => { setCreateForm({...createForm, role: e.target.value}); if (createErrors.role) setCreateErrors(prev => ({...prev, role: undefined})); }}
                             >
                                 <MenuItem value="USER">사용자</MenuItem>
                                 <MenuItem value="GUEST">게스트</MenuItem>
                             </Select>
+                            {createErrors.role && <FormHelperText>{createErrors.role}</FormHelperText>}
                         </FormControl>
                         <Alert severity="info" sx={{mt: 1}}>
                             기본 비밀번호가 설정되며, 첫 로그인 시 비밀번호 변경이 필요합니다.

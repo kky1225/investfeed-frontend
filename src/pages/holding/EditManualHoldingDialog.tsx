@@ -22,7 +22,7 @@ export default function EditManualHoldingDialog({open, onClose, holding, onUpdat
     const [quantity, setQuantity] = useState("");
     const [purAmt, setPurAmt] = useState("");
     const [purAmtManual, setPurAmtManual] = useState(false);
-    const [error, setError] = useState("");
+    const [formErrors, setFormErrors] = useState<{purPrice?: string; quantity?: string; purAmt?: string}>({});
 
     useEffect(() => {
         if (holding) {
@@ -40,25 +40,22 @@ export default function EditManualHoldingDialog({open, onClose, holding, onUpdat
     }, [purPrice, quantity, purAmtManual]);
 
     const handleClose = () => {
-        setError("");
+        setFormErrors({});
         setPurAmtManual(false);
         onClose();
     };
 
     const handleSubmit = async () => {
         if (!holding) return;
-        if (!purPrice || Number(purPrice) <= 0) {
-            setError("매수단가를 입력해주세요.");
+        const errors: {purPrice?: string; quantity?: string; purAmt?: string} = {};
+        if (!purPrice || Number(purPrice) <= 0) errors.purPrice = "매수단가를 입력해주세요.";
+        if (!quantity || Number(quantity) <= 0) errors.quantity = "수량을 입력해주세요.";
+        if (!purAmt || Number(purAmt) <= 0) errors.purAmt = "투자원금을 입력해주세요.";
+        if (Object.keys(errors).length > 0) {
+            setFormErrors(errors);
             return;
         }
-        if (!quantity || Number(quantity) <= 0) {
-            setError("수량을 입력해주세요.");
-            return;
-        }
-        if (!purAmt || Number(purAmt) <= 0) {
-            setError("투자원금을 입력해주세요.");
-            return;
-        }
+        setFormErrors({});
         try {
             await updateManualHolding(holding.id, {
                 purPrice: Number(purPrice),
@@ -67,8 +64,13 @@ export default function EditManualHoldingDialog({open, onClose, holding, onUpdat
             });
             onUpdated();
             handleClose();
-        } catch {
-            setError("수정에 실패했습니다.");
+        } catch (err) {
+            const axiosErr = err as {response?: {status?: number; data?: {code?: string; result?: Record<string, string>}}};
+            if (axiosErr.response?.status === 400 && axiosErr.response?.data?.code === 'VALIDATION_4001') {
+                setFormErrors((axiosErr.response.data.result ?? {}) as typeof formErrors);
+                return;
+            }
+            setFormErrors({purAmt: "수정에 실패했습니다."});
         }
     };
 
@@ -81,39 +83,40 @@ export default function EditManualHoldingDialog({open, onClose, holding, onUpdat
                         {holding?.stkNm}
                     </Typography>
                     <TextField
-                        autoFocus
+                        autoFocus required
                         label="매수단가"
                         size="small"
                         value={purPrice ? Number(purPrice).toLocaleString() : ''}
-                        onChange={e => setPurPrice(e.target.value.replace(/,/g, '').replace(/[^0-9]/g, ''))}
+                        onChange={e => { setPurPrice(e.target.value.replace(/,/g, '').replace(/[^0-9]/g, '')); if (formErrors.purPrice) setFormErrors(prev => ({...prev, purPrice: undefined})); }}
+                        error={!!formErrors.purPrice} helperText={formErrors.purPrice}
                         slotProps={{htmlInput: {inputMode: 'numeric'}}}
                     />
                     <TextField
-                        label="수량"
+                        label="수량" required
                         size="small"
                         value={quantity ? Number(quantity).toLocaleString() : ''}
-                        onChange={e => setQuantity(e.target.value.replace(/,/g, '').replace(/[^0-9]/g, ''))}
+                        onChange={e => { setQuantity(e.target.value.replace(/,/g, '').replace(/[^0-9]/g, '')); if (formErrors.quantity) setFormErrors(prev => ({...prev, quantity: undefined})); }}
+                        error={!!formErrors.quantity} helperText={formErrors.quantity}
                         slotProps={{htmlInput: {inputMode: 'numeric'}}}
                     />
                     <TextField
-                        label="투자원금"
+                        label="투자원금" required
                         size="small"
                         value={purAmt ? Number(purAmt).toLocaleString() : ''}
                         onChange={e => {
                             setPurAmt(e.target.value.replace(/,/g, '').replace(/[^0-9]/g, ''));
                             setPurAmtManual(true);
+                            if (formErrors.purAmt) setFormErrors(prev => ({...prev, purAmt: undefined}));
                         }}
-                        helperText="증권사 앱에 표시된 실제 투자원금을 직접 입력해주세요."
+                        error={!!formErrors.purAmt}
+                        helperText={formErrors.purAmt ?? "증권사 앱에 표시된 실제 투자원금을 직접 입력해주세요."}
                         slotProps={{htmlInput: {inputMode: 'numeric'}}}
                     />
-                    {error && (
-                        <Typography variant="caption" color="error">{error}</Typography>
-                    )}
                 </Box>
             </DialogContent>
             <DialogActions>
                 <Button onClick={handleClose}>취소</Button>
-                <Button onClick={handleSubmit} disabled={!purPrice || !quantity || !purAmt}>저장</Button>
+                <Button onClick={handleSubmit}>저장</Button>
             </DialogActions>
         </Dialog>
     );

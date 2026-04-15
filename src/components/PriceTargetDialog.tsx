@@ -27,7 +27,7 @@ interface PriceTargetDialogProps {
 
 export default function PriceTargetDialog({open, onClose, assetType, assetCode, assetName, currentPrice}: PriceTargetDialogProps) {
     const [targetPrice, setTargetPrice] = useState("");
-    const [error, setError] = useState("");
+    const [targetPriceError, setTargetPriceError] = useState("");
     const [loading, setLoading] = useState(false);
     const [targets, setTargets] = useState<PriceTarget[]>([]);
 
@@ -46,7 +46,7 @@ export default function PriceTargetDialog({open, onClose, assetType, assetCode, 
 
     const handleClose = () => {
         setTargetPrice("");
-        setError("");
+        setTargetPriceError("");
         onClose();
     };
 
@@ -55,9 +55,10 @@ export default function PriceTargetDialog({open, onClose, assetType, assetCode, 
         const target = Number(targetPrice);
 
         if (!targetPrice || target <= 0) {
-            setError("목표가를 입력해주세요.");
+            setTargetPriceError("목표가를 입력해주세요.");
             return;
         }
+        setTargetPriceError("");
 
         const direction = target >= cur ? 'ABOVE' as const : 'BELOW' as const;
 
@@ -72,9 +73,15 @@ export default function PriceTargetDialog({open, onClose, assetType, assetCode, 
             });
             setTargets(prev => [res.result, ...prev]);
             setTargetPrice("");
-            setError("");
-        } catch {
-            setError("목표가 알림 등록에 실패했습니다.");
+            setTargetPriceError("");
+        } catch (err) {
+            const axiosErr = err as {response?: {status?: number; data?: {code?: string; result?: Record<string, string>}}};
+            if (axiosErr.response?.status === 400 && axiosErr.response?.data?.code === 'VALIDATION_4001') {
+                const result = axiosErr.response.data.result ?? {};
+                setTargetPriceError(result.targetPrice ?? "목표가를 확인해주세요.");
+                return;
+            }
+            setTargetPriceError("목표가 알림 등록에 실패했습니다.");
         } finally {
             setLoading(false);
         }
@@ -101,17 +108,18 @@ export default function PriceTargetDialog({open, onClose, assetType, assetCode, 
                         현재가: {Number(currentPrice.replace(/,/g, '')).toLocaleString()}원
                     </Typography>
                     <TextField
-                        autoFocus
+                        autoFocus required
                         label="목표가 (원)"
                         size="small"
                         value={targetPrice ? Number(targetPrice).toLocaleString() : ''}
                         onChange={e => {
                             const raw = e.target.value.replace(/,/g, '').replace(/[^0-9]/g, '');
                             setTargetPrice(raw);
-                            setError("");
+                            if (targetPriceError) setTargetPriceError("");
                         }}
                         slotProps={{htmlInput: {inputMode: 'numeric'}}}
-                        helperText={(() => {
+                        error={!!targetPriceError}
+                        helperText={targetPriceError || (() => {
                             const cur = Number(currentPrice.replace(/,/g, ''));
                             const target = Number(targetPrice);
                             if (!targetPrice || target <= 0 || cur <= 0) return ' ';
@@ -122,9 +130,6 @@ export default function PriceTargetDialog({open, onClose, assetType, assetCode, 
                             return <span>현재가 대비 <span style={{color: clr}}>{sign}{diff.toFixed(2)}%</span> 도달 시 알림</span>;
                         })()}
                     />
-                    {error && (
-                        <Typography variant="caption" color="error">{error}</Typography>
-                    )}
 
                     {targets.length > 0 && (
                         <>
@@ -155,7 +160,7 @@ export default function PriceTargetDialog({open, onClose, assetType, assetCode, 
             </DialogContent>
             <DialogActions>
                 <Button onClick={handleClose}>닫기</Button>
-                <Button onClick={handleSubmit} disabled={!targetPrice || loading}>등록</Button>
+                <Button onClick={handleSubmit} disabled={loading}>등록</Button>
             </DialogActions>
         </Dialog>
     );

@@ -11,6 +11,7 @@ import DialogContentText from '@mui/material/DialogContentText';
 import DialogActions from '@mui/material/DialogActions';
 import TextField from '@mui/material/TextField';
 import FormControl from '@mui/material/FormControl';
+import FormHelperText from '@mui/material/FormHelperText';
 import InputLabel from '@mui/material/InputLabel';
 import Select from '@mui/material/Select';
 import MenuItem from '@mui/material/MenuItem';
@@ -49,6 +50,7 @@ export default function ApiKeyManagement() {
     const [formDialog, setFormDialog] = useState(false);
     const [form, setForm] = useState<ApiKeyReq>(initialForm);
     const [formLoading, setFormLoading] = useState(false);
+    const [formErrors, setFormErrors] = useState<{brokerId?: string; appKey?: string; secretKey?: string}>({});
     const [deleteDialog, setDeleteDialog] = useState<{open: boolean; id: number; brokerName: string}>({
         open: false, id: 0, brokerName: ''
     });
@@ -89,15 +91,15 @@ export default function ApiKeyManagement() {
     };
 
     const handleSubmit = async () => {
-        if (!form.brokerId) {
-            setSnackbar({open: true, message: '제공자를 선택해주세요.', severity: 'error'});
+        const errors: {brokerId?: string; appKey?: string; secretKey?: string} = {};
+        if (!form.brokerId) errors.brokerId = '제공자를 선택해주세요.';
+        if (!form.appKey.trim()) errors.appKey = 'App Key를 입력해주세요.';
+        if (!form.secretKey.trim()) errors.secretKey = 'Secret Key를 입력해주세요.';
+        if (Object.keys(errors).length > 0) {
+            setFormErrors(errors);
             return;
         }
-        if (!form.appKey || !form.secretKey) {
-            setSnackbar({open: true, message: '모든 필드를 입력해주세요.', severity: 'error'});
-            return;
-        }
-
+        setFormErrors({});
         setFormLoading(true);
         try {
             await createApiKey(form);
@@ -105,8 +107,13 @@ export default function ApiKeyManagement() {
             setFormDialog(false);
             setForm(initialForm);
             await loadApiKeys();
-        } catch (error: any) {
-            const message = error?.response?.data?.message || 'API Key 등록에 실패했습니다.';
+        } catch (err) {
+            const axiosErr = err as {response?: {status?: number; data?: {code?: string; message?: string; result?: Record<string, string>}}};
+            if (axiosErr.response?.status === 400 && axiosErr.response?.data?.code === 'VALIDATION_4001') {
+                setFormErrors((axiosErr.response.data.result ?? {}) as typeof formErrors);
+                return;
+            }
+            const message = axiosErr.response?.data?.message || 'API Key 등록에 실패했습니다.';
             setSnackbar({open: true, message, severity: 'error'});
         } finally {
             setFormLoading(false);
@@ -177,37 +184,40 @@ export default function ApiKeyManagement() {
             )}
 
             {/* 등록 다이얼로그 */}
-            <Dialog open={formDialog} onClose={() => setFormDialog(false)} maxWidth="sm" fullWidth disableScrollLock>
+            <Dialog open={formDialog} onClose={() => { setFormDialog(false); setFormErrors({}); }} maxWidth="sm" fullWidth disableScrollLock>
                 <DialogTitle>API Key 등록</DialogTitle>
                 <DialogContent>
                     <Box sx={{display: 'flex', flexDirection: 'column', gap: 2, mt: 1}}>
-                        <FormControl fullWidth size="small">
+                        <FormControl fullWidth size="small" required error={!!formErrors.brokerId}>
                             <InputLabel>제공자</InputLabel>
                             <Select
                                 value={form.brokerId}
                                 label="제공자"
-                                onChange={(e) => setForm({...form, brokerId: Number(e.target.value)})}
+                                onChange={(e) => { setForm({...form, brokerId: Number(e.target.value)}); if (formErrors.brokerId) setFormErrors(prev => ({...prev, brokerId: undefined})); }}
                             >
                                 {apiBrokers.map(b => (
                                     <MenuItem key={b.id} value={b.id}>{b.name}</MenuItem>
                                 ))}
                             </Select>
+                            {formErrors.brokerId && <FormHelperText>{formErrors.brokerId}</FormHelperText>}
                         </FormControl>
                         <TextField
                             label="App Key" required fullWidth size="small"
                             value={form.appKey}
-                            onChange={(e) => setForm({...form, appKey: e.target.value})}
+                            onChange={(e) => { setForm({...form, appKey: e.target.value}); if (formErrors.appKey) setFormErrors(prev => ({...prev, appKey: undefined})); }}
+                            error={!!formErrors.appKey} helperText={formErrors.appKey}
                         />
                         <TextField
                             label="Secret Key" required fullWidth size="small"
                             type="password"
                             value={form.secretKey}
-                            onChange={(e) => setForm({...form, secretKey: e.target.value})}
+                            onChange={(e) => { setForm({...form, secretKey: e.target.value}); if (formErrors.secretKey) setFormErrors(prev => ({...prev, secretKey: undefined})); }}
+                            error={!!formErrors.secretKey} helperText={formErrors.secretKey}
                         />
                     </Box>
                 </DialogContent>
                 <DialogActions>
-                    <Button onClick={() => setFormDialog(false)}>취소</Button>
+                    <Button onClick={() => { setFormDialog(false); setFormErrors({}); }}>취소</Button>
                     <Button onClick={handleSubmit} variant="contained"
                         sx={{bgcolor: 'text.primary', '&:hover': {bgcolor: 'text.secondary'}}}
                         disabled={formLoading}>

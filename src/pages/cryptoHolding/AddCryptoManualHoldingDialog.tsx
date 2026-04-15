@@ -35,7 +35,7 @@ export default function AddCryptoManualHoldingDialog({open, onClose, brokerId, o
     const [quantity, setQuantity] = useState("");
     const [purAmt, setPurAmt] = useState("");
     const [purAmtManual, setPurAmtManual] = useState(false);
-    const [error, setError] = useState("");
+    const [formErrors, setFormErrors] = useState<{stkCd?: string; purPrice?: string; quantity?: string; purAmt?: string}>({});
     const searchTimerRef = useRef<ReturnType<typeof setTimeout>>();
 
     useEffect(() => {
@@ -52,13 +52,13 @@ export default function AddCryptoManualHoldingDialog({open, onClose, brokerId, o
         setQuantity("");
         setPurAmt("");
         setPurAmtManual(false);
-        setError("");
+        setFormErrors({});
         onClose();
     };
 
     const handleSearchKeywordChange = (keyword: string) => {
         setSearchKeyword(keyword);
-        setError("");
+        if (formErrors.stkCd) setFormErrors(prev => ({...prev, stkCd: undefined}));
         if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
         if (!keyword.trim()) {
             setSearchResults([]);
@@ -78,35 +78,34 @@ export default function AddCryptoManualHoldingDialog({open, onClose, brokerId, o
     };
 
     const handleSubmit = async () => {
-        if (!selectedCrypto) {
-            setError("코인을 선택해주세요.");
+        const errors: {stkCd?: string; purPrice?: string; quantity?: string; purAmt?: string} = {};
+        if (!selectedCrypto) errors.stkCd = "코인을 선택해주세요.";
+        if (!purPrice || Number(purPrice) <= 0) errors.purPrice = "매수단가를 입력해주세요.";
+        if (!quantity || Number(quantity) <= 0) errors.quantity = "수량을 입력해주세요.";
+        if (!purAmt || Number(purAmt) <= 0) errors.purAmt = "투자원금을 입력해주세요.";
+        if (Object.keys(errors).length > 0) {
+            setFormErrors(errors);
             return;
         }
-        if (!purPrice || Number(purPrice) <= 0) {
-            setError("매수단가를 입력해주세요.");
-            return;
-        }
-        if (!quantity || Number(quantity) <= 0) {
-            setError("수량을 입력해주세요.");
-            return;
-        }
-        if (!purAmt || Number(purAmt) <= 0) {
-            setError("투자원금을 입력해주세요.");
-            return;
-        }
+        setFormErrors({});
         try {
             await createCryptoManualHolding({
                 brokerId,
-                stkCd: selectedCrypto.market,
-                stkNm: selectedCrypto.koreanName,
+                stkCd: selectedCrypto!.market,
+                stkNm: selectedCrypto!.koreanName,
                 purPrice: Number(purPrice),
                 quantity: Number(quantity),
                 purAmt: Number(purAmt),
             });
             onCreated();
             handleClose();
-        } catch {
-            setError("매수 등록에 실패했습니다.");
+        } catch (err) {
+            const axiosErr = err as {response?: {status?: number; data?: {code?: string; result?: Record<string, string>}}};
+            if (axiosErr.response?.status === 400 && axiosErr.response?.data?.code === 'VALIDATION_4001') {
+                setFormErrors((axiosErr.response.data.result ?? {}) as typeof formErrors);
+                return;
+            }
+            setFormErrors({purAmt: "매수 등록에 실패했습니다."});
         }
     };
 
@@ -126,7 +125,7 @@ export default function AddCryptoManualHoldingDialog({open, onClose, brokerId, o
                         onInputChange={(_, value) => handleSearchKeywordChange(value)}
                         onChange={(_, value) => {
                             setSelectedCrypto(value);
-                            setError("");
+                            if (formErrors.stkCd) setFormErrors(prev => ({...prev, stkCd: undefined}));
                         }}
                         noOptionsText={searchKeyword ? "검색 결과 없음" : "코인명을 입력하세요"}
                         forcePopupIcon={false}
@@ -149,9 +148,10 @@ export default function AddCryptoManualHoldingDialog({open, onClose, brokerId, o
                         renderInput={(params) => (
                             <TextField
                                 {...params}
-                                autoFocus
+                                autoFocus required
                                 label="코인 검색"
                                 placeholder="코인명을 입력하세요"
+                                error={!!formErrors.stkCd} helperText={formErrors.stkCd}
                                 slotProps={{
                                     input: {
                                         ...params.InputProps,
@@ -167,39 +167,40 @@ export default function AddCryptoManualHoldingDialog({open, onClose, brokerId, o
                         )}
                     />
                     <TextField
-                        label="매수단가"
+                        label="매수단가" required
                         size="small"
                         value={purPrice ? Number(purPrice).toLocaleString() : ''}
-                        onChange={e => setPurPrice(e.target.value.replace(/,/g, '').replace(/[^0-9]/g, ''))}
+                        onChange={e => { setPurPrice(e.target.value.replace(/,/g, '').replace(/[^0-9]/g, '')); if (formErrors.purPrice) setFormErrors(prev => ({...prev, purPrice: undefined})); }}
+                        error={!!formErrors.purPrice} helperText={formErrors.purPrice}
                         slotProps={{htmlInput: {inputMode: 'numeric'}}}
                     />
                     <TextField
-                        label="수량"
+                        label="수량" required
                         type="number"
                         size="small"
                         value={quantity}
-                        onChange={e => setQuantity(e.target.value)}
+                        onChange={e => { setQuantity(e.target.value); if (formErrors.quantity) setFormErrors(prev => ({...prev, quantity: undefined})); }}
+                        error={!!formErrors.quantity} helperText={formErrors.quantity}
                         slotProps={{htmlInput: {min: 0, step: "any"}}}
                     />
                     <TextField
-                        label="투자원금"
+                        label="투자원금" required
                         size="small"
                         value={purAmt ? Number(purAmt).toLocaleString() : ''}
                         onChange={e => {
                             setPurAmt(e.target.value.replace(/,/g, '').replace(/[^0-9]/g, ''));
                             setPurAmtManual(true);
+                            if (formErrors.purAmt) setFormErrors(prev => ({...prev, purAmt: undefined}));
                         }}
-                        helperText="거래소 앱에 표시된 실제 투자원금을 직접 입력해주세요. 미입력 시 매수단가 x 수량으로 자동 계산됩니다."
+                        error={!!formErrors.purAmt}
+                        helperText={formErrors.purAmt ?? "거래소 앱에 표시된 실제 투자원금을 직접 입력해주세요. 미입력 시 매수단가 x 수량으로 자동 계산됩니다."}
                         slotProps={{htmlInput: {inputMode: 'numeric'}}}
                     />
-                    {error && (
-                        <Typography variant="caption" color="error">{error}</Typography>
-                    )}
                 </Box>
             </DialogContent>
             <DialogActions>
                 <Button onClick={handleClose}>취소</Button>
-                <Button onClick={handleSubmit} disabled={!selectedCrypto || !purPrice || !quantity || !purAmt}>등록</Button>
+                <Button onClick={handleSubmit}>등록</Button>
             </DialogActions>
         </Dialog>
     );

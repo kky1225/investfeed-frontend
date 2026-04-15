@@ -167,8 +167,16 @@ export default function Profile(props: { disableCustomTheme?: boolean }) {
                 onConfirm: () => navigate('/'),
             });
         } catch (err: unknown) {
-            const axiosErr = err as { response?: { data?: { code?: string } } };
+            const axiosErr = err as { response?: { status?: number; data?: { code?: string; result?: Record<string, string> } } };
             const code = axiosErr.response?.data?.code ?? '';
+            if (axiosErr.response?.status === 400 && code === 'VALIDATION_4001') {
+                const result = axiosErr.response?.data?.result ?? {};
+                if (result.nickname) setNicknameError(result.nickname);
+                if (result.email) setEmailError(result.email);
+                if (result.name) setNameError(result.name);
+                if (result.phone) setPhoneError(result.phone);
+                return;
+            }
             if (code === 'AUTH_4013') {
                 setEmailError(ERROR_MESSAGES[code]);
             } else if (code === 'AUTH_4014') {
@@ -241,7 +249,7 @@ export default function Profile(props: { disableCustomTheme?: boolean }) {
                                 fullWidth
                                 variant="outlined"
                                 value={name}
-                                onChange={(e) => setName(e.target.value)}
+                                onChange={(e) => { setName(e.target.value); if (nameError) setNameError(''); }}
                             />
                         </FormControl>
                         <FormControl>
@@ -255,7 +263,7 @@ export default function Profile(props: { disableCustomTheme?: boolean }) {
                                 fullWidth
                                 variant="outlined"
                                 value={nickname}
-                                onChange={(e) => setNickname(e.target.value)}
+                                onChange={(e) => { setNickname(e.target.value); if (nicknameError) setNicknameError(''); }}
                             />
                         </FormControl>
                         <FormControl>
@@ -270,7 +278,7 @@ export default function Profile(props: { disableCustomTheme?: boolean }) {
                                 fullWidth
                                 variant="outlined"
                                 value={email}
-                                onChange={(e) => setEmail(e.target.value)}
+                                onChange={(e) => { setEmail(e.target.value); if (emailError) setEmailError(''); }}
                             />
                         </FormControl>
                         <FormControl>
@@ -284,7 +292,7 @@ export default function Profile(props: { disableCustomTheme?: boolean }) {
                                 fullWidth
                                 variant="outlined"
                                 value={phone}
-                                onChange={(e) => setPhone(e.target.value)}
+                                onChange={(e) => { setPhone(e.target.value); if (phoneError) setPhoneError(''); }}
                             />
                         </FormControl>
                         <Button

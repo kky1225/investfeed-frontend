@@ -213,6 +213,8 @@ const Interest = () => {
     const [searchLoading, setSearchLoading] = useState(false);
     const [selectedStock, setSelectedStock] = useState<StockSearchItem | null>(null);
     const [addItemError, setAddItemError] = useState("");
+    const [newGroupError, setNewGroupError] = useState("");
+    const [editGroupError, setEditGroupError] = useState("");
     const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
     const loadingGroupRef = useRef<number | null>(null);
@@ -298,27 +300,50 @@ const Interest = () => {
     };
 
     const handleAddGroup = async () => {
-        if (!newGroupName.trim()) return;
-        const res = await createInterestGroup({groupNm: newGroupName.trim()});
-        const created: InterestGroup = res.result;
-        setGroups(prev => [...prev, created]);
-        setAddGroupOpen(false);
-        setNewGroupName("");
-        setSelectedGroup(created);
-        setItems([]);
+        if (!newGroupName.trim()) {
+            setNewGroupError("그룹명을 입력해주세요.");
+            return;
+        }
+        setNewGroupError("");
+        try {
+            const res = await createInterestGroup({groupNm: newGroupName.trim()});
+            const created: InterestGroup = res.result;
+            setGroups(prev => [...prev, created]);
+            setAddGroupOpen(false);
+            setNewGroupName("");
+            setSelectedGroup(created);
+            setItems([]);
+        } catch (err) {
+            const axiosErr = err as {response?: {status?: number; data?: {code?: string; result?: Record<string, string>}}};
+            if (axiosErr.response?.status === 400 && axiosErr.response?.data?.code === 'VALIDATION_4001') {
+                setNewGroupError(axiosErr.response.data.result?.groupNm ?? "그룹명을 확인해주세요.");
+            }
+        }
     };
 
     const handleEditGroup = async () => {
-        if (!editGroupName.trim() || !editGroupId) return;
-        await updateInterestGroup(editGroupId, {groupNm: editGroupName.trim()});
-        setGroups(prev =>
-            prev.map(g => g.id === editGroupId ? {...g, groupNm: editGroupName.trim()} : g)
-        );
-        if (selectedGroup?.id === editGroupId) {
-            setSelectedGroup(prev => prev ? {...prev, groupNm: editGroupName.trim()} : prev);
+        if (!editGroupName.trim()) {
+            setEditGroupError("그룹명을 입력해주세요.");
+            return;
         }
-        setEditGroupOpen(false);
-        setEditGroupId(null);
+        if (!editGroupId) return;
+        setEditGroupError("");
+        try {
+            await updateInterestGroup(editGroupId, {groupNm: editGroupName.trim()});
+            setGroups(prev =>
+                prev.map(g => g.id === editGroupId ? {...g, groupNm: editGroupName.trim()} : g)
+            );
+            if (selectedGroup?.id === editGroupId) {
+                setSelectedGroup(prev => prev ? {...prev, groupNm: editGroupName.trim()} : prev);
+            }
+            setEditGroupOpen(false);
+            setEditGroupId(null);
+        } catch (err) {
+            const axiosErr = err as {response?: {status?: number; data?: {code?: string; result?: Record<string, string>}}};
+            if (axiosErr.response?.status === 400 && axiosErr.response?.data?.code === 'VALIDATION_4001') {
+                setEditGroupError(axiosErr.response.data.result?.groupNm ?? "그룹명을 확인해주세요.");
+            }
+        }
     };
 
     const handleDeleteGroup = async () => {
@@ -696,40 +721,42 @@ const Interest = () => {
             </Menu>
 
             {/* 그룹 추가 다이얼로그 */}
-            <Dialog open={addGroupOpen} onClose={() => setAddGroupOpen(false)} maxWidth="xs" fullWidth>
+            <Dialog open={addGroupOpen} onClose={() => { setAddGroupOpen(false); setNewGroupError(""); }} maxWidth="xs" fullWidth>
                 <DialogTitle>그룹 추가</DialogTitle>
                 <DialogContent>
                     <TextField
-                        autoFocus fullWidth label="그룹명"
+                        autoFocus fullWidth required size="small" label="그룹명"
                         value={newGroupName}
-                        onChange={e => setNewGroupName(e.target.value)}
+                        onChange={e => { setNewGroupName(e.target.value); if (newGroupError) setNewGroupError(""); }}
                         onKeyDown={e => e.key === "Enter" && !e.nativeEvent.isComposing && handleAddGroup()}
+                        error={!!newGroupError} helperText={newGroupError}
                         sx={{mt: 1}}
                         slotProps={{htmlInput: {maxLength: 20}}}
                     />
                 </DialogContent>
                 <DialogActions>
-                    <Button onClick={() => setAddGroupOpen(false)}>취소</Button>
-                    <Button onClick={handleAddGroup} disabled={!newGroupName.trim()}>추가</Button>
+                    <Button onClick={() => { setAddGroupOpen(false); setNewGroupError(""); }}>취소</Button>
+                    <Button onClick={handleAddGroup}>추가</Button>
                 </DialogActions>
             </Dialog>
 
             {/* 그룹 수정 다이얼로그 */}
-            <Dialog open={editGroupOpen} onClose={() => setEditGroupOpen(false)} maxWidth="xs" fullWidth>
+            <Dialog open={editGroupOpen} onClose={() => { setEditGroupOpen(false); setEditGroupError(""); }} maxWidth="xs" fullWidth>
                 <DialogTitle>그룹 이름 변경</DialogTitle>
                 <DialogContent>
                     <TextField
-                        autoFocus fullWidth label="그룹명"
+                        autoFocus fullWidth required size="small" label="그룹명"
                         value={editGroupName}
-                        onChange={e => setEditGroupName(e.target.value)}
+                        onChange={e => { setEditGroupName(e.target.value); if (editGroupError) setEditGroupError(""); }}
                         onKeyDown={e => e.key === "Enter" && !e.nativeEvent.isComposing && handleEditGroup()}
+                        error={!!editGroupError} helperText={editGroupError}
                         sx={{mt: 1}}
                         slotProps={{htmlInput: {maxLength: 20}}}
                     />
                 </DialogContent>
                 <DialogActions>
-                    <Button onClick={() => setEditGroupOpen(false)}>취소</Button>
-                    <Button onClick={handleEditGroup} disabled={!editGroupName.trim()}>저장</Button>
+                    <Button onClick={() => { setEditGroupOpen(false); setEditGroupError(""); }}>취소</Button>
+                    <Button onClick={handleEditGroup}>저장</Button>
                 </DialogActions>
             </Dialog>
 
@@ -755,6 +782,7 @@ const Interest = () => {
                 <DialogContent>
                     <Box sx={{mt: 1}}>
                         <Autocomplete
+                            size="small"
                             options={searchResults}
                             getOptionLabel={(option) => `${option.stkNm} (${option.stkCd})`}
                             filterOptions={(x) => x}

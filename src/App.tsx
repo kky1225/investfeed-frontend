@@ -36,6 +36,7 @@ import NotificationList from "./pages/notification/NotificationList.tsx";
 import MemberManagement from "./pages/admin/MemberManagement.tsx";
 import MenuManagement from "./pages/admin/MenuManagement.tsx";
 import BrokerManagement from "./pages/admin/BrokerManagement.tsx";
+import CalendarManagement from "./pages/admin/CalendarManagement.tsx";
 import Profile from "./pages/settings/Profile.tsx";
 import ProtectedRoute from "./components/ProtectedRoute.tsx";
 import ChangePassword from "./pages/settings/ChangePassword.tsx";
@@ -45,6 +46,7 @@ import CryptoHoldingPage from "./pages/cryptoHolding/CryptoHoldingPage.tsx";
 import AssetDashboard from "./pages/assetDashboard/AssetDashboard.tsx";
 import MultiViewPage from "./pages/multiView/MultiViewPage.tsx";
 import RebalancingPage from "./pages/rebalancing/RebalancingPage.tsx";
+import EconomicCalendarPage from "./pages/calendar/EconomicCalendarPage.tsx";
 import GoalPage from "./pages/goal/GoalPage.tsx";
 import NotificationSettingPage from "./pages/notificationSetting/NotificationSettingPage.tsx";
 
@@ -167,6 +169,7 @@ function App() {
                         <Route path="/crypto/interest/list/:groupId?" Component={CryptoInterest} />
                         <Route path="/multi-view" Component={MultiViewPage} />
                         <Route path="/rebalancing" Component={RebalancingPage} />
+                        <Route path="/calendar" Component={EconomicCalendarPage} />
                         <Route path="/goal" Component={GoalPage} />
                         <Route path="/notification/list" Component={NotificationList} />
                         <Route path="/notification/settings" Component={NotificationSettingPage} />
@@ -174,6 +177,7 @@ function App() {
                         <Route path="/admin/members" Component={MemberManagement} />
                         <Route path="/admin/menus" Component={MenuManagement} />
                         <Route path="/admin/brokers" Component={BrokerManagement} />
+                        <Route path="/admin/calendar" Component={CalendarManagement} />
                     </Route>
                 </Route>
             </Routes>
