@@ -44,6 +44,12 @@ const settingGroups: SettingGroup[] = [
             {key: 'rebalancingEnabled', label: '비중 초과 알림', description: '포트폴리오 비중이 설정한 목표를 벗어났을 때'},
         ],
     },
+    {
+        title: 'API Key 알림',
+        items: [
+            {key: 'apiKeyEnabled', label: '유효기간 만료 알림', description: 'API Key 만료 30일 전, 7일 전, 당일에 알림'},
+        ],
+    },
 ];
 
 export default function NotificationSettingPage() {

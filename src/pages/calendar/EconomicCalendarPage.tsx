@@ -39,6 +39,7 @@ export default function EconomicCalendarPage() {
     const [events, setEvents] = useState<CalendarEvent[]>([]);
     const [indicators, setIndicators] = useState<EconomicIndicator[]>([]);
     const [loading, setLoading] = useState(true);
+    const [lastUpdated, setLastUpdated] = useState<string | null>(null);
     const [selectedIndicator, setSelectedIndicator] = useState<EconomicIndicator | null>(null);
     const [history, setHistory] = useState<IndicatorHistoryRes | null>(null);
     const [chartLoading, setChartLoading] = useState(false);
@@ -55,6 +56,7 @@ export default function EconomicCalendarPage() {
             ]);
             setEvents(eventsRes.result?.events ?? []);
             setIndicators(indicatorsRes.result?.indicators ?? []);
+            setLastUpdated(eventsRes.result?.lastUpdated ?? null);
         } catch (err) {
             console.error(err);
         } finally {
@@ -114,6 +116,14 @@ export default function EconomicCalendarPage() {
             <Typography component="h2" variant="h6" sx={{mb: 2}}>
                 경제 캘린더
             </Typography>
+
+            {lastUpdated && !loading && (
+                <Box sx={{display: 'flex', justifyContent: 'flex-end', mb: 1}}>
+                    <Typography variant="caption" color="text.secondary">
+                        {new Date(lastUpdated).toLocaleTimeString('ko-KR', {hour: '2-digit', minute: '2-digit'})} 기준
+                    </Typography>
+                </Box>
+            )}
 
             {/* 주요 지표 카드 */}
             {(['KR', 'US'] as const).map((country) => {

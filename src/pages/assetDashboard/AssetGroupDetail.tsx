@@ -54,7 +54,7 @@ export default function AssetGroupDetail({group, summary}: AssetGroupDetailProps
                 const evltPl = evltAmt - item.purAmt;
                 const prftRt = item.purAmt > 0 ? (evltPl / item.purAmt * 100) : 0;
 
-                return {...item, curPrc, evltAmt, evltPl, prftRt: prftRt > 0 ? `+${prftRt.toFixed(2)}` : prftRt.toFixed(2)};
+                return {...item, curPrc, evltAmt, evltPl, prftRt: prftRt.toFixed(2)};
             });
 
             // 비중 재계산

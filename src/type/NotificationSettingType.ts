@@ -7,6 +7,7 @@ export interface NotificationSettingReq {
     lowerLimitEnabled: boolean;
     goalEnabled: boolean;
     rebalancingEnabled: boolean;
+    apiKeyEnabled: boolean;
 }
 
 export interface NotificationSettingRes {
@@ -18,4 +19,5 @@ export interface NotificationSettingRes {
     lowerLimitEnabled: boolean;
     goalEnabled: boolean;
     rebalancingEnabled: boolean;
+    apiKeyEnabled: boolean;
 }

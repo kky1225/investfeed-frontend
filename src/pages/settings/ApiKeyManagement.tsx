@@ -37,7 +37,26 @@ function formatDateTime(dateStr: string) {
     return `${date.getFullYear()}.${String(date.getMonth() + 1).padStart(2, '0')}.${String(date.getDate()).padStart(2, '0')} ${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
 }
 
-const initialForm: ApiKeyReq = {brokerId: 0, appKey: '', secretKey: ''};
+function defaultExpiresAt(): string {
+    const d = new Date();
+    d.setFullYear(d.getFullYear() + 1);
+    return d.toISOString().slice(0, 10);
+}
+
+function formatDate(dateStr: string) {
+    const date = new Date(dateStr);
+    return `${date.getFullYear()}.${String(date.getMonth() + 1).padStart(2, '0')}.${String(date.getDate()).padStart(2, '0')}`;
+}
+
+function getDaysLeft(dateStr: string): number {
+    const now = new Date();
+    now.setHours(0, 0, 0, 0);
+    const expires = new Date(dateStr);
+    expires.setHours(0, 0, 0, 0);
+    return Math.ceil((expires.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+}
+
+const initialForm: ApiKeyReq = {brokerId: 0, appKey: '', secretKey: '', expiresAt: defaultExpiresAt()};
 
 export default function ApiKeyManagement() {
     const navigate = useNavigate();
@@ -86,15 +105,16 @@ export default function ApiKeyManagement() {
 
     const openFormDialog = () => {
         const defaultBrokerId = apiBrokers.length > 0 ? apiBrokers[0].id : 0;
-        setForm({...initialForm, brokerId: defaultBrokerId});
+        setForm({...initialForm, brokerId: defaultBrokerId, expiresAt: defaultExpiresAt()});
         setFormDialog(true);
     };
 
     const handleSubmit = async () => {
-        const errors: {brokerId?: string; appKey?: string; secretKey?: string} = {};
+        const errors: {brokerId?: string; appKey?: string; secretKey?: string; expiresAt?: string} = {};
         if (!form.brokerId) errors.brokerId = '제공자를 선택해주세요.';
         if (!form.appKey.trim()) errors.appKey = 'App Key를 입력해주세요.';
         if (!form.secretKey.trim()) errors.secretKey = 'Secret Key를 입력해주세요.';
+        if (!form.expiresAt) errors.expiresAt = '유효기간을 입력해주세요.';
         if (Object.keys(errors).length > 0) {
             setFormErrors(errors);
             return;
@@ -171,6 +191,18 @@ export default function ApiKeyManagement() {
                                 <Typography variant="body2" color="text.secondary">
                                     App Key: {apiKey.appKey}
                                 </Typography>
+                                {(() => {
+                                    const daysLeft = getDaysLeft(apiKey.expiresAt);
+                                    const isExpired = daysLeft <= 0;
+                                    const isWarning = daysLeft > 0 && daysLeft <= 30;
+                                    return (
+                                        <Typography variant="body2" sx={{mt: 0.5, color: isExpired ? 'error.main' : isWarning ? 'warning.main' : 'text.secondary'}}>
+                                            만료일: {formatDate(apiKey.expiresAt)}
+                                            {isExpired && ' (만료됨)'}
+                                            {isWarning && ` (${daysLeft}일 남음)`}
+                                        </Typography>
+                                    );
+                                })()}
                             </CardContent>
                             <CardActions sx={{justifyContent: 'flex-end'}}>
                                 <Button size="small" color="error" startIcon={<DeleteIcon/>}
@@ -213,6 +245,14 @@ export default function ApiKeyManagement() {
                             value={form.secretKey}
                             onChange={(e) => { setForm({...form, secretKey: e.target.value}); if (formErrors.secretKey) setFormErrors(prev => ({...prev, secretKey: undefined})); }}
                             error={!!formErrors.secretKey} helperText={formErrors.secretKey}
+                        />
+                        <TextField
+                            label="유효기간" required fullWidth size="small"
+                            type="date"
+                            value={form.expiresAt}
+                            onChange={(e) => { setForm({...form, expiresAt: e.target.value}); if (formErrors.expiresAt) setFormErrors(prev => ({...prev, expiresAt: undefined})); }}
+                            error={!!formErrors.expiresAt} helperText={formErrors.expiresAt || '기본값: 1년'}
+                            slotProps={{inputLabel: {shrink: true}}}
                         />
                     </Box>
                 </DialogContent>

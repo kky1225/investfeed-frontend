@@ -46,10 +46,6 @@ export interface CalendarEvent {
     source: string; // ECOS, FRED, HOLIDAY, MANUAL
 }
 
-export interface CalendarEventsRes {
-    events: CalendarEvent[];
-}
-
 export interface ManualCalendarEventReq {
     date: string;
     name: string;

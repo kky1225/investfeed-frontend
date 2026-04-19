@@ -1,4 +1,5 @@
 import {useEffect, useState} from "react";
+import Alert from "@mui/material/Alert";
 import Box from "@mui/material/Box";
 import Typography from "@mui/material/Typography";
 import Card from "@mui/material/Card";
@@ -31,6 +32,8 @@ import GoalSettingDialog from "../assetDashboard/GoalSettingDialog.tsx";
 
 export default function GoalPage() {
     const [goals, setGoals] = useState<InvestmentGoalRes[]>([]);
+    const [loading, setLoading] = useState(true);
+    const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
     const [goalDialogOpen, setGoalDialogOpen] = useState(false);
     const [editGoal, setEditGoal] = useState<InvestmentGoalRes | null>(null);
     const [deleteTarget, setDeleteTarget] = useState<InvestmentGoalRes | null>(null);
@@ -40,14 +43,39 @@ export default function GoalPage() {
     const loadGoals = async () => {
         try {
             const res = await fetchGoalDashboard();
-            if (res.code === "0000") setGoals(res.result?.goals ?? []);
+            if (res.code === "0000") {
+                setGoals(res.result?.goals ?? []);
+                setLastUpdated(new Date());
+            }
         } catch {
             // 무시
+        } finally {
+            setLoading(false);
         }
     };
 
     useEffect(() => {
-        loadGoals();
+        let timeout: ReturnType<typeof setTimeout>;
+        let interval: ReturnType<typeof setInterval>;
+
+        (async () => {
+            await loadGoals();
+
+            const now = Date.now();
+            const waitTime = 60_000 - (now % 60_000);
+
+            timeout = setTimeout(() => {
+                loadGoals();
+                interval = setInterval(() => {
+                    loadGoals();
+                }, 60_000);
+            }, waitTime + 200);
+        })();
+
+        return () => {
+            clearTimeout(timeout);
+            clearInterval(interval);
+        };
     }, []);
 
     const handleDelete = async () => {
@@ -66,14 +94,34 @@ export default function GoalPage() {
                     <HelpOutlineIcon sx={{fontSize: 16, color: 'text.secondary'}}/>
                 </Tooltip>
                 <Box sx={{flex: 1}}/>
-                {goals.length < 3 && (
+                {!loading && goals.length < 3 && (
                     <Button size="small" variant="contained" startIcon={<AddIcon/>} onClick={() => { setEditGoal(null); setGoalDialogOpen(true); }}>
                         목표 추가
                     </Button>
                 )}
             </Box>
 
-            {goals.length > 0 ? (
+            {lastUpdated && !loading && (
+                <Box sx={{display: 'flex', justifyContent: 'flex-end', mb: 1}}>
+                    <Typography variant="caption" color="text.secondary">
+                        {lastUpdated.toLocaleTimeString('ko-KR', {hour: '2-digit', minute: '2-digit'})} 기준
+                    </Typography>
+                </Box>
+            )}
+
+            {loading ? (
+                <Stack spacing={2}>
+                    {[0, 1, 2].map((i) => (
+                        <Card variant="outlined" key={i}>
+                            <CardContent>
+                                <Box sx={{height: 80, display: 'flex', alignItems: 'center', justifyContent: 'center'}}>
+                                    <LinearProgress sx={{width: '100%'}}/>
+                                </Box>
+                            </CardContent>
+                        </Card>
+                    ))}
+                </Stack>
+            ) : goals.length > 0 ? (
                 <Stack spacing={2}>
                     {goals.map((goal) => {
                         const rate = Math.min(goal.achievementRate, 100);
@@ -106,6 +154,11 @@ export default function GoalPage() {
                                     <Typography variant="body2" color="text.secondary">
                                         <BlindText>{goal.currentAmount.toLocaleString()}원 / {goal.targetAmount.toLocaleString()}원</BlindText>
                                     </Typography>
+                                    {goal.isAchieved && (
+                                        <Alert severity="success" sx={{mt: 1.5, py: 0}} variant="outlined">
+                                            목표를 달성했습니다! 새로운 목표를 설정해보세요.
+                                        </Alert>
+                                    )}
                                 </CardContent>
                             </Card>
                         );

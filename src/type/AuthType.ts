@@ -76,6 +76,7 @@ export interface ApiKeyReq {
     brokerId: number;
     appKey: string;
     secretKey: string;
+    expiresAt: string;
 }
 
 export interface ApiKeyRes {
@@ -83,6 +84,7 @@ export interface ApiKeyRes {
     brokerId: number;
     brokerName: string;
     appKey: string;
+    expiresAt: string;
     createdAt: string;
 }
 

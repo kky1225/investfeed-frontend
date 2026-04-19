@@ -88,7 +88,7 @@ export default function BrokerSummaryCards({brokerSummaries, brokerPnlList}: Bro
                     holdings: updatedHoldings,
                     evltAmt: newEvltAmt,
                     evltPl: newEvltPl,
-                    prftRt: newPrftRt > 0 ? `+${newPrftRt.toFixed(2)}` : newPrftRt.toFixed(2),
+                    prftRt: newPrftRt.toFixed(2),
                 });
             });
             return next;

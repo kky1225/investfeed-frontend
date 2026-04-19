@@ -1,51 +1,35 @@
 import {useEffect, useRef, useState} from "react";
-import {useNavigate} from "react-router-dom";
 import Box from "@mui/material/Box";
-import Grid from "@mui/material/Grid";
 import Typography from "@mui/material/Typography";
 import Card from "@mui/material/Card";
 import CardContent from "@mui/material/CardContent";
-import CardActionArea from "@mui/material/CardActionArea";
 import Chip from "@mui/material/Chip";
 import Stack from "@mui/material/Stack";
+import Grid from "@mui/material/Grid";
+import Table from "@mui/material/Table";
+import TableBody from "@mui/material/TableBody";
+import TableCell from "@mui/material/TableCell";
+import TableContainer from "@mui/material/TableContainer";
+import TableRow from "@mui/material/TableRow";
 import CircularProgress from "@mui/material/CircularProgress";
+import ArrowDropUpIcon from "@mui/icons-material/ArrowDropUp";
+import ArrowDropDownIcon from "@mui/icons-material/ArrowDropDown";
+import RemoveIcon from "@mui/icons-material/Remove";
 import {MarketIndexRes} from "../../type/MarketIndexType.ts";
 import {fetchMarketIndexAll} from "../../api/marketindex/MarketIndexApi.ts";
-import {renderChangeAmount} from "../../components/CustomRender.tsx";
+import FearGreedGauge from "../../components/FearGreedGauge.tsx";
+import type {FearGreedItem} from "../../type/CryptoType.ts";
 
-// 타입별 카테고리 섹션 정의
-const SECTIONS = [
-    {
-        title: '미국 증시',
-        types: ['NASDAQ', 'SP500', 'VIX', 'PHILADELPHIA_SEMICONDUCTOR'],
-        linkable: false,
-        gridSize: {xs: 12, sm: 6, md: 6, xl: 3},
-    },
-    {
-        title: '환율 · 지수',
-        types: ['USD_KRW', 'DOLLAR_INDEX'],
-        linkable: false,
-        gridSize: {xs: 12, sm: 6, md: 6},
-    },
-    {
-        title: '원자재',
-        types: ['GOLD_INTERNATIONAL', 'WTI'],
-        linkable: false,
-        gridSize: {xs: 12, sm: 6, md: 6},
-    },
-    {
-        title: '국내 증시',
-        types: ['KOSPI', 'KOSDAQ'],
-        linkable: false,
-        gridSize: {xs: 12, sm: 6, md: 6},
-    },
+// 상단 티커 바에 표시할 핵심 지수
+const TICKER_TYPES = ['KOSPI', 'KOSDAQ', 'NASDAQ', 'USD_KRW'];
+
+// 테이블 섹션 정의
+const TABLE_SECTIONS = [
+    {title: '미국 증시', types: ['NASDAQ', 'SP500', 'VIX', 'PHILADELPHIA_SEMICONDUCTOR']},
+    {title: '국내 증시', types: ['KOSPI', 'KOSDAQ']},
+    {title: '환율 · 지수', types: ['USD_KRW', 'DOLLAR_INDEX']},
+    {title: '원자재', types: ['GOLD_INTERNATIONAL', 'WTI']},
 ];
-
-interface MarketIndexCardProps {
-    item: MarketIndexRes;
-    linkable: boolean;
-    linkUrl?: string;
-}
 
 const getTrend = (changeRate: string): 'up' | 'down' | 'neutral' => {
     if (changeRate.startsWith('+')) return 'up';
@@ -53,70 +37,19 @@ const getTrend = (changeRate: string): 'up' | 'down' | 'neutral' => {
     return 'neutral';
 };
 
-const trendChipColor = {
-    up: 'error' as const,
-    down: 'info' as const,
-    neutral: 'default' as const,
-};
+const trendColor = {up: '#d32f2f', down: '#0288d1', neutral: 'inherit'};
 
-function MarketIndexCard({item, linkable, linkUrl}: MarketIndexCardProps) {
-    const navigate = useNavigate();
-    const trend = getTrend(item.changeRate);
-    const chipColor = trendChipColor[trend];
-
-    const updatedTime = new Date(item.updatedAt).toLocaleTimeString('ko-KR', {
-        hour: '2-digit',
-        minute: '2-digit',
-    });
-
-    const cardContent = (
-        <CardContent sx={{p: 3, '&:last-child': {pb: 3}}}>
-            <Stack direction="row" sx={{justifyContent: 'space-between', alignItems: 'flex-start', mb: 1}}>
-                <Typography component="h2" variant="body1" sx={{fontWeight: 600}}>
-                    {item.name}
-                </Typography>
-                <Chip
-                    size="small"
-                    label={item.delayStatus}
-                    variant="outlined"
-                    color={item.delayStatus === '실시간' ? 'success' : 'default'}
-                    sx={{fontSize: '0.65rem', height: 20}}
-                />
-            </Stack>
-
-            <Stack direction="row" sx={{alignItems: 'center', gap: 1, mb: 1}}>
-                <Typography variant="h4" component="p" sx={{fontWeight: 700}}>
-                    {item.price}
-                </Typography>
-                {renderChangeAmount(item.changeAmount, item.type === 'USD_KRW' ? '원' : '')}
-                <Chip size="small" color={chipColor} label={item.changeRate}/>
-            </Stack>
-
-            <Typography variant="caption" sx={{color: 'text.disabled', display: 'block'}}>
-                {updatedTime} 기준
-            </Typography>
-        </CardContent>
-    );
-
-    if (linkable && linkUrl) {
-        return (
-            <Card variant="outlined" sx={{height: '100%'}}>
-                <CardActionArea onClick={() => navigate(linkUrl)} sx={{height: '100%'}}>
-                    {cardContent}
-                </CardActionArea>
-            </Card>
-        );
-    }
-
-    return (
-        <Card variant="outlined" sx={{height: '100%'}}>
-            {cardContent}
-        </Card>
-    );
+function TrendIcon({trend}: {trend: 'up' | 'down' | 'neutral'}) {
+    if (trend === 'up') return <ArrowDropUpIcon sx={{color: trendColor.up, fontSize: 20}}/>;
+    if (trend === 'down') return <ArrowDropDownIcon sx={{color: trendColor.down, fontSize: 20}}/>;
+    return <RemoveIcon sx={{color: 'text.disabled', fontSize: 14}}/>;
 }
 
 export default function MarketIndexList() {
     const [data, setData] = useState<MarketIndexRes[]>([]);
+    const [fearGreedCurrent, setFearGreedCurrent] = useState<FearGreedItem | null>(null);
+    const [fearGreedHistory, setFearGreedHistory] = useState<FearGreedItem[]>([]);
+    const [bitcoin, setBitcoin] = useState<{price: string; changeAmount: string; changeRate: string; trend: string} | null>(null);
     const [loading, setLoading] = useState(true);
 
     const chartTimer = useRef<number>(0);
@@ -124,7 +57,12 @@ export default function MarketIndexList() {
     const loadData = async () => {
         try {
             const result = await fetchMarketIndexAll();
-            setData(result);
+            setData(result.indices);
+            if (result.fearGreed) {
+                setFearGreedCurrent(result.fearGreed.current);
+                setFearGreedHistory(result.fearGreed.history);
+            }
+            setBitcoin(result.bitcoin ?? null);
         } finally {
             setLoading(false);
         }
@@ -166,40 +104,159 @@ export default function MarketIndexList() {
 
     return (
         <Box sx={{width: '100%', maxWidth: {sm: '100%', md: '1700px'}}}>
-            <Typography variant="h6" sx={{mb: 3, fontWeight: 600}}>
-                주요 지수
-            </Typography>
+            <Box sx={{display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 3}}>
+                <Typography variant="h6" sx={{fontWeight: 600}}>
+                    주요 지수
+                </Typography>
+                {data.length > 0 && (
+                    <Typography variant="caption" color="text.secondary">
+                        {new Date(data[0].updatedAt).toLocaleTimeString('ko-KR', {hour: '2-digit', minute: '2-digit'})} 기준
+                    </Typography>
+                )}
+            </Box>
 
-            <Stack spacing={4}>
-                {SECTIONS.map(section => {
-                    const items = section.types
-                        .map(type => indexMap[type])
-                        .filter(Boolean);
+            {/* 상단 티커 바 */}
+            <Card variant="outlined" sx={{mb: 3}}>
+                <CardContent sx={{py: 1.5, '&:last-child': {pb: 1.5}}}>
+                    <Stack direction="row" sx={{justifyContent: 'space-around', flexWrap: 'wrap', gap: 1}}>
+                        {TICKER_TYPES.map(type => {
+                            const item = indexMap[type];
+                            if (!item) return null;
+                            const trend = getTrend(item.changeRate);
+                            return (
+                                <Stack key={type} direction="row" sx={{alignItems: 'center', gap: 0.5}}>
+                                    <Typography variant="body2" sx={{fontWeight: 600, color: 'text.secondary'}}>
+                                        {item.name}
+                                    </Typography>
+                                    <Typography variant="body2" sx={{fontWeight: 700}}>
+                                        {item.price}
+                                    </Typography>
+                                    <TrendIcon trend={trend}/>
+                                    <Typography variant="body2" sx={{color: trendColor[trend], fontWeight: 600}}>
+                                        {item.changeRate}
+                                    </Typography>
+                                </Stack>
+                            );
+                        })}
+                    </Stack>
+                </CardContent>
+            </Card>
 
-                    if (items.length === 0) return null;
+            {/* 메인 컨텐츠: 테이블 + 공포탐욕 */}
+            <Grid container spacing={3}>
+                {/* 좌측: 시장 지수 테이블 */}
+                <Grid size={{xs: 12, md: fearGreedCurrent ? 8 : 12}}>
+                    <Stack spacing={3}>
+                        {TABLE_SECTIONS.map(section => {
+                            const items = section.types.map(type => indexMap[type]).filter(Boolean);
+                            if (items.length === 0) return null;
 
-                    return (
-                        <Box key={section.title}>
-                            <Typography
-                                variant="subtitle2"
-                                sx={{mb: 1.5, color: 'text.secondary', fontWeight: 600, textTransform: 'uppercase', letterSpacing: 0.5}}
-                            >
-                                {section.title}
-                            </Typography>
-                            <Grid container spacing={3}>
-                                {items.map(item => (
-                                    <Grid key={item.type} size={section.gridSize}>
-                                        <MarketIndexCard
-                                            item={item}
-                                            linkable={section.linkable}
-                                        />
-                                    </Grid>
-                                ))}
-                            </Grid>
-                        </Box>
-                    );
-                })}
-            </Stack>
+                            return (
+                                <Card variant="outlined" key={section.title}>
+                                    <CardContent sx={{pb: '16px !important'}}>
+                                        <Typography variant="body2" sx={{fontWeight: 600, color: 'text.secondary', mb: 1}}>
+                                            {section.title}
+                                        </Typography>
+                                        <TableContainer>
+                                            <Table size="small">
+                                                <TableBody>
+                                                    {items.map(item => {
+                                                        const trend = getTrend(item.changeRate);
+                                                        const color = trendColor[trend];
+                                                        return (
+                                                            <TableRow key={item.type} sx={{'&:last-child td': {borderBottom: 0}}}>
+                                                                <TableCell>
+                                                                    <Typography variant="body2" sx={{fontWeight: 600}}>
+                                                                        {item.name}
+                                                                    </Typography>
+                                                                </TableCell>
+                                                                <TableCell align="right">
+                                                                    <Typography variant="body2" sx={{fontWeight: 700}}>
+                                                                        {item.price}
+                                                                    </Typography>
+                                                                </TableCell>
+                                                                <TableCell align="right">
+                                                                    <Stack direction="row" sx={{alignItems: 'center', justifyContent: 'flex-end'}}>
+                                                                        <TrendIcon trend={trend}/>
+                                                                        <Typography variant="body2" sx={{color, fontWeight: 600}}>
+                                                                            {item.changeAmount}
+                                                                        </Typography>
+                                                                    </Stack>
+                                                                </TableCell>
+                                                                <TableCell align="right">
+                                                                    <Chip
+                                                                        size="small"
+                                                                        label={item.changeRate}
+                                                                        color={trend === 'up' ? 'error' : trend === 'down' ? 'info' : 'default'}
+                                                                        sx={{fontWeight: 600, minWidth: 65}}
+                                                                    />
+                                                                </TableCell>
+                                                                <TableCell align="right">
+                                                                    <Chip
+                                                                        size="small"
+                                                                        label={item.delayStatus}
+                                                                        variant="outlined"
+                                                                        color={item.delayStatus === '실시간' ? 'success' : 'default'}
+                                                                        sx={{fontSize: '0.65rem', height: 20}}
+                                                                    />
+                                                                </TableCell>
+                                                            </TableRow>
+                                                        );
+                                                    })}
+                                                </TableBody>
+                                            </Table>
+                                        </TableContainer>
+                                    </CardContent>
+                                </Card>
+                            );
+                        })}
+                    </Stack>
+                </Grid>
+
+                {/* 우측: 공포 & 탐욕 지수 + 비트코인 */}
+                {(fearGreedCurrent || bitcoin) && (
+                    <Grid size={{xs: 12, md: 4}}>
+                        <Stack spacing={3}>
+                            {fearGreedCurrent && (
+                                <FearGreedGauge current={fearGreedCurrent} history={fearGreedHistory}/>
+                            )}
+                            {bitcoin && (
+                                <Card variant="outlined">
+                                    <CardContent>
+                                        <Stack direction="row" sx={{justifyContent: 'space-between', alignItems: 'center', mb: 1}}>
+                                            <Typography variant="subtitle2">
+                                                비트코인 (BTC)
+                                            </Typography>
+                                            <Chip size="small" label="실시간" variant="outlined" color="success" sx={{fontSize: '0.65rem', height: 20}}/>
+                                        </Stack>
+                                        <Typography variant="h5" sx={{fontWeight: 700, mb: 1}}>
+                                            {Number(bitcoin.price).toLocaleString()}원
+                                        </Typography>
+                                        <Stack direction="row" sx={{alignItems: 'center', gap: 0.5}}>
+                                            <TrendIcon trend={bitcoin.trend === 'UP' ? 'up' : bitcoin.trend === 'DOWN' ? 'down' : 'neutral'}/>
+                                            <Typography
+                                                variant="body2"
+                                                sx={{
+                                                    fontWeight: 600,
+                                                    color: bitcoin.trend === 'UP' ? trendColor.up : bitcoin.trend === 'DOWN' ? trendColor.down : 'inherit'
+                                                }}
+                                            >
+                                                {Number(bitcoin.changeAmount) > 0 ? '+' : ''}{Number(bitcoin.changeAmount).toLocaleString()}원
+                                            </Typography>
+                                            <Chip
+                                                size="small"
+                                                label={`${Number(bitcoin.changeRate) > 0 ? '+' : ''}${bitcoin.changeRate}%`}
+                                                color={bitcoin.trend === 'UP' ? 'error' : bitcoin.trend === 'DOWN' ? 'info' : 'default'}
+                                                sx={{fontWeight: 600}}
+                                            />
+                                        </Stack>
+                                    </CardContent>
+                                </Card>
+                            )}
+                        </Stack>
+                    </Grid>
+                )}
+            </Grid>
         </Box>
     );
 }

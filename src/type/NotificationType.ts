@@ -1,4 +1,4 @@
-export type NotificationType = 'PRICE' | 'TRADE' | 'TARGET_PRICE' | 'GOAL' | 'REBALANCING';
+export type NotificationType = 'PRICE' | 'TRADE' | 'TARGET_PRICE' | 'GOAL' | 'REBALANCING' | 'API_KEY';
 export type AssetType = 'STOCK' | 'CRYPTO' | 'TOTAL';
 export type Direction = 'UP' | 'DOWN' | 'UPPER_LIMIT' | 'LOWER_LIMIT' | 'HIGH_52W' | 'LOW_52W' | 'TARGET_ABOVE' | 'TARGET_BELOW' | 'GOAL_ACHIEVED' | 'REBALANCING_ASSET' | 'REBALANCING_STOCK';
 export type PriceTargetDirection = 'ABOVE' | 'BELOW';
