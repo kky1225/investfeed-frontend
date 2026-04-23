@@ -26,6 +26,10 @@ import Menu from '@mui/material/Menu';
 import MenuItem from '@mui/material/MenuItem';
 import ListItemIcon from '@mui/material/ListItemIcon';
 import ListItemText from '@mui/material/ListItemText';
+import Accordion from '@mui/material/Accordion';
+import AccordionSummary from '@mui/material/AccordionSummary';
+import AccordionDetails from '@mui/material/AccordionDetails';
+import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import {DataGrid, type GridColDef} from '@mui/x-data-grid';
 import {
     fetchSchedulerStatus,
@@ -64,17 +68,19 @@ function formatDateTime(s: string | null): string {
 }
 
 // 스케줄러 카탈로그. 실제로 한 번이라도 실행되어야 DB에 status 행이 생기므로,
-// 프론트에서 전체 12개를 먼저 그려두고 DB 데이터가 있는 건 덮어쓴다.
+// 프론트에서 전체 목록을 먼저 그려두고 DB 데이터가 있는 건 덮어쓴다.
 type SchedulerType = 'FAST' | 'SLOW';
 const SCHEDULER_CATALOG: Array<{name: string; type: SchedulerType; label: string; cron: string}> = [
     {name: 'PriceAlertScheduler',          type: 'FAST', label: '매분',         cron: '0 * * * * *'},
     {name: 'MarketIndexScheduler',         type: 'FAST', label: '매분',         cron: '0 * * * * *'},
+    {name: 'InvestorCloseMarketScheduler', type: 'FAST', label: '매분(15:36~21:00)', cron: '0 * * * * *'},
     {name: 'CalendarSyncScheduler',        type: 'SLOW', label: '매 30분',      cron: '0 */30 * * * *'},
     {name: 'GoalAlertScheduler',           type: 'SLOW', label: '매시 정각',    cron: '0 0 * * * *'},
     {name: 'RebalancingAlertScheduler',    type: 'SLOW', label: '매시 정각',    cron: '0 0 * * * *'},
     {name: 'RecommendScheduler',           type: 'SLOW', label: '매시 30분',    cron: '0 30 * * * *'},
     {name: 'HoldingSyncScheduler',         type: 'SLOW', label: '매일 00:00',   cron: '0 0 0 * * *'},
     {name: 'SchedulerLogCleanupScheduler', type: 'SLOW', label: '매일 04:00',   cron: '0 0 4 * * *'},
+    {name: 'InterestSyncScheduler',        type: 'SLOW', label: '매일 05:15',   cron: '0 15 5 * * *'},
     {name: 'IndexInvestorDailyScheduler',  type: 'SLOW', label: '매일 07:00',   cron: '0 0 7 * * *'},
     {name: 'ApiKeyExpiryScheduler',        type: 'SLOW', label: '매일 09:00',   cron: '0 0 9 * * *'},
     {name: 'StockDividendScheduler',       type: 'SLOW', label: '매일 13:30',   cron: '0 30 13 * * *'},
@@ -451,25 +457,13 @@ export default function Monitoring() {
                     <Typography variant="subtitle2" sx={{mb: 1, color: 'text.secondary', fontWeight: 600}}>
                         스케줄러 현황
                     </Typography>
-                    <Grid container spacing={2} sx={{mb: 3}}>
-                        {loading ? (
-                            Array.from({length: 6}).map((_, i) => (
-                                <Grid key={i} size={{xs: 12, sm: 6, md: 4}}>
-                                    <Card variant="outlined">
-                                        <CardContent>
-                                            <Skeleton width={180} height={20} sx={{mb: 1}}/>
-                                            <Skeleton width={120}/>
-                                            <Skeleton width={140}/>
-                                        </CardContent>
-                                    </Card>
-                                </Grid>
-                            ))
-                        ) : (
-                            SCHEDULER_CATALOG.map((info) => {
-                                const s = statuses.find((x) => x.schedulerName === info.name);
-                                const state: SchedulerState = s?.state ?? 'PENDING';
-                                const meta = STATE_META[state];
-                                return (
+                    {(() => {
+                        // 카드 렌더링 공통 헬퍼 — 문제/정상 그룹 모두에서 재사용
+                        const renderCard = (info: typeof SCHEDULER_CATALOG[number]) => {
+                            const s = statuses.find((x) => x.schedulerName === info.name);
+                            const state: SchedulerState = s?.state ?? 'PENDING';
+                            const meta = STATE_META[state];
+                            return (
                                 <Grid key={info.name} size={{xs: 12, sm: 6, md: 4}} sx={{display: 'flex'}}>
                                     <Card variant="outlined" sx={{opacity: s ? 1 : 0.65, width: '100%', display: 'flex', flexDirection: 'column'}}>
                                         <CardContent sx={{flex: 1, display: 'flex', flexDirection: 'column'}}>
@@ -530,10 +524,105 @@ export default function Monitoring() {
                                         </CardContent>
                                     </Card>
                                 </Grid>
-                                );
-                            })
-                        )}
-                    </Grid>
+                            );
+                        };
+
+                        if (loading) {
+                            return (
+                                <Grid container spacing={2} sx={{mb: 3}}>
+                                    {Array.from({length: 6}).map((_, i) => (
+                                        <Grid key={i} size={{xs: 12, sm: 6, md: 4}}>
+                                            <Card variant="outlined">
+                                                <CardContent>
+                                                    <Skeleton width={180} height={20} sx={{mb: 1}}/>
+                                                    <Skeleton width={120}/>
+                                                    <Skeleton width={140}/>
+                                                </CardContent>
+                                            </Card>
+                                        </Grid>
+                                    ))}
+                                </Grid>
+                            );
+                        }
+
+                        // 상태별 분류. PROBLEM 은 관리자 주목이 필요한 것(FAILED/STUCK/WARNING),
+                        // NORMAL 은 평상시엔 접어두는 것(SUCCESS/PENDING).
+                        const PROBLEM_STATES: SchedulerState[] = ['FAILED', 'STUCK', 'WARNING'];
+                        const catalogWithState = SCHEDULER_CATALOG.map((info) => {
+                            const s = statuses.find((x) => x.schedulerName === info.name);
+                            const state: SchedulerState = s?.state ?? 'PENDING';
+                            return {info, state};
+                        });
+                        const problemList = catalogWithState.filter((c) => PROBLEM_STATES.includes(c.state));
+                        const normalList = catalogWithState.filter((c) => !PROBLEM_STATES.includes(c.state));
+
+                        const total = catalogWithState.length;
+                        const countByState = (state: SchedulerState) =>
+                            catalogWithState.filter((c) => c.state === state).length;
+                        // 카드 내부 상태 점과 동일한 시각 언어. 레이블은 Tooltip 으로.
+                        const StateDot = ({state, count}: {state: SchedulerState; count: number}) => (
+                            <Tooltip title={STATE_META[state].label} placement="top" arrow>
+                                <Stack direction="row" spacing={0.75} sx={{alignItems: 'center', opacity: count === 0 ? 0.4 : 1, cursor: 'help'}}>
+                                    <Box sx={{width: 10, height: 10, borderRadius: '50%', bgcolor: STATE_META[state].color}}/>
+                                    <Typography variant="body2" sx={{fontWeight: 500}}>{count}</Typography>
+                                </Stack>
+                            </Tooltip>
+                        );
+
+                        return (
+                            <>
+                                {/* 상단 요약 바 — 점 색상은 카드 내부 상태 점과 일치 */}
+                                <Card variant="outlined" sx={{mb: 2}}>
+                                    <CardContent sx={{py: 1.5, '&:last-child': {pb: 1.5}}}>
+                                        <Stack direction="row" spacing={2.5} sx={{alignItems: 'center', flexWrap: 'wrap'}}>
+                                            <Typography variant="body2" sx={{fontWeight: 600}}>
+                                                전체 {total}
+                                            </Typography>
+                                            <StateDot state="SUCCESS" count={countByState('SUCCESS')}/>
+                                            <StateDot state="WARNING" count={countByState('WARNING')}/>
+                                            <StateDot state="STUCK"   count={countByState('STUCK')}/>
+                                            <StateDot state="FAILED"  count={countByState('FAILED')}/>
+                                            <StateDot state="PENDING" count={countByState('PENDING')}/>
+                                        </Stack>
+                                    </CardContent>
+                                </Card>
+
+                                {/* 문제가 있는 스케줄러 — 항상 펼친 상태로 노출 */}
+                                {problemList.length > 0 && (
+                                    <>
+                                        <Typography variant="caption" sx={{display: 'block', mb: 1, color: 'error.main', fontWeight: 600}}>
+                                            ⚠ 주의 필요 ({problemList.length})
+                                        </Typography>
+                                        <Grid container spacing={2} sx={{mb: 3}}>
+                                            {problemList.map((c) => renderCard(c.info))}
+                                        </Grid>
+                                    </>
+                                )}
+
+                                {/* 스케줄러 목록 — 문제가 하나도 없으면 기본 펼침, 있으면 접힘.
+                                    Box 로 감싸서 Accordion 이 `:last-of-type` 이 되도록 함
+                                    (surfaces.ts 의 `&:not(:last-of-type) { borderBottom: none }` 규칙 회피). */}
+                                <Box sx={{mb: 3}}>
+                                    <Accordion
+                                        variant="outlined"
+                                        defaultExpanded={problemList.length === 0}
+                                        slotProps={{transition: {unmountOnExit: true}}}
+                                    >
+                                        <AccordionSummary expandIcon={<ExpandMoreIcon/>}>
+                                            <Typography variant="body2" sx={{fontWeight: 600}}>
+                                                스케줄러 목록 ({normalList.length})
+                                            </Typography>
+                                        </AccordionSummary>
+                                        <AccordionDetails>
+                                            <Grid container spacing={2}>
+                                                {normalList.map((c) => renderCard(c.info))}
+                                            </Grid>
+                                        </AccordionDetails>
+                                    </Accordion>
+                                </Box>
+                            </>
+                        );
+                    })()}
 
                     <Typography variant="subtitle2" sx={{mb: 1, color: 'text.secondary', fontWeight: 600}}>
                         실행 이력

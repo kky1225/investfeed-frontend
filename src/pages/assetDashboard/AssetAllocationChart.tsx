@@ -9,6 +9,7 @@ import Box from "@mui/material/Box";
 import Stack from "@mui/material/Stack";
 import LinearProgress, {linearProgressClasses} from "@mui/material/LinearProgress";
 import {useMediaQuery, useTheme} from "@mui/material";
+import {useBlindMode} from "../../context/BlindModeContext.tsx";
 
 interface AssetAllocationChartProps {
     stockTotal: number;
@@ -37,13 +38,20 @@ const StyledText = styled('text', {
 
 function PieCenterLabel({primaryText, secondaryText, small}: { primaryText: string; secondaryText: string; small?: boolean }) {
     const {width, height, left, top} = useDrawingArea();
+    const {isBlind} = useBlindMode();
     const gap = small ? 18 : 24;
     const primaryY = top + height / 2 - (small ? 8 : 10);
     const secondaryY = primaryY + gap;
 
+    // primary(총 자산 금액) 는 블라인드 대상. BlindText 와 동일한 blur(8px) 적용 (SVG text 도 CSS filter 지원).
+    const primaryStyle = {
+        ...(small ? {fontSize: '0.85rem'} : {}),
+        ...(isBlind ? {filter: 'blur(8px)'} : {}),
+    };
+
     return (
         <Fragment>
-            <StyledText variant="primary" x={left + width / 2} y={primaryY} style={small ? {fontSize: '0.85rem'} : undefined}>
+            <StyledText variant="primary" x={left + width / 2} y={primaryY} style={primaryStyle}>
                 {primaryText}
             </StyledText>
             <StyledText variant="secondary" x={left + width / 2} y={secondaryY} style={small ? {fontSize: '0.7rem'} : undefined}>
@@ -129,7 +137,10 @@ export default function AssetAllocationChart({stockTotal, cryptoTotal, cashTotal
                         height={chartSize}
                         width={chartSize}
                         onItemClick={handleItemClick}
-                        sx={{cursor: 'pointer'}}
+                        sx={{
+                            // slice(개별 arc) 위에서만 pointer. 차트 margin(빈 여백) 에선 default 커서 유지.
+                            '& .MuiPieArc-root': {cursor: 'pointer'},
+                        }}
                     >
                         <PieCenterLabel primaryText={totalAsset.toLocaleString()} secondaryText="Total" small={isSmallScreen}/>
                     </PieChart>
