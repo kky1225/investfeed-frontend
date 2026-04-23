@@ -6,10 +6,11 @@ interface ThemeStockTableProps {
     rows: ThemeStockGridRow[],
     columns: GridColDef[],
     pageSize: number,
+    loading?: boolean,
 }
 
 const ThemeStockTableProps = (
-    { rows, columns, pageSize }: ThemeStockTableProps
+    { rows, columns, pageSize, loading }: ThemeStockTableProps
 ) => {
     const navigate = useNavigate();
 
@@ -31,7 +32,12 @@ const ThemeStockTableProps = (
             pageSizeOptions={[10, 20, 50, 100]}
             disableColumnResize
             density="compact"
+            loading={loading}
             slotProps={{
+                loadingOverlay: {
+                    variant: 'skeleton',
+                    noRowsVariant: 'skeleton',
+                },
                 filterPanel: {
                     filterFormProps: {
                         logicOperatorInputProps: {

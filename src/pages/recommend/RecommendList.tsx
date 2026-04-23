@@ -1,6 +1,10 @@
 import {Box} from "@mui/material";
 import Typography from "@mui/material/Typography";
 import Grid from "@mui/material/Grid";
+import Card from "@mui/material/Card";
+import CardContent from "@mui/material/CardContent";
+import Stack from "@mui/material/Stack";
+import Skeleton from "@mui/material/Skeleton";
 import {useEffect, useRef, useState} from "react";
 import {fetchTimeNow} from "../../api/time/TimeApi.ts";
 import {MarketType} from "../../type/timeType.ts";
@@ -16,6 +20,7 @@ import RecommendCard, {RecommendCardProps} from "../../components/RecommendCard.
 const RecommendList = () => {
     const [recommendDataList, setRecommendDataList] = useState<RecommendCardProps[]>([]);
     const [avoidDataList, setAvoidDataList] = useState<RecommendCardProps[]>([]);
+    const [loading, setLoading] = useState(true);
 
     const chartTimer = useRef<number>(0);
     const marketTimer = useRef<number>(0);
@@ -126,6 +131,8 @@ const RecommendList = () => {
             });
         } catch (error) {
             console.error(error);
+        } finally {
+            setLoading(false);
         }
     }
 
@@ -212,7 +219,22 @@ const RecommendList = () => {
                         columns={12}
                         sx={{ mt: 1, mb: (theme) => theme.spacing(2) }}
                     >
-                        { recommendDataList.length > 0 ?
+                        { loading ? (
+                            Array.from({length: 4}).map((_, index) => (
+                                <Grid key={index} size={{ xs: 12, md: 6 }}>
+                                    <Card variant="outlined" sx={{width: '100%'}}>
+                                        <CardContent>
+                                            <Skeleton width={140} height={24}/>
+                                            <Stack direction="row" spacing={1} sx={{alignItems: 'center', mt: 1}}>
+                                                <Skeleton width={120} height={40}/>
+                                                <Skeleton width={60}/>
+                                                <Skeleton variant="rounded" width={60} height={24}/>
+                                            </Stack>
+                                        </CardContent>
+                                    </Card>
+                                </Grid>
+                            ))
+                        ) : recommendDataList.length > 0 ?
                             recommendDataList.map((data: RecommendCardProps, index: number) => (
                                 <Grid key={index} size={{ xs: 12, md: 6 }}>
                                     <RecommendCard {...data} />
@@ -231,7 +253,22 @@ const RecommendList = () => {
                         columns={12}
                         sx={{ mt: 1, mb: (theme) => theme.spacing(2) }}
                     >
-                        { avoidDataList.length > 0 ?
+                        { loading ? (
+                            Array.from({length: 4}).map((_, index) => (
+                                <Grid key={index} size={{ xs: 12, md: 6 }}>
+                                    <Card variant="outlined" sx={{width: '100%'}}>
+                                        <CardContent>
+                                            <Skeleton width={140} height={24}/>
+                                            <Stack direction="row" spacing={1} sx={{alignItems: 'center', mt: 1}}>
+                                                <Skeleton width={120} height={40}/>
+                                                <Skeleton width={60}/>
+                                                <Skeleton variant="rounded" width={60} height={24}/>
+                                            </Stack>
+                                        </CardContent>
+                                    </Card>
+                                </Grid>
+                            ))
+                        ) : avoidDataList.length > 0 ?
                             avoidDataList.map((data: RecommendCardProps, index: number) => (
                                 <Grid key={index} size={{ xs: 12, md: 6 }}>
                                     <RecommendCard {...data} />

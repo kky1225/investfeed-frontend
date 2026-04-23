@@ -10,6 +10,7 @@ import Stack from "@mui/material/Stack";
 import Grid from "@mui/material/Grid";
 import Chip from "@mui/material/Chip";
 import LinearProgress from "@mui/material/LinearProgress";
+import Skeleton from "@mui/material/Skeleton";
 import Alert from "@mui/material/Alert";
 import Tooltip from "@mui/material/Tooltip";
 import HelpOutlineIcon from "@mui/icons-material/HelpOutline";
@@ -175,6 +176,44 @@ export default function RebalancingPage() {
                 <Typography component="h2" variant="h6">포트폴리오 리밸런싱</Typography>
                 <BlindToggle/>
             </Box>
+
+            {/* 비중 설정 스켈레톤 */}
+            {!loaded && (
+                <>
+                    <Card variant="outlined" sx={{mb: 3}}>
+                        <CardContent>
+                            <Skeleton width={80} height={24} sx={{mb: 2}}/>
+                            <Grid container spacing={2}>
+                                {Array.from({length: 4}).map((_, i) => (
+                                    <Grid key={i} size={{xs: 6, md: 3}}>
+                                        <Box sx={{p: 2, borderRadius: 2, border: '1px solid', borderColor: 'divider', textAlign: 'center'}}>
+                                            <Skeleton width={40} sx={{mx: 'auto'}}/>
+                                            <Skeleton width={60} height={32} sx={{mx: 'auto', my: 0.5}}/>
+                                            <Skeleton variant="rounded" width={40} height={20} sx={{mx: 'auto'}}/>
+                                        </Box>
+                                    </Grid>
+                                ))}
+                            </Grid>
+                        </CardContent>
+                    </Card>
+                    <Card variant="outlined" sx={{mb: 3}}>
+                        <CardContent>
+                            <Skeleton width={100} height={24} sx={{mb: 2}}/>
+                            <Stack spacing={2}>
+                                {Array.from({length: 3}).map((_, i) => (
+                                    <Box key={i}>
+                                        <Box sx={{display: 'flex', justifyContent: 'space-between', mb: 0.5}}>
+                                            <Skeleton width={80}/>
+                                            <Skeleton width={200}/>
+                                        </Box>
+                                        <Skeleton variant="rounded" height={8} sx={{borderRadius: 4}}/>
+                                    </Box>
+                                ))}
+                            </Stack>
+                        </CardContent>
+                    </Card>
+                </>
+            )}
 
             {/* 비중 설정 */}
             {loaded && <Card variant="outlined" sx={{mb: 3}}>
@@ -363,8 +402,14 @@ export default function RebalancingPage() {
                                         rows={status.overweightStocks.map((s, i) => ({...s, id: i}))}
                                         columns={columns}
                                         disableRowSelectionOnClick
-                                        pageSizeOptions={[10, 20, 50]}
+                                        pageSizeOptions={[10, 20, 50, 100]}
                                         initialState={{pagination: {paginationModel: {pageSize: 10}}}}
+                                        slotProps={{
+                                            loadingOverlay: {
+                                                variant: 'skeleton',
+                                                noRowsVariant: 'skeleton',
+                                            },
+                                        }}
                                         localeText={{noRowsLabel: '데이터가 없습니다.'}}
                                         sx={{'& .MuiDataGrid-cell': {display: 'flex', alignItems: 'center'}, border: 'none'}}
                                     />

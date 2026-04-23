@@ -12,7 +12,13 @@ import Chip from '@mui/material/Chip';
 import Button from '@mui/material/Button';
 import FormControlLabel from '@mui/material/FormControlLabel';
 import Switch from '@mui/material/Switch';
+import TextField from '@mui/material/TextField';
+import InputAdornment from '@mui/material/InputAdornment';
+import MenuItem from '@mui/material/MenuItem';
+import SearchIcon from '@mui/icons-material/Search';
 import Divider from '@mui/material/Divider';
+import Skeleton from '@mui/material/Skeleton';
+import Stack from '@mui/material/Stack';
 import Dialog from '@mui/material/Dialog';
 import DialogTitle from '@mui/material/DialogTitle';
 import DialogContent from '@mui/material/DialogContent';
@@ -29,6 +35,37 @@ import {fetchPriceTargets, deletePriceTarget} from '../../api/notification/Notif
 import type {Notification, AssetType, PriceTarget} from '../../type/NotificationType';
 
 type TabFilter = 'ALL' | AssetType;
+type TypeFilter = 'ALL' | '가격' | '목표' | '리밸런싱' | 'API_KEY';
+type PeriodFilter = 'ALL' | 'TODAY' | 'WEEK' | 'MONTH';
+
+function matchesTypeFilter(notificationType: string, filter: TypeFilter): boolean {
+    if (filter === 'ALL') return true;
+    if (filter === '가격') return ['PRICE', 'TRADE', 'TARGET_PRICE'].includes(notificationType);
+    if (filter === '목표') return notificationType === 'GOAL';
+    if (filter === '리밸런싱') return notificationType === 'REBALANCING';
+    if (filter === 'API_KEY') return notificationType === 'API_KEY';
+    return true;
+}
+
+function matchesPeriod(createdAt: string, period: PeriodFilter): boolean {
+    if (period === 'ALL') return true;
+    const d = new Date(createdAt);
+    const now = new Date();
+    if (period === 'TODAY') {
+        return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth() && d.getDate() === now.getDate();
+    }
+    if (period === 'WEEK') {
+        const sevenDaysAgo = new Date(now);
+        sevenDaysAgo.setDate(now.getDate() - 7);
+        return d >= sevenDaysAgo;
+    }
+    if (period === 'MONTH') {
+        const thirtyDaysAgo = new Date(now);
+        thirtyDaysAgo.setDate(now.getDate() - 30);
+        return d >= thirtyDaysAgo;
+    }
+    return true;
+}
 
 function formatDate(dateStr: string) {
     const date = new Date(dateStr);
@@ -80,9 +117,12 @@ function getNavigationPath(notification: Notification): string {
 
 export default function NotificationList() {
     const navigate = useNavigate();
-    const {notifications, handleMarkAsRead, handleMarkAllAsRead} = useNotification();
+    const {notifications, loading, handleMarkAsRead, handleMarkAllAsRead} = useNotification();
     const [tabFilter, setTabFilter] = useState<TabFilter>('ALL');
     const [unreadOnly, setUnreadOnly] = useState(false);
+    const [typeFilter, setTypeFilter] = useState<TypeFilter>('ALL');
+    const [periodFilter, setPeriodFilter] = useState<PeriodFilter>('ALL');
+    const [searchQuery, setSearchQuery] = useState('');
     const [priceTargets, setPriceTargets] = useState<PriceTarget[]>([]);
     const [priceTargetDialogOpen, setPriceTargetDialogOpen] = useState(false);
 
@@ -114,7 +154,13 @@ export default function NotificationList() {
     };
 
     const tabFiltered = tabFilter === 'ALL' ? notifications : notifications.filter(n => n.assetType === tabFilter);
-    const filtered = unreadOnly ? tabFiltered.filter(n => !n.isRead) : tabFiltered;
+    const typeFiltered = tabFiltered.filter(n => matchesTypeFilter(n.type, typeFilter));
+    const periodFiltered = typeFiltered.filter(n => matchesPeriod(n.createdAt, periodFilter));
+    const query = searchQuery.trim().toLowerCase();
+    const searched = query
+        ? periodFiltered.filter(n => (n.assetName ?? '').toLowerCase().includes(query))
+        : periodFiltered;
+    const filtered = unreadOnly ? searched.filter(n => !n.isRead) : searched;
     const grouped = groupByDate(filtered);
     const hasUnread = tabFiltered.some(n => !n.isRead);
 
@@ -201,9 +247,81 @@ export default function NotificationList() {
                 />
             </Box>
 
+            <Box sx={{display: 'flex', gap: 1, mb: 1, alignItems: 'center', flexWrap: 'wrap'}}>
+                <TextField
+                    size="small"
+                    placeholder="종목명 검색"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    sx={{flex: 1, minWidth: 160}}
+                    slotProps={{
+                        input: {
+                            startAdornment: (
+                                <InputAdornment position="start">
+                                    <SearchIcon fontSize="small"/>
+                                </InputAdornment>
+                            ),
+                        }
+                    }}
+                />
+                <TextField
+                    size="small"
+                    select
+                    value={typeFilter}
+                    onChange={(e) => setTypeFilter(e.target.value as TypeFilter)}
+                    sx={{minWidth: 110}}
+                >
+                    <MenuItem value="ALL">전체 종류</MenuItem>
+                    <MenuItem value="가격">가격</MenuItem>
+                    <MenuItem value="목표">목표</MenuItem>
+                    <MenuItem value="리밸런싱">리밸런싱</MenuItem>
+                    <MenuItem value="API_KEY">API Key</MenuItem>
+                </TextField>
+                <TextField
+                    size="small"
+                    select
+                    value={periodFilter}
+                    onChange={(e) => setPeriodFilter(e.target.value as PeriodFilter)}
+                    sx={{minWidth: 110}}
+                >
+                    <MenuItem value="ALL">전체 기간</MenuItem>
+                    <MenuItem value="TODAY">오늘</MenuItem>
+                    <MenuItem value="WEEK">최근 7일</MenuItem>
+                    <MenuItem value="MONTH">최근 30일</MenuItem>
+                </TextField>
+            </Box>
+
             <Divider/>
 
-            {filtered.length === 0 ? (
+            {loading ? (
+                <Box>
+                    {Array.from({length: 2}).map((_, groupIdx) => (
+                        <Box key={groupIdx}>
+                            <Typography variant="caption" sx={{display: 'block', px: 2, pt: 2, pb: 0.5}}>
+                                <Skeleton width={60}/>
+                            </Typography>
+                            <Stack sx={{px: 1}}>
+                                {Array.from({length: 5}).map((_, i) => (
+                                    <Box key={i} sx={{display: 'flex', alignItems: 'center', gap: 1.5, py: 1, px: 1}}>
+                                        <Skeleton variant="circular" width={20} height={20}/>
+                                        <Box sx={{flex: 1}}>
+                                            <Box sx={{display: 'flex', alignItems: 'center', gap: 0.5, mb: 0.5}}>
+                                                <Skeleton variant="rounded" width={32} height={18}/>
+                                                <Skeleton width={120}/>
+                                            </Box>
+                                            <Box sx={{display: 'flex', justifyContent: 'space-between'}}>
+                                                <Skeleton width={180}/>
+                                                <Skeleton width={40}/>
+                                            </Box>
+                                        </Box>
+                                    </Box>
+                                ))}
+                            </Stack>
+                            <Divider/>
+                        </Box>
+                    ))}
+                </Box>
+            ) : filtered.length === 0 ? (
                 <Box sx={{py: 8, textAlign: 'center'}}>
                     <NotificationsNoneIcon sx={{fontSize: 48, color: 'text.disabled', mb: 1}}/>
                     <Typography variant="body2" color="text.secondary">

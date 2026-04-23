@@ -1,11 +1,11 @@
 import {useMemo} from "react";
-import Box from "@mui/material/Box";
 import {DataGrid, GridColDef} from "@mui/x-data-grid";
 
 interface CustomDataTableProps {
     rows: any,
     columns: GridColDef[],
     pageSize: number,
+    loading?: boolean,
 }
 
 const calcHeaderMinWidth = (headerName: string): number => {
@@ -19,7 +19,7 @@ const calcHeaderMinWidth = (headerName: string): number => {
 };
 
 const CustomDataTable = (
-    { rows, columns }: CustomDataTableProps
+    { rows, columns, loading }: CustomDataTableProps
 ) => {
     const adjustedColumns = useMemo(() =>
         columns.map(col => {
@@ -32,10 +32,7 @@ const CustomDataTable = (
         }),
     [columns]);
 
-    const totalMinWidth = adjustedColumns.reduce((sum, col) => sum + (col.minWidth ?? 100), 0) + 48;
-
     return (
-        <Box sx={{overflowX: 'auto', WebkitOverflowScrolling: 'touch'}}>
         <DataGrid
             checkboxSelection
             rows={rows}
@@ -46,11 +43,16 @@ const CustomDataTable = (
             initialState={{
                 pagination: { paginationModel: { pageSize: 20 } },
             }}
-            pageSizeOptions={[10, 20, 50]}
+            pageSizeOptions={[10, 20, 50, 100]}
             disableColumnResize
             density="compact"
-            sx={{ minWidth: totalMinWidth }}
+            autoHeight
+            loading={loading}
             slotProps={{
+                loadingOverlay: {
+                    variant: 'skeleton',
+                    noRowsVariant: 'skeleton',
+                },
                 filterPanel: {
                     filterFormProps: {
                         logicOperatorInputProps: {
@@ -77,7 +79,6 @@ const CustomDataTable = (
                 },
             }}
         />
-        </Box>
     )
 }
 

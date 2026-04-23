@@ -6,6 +6,7 @@ import type {Notification} from '../type/NotificationType';
 interface NotificationContextType {
     notifications: Notification[];
     unreadCount: number;
+    loading: boolean;
     loadNotifications: () => Promise<void>;
     refreshAll: () => Promise<void>;
     handleMarkAsRead: (id: number) => Promise<void>;
@@ -18,6 +19,7 @@ export function NotificationProvider({children}: { children: ReactNode }) {
     const {isAuthenticated} = useAuth();
     const [notifications, setNotifications] = useState<Notification[]>([]);
     const [unreadCount, setUnreadCount] = useState(0);
+    const [loading, setLoading] = useState(true);
     const wsRef = useRef<WebSocket | null>(null);
 
     const loadNotifications = useCallback(async () => {
@@ -26,6 +28,8 @@ export function NotificationProvider({children}: { children: ReactNode }) {
             setNotifications(res.result ?? []);
         } catch {
             // ignore
+        } finally {
+            setLoading(false);
         }
     }, []);
 
@@ -109,6 +113,7 @@ export function NotificationProvider({children}: { children: ReactNode }) {
         <NotificationContext.Provider value={{
             notifications,
             unreadCount,
+            loading,
             loadNotifications,
             refreshAll,
             handleMarkAsRead,

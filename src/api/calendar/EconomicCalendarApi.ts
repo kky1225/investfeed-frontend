@@ -1,5 +1,6 @@
 import api from '../../axios.ts';
-import type {CalendarEventsReq, IndicatorHistoryReq, ManualCalendarEventReq} from '../../type/EconomicCalendarType.ts';
+import type {BulkRefreshReq, BulkRefreshStatus, CalendarEventsReq, IndicatorHistoryReq, ManualCalendarEventReq} from '../../type/EconomicCalendarType.ts';
+import type {ApiResponse} from '../../type/AuthType.ts';
 
 export const fetchEconomicIndicators = async () => {
     const res = await api.post('/calendar/indicators');
@@ -33,5 +34,15 @@ export const updateCalendarEvent = async (id: number, req: ManualCalendarEventRe
 
 export const deleteCalendarEvent = async (id: number) => {
     const res = await api.delete(`/calendar/events/${id}`);
+    return res.data;
+};
+
+export const startBulkRefresh = async (req: BulkRefreshReq): Promise<ApiResponse<BulkRefreshStatus>> => {
+    const res = await api.post<ApiResponse<BulkRefreshStatus>>('/admin/calendar/bulk-refresh', req);
+    return res.data;
+};
+
+export const fetchBulkRefreshStatus = async (): Promise<ApiResponse<BulkRefreshStatus>> => {
+    const res = await api.get<ApiResponse<BulkRefreshStatus>>('/admin/calendar/bulk-refresh/status');
     return res.data;
 };

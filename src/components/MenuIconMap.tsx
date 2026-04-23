@@ -17,6 +17,7 @@ import WalletIcon from '@mui/icons-material/Wallet';
 import FlagIcon from '@mui/icons-material/Flag';
 import FormatListBulletedIcon from '@mui/icons-material/FormatListBulleted';
 import CalendarMonthIcon from '@mui/icons-material/CalendarMonth';
+import MonitorIcon from '@mui/icons-material/Monitor';
 import type {ReactElement} from 'react';
 
 const iconMap: Record<string, ReactElement> = {
@@ -39,6 +40,7 @@ const iconMap: Record<string, ReactElement> = {
     FlagIcon: <FlagIcon />,
     FormatListBulletedIcon: <FormatListBulletedIcon />,
     CalendarMonthIcon: <CalendarMonthIcon />,
+    MonitorIcon: <MonitorIcon />,
 };
 
 export const getMenuIcon = (iconName: string | null): ReactElement => {

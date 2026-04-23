@@ -1,6 +1,10 @@
 import Typography from "@mui/material/Typography";
 import Box from "@mui/material/Box";
 import Grid from "@mui/material/Grid";
+import Card from "@mui/material/Card";
+import CardContent from "@mui/material/CardContent";
+import Stack from "@mui/material/Stack";
+import Skeleton from "@mui/material/Skeleton";
 import {GridColDef} from "@mui/x-data-grid";
 import StockTable from "../../components/StockTable.tsx";
 import {useEffect, useRef, useState} from "react";
@@ -32,6 +36,7 @@ const RankList = () => {
     const [value, setValue] = useState(Number(type) || 0);
     const [row, setRow] = useState<StockGridRow[]>([]);
     const [columns, setColumns] = useState<GridColDef[]>([]);
+    const [loading, setLoading] = useState(true);
 
     const chartTimer = useRef<number>(0);
     const marketTimer = useRef<number>(0);
@@ -44,6 +49,8 @@ const RankList = () => {
         let interval: ReturnType<typeof setInterval>;
         let displayInterval: ReturnType<typeof setInterval>;
         let socket: WebSocket;
+
+        setLoading(true);
 
         (async () => {
             const items = await stockList(req);
@@ -330,6 +337,8 @@ const RankList = () => {
             });
         } catch (error) {
             console.log(error);
+        } finally {
+            setLoading(false);
         }
     }
 
@@ -372,7 +381,7 @@ const RankList = () => {
     return (
         <Box sx={{ width: '100%', maxWidth: { sm: '100%', md: '1700px' } }}>
             <Typography component="h2" variant="h6" sx={{ mb: 2 }}>
-                주식 목록
+                순위 목록
             </Typography>
             <Grid
                 container
@@ -388,7 +397,7 @@ const RankList = () => {
                             <Tab label="거래량 급증률 상위" {...a11yProps(2)} />
                         </Tabs>
                     </Box>
-                    <StockTable rows={row} columns={columns} pageSize={100} />
+                    <StockTable rows={row} columns={columns} pageSize={100} loading={loading} />
                 </Box>
             </Grid>
         </Box>

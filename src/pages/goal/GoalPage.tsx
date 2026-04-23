@@ -9,6 +9,7 @@ import IconButton from "@mui/material/IconButton";
 import Stack from "@mui/material/Stack";
 import Chip from "@mui/material/Chip";
 import LinearProgress from "@mui/material/LinearProgress";
+import Skeleton from "@mui/material/Skeleton";
 import Menu from "@mui/material/Menu";
 import MenuItem from "@mui/material/MenuItem";
 import ListItemIcon from "@mui/material/ListItemIcon";
@@ -114,9 +115,15 @@ export default function GoalPage() {
                     {[0, 1, 2].map((i) => (
                         <Card variant="outlined" key={i}>
                             <CardContent>
-                                <Box sx={{height: 80, display: 'flex', alignItems: 'center', justifyContent: 'center'}}>
-                                    <LinearProgress sx={{width: '100%'}}/>
+                                <Box sx={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1}}>
+                                    <Skeleton width={140} height={28}/>
+                                    <Skeleton variant="circular" width={24} height={24}/>
                                 </Box>
+                                <Box sx={{display: 'flex', alignItems: 'center', gap: 1, mb: 1}}>
+                                    <Skeleton variant="rounded" sx={{flex: 1, height: 10, borderRadius: 5}}/>
+                                    <Skeleton width={50}/>
+                                </Box>
+                                <Skeleton width={220}/>
                             </CardContent>
                         </Card>
                     ))}
@@ -134,7 +141,7 @@ export default function GoalPage() {
                                             <Typography variant="body1" sx={{fontWeight: 600}}>
                                                 {goalTypeLabel[goal.type]}
                                             </Typography>
-                                            {goal.isAchieved && <Chip label="달성 완료" size="small" color="success" variant="outlined"/>}
+                                            {isOver && <Chip label="달성 완료" size="small" color="success" variant="outlined"/>}
                                         </Box>
                                         <IconButton size="small" onClick={(e) => { setAnchorEl(e.currentTarget); setMenuTarget(goal); }}>
                                             <MoreVertIcon fontSize="small"/>
@@ -154,7 +161,7 @@ export default function GoalPage() {
                                     <Typography variant="body2" color="text.secondary">
                                         <BlindText>{goal.currentAmount.toLocaleString()}원 / {goal.targetAmount.toLocaleString()}원</BlindText>
                                     </Typography>
-                                    {goal.isAchieved && (
+                                    {isOver && (
                                         <Alert severity="success" sx={{mt: 1.5, py: 0}} variant="outlined">
                                             목표를 달성했습니다! 새로운 목표를 설정해보세요.
                                         </Alert>
@@ -180,7 +187,7 @@ export default function GoalPage() {
             <Menu anchorEl={anchorEl} open={Boolean(anchorEl)} onClose={() => setAnchorEl(null)}>
                 <MenuItem onClick={() => { setEditGoal(menuTarget); setGoalDialogOpen(true); setAnchorEl(null); }}>
                     <ListItemIcon><EditIcon fontSize="small"/></ListItemIcon>
-                    <ListItemText>{menuTarget?.isAchieved ? '새 목표 설정' : '수정'}</ListItemText>
+                    <ListItemText>{menuTarget && menuTarget.achievementRate >= 100 ? '새 목표 설정' : '수정'}</ListItemText>
                 </MenuItem>
                 <MenuItem onClick={() => { setDeleteTarget(menuTarget); setAnchorEl(null); }}>
                     <ListItemIcon><DeleteIcon fontSize="small" color="error"/></ListItemIcon>

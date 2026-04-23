@@ -6,10 +6,11 @@ interface SectStockTableProps {
     rows: SectStockGridRow[],
     columns: GridColDef[],
     pageSize: number,
+    loading?: boolean,
 }
 
 const SectStockTableProps = (
-    { rows, columns, pageSize }: SectStockTableProps
+    { rows, columns, pageSize, loading }: SectStockTableProps
 ) => {
     const navigate = useNavigate();
 
@@ -31,7 +32,12 @@ const SectStockTableProps = (
             pageSizeOptions={[10, 20, 50, 100]}
             disableColumnResize
             density="compact"
+            loading={loading}
             slotProps={{
+                loadingOverlay: {
+                    variant: 'skeleton',
+                    noRowsVariant: 'skeleton',
+                },
                 filterPanel: {
                     filterFormProps: {
                         logicOperatorInputProps: {

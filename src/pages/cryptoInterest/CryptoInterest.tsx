@@ -17,6 +17,7 @@ import ListItemText from "@mui/material/ListItemText";
 import Divider from "@mui/material/Divider";
 import Chip from "@mui/material/Chip";
 import CircularProgress from "@mui/material/CircularProgress";
+import Skeleton from "@mui/material/Skeleton";
 import Menu from "@mui/material/Menu";
 import MenuItem from "@mui/material/MenuItem";
 import AddIcon from "@mui/icons-material/Add";
@@ -578,9 +579,14 @@ const CryptoInterest = () => {
                     </Stack>
 
                     {groupsLoading ? (
-                        <Box sx={{display: "flex", justifyContent: "center", p: 2}}>
-                            <CircularProgress size={20}/>
-                        </Box>
+                        <Stack sx={{p: 1}} spacing={0.5}>
+                            {Array.from({length: 5}).map((_, i) => (
+                                <Box key={i} sx={{display: 'flex', alignItems: 'center', gap: 1, px: 1, py: 0.75}}>
+                                    <Skeleton variant="circular" width={16} height={16}/>
+                                    <Skeleton width="70%" height={20}/>
+                                </Box>
+                            ))}
+                        </Stack>
                     ) : groups.length === 0 ? (
                         <Box sx={{p: 2, textAlign: "center"}}>
                             <FolderOpenIcon sx={{color: "text.disabled", fontSize: 32, mb: 0.5}}/>
@@ -683,7 +689,7 @@ const CryptoInterest = () => {
                                     initialState={{
                                         pagination: {paginationModel: {pageSize: 20}},
                                     }}
-                                    pageSizeOptions={[10, 20, 50]}
+                                    pageSizeOptions={[10, 20, 50, 100]}
                                     disableColumnResize
                                     density="compact"
                                     loading={itemsLoading}
@@ -695,6 +701,10 @@ const CryptoInterest = () => {
                                         "& .MuiDataGrid-cell[data-field='__drag__']": {padding: 0},
                                     }}
                                     slotProps={{
+                                        loadingOverlay: {
+                                            variant: "skeleton",
+                                            noRowsVariant: "skeleton",
+                                        },
                                         filterPanel: {
                                             filterFormProps: {
                                                 logicOperatorInputProps: {variant: "outlined", size: "small"},

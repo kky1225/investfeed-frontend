@@ -125,6 +125,7 @@ export default function ManualHoldingTab({broker}: ManualHoldingTabProps) {
     const [menuTarget, setMenuTarget] = useState<ManualHolding | null>(null);
     const [orderDirty, setOrderDirty] = useState(false);
     const [savingOrder, setSavingOrder] = useState(false);
+    const [loading, setLoading] = useState(true);
 
     const sensors = useSensors(
         useSensor(PointerSensor, {activationConstraint: {distance: 5}}),
@@ -201,6 +202,8 @@ export default function ManualHoldingTab({broker}: ManualHoldingTabProps) {
             setOrderDirty(false);
         } catch (err) {
             console.error(err);
+        } finally {
+            setLoading(false);
         }
     }, [broker.id, toHoldingStocks, updateSummary]);
 
@@ -209,6 +212,7 @@ export default function ManualHoldingTab({broker}: ManualHoldingTabProps) {
     }, [isBlind]);
 
     useEffect(() => {
+        setLoading(true);
         loadData();
     }, [loadData]);
 
@@ -340,6 +344,7 @@ export default function ManualHoldingTab({broker}: ManualHoldingTabProps) {
                 editable={true}
                 onBalanceUpdate={handleBalanceUpdate}
                 dailyPl={dailyPl}
+                loading={loading}
             />
 
             <Box sx={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2}}>
@@ -411,7 +416,14 @@ export default function ManualHoldingTab({broker}: ManualHoldingTabProps) {
                         pageSizeOptions={[10, 20, 50, 100]}
                         disableColumnResize
                         density="compact"
+                        loading={loading}
                         slots={{row: DraggableRow}}
+                        slotProps={{
+                            loadingOverlay: {
+                                variant: 'skeleton',
+                                noRowsVariant: 'skeleton',
+                            },
+                        }}
                         localeText={{noRowsLabel: '데이터가 없습니다.'}}
                         sx={{
                             "& .MuiDataGrid-cell[data-field='__drag__']": {padding: 0},

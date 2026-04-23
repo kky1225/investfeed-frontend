@@ -5,12 +5,12 @@ import {StockGridRow} from "../type/StockType.ts";
 interface StockTableProps {
     rows: StockGridRow[],
     columns: GridColDef[],
-    loading: boolean,
     pageSize: number,
+    loading?: boolean,
 }
 
 const StockTable = (
-    { rows, columns, loading, pageSize }: StockTableProps
+    { rows, columns, pageSize, loading }: StockTableProps
 ) => {
     const navigate = useNavigate();
 
@@ -32,7 +32,12 @@ const StockTable = (
             pageSizeOptions={[10, 20, 50, 100]}
             disableColumnResize
             density="compact"
+            loading={loading}
             slotProps={{
+                loadingOverlay: {
+                    variant: 'skeleton',
+                    noRowsVariant: 'skeleton',
+                },
                 filterPanel: {
                     filterFormProps: {
                         logicOperatorInputProps: {
@@ -58,7 +63,6 @@ const StockTable = (
                     },
                 },
             }}
-            loading={loading}
         />
     )
 }

@@ -1,6 +1,10 @@
 import Box from "@mui/material/Box";
 import Grid from "@mui/material/Grid";
 import Typography from "@mui/material/Typography";
+import Card from "@mui/material/Card";
+import CardContent from "@mui/material/CardContent";
+import Stack from "@mui/material/Stack";
+import Skeleton from "@mui/material/Skeleton";
 import CryptoLineChart, {CryptoLineChartProps} from "../../components/CryptoLineChart.tsx";
 import FearGreedGauge from "../../components/FearGreedGauge.tsx";
 import {fetchCryptoList, fetchCryptoListStream} from "../../api/crypto/CryptoApi.ts";
@@ -24,6 +28,7 @@ const CryptoList = () => {
     const [cryptoDataList, setCryptoDataList] = useState<CryptoLineChartProps[]>([]);
     const [fearGreedCurrent, setFearGreedCurrent] = useState<FearGreedItem>({value: 0, classification: '', date: ''});
     const [fearGreedHistory, setFearGreedHistory] = useState<FearGreedItem[]>([]);
+    const [loading, setLoading] = useState(true);
 
     useEffect(() => {
         let interval: ReturnType<typeof setInterval>;
@@ -95,6 +100,8 @@ const CryptoList = () => {
             setCryptoDataList(newCryptoDataList);
         } catch (error) {
             console.error(error);
+        } finally {
+            setLoading(false);
         }
     }
 
@@ -190,13 +197,32 @@ const CryptoList = () => {
                 columns={12}
                 sx={{mb: (theme) => theme.spacing(2)}}
             >
-                {
+                {loading ? (
+                    Array.from({length: 2}).map((_, index) => (
+                        <Grid key={index} size={{xs: 12, md: 6}}>
+                            <Card variant="outlined" sx={{width: '100%'}}>
+                                <CardContent>
+                                    <Skeleton width={120} height={28}/>
+                                    <Stack direction="row" sx={{justifyContent: 'space-between', alignItems: 'center', mt: 1, mb: 1}}>
+                                        <Skeleton width={140} height={40}/>
+                                        <Stack direction="row" spacing={1}>
+                                            <Skeleton variant="rounded" width={60} height={24}/>
+                                            <Skeleton variant="rounded" width={80} height={24}/>
+                                        </Stack>
+                                    </Stack>
+                                    <Skeleton width={180}/>
+                                    <Skeleton variant="rectangular" height={220} sx={{mt: 1.5, borderRadius: 1}}/>
+                                </CardContent>
+                            </Card>
+                        </Grid>
+                    ))
+                ) : (
                     cryptoDataList.map((value, index) => (
                         <Grid key={index} size={{xs: 12, md: 6}}>
                             <CryptoLineChart {...value} />
                         </Grid>
                     ))
-                }
+                )}
             </Grid>
             <Typography component="h2" variant="h6" sx={{mb: 2}}>
                 시장 심리
@@ -208,7 +234,19 @@ const CryptoList = () => {
                 sx={{mb: (theme) => theme.spacing(2)}}
             >
                 <Grid size={{xs: 12, md: 6}}>
-                    <FearGreedGauge current={fearGreedCurrent} history={fearGreedHistory} />
+                    {loading ? (
+                        <Card variant="outlined" sx={{width: '100%'}}>
+                            <CardContent>
+                                <Skeleton width={100} height={28}/>
+                                <Box sx={{display: 'flex', justifyContent: 'center', py: 2}}>
+                                    <Skeleton variant="circular" width={180} height={180}/>
+                                </Box>
+                                <Skeleton variant="rectangular" height={80} sx={{mt: 1, borderRadius: 1}}/>
+                            </CardContent>
+                        </Card>
+                    ) : (
+                        <FearGreedGauge current={fearGreedCurrent} history={fearGreedHistory} />
+                    )}
                 </Grid>
             </Grid>
         </Box>

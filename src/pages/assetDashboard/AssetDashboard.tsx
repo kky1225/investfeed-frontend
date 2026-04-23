@@ -1,11 +1,12 @@
 import {useEffect, useRef, useState} from "react";
 import Box from "@mui/material/Box";
 import Typography from "@mui/material/Typography";
-import CircularProgress from "@mui/material/CircularProgress";
 import Card from "@mui/material/Card";
 import CardContent from "@mui/material/CardContent";
 import Divider from "@mui/material/Divider";
 import Stack from "@mui/material/Stack";
+import Grid from "@mui/material/Grid";
+import Skeleton from "@mui/material/Skeleton";
 import {fetchAssetDashboard} from "../../api/asset/AssetDashboardApi.ts";
 import type {AssetDashboardRes} from "../../type/AssetDashboardType.ts";
 import AssetSummaryCard from "./AssetSummaryCard.tsx";
@@ -64,15 +65,7 @@ export default function AssetDashboard() {
         };
     }, []);
 
-    if (loading) {
-        return (
-            <Box sx={{display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: 300}}>
-                <CircularProgress/>
-            </Box>
-        );
-    }
-
-    if (!data) {
+    if (!loading && !data) {
         return (
             <Box sx={{width: '100%', maxWidth: {sm: '100%', md: '1700px'}}}>
                 <Typography component="h2" variant="h6" sx={{mb: 2}}>
@@ -85,8 +78,8 @@ export default function AssetDashboard() {
         );
     }
 
-    const stockTotal = data.stockSummary.evltAmt;
-    const cryptoTotal = data.cryptoSummary.evltAmt;
+    const stockTotal = data?.stockSummary.evltAmt ?? 0;
+    const cryptoTotal = data?.cryptoSummary.evltAmt ?? 0;
 
     return (
         <Box sx={{width: '100%', maxWidth: {sm: '100%', md: '1700px'}}}>
@@ -97,7 +90,7 @@ export default function AssetDashboard() {
                     </Typography>
                     <BlindToggle/>
                 </Box>
-                {lastUpdated && (
+                {!loading && lastUpdated && (
                     <Typography variant="caption" color="text.secondary">
                         {lastUpdated.toLocaleTimeString('ko-KR', {hour: '2-digit', minute: '2-digit'})} 기준
                     </Typography>
@@ -105,62 +98,66 @@ export default function AssetDashboard() {
             </Box>
 
             <AssetSummaryCard
-                totalAsset={data.totalAsset}
-                totalEvltAmt={data.totalEvltAmt}
-                totalPurAmt={data.totalPurAmt}
-                totalEvltPl={data.totalEvltPl}
-                totalPrftRt={data.totalPrftRt}
-                totalCash={data.totalCash}
+                totalAsset={data?.totalAsset ?? 0}
+                totalEvltAmt={data?.totalEvltAmt ?? 0}
+                totalPurAmt={data?.totalPurAmt ?? 0}
+                totalEvltPl={data?.totalEvltPl ?? 0}
+                totalPrftRt={data?.totalPrftRt ?? '0'}
+                totalCash={data?.totalCash ?? 0}
+                loading={loading}
             />
 
-            {data?.realizedPnl && (
+            {/* 실현손익 */}
+            {(loading || data?.realizedPnl) && (
                 <Card variant="outlined" sx={{mb: 3}}>
                     <CardContent>
                         <Typography variant="body2" sx={{color: 'text.secondary', mb: 1.5, fontWeight: 600}}>
                             실현손익
                         </Typography>
                         <Stack direction="row" spacing={4} divider={<Divider orientation="vertical" flexItem/>}>
-                            <Box>
-                                <Typography variant="body2" sx={{color: 'text.secondary'}}>당월</Typography>
-                                <Typography variant="body1" sx={{
-                                    fontWeight: 600,
-                                    color: data?.realizedPnl.currentMonthPnl > 0 ? 'error.main' : data?.realizedPnl.currentMonthPnl < 0 ? 'info.main' : 'text.primary'
-                                }}>
-                                    <BlindText>{data?.realizedPnl.currentMonthPnl > 0 ? '+' : ''}{data?.realizedPnl.currentMonthPnl.toLocaleString()}원</BlindText>
-                                </Typography>
-                            </Box>
-                            <Box>
-                                <Typography variant="body2" sx={{color: 'text.secondary'}}>올해</Typography>
-                                <Typography variant="body1" sx={{
-                                    fontWeight: 600,
-                                    color: data?.realizedPnl.ytdPnl > 0 ? 'error.main' : data?.realizedPnl.ytdPnl < 0 ? 'info.main' : 'text.primary'
-                                }}>
-                                    <BlindText>{data?.realizedPnl.ytdPnl > 0 ? '+' : ''}{data?.realizedPnl.ytdPnl.toLocaleString()}원</BlindText>
-                                </Typography>
-                            </Box>
-                            <Box>
-                                <Typography variant="body2" sx={{color: 'text.secondary'}}>전체</Typography>
-                                <Typography variant="body1" sx={{
-                                    fontWeight: 600,
-                                    color: data?.realizedPnl.allTimePnl > 0 ? 'error.main' : data?.realizedPnl.allTimePnl < 0 ? 'info.main' : 'text.primary'
-                                }}>
-                                    <BlindText>{data?.realizedPnl.allTimePnl > 0 ? '+' : ''}{data?.realizedPnl.allTimePnl.toLocaleString()}원</BlindText>
-                                </Typography>
-                            </Box>
+                            {(['당월', '올해', '전체'] as const).map((label, i) => {
+                                const value = data?.realizedPnl
+                                    ? [data.realizedPnl.currentMonthPnl, data.realizedPnl.ytdPnl, data.realizedPnl.allTimePnl][i]
+                                    : 0;
+                                return (
+                                    <Box key={label}>
+                                        <Typography variant="body2" sx={{color: 'text.secondary'}}>{label}</Typography>
+                                        <Typography variant="body1" sx={{
+                                            fontWeight: 600,
+                                            color: loading ? undefined : (value > 0 ? 'error.main' : value < 0 ? 'info.main' : 'text.primary')
+                                        }}>
+                                            {loading
+                                                ? <Skeleton width={120}/>
+                                                : <BlindText>{value > 0 ? '+' : ''}{value.toLocaleString()}원</BlindText>}
+                                        </Typography>
+                                    </Box>
+                                );
+                            })}
                         </Stack>
                     </CardContent>
                 </Card>
             )}
 
-            {/* 투자 목표 (표시만) */}
-            {(data?.goals ?? []).length > 0 && (
+            {/* 투자 목표 */}
+            {(loading || (data?.goals ?? []).length > 0) && (
                 <Card variant="outlined" sx={{mb: 3}}>
                     <CardContent>
                         <Typography variant="body2" sx={{color: 'text.secondary', fontWeight: 600, mb: 1.5}}>
                             투자 목표
                         </Typography>
                         <Stack spacing={2}>
-                            {(data?.goals ?? []).map((goal) => {
+                            {loading ? (
+                                Array.from({length: 3}).map((_, i) => (
+                                    <Box key={i}>
+                                        <Skeleton width={150} height={24} sx={{mb: 0.5}}/>
+                                        <Box sx={{display: 'flex', alignItems: 'center', gap: 1, mb: 0.5}}>
+                                            <Skeleton variant="rounded" sx={{flex: 1, height: 8}}/>
+                                            <Skeleton width={45}/>
+                                        </Box>
+                                        <Skeleton width={200}/>
+                                    </Box>
+                                ))
+                            ) : (data?.goals ?? []).map((goal) => {
                                 const rate = Math.min(goal.achievementRate, 100);
                                 const isOver = goal.achievementRate >= 100;
                                 return (
@@ -193,23 +190,69 @@ export default function AssetDashboard() {
                 </Card>
             )}
 
-            <BrokerSummaryCards brokerSummaries={data.brokerSummaries} brokerPnlList={data?.realizedPnl?.brokerPnlList}/>
-
-            <AssetAllocationChart
-                stockTotal={stockTotal}
-                cryptoTotal={cryptoTotal}
-                cashTotal={data.totalCash}
-                totalAsset={data.totalAsset}
-                selectedGroup={selectedGroup}
-                onGroupSelect={setSelectedGroup}
-            />
-
-            {selectedGroup === 'stock' && data.stockSummary.holdings.length > 0 && (
-                <AssetGroupDetail group="stock" summary={data.stockSummary}/>
+            {/* 증권사/거래소별 현황 */}
+            {loading ? (
+                <Box sx={{mb: 3}}>
+                    <Typography component="h2" variant="subtitle2" sx={{mb: 1.5}}>
+                        증권사 / 거래소별 현황
+                    </Typography>
+                    <Grid container spacing={2}>
+                        {Array.from({length: 3}).map((_, i) => (
+                            <Grid key={i} size={{xs: 12, sm: 6, md: 4}}>
+                                <Card variant="outlined" sx={{height: '100%'}}>
+                                    <CardContent sx={{pb: '16px !important'}}>
+                                        <Box sx={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1.5}}>
+                                            <Skeleton width={80} height={24}/>
+                                            <Skeleton variant="rounded" width={40} height={20}/>
+                                        </Box>
+                                        <Skeleton width={60} height={20}/>
+                                        <Skeleton width={140} height={32} sx={{mb: 1.5}}/>
+                                        <Divider sx={{mb: 1.5}}/>
+                                        <Box sx={{display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1}}>
+                                            {Array.from({length: 4}).map((_, j) => (
+                                                <Box key={j}>
+                                                    <Skeleton width={50}/>
+                                                    <Skeleton width={100}/>
+                                                </Box>
+                                            ))}
+                                        </Box>
+                                    </CardContent>
+                                </Card>
+                            </Grid>
+                        ))}
+                    </Grid>
+                </Box>
+            ) : (
+                <BrokerSummaryCards brokerSummaries={data!.brokerSummaries} brokerPnlList={data?.realizedPnl?.brokerPnlList}/>
             )}
 
-            {selectedGroup === 'crypto' && data.cryptoSummary.holdings.length > 0 && (
-                <AssetGroupDetail group="crypto" summary={data.cryptoSummary}/>
+            {/* 자산 배분 차트 */}
+            {loading ? (
+                <Card variant="outlined" sx={{mb: 3}}>
+                    <CardContent>
+                        <Skeleton width={120} height={28} sx={{mb: 2}}/>
+                        <Box sx={{display: 'flex', justifyContent: 'center', py: 3}}>
+                            <Skeleton variant="circular" width={240} height={240}/>
+                        </Box>
+                    </CardContent>
+                </Card>
+            ) : (
+                <AssetAllocationChart
+                    stockTotal={stockTotal}
+                    cryptoTotal={cryptoTotal}
+                    cashTotal={data!.totalCash}
+                    totalAsset={data!.totalAsset}
+                    selectedGroup={selectedGroup}
+                    onGroupSelect={setSelectedGroup}
+                />
+            )}
+
+            {!loading && selectedGroup === 'stock' && data!.stockSummary.holdings.length > 0 && (
+                <AssetGroupDetail group="stock" summary={data!.stockSummary}/>
+            )}
+
+            {!loading && selectedGroup === 'crypto' && data!.cryptoSummary.holdings.length > 0 && (
+                <AssetGroupDetail group="crypto" summary={data!.cryptoSummary}/>
             )}
         </Box>
     );

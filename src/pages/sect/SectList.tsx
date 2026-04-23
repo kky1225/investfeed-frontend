@@ -1,6 +1,10 @@
 import {Box, Tab, Tabs} from "@mui/material";
 import Typography from "@mui/material/Typography";
 import Grid from "@mui/material/Grid";
+import Card from "@mui/material/Card";
+import CardContent from "@mui/material/CardContent";
+import Stack from "@mui/material/Stack";
+import Skeleton from "@mui/material/Skeleton";
 import {useEffect, useRef, useState} from "react";
 import {useNavigate, useParams} from "react-router-dom";
 import * as React from "react";
@@ -19,6 +23,7 @@ const SectList = () => {
     });
     const [value, setValue] = useState(indsCd === "001" ? 0 : 1);
     const [sectDataList, setSectDataList] = useState<SectCardProps[]>([]);
+    const [loading, setLoading] = useState(true);
 
     const chartTimer = useRef<number>(0);
     const marketTimer = useRef<number>(0);
@@ -28,6 +33,8 @@ const SectList = () => {
         let socketTimeout: ReturnType<typeof setTimeout>;
         let interval: ReturnType<typeof setInterval>;
         let socket: WebSocket;
+
+        setLoading(true);
 
         (async () => {
             const items = await sectList(req);
@@ -132,6 +139,8 @@ const SectList = () => {
             });
         } catch (error) {
             console.error(error);
+        } finally {
+            setLoading(false);
         }
     }
 
@@ -236,13 +245,27 @@ const SectList = () => {
                         columns={12}
                         sx={{ mt: 1, mb: (theme) => theme.spacing(2) }}
                     >
-                        {
+                        {loading ? (
+                            Array.from({length: 8}).map((_, index) => (
+                                <Grid key={index} size={{ xs: 12, md: 6, lg: 3 }}>
+                                    <Card variant="outlined" sx={{width: '100%'}}>
+                                        <CardContent>
+                                            <Skeleton width={120} height={24}/>
+                                            <Stack direction="row" spacing={1} sx={{alignItems: 'center', mt: 1}}>
+                                                <Skeleton width={100} height={40}/>
+                                                <Skeleton variant="rounded" width={60} height={24}/>
+                                            </Stack>
+                                        </CardContent>
+                                    </Card>
+                                </Grid>
+                            ))
+                        ) : (
                             sectDataList.map((data: SectCardProps, index: number) => (
                                 <Grid key={index} size={{ xs: 12, md:6, lg: 3 }}>
                                     <SectCard {...data} />
                                 </Grid>
                             ))
-                        }
+                        )}
                     </Grid>
                 </Box>
             </Grid>

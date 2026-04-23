@@ -19,6 +19,7 @@ import Card from '@mui/material/Card';
 import CardContent from '@mui/material/CardContent';
 import CardActions from '@mui/material/CardActions';
 import Chip from '@mui/material/Chip';
+import Skeleton from '@mui/material/Skeleton';
 import IconButton from '@mui/material/IconButton';
 import AddIcon from '@mui/icons-material/Add';
 import DeleteIcon from '@mui/icons-material/Delete';
@@ -174,7 +175,23 @@ export default function ApiKeyManagement() {
             </Box>
 
             {loading ? (
-                <Typography color="text.secondary">불러오는 중...</Typography>
+                <Box sx={{display: 'flex', flexDirection: 'column', gap: 2}}>
+                    {Array.from({length: 2}).map((_, i) => (
+                        <Card key={i} variant="outlined">
+                            <CardContent>
+                                <Box sx={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1}}>
+                                    <Skeleton variant="rounded" width={80} height={24}/>
+                                    <Skeleton width={130}/>
+                                </Box>
+                                <Skeleton width="70%" sx={{mb: 0.5}}/>
+                                <Skeleton width="40%"/>
+                            </CardContent>
+                            <CardActions sx={{justifyContent: 'flex-end'}}>
+                                <Skeleton variant="rounded" width={60} height={28}/>
+                            </CardActions>
+                        </Card>
+                    ))}
+                </Box>
             ) : apiKeys.length === 0 ? (
                 <Alert severity="info">등록된 API Key가 없습니다.</Alert>
             ) : (

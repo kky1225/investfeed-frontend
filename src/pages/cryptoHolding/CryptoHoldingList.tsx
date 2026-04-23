@@ -101,6 +101,7 @@ const CryptoHoldingList = () => {
     const [markets, setMarkets] = useState<string[]>([]);
     const [orderDirty, setOrderDirty] = useState(false);
     const [savingOrder, setSavingOrder] = useState(false);
+    const [loading, setLoading] = useState(true);
 
     const sensors = useSensors(
         useSensor(PointerSensor, {activationConstraint: {distance: 5}}),
@@ -132,6 +133,8 @@ const CryptoHoldingList = () => {
                 }
             } catch (err) {
                 console.error(err);
+            } finally {
+                setLoading(false);
             }
         })();
     }, []);
@@ -227,6 +230,7 @@ const CryptoHoldingList = () => {
                 totPrftRt={totPrftRt}
                 balance={balance}
                 dailyPl={dailyPl}
+                loading={loading}
             />
 
             <Box sx={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2}}>
@@ -288,7 +292,14 @@ const CryptoHoldingList = () => {
                         pageSizeOptions={[10, 20, 50, 100]}
                         disableColumnResize
                         density="compact"
+                        loading={loading}
                         slots={{row: DraggableRow}}
+                        slotProps={{
+                            loadingOverlay: {
+                                variant: 'skeleton',
+                                noRowsVariant: 'skeleton',
+                            },
+                        }}
                         localeText={{noRowsLabel: '데이터가 없습니다.'}}
                         sx={{
                             "& .MuiDataGrid-cell[data-field='__drag__']": {padding: 0},

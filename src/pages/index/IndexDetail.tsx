@@ -5,6 +5,7 @@ import CardContent from "@mui/material/CardContent";
 import Stack from "@mui/material/Stack";
 import Chip from "@mui/material/Chip";
 import Card from "@mui/material/Card";
+import Skeleton from "@mui/material/Skeleton";
 import {JSX, MouseEvent, ReactElement, useEffect, useRef, useState} from "react";
 import CandlestickChartIcon from '@mui/icons-material/CandlestickChart';
 import StackedLineChartIcon from '@mui/icons-material/StackedLineChart';
@@ -97,6 +98,7 @@ const IndexDetail = () => {
 
     const [indexBarData, setIndexBarData] = useState<Array<number>>([0, 0, 0]);
     const [programBarData, setProgramBarData] = useState<Array<number>>([0, 0, 0]);
+    const [loading, setLoading] = useState(true);
 
     interface StockInfoProps {
         trdeQty: number;
@@ -435,7 +437,7 @@ const IndexDetail = () => {
                 },
                 {
                     field: 'scNetprps',
-                    headerName: '증권',
+                    headerName: '금융투자',
                     flex: 1,
                     minWidth: 100,
                     renderCell: (params) => renderTradeColor(params.value as number),
@@ -448,15 +450,15 @@ const IndexDetail = () => {
                     renderCell: (params) => renderTradeColor(params.value as number),
                 },
                 {
-                    field: 'invtrtNetprps',
-                    headerName: '투신',
+                    field: 'jnsinkmNetprps',
+                    headerName: '종신금',
                     flex: 1,
                     minWidth: 100,
                     renderCell: (params) => renderTradeColor(params.value as number),
                 },
                 {
-                    field: 'bankNetprps',
-                    headerName: '은행',
+                    field: 'invtrtNetprps',
+                    headerName: '투신',
                     flex: 1,
                     minWidth: 100,
                     renderCell: (params) => renderTradeColor(params.value as number),
@@ -470,7 +472,21 @@ const IndexDetail = () => {
                 },
                 {
                     field: 'endwNetprps',
-                    headerName: '기금',
+                    headerName: '연기금등',
+                    flex: 1,
+                    minWidth: 100,
+                    renderCell: (params) => renderTradeColor(params.value as number),
+                },
+                {
+                    field: 'bankNetprps',
+                    headerName: '은행',
+                    flex: 1,
+                    minWidth: 100,
+                    renderCell: (params) => renderTradeColor(params.value as number),
+                },
+                {
+                    field: 'natnNetprps',
+                    headerName: '국가',
                     flex: 1,
                     minWidth: 100,
                     renderCell: (params) => renderTradeColor(params.value as number),
@@ -483,10 +499,10 @@ const IndexDetail = () => {
                     renderCell: (params) => renderTradeColor(params.value as number),
                 },
                 {
-                    field: 'natnNetprps',
-                    headerName: '국가',
+                    field: 'nativeTrmtFrgnrNetprps',
+                    headerName: '내국인대우외국인',
                     flex: 1,
-                    minWidth: 100,
+                    minWidth: 140,
                     renderCell: (params) => renderTradeColor(params.value as number),
                 },
             ];
@@ -499,12 +515,14 @@ const IndexDetail = () => {
                 orgnNetprps: Number(item.orgnNetprps),
                 scNetprps: Number(item.scNetprps),
                 insrncNetprps: Number(item.insrncNetprps),
+                jnsinkmNetprps: Number(item.jnsinkmNetprps),
                 invtrtNetprps: Number(item.invtrtNetprps),
-                bankNetprps: Number(item.bankNetprps),
                 samoFundNetprps: Number(item.samoFundNetprps),
                 endwNetprps: Number(item.endwNetprps),
-                etcCorpNetprps: Number(item.etcCorpNetprps),
+                bankNetprps: Number(item.bankNetprps),
                 natnNetprps: Number(item.natnNetprps),
+                etcCorpNetprps: Number(item.etcCorpNetprps),
+                nativeTrmtFrgnrNetprps: Number(item.nativeTrmtFrgnrNetprps),
             }));
 
             setTabData({
@@ -519,6 +537,8 @@ const IndexDetail = () => {
             });
         } catch(error) {
             console.error(error);
+        } finally {
+            setLoading(false);
         }
     }
 
@@ -830,7 +850,7 @@ const IndexDetail = () => {
                     <Card variant="outlined" sx={{ width: '100%' }}>
                         <CardContent>
                             <Typography component="h2" variant="subtitle2" gutterBottom>
-                                {sectChartData.title}
+                                {loading ? <Skeleton width={100}/> : sectChartData.title}
                             </Typography>
                             <Stack sx={{ justifyContent: 'space-between' }}>
                                 <Stack
@@ -842,19 +862,25 @@ const IndexDetail = () => {
                                     }}
                                 >
                                     <Typography variant="h4" component="p">
-                                        {sectChartData.value}
+                                        {loading ? <Skeleton width={160}/> : sectChartData.value}
                                     </Typography>
-                                    {renderChangeAmount(sectChartData.predPre, '')}
-                                    <Chip size="small" color={color} label={trendValues[sectChartData.trend]} />
+                                    {loading ? <Skeleton width={80}/> : renderChangeAmount(sectChartData.predPre, '')}
+                                    {loading
+                                        ? <Skeleton variant="rounded" width={60} height={24}/>
+                                        : <Chip size="small" color={color} label={trendValues[sectChartData.trend]} />}
                                 </Stack>
                                 <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-                                    {sectChartData.interval}
+                                    {loading ? <Skeleton width={140}/> : sectChartData.interval}
                                 </Typography>
                             </Stack>
                         </CardContent>
                         <Box sx={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
                             <Box sx={{ minWidth: 1200 }}>
-                                <IndexDetailLineChart {...sectChartData} />
+                                {loading ? (
+                                    <Skeleton variant="rectangular" height={400} sx={{mx: 2, mb: 2, borderRadius: 1}}/>
+                                ) : (
+                                    <IndexDetailLineChart {...sectChartData} />
+                                )}
                             </Box>
                         </Box>
                         <Box
@@ -943,7 +969,7 @@ const IndexDetail = () => {
                                 </Grid>
                                 <Grid size={{xs: 12, md: 3}}>
                                     <Typography component="h3" variant="subtitle2" gutterBottom>
-                                        {info.trdeQty.toLocaleString()}
+                                        {loading ? <Skeleton width={100}/> : info.trdeQty.toLocaleString()}
                                     </Typography>
                                 </Grid>
                                 <Grid size={{xs: 12, md: 3}}>
@@ -953,7 +979,7 @@ const IndexDetail = () => {
                                 </Grid>
                                 <Grid size={{xs: 12, md: 3}}>
                                     <Typography component="h3" variant="subtitle2" gutterBottom>
-                                        {info.trdePrica.toLocaleString()}
+                                        {loading ? <Skeleton width={100}/> : info.trdePrica.toLocaleString()}
                                     </Typography>
                                 </Grid>
                                 <Grid size={{xs: 12, md: 3}}>
@@ -963,7 +989,7 @@ const IndexDetail = () => {
                                 </Grid>
                                 <Grid size={{xs: 12, md: 3}}>
                                     <Typography component="h3" variant="subtitle2" gutterBottom>
-                                        {info.openPric.toLocaleString()}
+                                        {loading ? <Skeleton width={100}/> : info.openPric.toLocaleString()}
                                     </Typography>
                                 </Grid>
                                 <Grid size={{xs: 12, md: 3}}>
@@ -973,7 +999,7 @@ const IndexDetail = () => {
                                 </Grid>
                                 <Grid size={{xs: 12, md: 3}}>
                                     <Typography component="h3" variant="subtitle2" gutterBottom>
-                                        {info.curPrc.toLocaleString()}
+                                        {loading ? <Skeleton width={100}/> : info.curPrc.toLocaleString()}
                                     </Typography>
                                 </Grid>
                                 <Grid size={{xs: 12, md: 3}}>
@@ -983,7 +1009,7 @@ const IndexDetail = () => {
                                 </Grid>
                                 <Grid size={{xs: 12, md: 3}}>
                                     <Typography component="h3" variant="subtitle2" gutterBottom>
-                                        {info._250lwst.toLocaleString()}
+                                        {loading ? <Skeleton width={100}/> : info._250lwst.toLocaleString()}
                                     </Typography>
                                 </Grid>
                                 <Grid size={{xs: 12, md: 3}}>
@@ -993,7 +1019,7 @@ const IndexDetail = () => {
                                 </Grid>
                                 <Grid size={{xs: 12, md: 3}}>
                                     <Typography component="h3" variant="subtitle2" gutterBottom>
-                                        {info._250hgst.toLocaleString()}
+                                        {loading ? <Skeleton width={100}/> : info._250hgst.toLocaleString()}
                                     </Typography>
                                 </Grid>
                             </Grid>
@@ -1012,17 +1038,21 @@ const IndexDetail = () => {
                                 <Grid size={{ xs: 12, md: 6 }}>
                                     <Card variant="outlined" sx={{ width: '100%' }}>
                                         <CardContent>
-                                            <InvestorBarChart data={indexBarData} />
+                                            {loading ? (
+                                                <Skeleton variant="rectangular" height={300} sx={{borderRadius: 1}}/>
+                                            ) : (
+                                                <InvestorBarChart data={indexBarData} />
+                                            )}
                                         </CardContent>
                                     </Card>
                                     <Card variant="outlined" sx={{ width: '100%', mt: 2 }}>
-                                        {indexMessage.icon}
+                                        {!loading && indexMessage.icon}
                                         <CardContent>
                                             <Typography gutterBottom variant="h5" component="div">
-                                                {indexMessage.title}
+                                                {loading ? <Skeleton width={180}/> : indexMessage.title}
                                             </Typography>
                                             <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-                                                {indexMessage.message}
+                                                {loading ? <Skeleton width="80%"/> : indexMessage.message}
                                             </Typography>
                                         </CardContent>
                                     </Card>
@@ -1030,17 +1060,21 @@ const IndexDetail = () => {
                                 <Grid size={{ xs: 12, md: 6 }}>
                                     <Card variant="outlined" sx={{ width: '100%' }}>
                                         <CardContent>
-                                            <ProgramBarChart data={programBarData} />
+                                            {loading ? (
+                                                <Skeleton variant="rectangular" height={300} sx={{borderRadius: 1}}/>
+                                            ) : (
+                                                <ProgramBarChart data={programBarData} />
+                                            )}
                                         </CardContent>
                                     </Card>
                                     <Card variant="outlined" sx={{ width: '100%', mt: 2 }}>
-                                        {programMessage.icon}
+                                        {!loading && programMessage.icon}
                                         <CardContent>
                                             <Typography gutterBottom variant="h5" component="div">
-                                                {programMessage.title}
+                                                {loading ? <Skeleton width={180}/> : programMessage.title}
                                             </Typography>
                                             <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-                                                {programMessage.message}
+                                                {loading ? <Skeleton width="80%"/> : programMessage.message}
                                             </Typography>
                                         </CardContent>
                                     </Card>
@@ -1057,30 +1091,43 @@ const IndexDetail = () => {
                             </Typography>
                         </AccordionSummary>
                         <AccordionDetails sx={{ overflow: 'visible' }}>
-                            <Box sx={{ px: 3, height: 100, overflow: 'visible' }}>
-                                <Slider
-                                    aria-label="Custom marks"
-                                    track={false}
-                                    value={info.curPrc}
-                                    valueLabelDisplay="auto"
-                                    disabled
-                                    max={dayRange[1].value}
-                                    min={dayRange[0].value}
-                                    marks={dayRange}
-                                />
-                            </Box>
-                            <Box sx={{ px: 3, height: 100, overflow: 'visible' }}>
-                                <Slider
-                                    aria-label="Custom marks"
-                                    track={false}
-                                    value={info.curPrc}
-                                    valueLabelDisplay="auto"
-                                    disabled
-                                    max={yearRange[1].value}
-                                    min={yearRange[0].value}
-                                    marks={yearRange}
-                                />
-                            </Box>
+                            {loading ? (
+                                <>
+                                    <Box sx={{ px: 3, height: 100 }}>
+                                        <Skeleton variant="rectangular" height={40} sx={{mt: 3, borderRadius: 1}}/>
+                                    </Box>
+                                    <Box sx={{ px: 3, height: 100 }}>
+                                        <Skeleton variant="rectangular" height={40} sx={{mt: 3, borderRadius: 1}}/>
+                                    </Box>
+                                </>
+                            ) : (
+                                <>
+                                    <Box sx={{ px: 3, height: 100, overflow: 'visible' }}>
+                                        <Slider
+                                            aria-label="Custom marks"
+                                            track={false}
+                                            value={info.curPrc}
+                                            valueLabelDisplay="auto"
+                                            disabled
+                                            max={dayRange[1].value}
+                                            min={dayRange[0].value}
+                                            marks={dayRange}
+                                        />
+                                    </Box>
+                                    <Box sx={{ px: 3, height: 100, overflow: 'visible' }}>
+                                        <Slider
+                                            aria-label="Custom marks"
+                                            track={false}
+                                            value={info.curPrc}
+                                            valueLabelDisplay="auto"
+                                            disabled
+                                            max={yearRange[1].value}
+                                            min={yearRange[0].value}
+                                            marks={yearRange}
+                                        />
+                                    </Box>
+                                </>
+                            )}
                         </AccordionDetails>
                     </Accordion>
                 </Grid>
@@ -1094,7 +1141,11 @@ const IndexDetail = () => {
                         <AccordionDetails>
                             <Box sx={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
                                 <Box sx={{ minWidth: 1200 }}>
-                                    <ProgramLineChart seriesData={programChartData} date={programDateData} />
+                                    {loading ? (
+                                        <Skeleton variant="rectangular" height={300} sx={{borderRadius: 1}}/>
+                                    ) : (
+                                        <ProgramLineChart seriesData={programChartData} date={programDateData} />
+                                    )}
                                 </Box>
                             </Box>
                         </AccordionDetails>
@@ -1110,7 +1161,7 @@ const IndexDetail = () => {
                             <Tab label="프로그램" value='program' />
                         </Tabs>
                     </Box>
-                    <CustomDataTable rows={tabData[tabValue].row} columns={tabData[tabValue].col} pageSize={20} />
+                    <CustomDataTable rows={tabData[tabValue].row} columns={tabData[tabValue].col} pageSize={20} loading={loading} />
                 </Grid>
             </Grid>
         </Box>

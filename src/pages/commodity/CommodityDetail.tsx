@@ -1,6 +1,8 @@
 import {JSX, MouseEvent, ReactElement, useEffect, useRef, useState} from "react";
 import {useParams} from "react-router-dom";
-import {Box, Select, SelectChangeEvent, Slider, Tooltip} from "@mui/material";
+import {Accordion, AccordionDetails, AccordionSummary, Box, Select, SelectChangeEvent, Slider, Tooltip} from "@mui/material";
+import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
+import Skeleton from "@mui/material/Skeleton";
 import Typography from "@mui/material/Typography";
 import Grid from "@mui/material/Grid";
 import Card from "@mui/material/Card";
@@ -91,6 +93,8 @@ const CommodityDetail = () => {
         dateList: []
     });
 
+    const [loading, setLoading] = useState(true);
+
     const [dayRange, setDayRange] = useState<CommodityRangeProps[]>([
         {
             value: 0,
@@ -153,6 +157,7 @@ const CommodityDetail = () => {
     const trendValues = { up: `${commodityChartData.fluRt}%`, down: `${commodityChartData.fluRt}%`, neutral: `${commodityChartData.fluRt}%` };
 
     useEffect(() => {
+        setLoading(true);
         commodityDetail(req);
 
         let chartTimeout: ReturnType<typeof setTimeout>;
@@ -332,6 +337,8 @@ const CommodityDetail = () => {
             setMessage(message);
         } catch (err) {
             console.error(err);
+        } finally {
+            setLoading(false);
         }
     }
 
@@ -555,12 +562,16 @@ const CommodityDetail = () => {
                         <CardContent>
                             <Box sx={{ display: 'flex', justifyContent: 'space-between'}}>
                                 <Typography component="h2" variant="subtitle2" gutterBottom>
-                                    {commodityChartData.title}
-                                    {commodityChartData.orderWarning !== '0' &&
-                                        <Tooltip title={orderWarningMsg(commodityChartData.orderWarning)} placement="right">
-                                            <ErrorIcon color="error" sx={{ fontSize: 'inherit', verticalAlign: 'middle', ml: "1px", mb: "3px" }} />
-                                        </Tooltip>
-                                    }
+                                    {loading ? <Skeleton width={140}/> : (
+                                        <>
+                                            {commodityChartData.title}
+                                            {commodityChartData.orderWarning !== '0' &&
+                                                <Tooltip title={orderWarningMsg(commodityChartData.orderWarning)} placement="right">
+                                                    <ErrorIcon color="error" sx={{ fontSize: 'inherit', verticalAlign: 'middle', ml: "1px", mb: "3px" }} />
+                                                </Tooltip>
+                                            }
+                                        </>
+                                    )}
                                 </Typography>
                                 {commodityChartData.nxtEnable === 'Y' &&
                                     <Typography component="h2" variant="subtitle2" gutterBottom>
@@ -581,19 +592,25 @@ const CommodityDetail = () => {
                                     }}
                                 >
                                     <Typography variant="h4" component="p">
-                                        {commodityChartData.value}
+                                        {loading ? <Skeleton width={160}/> : commodityChartData.value}
                                     </Typography>
-                                    {renderChangeAmount(commodityChartData.predPre, '')}
-                                    <Chip size="small" color={color} label={trendValues[commodityChartData.trend]} />
+                                    {loading ? <Skeleton width={80}/> : renderChangeAmount(commodityChartData.predPre, '')}
+                                    {loading
+                                        ? <Skeleton variant="rounded" width={60} height={24}/>
+                                        : <Chip size="small" color={color} label={trendValues[commodityChartData.trend]} />}
                                 </Stack>
                                 <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-                                    {commodityChartData.interval}
+                                    {loading ? <Skeleton width={140}/> : commodityChartData.interval}
                                 </Typography>
                             </Stack>
                         </CardContent>
                         <Box sx={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
                             <Box sx={{ minWidth: 1200 }}>
-                                <CommodityDetailLineChart {...commodityChartData} />
+                                {loading ? (
+                                    <Skeleton variant="rectangular" height={400} sx={{mx: 2, mb: 2, borderRadius: 1}}/>
+                                ) : (
+                                    <CommodityDetailLineChart {...commodityChartData} />
+                                )}
                             </Box>
                         </Box>
                         <Box
@@ -681,7 +698,7 @@ const CommodityDetail = () => {
                                 </Grid>
                                 <Grid size={{xs: 12, md: 3}}>
                                     <Typography variant="subtitle2" gutterBottom>
-                                        {info.trdeQty.toLocaleString()}
+                                        {loading ? <Skeleton width={100}/> : info.trdeQty.toLocaleString()}
                                     </Typography>
                                 </Grid>
                                 <Grid size={{xs: 12, md: 3}}>
@@ -691,7 +708,7 @@ const CommodityDetail = () => {
                                 </Grid>
                                 <Grid size={{xs: 12, md: 3}}>
                                     <Typography variant="subtitle2" gutterBottom>
-                                        {info.trdePrica.toLocaleString()}
+                                        {loading ? <Skeleton width={100}/> : info.trdePrica.toLocaleString()}
                                     </Typography>
                                 </Grid>
                                 <Grid size={{xs: 12, md: 3}}>
@@ -701,7 +718,7 @@ const CommodityDetail = () => {
                                 </Grid>
                                 <Grid size={{xs: 12, md: 3}}>
                                     <Typography variant="subtitle2" gutterBottom>
-                                        {info.openPric.toLocaleString()}
+                                        {loading ? <Skeleton width={100}/> : info.openPric.toLocaleString()}
                                     </Typography>
                                 </Grid>
                                 <Grid size={{xs: 12, md: 3}}>
@@ -711,7 +728,7 @@ const CommodityDetail = () => {
                                 </Grid>
                                 <Grid size={{xs: 12, md: 3}}>
                                     <Typography variant="subtitle2" gutterBottom>
-                                        {info.curPrc.toLocaleString()}
+                                        {loading ? <Skeleton width={100}/> : info.curPrc.toLocaleString()}
                                     </Typography>
                                 </Grid>
                                 <Grid size={{xs: 12, md: 3}}>
@@ -721,7 +738,7 @@ const CommodityDetail = () => {
                                 </Grid>
                                 <Grid size={{xs: 12, md: 3}}>
                                     <Typography variant="subtitle2" gutterBottom>
-                                        {info._250lwst.toLocaleString()}
+                                        {loading ? <Skeleton width={100}/> : info._250lwst.toLocaleString()}
                                     </Typography>
                                 </Grid>
                                 <Grid size={{xs: 12, md: 3}}>
@@ -731,7 +748,7 @@ const CommodityDetail = () => {
                                 </Grid>
                                 <Grid size={{xs: 12, md: 3}}>
                                     <Typography variant="subtitle2" gutterBottom>
-                                        {info._250hgst.toLocaleString()}
+                                        {loading ? <Skeleton width={100}/> : info._250hgst.toLocaleString()}
                                     </Typography>
                                 </Grid>
                             </Grid>
@@ -739,62 +756,89 @@ const CommodityDetail = () => {
                     </Card>
                 </Grid>
                 <Grid size={{ xs: 12, md: 8 }}>
-                    <Typography component="h2" variant="h6" sx={{ mb: 2 }}>
-                        당일 투자자별 순매수(주)
-                    </Typography>
-                    <Grid container spacing={2}>
-                        <Grid size={{ xs: 12, md: 6 }}>
-                            <Card variant="outlined" sx={{ width: '100%' }}>
-                                <CardContent>
-                                    <InvestorBarChart data={barData} />
-                                </CardContent>
-                            </Card>
-                        </Grid>
-                        <Grid size={{ xs: 12, md: 6 }}>
-                            <Card variant="outlined" sx={{ width: '100%' }}>
-                                {message.icon}
-                                <CardContent>
-                                    <Typography gutterBottom variant="h5" component="div">
-                                        {message.title}
-                                    </Typography>
-                                    <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-                                        {message.message}
-                                    </Typography>
-                                </CardContent>
-                            </Card>
-                        </Grid>
-                    </Grid>
+                    <Accordion variant="outlined" defaultExpanded>
+                        <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+                            <Typography component="h2" variant="h6">
+                                당일 투자자별 순매수(주)
+                            </Typography>
+                        </AccordionSummary>
+                        <AccordionDetails>
+                            <Grid container spacing={2}>
+                                <Grid size={{ xs: 12, md: 6 }}>
+                                    <Card variant="outlined" sx={{ width: '100%' }}>
+                                        <CardContent>
+                                            {loading ? (
+                                                <Skeleton variant="rectangular" height={300} sx={{borderRadius: 1}}/>
+                                            ) : (
+                                                <InvestorBarChart data={barData} />
+                                            )}
+                                        </CardContent>
+                                    </Card>
+                                </Grid>
+                                <Grid size={{ xs: 12, md: 6 }}>
+                                    <Card variant="outlined" sx={{ width: '100%' }}>
+                                        {!loading && message.icon}
+                                        <CardContent>
+                                            <Typography gutterBottom variant="h5" component="div">
+                                                {loading ? <Skeleton width={180}/> : message.title}
+                                            </Typography>
+                                            <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+                                                {loading ? <Skeleton width="80%"/> : message.message}
+                                            </Typography>
+                                        </CardContent>
+                                    </Card>
+                                </Grid>
+                            </Grid>
+                        </AccordionDetails>
+                    </Accordion>
                 </Grid>
                 <Grid size={{ xs: 12, md: 4 }}>
-                    <Typography component="h2" variant="h6" sx={{ mb: 2 }}>
-                        일별 시세
-                    </Typography>
-                    <Card variant="outlined" sx={{ width: '100%', overflow: 'visible' }}>
-                        <CardContent sx={{ overflow: 'visible', px: 5, height: 100 }}>
-                            <Slider
-                                aria-label="Custom marks"
-                                track={false}
-                                value={info.curPrc}
-                                valueLabelDisplay="auto"
-                                disabled
-                                max={dayRange[1].value}
-                                min={dayRange[0].value}
-                                marks={dayRange}
-                            />
-                        </CardContent>
-                        <CardContent sx={{ overflow: 'visible', px: 5, height: 100 }}>
-                            <Slider
-                                aria-label="Custom marks"
-                                track={false}
-                                value={info.curPrc}
-                                valueLabelDisplay="auto"
-                                disabled
-                                max={yearRange[1].value}
-                                min={yearRange[0].value}
-                                marks={yearRange}
-                            />
-                        </CardContent>
-                    </Card>
+                    <Accordion variant="outlined" defaultExpanded sx={{ overflow: 'visible' }}>
+                        <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+                            <Typography component="h2" variant="h6">
+                                일별 시세
+                            </Typography>
+                        </AccordionSummary>
+                        <AccordionDetails sx={{ overflow: 'visible' }}>
+                            {loading ? (
+                                <>
+                                    <Box sx={{ px: 3, height: 100 }}>
+                                        <Skeleton variant="rectangular" height={40} sx={{mt: 3, borderRadius: 1}}/>
+                                    </Box>
+                                    <Box sx={{ px: 3, height: 100 }}>
+                                        <Skeleton variant="rectangular" height={40} sx={{mt: 3, borderRadius: 1}}/>
+                                    </Box>
+                                </>
+                            ) : (
+                                <>
+                                    <Box sx={{ px: 3, height: 100, overflow: 'visible' }}>
+                                        <Slider
+                                            aria-label="Custom marks"
+                                            track={false}
+                                            value={info.curPrc}
+                                            valueLabelDisplay="auto"
+                                            disabled
+                                            max={dayRange[1].value}
+                                            min={dayRange[0].value}
+                                            marks={dayRange}
+                                        />
+                                    </Box>
+                                    <Box sx={{ px: 3, height: 100, overflow: 'visible' }}>
+                                        <Slider
+                                            aria-label="Custom marks"
+                                            track={false}
+                                            value={info.curPrc}
+                                            valueLabelDisplay="auto"
+                                            disabled
+                                            max={yearRange[1].value}
+                                            min={yearRange[0].value}
+                                            marks={yearRange}
+                                        />
+                                    </Box>
+                                </>
+                            )}
+                        </AccordionDetails>
+                    </Accordion>
                 </Grid>
             </Grid>
         </Box>

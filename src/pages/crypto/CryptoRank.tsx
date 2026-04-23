@@ -78,6 +78,7 @@ const columns: GridColDef[] = [
 const CryptoRank = () => {
     const navigate = useNavigate();
     const [rows, setRows] = useState<CryptoRankRow[]>([]);
+    const [loading, setLoading] = useState(true);
     const bufferMap = useRef<Map<string, CryptoTickerStream>>(new Map());
 
     useEffect(() => {
@@ -147,6 +148,8 @@ const CryptoRank = () => {
             })));
         } catch (e) {
             console.error(e);
+        } finally {
+            setLoading(false);
         }
     };
 
@@ -196,10 +199,15 @@ const CryptoRank = () => {
                         initialState={{
                             pagination: {paginationModel: {pageSize: 50}},
                         }}
-                        pageSizeOptions={[20, 50, 100]}
+                        pageSizeOptions={[10, 20, 50, 100]}
                         disableColumnResize
                         density="compact"
+                        loading={loading}
                         slotProps={{
+                            loadingOverlay: {
+                                variant: 'skeleton',
+                                noRowsVariant: 'skeleton',
+                            },
                             filterPanel: {
                                 filterFormProps: {
                                     logicOperatorInputProps: {

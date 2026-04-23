@@ -26,6 +26,7 @@ import DialogTitle from "@mui/material/DialogTitle";
 import DialogContent from "@mui/material/DialogContent";
 import DialogActions from "@mui/material/DialogActions";
 import {DataGrid, type GridColDef, type GridRenderCellParams} from "@mui/x-data-grid";
+import Skeleton from "@mui/material/Skeleton";
 import BlindText from "../../components/BlindText.tsx";
 import {useBlindMode} from "../../context/BlindModeContext.tsx";
 import type {RealizedPnlItem} from "../../type/RealizedPnlType.ts";
@@ -60,6 +61,7 @@ export default function CryptoRealizedPnlTab({myBrokers}: CryptoRealizedPnlTabPr
     const [menuTarget, setMenuTarget] = useState<RealizedPnlItem | null>(null);
 
     const [reloadKey, setReloadKey] = useState(0);
+    const [loading, setLoading] = useState(true);
     const reload = () => setReloadKey(prev => prev + 1);
     const {isBlind} = useBlindMode();
     const [showList, setShowList] = useState(!isBlind);
@@ -74,6 +76,8 @@ export default function CryptoRealizedPnlTab({myBrokers}: CryptoRealizedPnlTabPr
         if (myBrokers.length === 0 || !selectedBroker) return;
         let cancelled = false;
 
+        setLoading(true);
+
         (async () => {
             try {
                 const yearParam = viewMode !== 'all' ? year : undefined;
@@ -86,6 +90,8 @@ export default function CryptoRealizedPnlTab({myBrokers}: CryptoRealizedPnlTabPr
                 setTotalPnl(filtered.reduce((sum, item) => sum + item.realizedPnl, 0));
             } catch (err) {
                 console.error(err);
+            } finally {
+                if (!cancelled) setLoading(false);
             }
         })();
 
@@ -201,8 +207,8 @@ export default function CryptoRealizedPnlTab({myBrokers}: CryptoRealizedPnlTabPr
                     <Typography variant="body2" sx={{color: 'text.secondary', mb: 0.5}}>
                         {viewMode === 'monthly' ? `${year}년 ${month}월` : viewMode === 'yearly' ? `${year}년` : '전체'} 실현손익
                     </Typography>
-                    <Typography variant="h4" sx={{fontWeight: 700, color: pnlColor}}>
-                        <BlindText>{totalPnl > 0 ? '+' : ''}{totalPnl.toLocaleString()}원</BlindText>
+                    <Typography variant="h4" sx={{fontWeight: 700, color: loading ? undefined : pnlColor}}>
+                        {loading ? <Skeleton width="40%"/> : <BlindText>{totalPnl > 0 ? '+' : ''}{totalPnl.toLocaleString()}원</BlindText>}
                     </Typography>
                 </CardContent>
             </Card>
@@ -224,6 +230,13 @@ export default function CryptoRealizedPnlTab({myBrokers}: CryptoRealizedPnlTabPr
                     disableRowSelectionOnClick
                     pageSizeOptions={[10, 20, 50, 100]}
                     initialState={{pagination: {paginationModel: {pageSize: 10}}}}
+                    loading={loading}
+                    slotProps={{
+                        loadingOverlay: {
+                            variant: 'skeleton',
+                            noRowsVariant: 'skeleton',
+                        },
+                    }}
                     localeText={{noRowsLabel: '데이터가 없습니다.'}}
                     sx={{
                         '& .MuiDataGrid-cell': {cursor: 'default', display: 'flex', alignItems: 'center'},

@@ -1,6 +1,10 @@
 import Box from "@mui/material/Box";
 import Grid from "@mui/material/Grid";
 import Typography from "@mui/material/Typography";
+import Card from "@mui/material/Card";
+import CardContent from "@mui/material/CardContent";
+import Stack from "@mui/material/Stack";
+import Skeleton from "@mui/material/Skeleton";
 import IndexLineChart, {IndexLineChartProps} from "../../components/IndexLineChart.tsx";
 import {fetchIndexList, fetchIndexListStream} from "../../api/index/IndexApi.ts";
 import {useEffect, useRef, useState} from "react";
@@ -13,6 +17,7 @@ const IndexList = () => {
     const marketTimer = useRef<number>(0);
 
     const [indexDataList, setIndexDataList] = useState<IndexLineChartProps[]>([]);
+    const [loading, setLoading] = useState(true);
 
     useEffect(() => {
         indexList();
@@ -169,6 +174,8 @@ const IndexList = () => {
             setIndexDataList(newIndexDataList);
         }catch (error) {
             console.error(error);
+        } finally {
+            setLoading(false);
         }
     }
 
@@ -241,13 +248,32 @@ const IndexList = () => {
                 columns={12}
                 sx={{ mb: (theme) => theme.spacing(2) }}
             >
-                {
+                {loading ? (
+                    Array.from({length: 4}).map((_, index) => (
+                        <Grid key={index} size={{ xs: 12, md: 6 }}>
+                            <Card variant="outlined" sx={{width: '100%'}}>
+                                <CardContent>
+                                    <Skeleton width={120} height={28}/>
+                                    <Stack direction="row" sx={{justifyContent: 'space-between', alignItems: 'center', mt: 1, mb: 1}}>
+                                        <Skeleton width={140} height={40}/>
+                                        <Stack direction="row" spacing={1}>
+                                            <Skeleton variant="rounded" width={60} height={24}/>
+                                            <Skeleton variant="rounded" width={80} height={24}/>
+                                        </Stack>
+                                    </Stack>
+                                    <Skeleton width={180}/>
+                                    <Skeleton variant="rectangular" height={220} sx={{mt: 1.5, borderRadius: 1}}/>
+                                </CardContent>
+                            </Card>
+                        </Grid>
+                    ))
+                ) : (
                     indexDataList.map((value, index) => (
                         <Grid key={index} size={{ xs: 12, md: 6 }}>
                             <IndexLineChart {...value} />
                         </Grid>
                     ))
-                }
+                )}
                 {/*<Grid size={{ xs: 12, md: 6 }}>*/}
                 {/*    <Card variant="outlined" sx={{ width: '100%', mb: 1}}>*/}
                 {/*        <CardContent>*/}

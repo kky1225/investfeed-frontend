@@ -5,6 +5,7 @@ import CardContent from "@mui/material/CardContent";
 import Stack from "@mui/material/Stack";
 import Chip from "@mui/material/Chip";
 import Card from "@mui/material/Card";
+import Skeleton from "@mui/material/Skeleton";
 import {MouseEvent, ReactElement, useEffect, useRef, useState} from "react";
 import CandlestickChartIcon from '@mui/icons-material/CandlestickChart';
 import StackedLineChartIcon from '@mui/icons-material/StackedLineChart';
@@ -99,6 +100,8 @@ const CryptoDetail = () => {
         accTradePrice24h: number;
     }
 
+    const [loading, setLoading] = useState(true);
+
     const [info, setInfo] = useState<CryptoInfoProps>({
         openingPrice: 0,
         highPrice: 0,
@@ -134,6 +137,8 @@ const CryptoDetail = () => {
     useEffect(() => {
         let interval: ReturnType<typeof setInterval>;
         let socket: WebSocket;
+
+        setLoading(true);
 
         (async () => {
             await cryptoDetail(req);
@@ -253,6 +258,8 @@ const CryptoDetail = () => {
 
         } catch (error) {
             console.error(error);
+        } finally {
+            setLoading(false);
         }
     }
 
@@ -416,7 +423,7 @@ const CryptoDetail = () => {
                         <CardContent>
                             <Box sx={{display: 'flex', alignItems: 'center', justifyContent: 'space-between'}}>
                                 <Typography component="h2" variant="subtitle2" gutterBottom>
-                                    {chartData.title}
+                                    {loading ? <Skeleton width={120}/> : chartData.title}
                                 </Typography>
                                 <Tooltip title="목표가 알림">
                                     <IconButton size="small" onClick={() => setPriceTargetOpen(true)} sx={{mb: "3px"}}>
@@ -434,19 +441,25 @@ const CryptoDetail = () => {
                                     }}
                                 >
                                     <Typography variant="h4" component="p">
-                                        {chartData.value}
+                                        {loading ? <Skeleton width={160}/> : chartData.value}
                                     </Typography>
-                                    {renderChangeAmount(chartData.changePrice)}
-                                    <Chip size="small" color={color} label={trendValues[chartData.trend]} />
+                                    {loading ? <Skeleton width={80}/> : renderChangeAmount(chartData.changePrice)}
+                                    {loading
+                                        ? <Skeleton variant="rounded" width={60} height={24}/>
+                                        : <Chip size="small" color={color} label={trendValues[chartData.trend]} />}
                                 </Stack>
                                 <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-                                    {chartData.interval}
+                                    {loading ? <Skeleton width={140}/> : chartData.interval}
                                 </Typography>
                             </Stack>
                         </CardContent>
                         <Box sx={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
                             <Box sx={{ minWidth: 1200 }}>
-                                <CryptoDetailLineChart {...chartData} />
+                                {loading ? (
+                                    <Skeleton variant="rectangular" height={400} sx={{mx: 2, mb: 2, borderRadius: 1}}/>
+                                ) : (
+                                    <CryptoDetailLineChart {...chartData} />
+                                )}
                             </Box>
                         </Box>
                         <Box
@@ -536,7 +549,7 @@ const CryptoDetail = () => {
                                 </Grid>
                                 <Grid size={{xs: 12, md: 3}}>
                                     <Typography component="h3" variant="subtitle2" gutterBottom>
-                                        {info.openingPrice.toLocaleString()}
+                                        {loading ? <Skeleton width={100}/> : info.openingPrice.toLocaleString()}
                                     </Typography>
                                 </Grid>
                                 <Grid size={{xs: 12, md: 3}}>
@@ -546,7 +559,7 @@ const CryptoDetail = () => {
                                 </Grid>
                                 <Grid size={{xs: 12, md: 3}}>
                                     <Typography component="h3" variant="subtitle2" gutterBottom>
-                                        {info.tradePrice.toLocaleString()}
+                                        {loading ? <Skeleton width={100}/> : info.tradePrice.toLocaleString()}
                                     </Typography>
                                 </Grid>
                                 <Grid size={{xs: 12, md: 3}}>
@@ -556,7 +569,7 @@ const CryptoDetail = () => {
                                 </Grid>
                                 <Grid size={{xs: 12, md: 3}}>
                                     <Typography component="h3" variant="subtitle2" gutterBottom>
-                                        {info.highPrice.toLocaleString()}
+                                        {loading ? <Skeleton width={100}/> : info.highPrice.toLocaleString()}
                                     </Typography>
                                 </Grid>
                                 <Grid size={{xs: 12, md: 3}}>
@@ -566,7 +579,7 @@ const CryptoDetail = () => {
                                 </Grid>
                                 <Grid size={{xs: 12, md: 3}}>
                                     <Typography component="h3" variant="subtitle2" gutterBottom>
-                                        {info.lowPrice.toLocaleString()}
+                                        {loading ? <Skeleton width={100}/> : info.lowPrice.toLocaleString()}
                                     </Typography>
                                 </Grid>
                                 <Grid size={{xs: 12, md: 3}}>
@@ -576,7 +589,7 @@ const CryptoDetail = () => {
                                 </Grid>
                                 <Grid size={{xs: 12, md: 3}}>
                                     <Typography component="h3" variant="subtitle2" gutterBottom>
-                                        {info.prevClosingPrice.toLocaleString()}
+                                        {loading ? <Skeleton width={100}/> : info.prevClosingPrice.toLocaleString()}
                                     </Typography>
                                 </Grid>
                                 <Grid size={{xs: 12, md: 3}}>
@@ -586,7 +599,7 @@ const CryptoDetail = () => {
                                 </Grid>
                                 <Grid size={{xs: 12, md: 3}}>
                                     <Typography component="h3" variant="subtitle2" gutterBottom>
-                                        {info.accTradeVolume24h.toLocaleString()}
+                                        {loading ? <Skeleton width={100}/> : info.accTradeVolume24h.toLocaleString()}
                                     </Typography>
                                 </Grid>
                                 <Grid size={{xs: 12, md: 3}}>
@@ -596,7 +609,7 @@ const CryptoDetail = () => {
                                 </Grid>
                                 <Grid size={{xs: 12, md: 3}}>
                                     <Typography component="h3" variant="subtitle2" gutterBottom>
-                                        {formatTradePrice(info.accTradePrice24h)}
+                                        {loading ? <Skeleton width={100}/> : formatTradePrice(info.accTradePrice24h)}
                                     </Typography>
                                 </Grid>
                             </Grid>
@@ -608,30 +621,43 @@ const CryptoDetail = () => {
                         시세 범위
                     </Typography>
                     <Card variant="outlined" sx={{ width: '100%', overflow: 'visible' }}>
-                        <CardContent sx={{ overflow: 'visible', px: 5, height: 100 }}>
-                            <Slider
-                                aria-label="Custom marks"
-                                track={false}
-                                value={info.tradePrice}
-                                valueLabelDisplay="auto"
-                                disabled
-                                max={dayRange[1].value}
-                                min={dayRange[0].value}
-                                marks={dayRange}
-                            />
-                        </CardContent>
-                        <CardContent sx={{ overflow: 'visible', px: 5, height: 100 }}>
-                            <Slider
-                                aria-label="Custom marks"
-                                track={false}
-                                value={info.tradePrice}
-                                valueLabelDisplay="auto"
-                                disabled
-                                max={yearRange[1].value}
-                                min={yearRange[0].value}
-                                marks={yearRange}
-                            />
-                        </CardContent>
+                        {loading ? (
+                            <>
+                                <CardContent sx={{ px: 5, height: 100 }}>
+                                    <Skeleton variant="rectangular" height={40} sx={{mt: 3, borderRadius: 1}}/>
+                                </CardContent>
+                                <CardContent sx={{ px: 5, height: 100 }}>
+                                    <Skeleton variant="rectangular" height={40} sx={{mt: 3, borderRadius: 1}}/>
+                                </CardContent>
+                            </>
+                        ) : (
+                            <>
+                                <CardContent sx={{ overflow: 'visible', px: 5, height: 100 }}>
+                                    <Slider
+                                        aria-label="Custom marks"
+                                        track={false}
+                                        value={info.tradePrice}
+                                        valueLabelDisplay="auto"
+                                        disabled
+                                        max={dayRange[1].value}
+                                        min={dayRange[0].value}
+                                        marks={dayRange}
+                                    />
+                                </CardContent>
+                                <CardContent sx={{ overflow: 'visible', px: 5, height: 100 }}>
+                                    <Slider
+                                        aria-label="Custom marks"
+                                        track={false}
+                                        value={info.tradePrice}
+                                        valueLabelDisplay="auto"
+                                        disabled
+                                        max={yearRange[1].value}
+                                        min={yearRange[0].value}
+                                        marks={yearRange}
+                                    />
+                                </CardContent>
+                            </>
+                        )}
                     </Card>
                 </Grid>
             </Grid>

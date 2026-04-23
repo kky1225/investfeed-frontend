@@ -37,6 +37,7 @@ import MemberManagement from "./pages/admin/MemberManagement.tsx";
 import MenuManagement from "./pages/admin/MenuManagement.tsx";
 import BrokerManagement from "./pages/admin/BrokerManagement.tsx";
 import CalendarManagement from "./pages/admin/CalendarManagement.tsx";
+import Monitoring from "./pages/admin/Monitoring.tsx";
 import Profile from "./pages/settings/Profile.tsx";
 import ProtectedRoute from "./components/ProtectedRoute.tsx";
 import ChangePassword from "./pages/settings/ChangePassword.tsx";
@@ -178,6 +179,7 @@ function App() {
                         <Route path="/admin/menus" Component={MenuManagement} />
                         <Route path="/admin/brokers" Component={BrokerManagement} />
                         <Route path="/admin/calendar" Component={CalendarManagement} />
+                        <Route path="/admin/monitoring" Component={Monitoring} />
                     </Route>
                 </Route>
             </Routes>

@@ -1,6 +1,10 @@
 import Box from "@mui/material/Box";
 import Grid from "@mui/material/Grid";
 import Typography from "@mui/material/Typography";
+import Card from "@mui/material/Card";
+import CardContent from "@mui/material/CardContent";
+import Stack from "@mui/material/Stack";
+import Skeleton from "@mui/material/Skeleton";
 import {useEffect, useRef, useState} from "react";
 import {fetchTimeNow} from "../../api/time/TimeApi.ts";
 import {MarketType} from "../../type/timeType.ts";
@@ -13,6 +17,7 @@ const CommodityList = () => {
     const marketTimer = useRef<number>(0);
 
     const [commodityDataList, setCommodityDataList] = useState<CommodityLineChartProps[]>([]);
+    const [loading, setLoading] = useState(true);
 
     useEffect(() => {
         commodityList();
@@ -166,6 +171,8 @@ const CommodityList = () => {
             setCommodityDataList(newCommodityDataList);
         }catch (error) {
             console.error(error);
+        } finally {
+            setLoading(false);
         }
     }
 
@@ -230,7 +237,7 @@ const CommodityList = () => {
     return (
         <Box sx={{ width: '100%', maxWidth: { sm: '100%', md: '1700px' } }}>
             <Typography component="h2" variant="h6" sx={{ mb: 2 }}>
-                주요 지수
+                원자재 목록
             </Typography>
             <Grid
                 container
@@ -238,13 +245,32 @@ const CommodityList = () => {
                 columns={12}
                 sx={{ mb: (theme) => theme.spacing(2) }}
             >
-                {
+                {loading ? (
+                    Array.from({length: 2}).map((_, index) => (
+                        <Grid key={index} size={{ xs: 12, md: 6 }}>
+                            <Card variant="outlined" sx={{width: '100%'}}>
+                                <CardContent>
+                                    <Skeleton width={120} height={28}/>
+                                    <Stack direction="row" sx={{justifyContent: 'space-between', alignItems: 'center', mt: 1, mb: 1}}>
+                                        <Skeleton width={140} height={40}/>
+                                        <Stack direction="row" spacing={1}>
+                                            <Skeleton variant="rounded" width={60} height={24}/>
+                                            <Skeleton variant="rounded" width={80} height={24}/>
+                                        </Stack>
+                                    </Stack>
+                                    <Skeleton width={180}/>
+                                    <Skeleton variant="rectangular" height={220} sx={{mt: 1.5, borderRadius: 1}}/>
+                                </CardContent>
+                            </Card>
+                        </Grid>
+                    ))
+                ) : (
                     commodityDataList.map((value, index) => (
                         <Grid key={index} size={{ xs: 12, md: 6 }}>
                             <CommodityLineChart {...value} />
                         </Grid>
                     ))
-                }
+                )}
             </Grid>
         </Box>
     )

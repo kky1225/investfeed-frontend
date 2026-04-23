@@ -7,6 +7,10 @@ import {fetchThemeList} from "../../api/theme/ThemeApi.ts";
 import ThemeTable, {ThemeGridRow} from "../../components/ThemeTable.tsx";
 import {GridColDef} from "@mui/x-data-grid";
 import Chip from "@mui/material/Chip";
+import Card from "@mui/material/Card";
+import CardContent from "@mui/material/CardContent";
+import Stack from "@mui/material/Stack";
+import Skeleton from "@mui/material/Skeleton";
 import NumberSpinner from "../../components/NumberSpinner.tsx";
 import FormControl from "@mui/material/FormControl";
 import MenuItem from "@mui/material/MenuItem";
@@ -17,6 +21,7 @@ const ThemeList = () => {
         fluPlAmtTp: "3"
     });
     const [row, setRow] = useState<ThemeGridRow[]>([]);
+    const [loading, setLoading] = useState(true);
     const columns: GridColDef[] = [
         {
             field: 'rank',
@@ -95,6 +100,8 @@ const ThemeList = () => {
             setRow(newRowData);
         } catch (error) {
             console.error(error);
+        } finally {
+            setLoading(false);
         }
     }
 
@@ -175,7 +182,7 @@ const ThemeList = () => {
                         columns={12}
                         sx={{ mt: 1, mb: (theme) => theme.spacing(2) }}
                     >
-                        <ThemeTable rows={row} columns={columns} pageSize={100} />
+                        <ThemeTable rows={row} columns={columns} pageSize={100} loading={loading} />
                     </Grid>
                 </Box>
             </Grid>

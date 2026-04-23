@@ -5,6 +5,7 @@ interface ThemeTableProps {
     rows: ThemeGridRow[],
     columns: GridColDef[],
     pageSize: number,
+    loading?: boolean,
 }
 
 export interface ThemeGridRow {
@@ -17,7 +18,7 @@ export interface ThemeGridRow {
 }
 
 const ThemeTable = (
-    { rows, columns, pageSize }: ThemeTableProps
+    { rows, columns, pageSize, loading }: ThemeTableProps
 ) => {
     const navigate = useNavigate();
 
@@ -39,7 +40,12 @@ const ThemeTable = (
             pageSizeOptions={[10, 20, 50, 100]}
             disableColumnResize
             density="compact"
+            loading={loading}
             slotProps={{
+                loadingOverlay: {
+                    variant: 'skeleton',
+                    noRowsVariant: 'skeleton',
+                },
                 filterPanel: {
                     filterFormProps: {
                         logicOperatorInputProps: {

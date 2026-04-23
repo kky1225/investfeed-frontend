@@ -3,6 +3,10 @@ import Box from "@mui/material/Box";
 import Grid from "@mui/material/Grid";
 import {GridColDef} from "@mui/x-data-grid";
 import Chip from "@mui/material/Chip";
+import Card from "@mui/material/Card";
+import CardContent from "@mui/material/CardContent";
+import Stack from "@mui/material/Stack";
+import Skeleton from "@mui/material/Skeleton";
 import {useEffect, useRef, useState} from "react";
 import {fetchTimeNow} from "../../api/time/TimeApi.ts";
 import {MarketType} from "../../type/timeType.ts";
@@ -29,6 +33,7 @@ const ThemeStockList = () => {
     });
 
     const [row, setRow] = useState<ThemeStockGridRow[]>([]);
+    const [loading, setLoading] = useState(true);
     const columns: GridColDef[] = [
         {
             field: 'index',
@@ -230,6 +235,8 @@ const ThemeStockList = () => {
             });
         } catch (error) {
             console.log(error);
+        } finally {
+            setLoading(false);
         }
     }
 
@@ -268,7 +275,7 @@ const ThemeStockList = () => {
     return (
         <Box sx={{ width: '100%', maxWidth: { sm: '100%', md: '1700px' } }}>
             <Typography component="h2" variant="h6" sx={{ mb: 2 }}>
-                주식 목록
+                테마 주식 목록
             </Typography>
             <Grid
                 container
@@ -277,7 +284,7 @@ const ThemeStockList = () => {
                 sx={{ mb: (theme) => theme.spacing(2) }}
             >
                 <Box sx={{ width: '100%' }}>
-                    <ThemeStockTableProps rows={row} columns={columns} pageSize={100} />
+                    <ThemeStockTableProps rows={row} columns={columns} pageSize={100} loading={loading} />
                 </Box>
             </Grid>
         </Box>

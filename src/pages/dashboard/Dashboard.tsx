@@ -7,6 +7,7 @@ import StatCard, {StatCardProps} from "../../components/StatCard.tsx";
 import Card from "@mui/material/Card";
 import CardContent from "@mui/material/CardContent";
 import Button from "@mui/material/Button";
+import Skeleton from "@mui/material/Skeleton";
 import {useMediaQuery} from "@mui/material";
 import InsightsRoundedIcon from '@mui/icons-material/InsightsRounded';
 import ChevronRightRoundedIcon from '@mui/icons-material/ChevronRightRounded';
@@ -67,6 +68,7 @@ export default function Dashboard() {
 
     const [row, setRow] = useState<GridRowsProp[]>([]);
     const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+    const [loading, setLoading] = useState(true);
 
     useEffect(() => {
         let chartTimeout: ReturnType<typeof setTimeout>;
@@ -200,6 +202,8 @@ export default function Dashboard() {
             setRow(ranking);
         } catch (err) {
             console.error(err);
+        } finally {
+            setLoading(false);
         }
     };
 
@@ -426,7 +430,11 @@ export default function Dashboard() {
                         <Typography component="h2" variant="subtitle2" gutterBottom>
                             투자자별 순매수(억)
                         </Typography>
-                        <InvestorBarChart data={investorData}/>
+                        {loading ? (
+                            <Skeleton variant="rectangular" height={200} sx={{borderRadius: 1}}/>
+                        ) : (
+                            <InvestorBarChart data={investorData}/>
+                        )}
                     </CardContent>
                 </Card>
             </Grid>
@@ -436,34 +444,29 @@ export default function Dashboard() {
                         <Typography component="h2" variant="subtitle2" gutterBottom>
                             프로그램 순매수(억)
                         </Typography>
-                        <ProgramBarChart data={programData}/>
+                        {loading ? (
+                            <Skeleton variant="rectangular" height={200} sx={{borderRadius: 1}}/>
+                        ) : (
+                            <ProgramBarChart data={programData}/>
+                        )}
                     </CardContent>
                 </Card>
             </Grid>
             <Grid size={{xs: 12, sm: 12, lg: 4}}>
                 <Stack spacing={1}>
-                    <Card variant="outlined" sx={{width: '100%'}}>
-                        {investorMsg.icon}
-                        <CardContent>
-                            <Typography gutterBottom variant="h5" component="div">
-                                {investorMsg.title}
-                            </Typography>
-                            <Typography variant="body2" sx={{color: 'text.secondary'}}>
-                                {investorMsg.message}
-                            </Typography>
-                        </CardContent>
-                    </Card>
-                    <Card variant="outlined" sx={{width: '100%'}}>
-                        {programMsg.icon}
-                        <CardContent>
-                            <Typography gutterBottom variant="h5" component="div">
-                                {programMsg.title}
-                            </Typography>
-                            <Typography variant="body2" sx={{color: 'text.secondary'}}>
-                                {programMsg.message}
-                            </Typography>
-                        </CardContent>
-                    </Card>
+                    {([investorMsg, programMsg]).map((msg, i) => (
+                        <Card key={i} variant="outlined" sx={{width: '100%'}}>
+                            {!loading && msg.icon}
+                            <CardContent>
+                                <Typography gutterBottom variant="h5" component="div">
+                                    {loading ? <Skeleton width="60%"/> : msg.title}
+                                </Typography>
+                                <Typography variant="body2" sx={{color: 'text.secondary'}}>
+                                    {loading ? <Skeleton width="90%"/> : msg.message}
+                                </Typography>
+                            </CardContent>
+                        </Card>
+                    ))}
                 </Stack>
             </Grid>
         </>
@@ -475,7 +478,7 @@ export default function Dashboard() {
                 <Typography component="h2" variant="h6">
                     주요 지수
                 </Typography>
-                {lastUpdated && (
+                {!loading && lastUpdated && (
                     <Typography variant="caption" color="text.secondary">
                         {lastUpdated.toLocaleTimeString('ko-KR', {hour: '2-digit', minute: '2-digit'})} 기준
                     </Typography>
@@ -487,7 +490,23 @@ export default function Dashboard() {
                 columns={12}
                 sx={{ mb: (theme) => theme.spacing(2) }}
             >
-                {indexDataList.map((card, index) => (
+                {loading ? (
+                    Array.from({length: 4}).map((_, index) => (
+                        <Grid key={index} size={{ xs: 12, sm: 6, lg: 3 }}>
+                            <Card variant="outlined" sx={{height: '100%'}}>
+                                <CardContent>
+                                    <Skeleton width={80} height={24}/>
+                                    <Stack direction="row" sx={{justifyContent: 'space-between', alignItems: 'center', mt: 1}}>
+                                        <Skeleton width={120} height={40}/>
+                                        <Skeleton variant="rounded" width={60} height={24}/>
+                                    </Stack>
+                                    <Skeleton width={100}/>
+                                    <Skeleton variant="rectangular" height={50} sx={{mt: 1, borderRadius: 1}}/>
+                                </CardContent>
+                            </Card>
+                        </Grid>
+                    ))
+                ) : indexDataList.map((card, index) => (
                     <Grid key={index} size={{ xs: 12, sm: 6, lg: 3 }}>
                         <StatCard {...card} />
                     </Grid>
@@ -530,7 +549,7 @@ export default function Dashboard() {
             <Typography component="h2" variant="h6" sx={{mb: 2}}>
                 월간 종합(KOSPI) 기관/외국인 매수 상위 순위
             </Typography>
-            <CustomDataTable rows={row} columns={columns} pageSize={20}/>
+            <CustomDataTable rows={row} columns={columns} pageSize={20} loading={loading}/>
         </Box>
     );
 }

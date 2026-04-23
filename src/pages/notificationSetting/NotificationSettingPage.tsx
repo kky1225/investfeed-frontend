@@ -6,6 +6,7 @@ import CardContent from "@mui/material/CardContent";
 import Switch from "@mui/material/Switch";
 import Stack from "@mui/material/Stack";
 import Alert from "@mui/material/Alert";
+import Skeleton from "@mui/material/Skeleton";
 import {fetchNotificationSetting, saveNotificationSetting} from "../../api/notification/NotificationApi.ts";
 import type {NotificationSettingRes} from "../../type/NotificationSettingType.ts";
 
@@ -55,6 +56,7 @@ const settingGroups: SettingGroup[] = [
 export default function NotificationSettingPage() {
     const [setting, setSetting] = useState<NotificationSettingRes | null>(null);
     const [saved, setSaved] = useState(false);
+    const [loading, setLoading] = useState(true);
 
     useEffect(() => {
         (async () => {
@@ -63,6 +65,8 @@ export default function NotificationSettingPage() {
                 if (res.result) setSetting(res.result);
             } catch {
                 // 기본값 사용
+            } finally {
+                setLoading(false);
             }
         })();
     }, []);
@@ -80,8 +84,6 @@ export default function NotificationSettingPage() {
         }
     };
 
-    if (!setting) return null;
-
     return (
         <Box sx={{width: '100%', maxWidth: {sm: '100%', md: '700px'}}}>
             <Typography component="h2" variant="h6" sx={{mb: 2}}>
@@ -90,6 +92,33 @@ export default function NotificationSettingPage() {
 
             {saved && <Alert severity="success" sx={{mb: 2}}>알림 설정이 저장되었습니다.</Alert>}
 
+            {loading ? (
+                <Stack spacing={3}>
+                    {settingGroups.map((group) => (
+                        <Card variant="outlined" key={group.title}>
+                            <CardContent>
+                                <Skeleton width={100} height={20} sx={{mb: 1}}/>
+                                <Stack spacing={0}>
+                                    {group.items.map((item, index) => (
+                                        <Box key={item.key} sx={{
+                                            display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                                            py: 1.5,
+                                            borderBottom: index < group.items.length - 1 ? '1px solid' : 'none',
+                                            borderColor: 'divider',
+                                        }}>
+                                            <Box sx={{flex: 1}}>
+                                                <Skeleton width={120} sx={{mb: 0.5}}/>
+                                                <Skeleton width="80%"/>
+                                            </Box>
+                                            <Skeleton variant="rounded" width={32} height={18} sx={{ml: 2}}/>
+                                        </Box>
+                                    ))}
+                                </Stack>
+                            </CardContent>
+                        </Card>
+                    ))}
+                </Stack>
+            ) : setting ? (
             <Stack spacing={3}>
                 {settingGroups.map((group) => (
                     <Card variant="outlined" key={group.title}>
@@ -121,6 +150,9 @@ export default function NotificationSettingPage() {
                     </Card>
                 ))}
             </Stack>
+            ) : (
+                <Alert severity="error">알림 설정을 불러오지 못했습니다.</Alert>
+            )}
         </Box>
     );
 }

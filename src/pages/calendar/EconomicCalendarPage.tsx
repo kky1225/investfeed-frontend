@@ -7,6 +7,7 @@ import Grid from "@mui/material/Grid";
 import Chip from "@mui/material/Chip";
 import IconButton from "@mui/material/IconButton";
 import CircularProgress from "@mui/material/CircularProgress";
+import Skeleton from "@mui/material/Skeleton";
 import Popover from "@mui/material/Popover";
 import ChevronLeftIcon from "@mui/icons-material/ChevronLeft";
 import ChevronRightIcon from "@mui/icons-material/ChevronRight";
@@ -125,8 +126,30 @@ export default function EconomicCalendarPage() {
                 </Box>
             )}
 
+            {/* 주요 지표 카드 스켈레톤 */}
+            {loading && ([{country: 'KR', count: 4, label: '🇰🇷 한국'}, {country: 'US', count: 8, label: '🇺🇸 미국'}] as const).map((c) => (
+                <Box key={c.country} sx={{mb: 2}}>
+                    <Typography variant="caption" sx={{fontWeight: 700, mb: 1, display: 'flex', alignItems: 'center', gap: 0.5}}>
+                        {c.label}
+                    </Typography>
+                    <Grid container spacing={1.5}>
+                        {Array.from({length: c.count}).map((_, i) => (
+                            <Grid key={i} size={{xs: 6, sm: 4, md: 2.4}}>
+                                <Card variant="outlined">
+                                    <CardContent sx={{pb: '8px !important', p: 1.5}}>
+                                        <Skeleton width="70%" sx={{mb: 0.5}}/>
+                                        <Skeleton width="50%" height={28}/>
+                                        <Skeleton width="60%"/>
+                                    </CardContent>
+                                </Card>
+                            </Grid>
+                        ))}
+                    </Grid>
+                </Box>
+            ))}
+
             {/* 주요 지표 카드 */}
-            {(['KR', 'US'] as const).map((country) => {
+            {!loading && (['KR', 'US'] as const).map((country) => {
                 const countryIndicators = indicators.filter(i => i.country === country);
                 if (countryIndicators.length === 0) return null;
                 return (
@@ -180,7 +203,7 @@ export default function EconomicCalendarPage() {
                             <Typography variant="caption" color="text.secondary">({selectedIndicator.unit})</Typography>
                         </Box>
                         {chartLoading ? (
-                            <Box sx={{display: 'flex', justifyContent: 'center', py: 4}}><CircularProgress size={24}/></Box>
+                            <Skeleton variant="rectangular" height={300} sx={{borderRadius: 1}}/>
                         ) : history && history.data.length > 0 ? (
                             <Box sx={{overflowX: 'auto'}}>
                                 <Box sx={{minWidth: 600, height: 300}}>
@@ -286,7 +309,32 @@ export default function EconomicCalendarPage() {
                     </Box>
 
                     {loading ? (
-                        <Box sx={{display: 'flex', justifyContent: 'center', py: 4}}><CircularProgress size={24}/></Box>
+                        <>
+                            <Grid container columns={7}>
+                                {WEEKDAYS.map((day) => (
+                                    <Grid key={day} size={1}>
+                                        <Box sx={{textAlign: 'center', py: 1}}>
+                                            <Typography variant="caption" sx={{fontWeight: 600, color: day === '일' ? 'error.main' : day === '토' ? 'info.main' : 'text.secondary'}}>
+                                                {day}
+                                            </Typography>
+                                        </Box>
+                                    </Grid>
+                                ))}
+                            </Grid>
+                            <Grid container columns={7}>
+                                {Array.from({length: 35}).map((_, i) => (
+                                    <Grid key={i} size={1}>
+                                        <Box sx={{minHeight: 120, p: 0.5, border: '1px solid', borderColor: 'divider'}}>
+                                            <Skeleton width={20} height={20}/>
+                                            <Box sx={{mt: 0.5}}>
+                                                <Skeleton variant="rounded" height={16} sx={{mb: 0.3}}/>
+                                                <Skeleton variant="rounded" height={16}/>
+                                            </Box>
+                                        </Box>
+                                    </Grid>
+                                ))}
+                            </Grid>
+                        </>
                     ) : (
                         <>
                             <Grid container columns={7}>

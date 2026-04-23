@@ -6,6 +6,7 @@ import Stack from "@mui/material/Stack";
 import Chip from "@mui/material/Chip";
 import Divider from "@mui/material/Divider";
 import Card from "@mui/material/Card";
+import Skeleton from "@mui/material/Skeleton";
 import {useState, MouseEvent, useRef, useEffect, ReactElement, JSX} from "react";
 import CandlestickChartIcon from '@mui/icons-material/CandlestickChart';
 import StackedLineChartIcon from '@mui/icons-material/StackedLineChart';
@@ -172,12 +173,15 @@ const StockDetail = () => {
     const [dividendData, setDividendData] = useState<StockDividendItem[]>([]);
     const [dividendYield, setDividendYield] = useState<number | null>(null);
     const [priceTargetOpen, setPriceTargetOpen] = useState(false);
+    const [loading, setLoading] = useState(true);
 
     useEffect(() => {
         let chartTimeout: ReturnType<typeof setTimeout>;
         let socketTimeout: ReturnType<typeof setTimeout>;
         let interval: ReturnType<typeof setInterval>;
         let socket: WebSocket;
+
+        setLoading(true);
 
         (async() => {
             const items = await stockDetail(req);
@@ -500,6 +504,13 @@ const StockDetail = () => {
                     renderCell: (params) => renderTradeColor(params.value as number),
                 },
                 {
+                    field: 'natn',
+                    headerName: '국가',
+                    flex: 1,
+                    minWidth: 100,
+                    renderCell: (params) => renderTradeColor(params.value as number),
+                },
+                {
                     field: 'etcCorp',
                     headerName: '기타법인',
                     flex: 1,
@@ -516,7 +527,7 @@ const StockDetail = () => {
             ];
 
             const investorRow = stockInvestorList.map((item: {
-                dt: string; indInvsr: string; frgnrInvsr: string; orgn: string; fnncInvt: string; insrnc: string; etcFnnc: string; invtrt: string; samoFund: string; penfndEtc: string; bank: string; etcCorp: string; natfor: string;
+                dt: string; indInvsr: string; frgnrInvsr: string; orgn: string; fnncInvt: string; insrnc: string; etcFnnc: string; invtrt: string; samoFund: string; penfndEtc: string; bank: string; natn: string; etcCorp: string; natfor: string;
             }) => {
                 return {
                     id: item.dt,
@@ -531,6 +542,7 @@ const StockDetail = () => {
                     samoFund: Number(item.samoFund),
                     penfndEtc: Number(item.penfndEtc),
                     bank: Number(item.bank),
+                    natn: Number(item.natn),
                     etcCorp: Number(item.etcCorp),
                     natfor: Number(item.natfor),
                 }
@@ -682,6 +694,8 @@ const StockDetail = () => {
             console.error(error);
 
             return [];
+        } finally {
+            setLoading(false);
         }
     }
 
@@ -1071,12 +1085,16 @@ const StockDetail = () => {
                         <CardContent>
                             <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                 <Typography component="h2" variant="subtitle2" gutterBottom>
-                                    {stockChartData.title}
-                                    {stockChartData.orderWarning !== '0' &&
-                                        <Tooltip title={orderWarningMsg(stockChartData.orderWarning)} placement="right">
-                                            <ErrorIcon color="error" sx={{ fontSize: 'inherit', verticalAlign: 'middle', ml: "1px", mb: "3px" }} />
-                                        </Tooltip>
-                                    }
+                                    {loading ? <Skeleton width={140}/> : (
+                                        <>
+                                            {stockChartData.title}
+                                            {stockChartData.orderWarning !== '0' &&
+                                                <Tooltip title={orderWarningMsg(stockChartData.orderWarning)} placement="right">
+                                                    <ErrorIcon color="error" sx={{ fontSize: 'inherit', verticalAlign: 'middle', ml: "1px", mb: "3px" }} />
+                                                </Tooltip>
+                                            }
+                                        </>
+                                    )}
                                 </Typography>
                                 <Stack direction="row" alignItems="center" gap={0.5}>
                                     {stockChartData.nxtEnable === 'Y' &&
@@ -1112,10 +1130,12 @@ const StockDetail = () => {
                                     }}
                                 >
                                     <Typography variant="h4" component="p">
-                                        {stockChartData.value}
+                                        {loading ? <Skeleton width={160}/> : stockChartData.value}
                                     </Typography>
-                                    {renderChangeAmount(stockChartData.predPre)}
-                                    <Chip size="small" color={color} label={trendValues[stockChartData.trend]} />
+                                    {loading ? <Skeleton width={80}/> : renderChangeAmount(stockChartData.predPre)}
+                                    {loading
+                                        ? <Skeleton variant="rounded" width={60} height={24}/>
+                                        : <Chip size="small" color={color} label={trendValues[stockChartData.trend]} />}
                                     {expectedPrice && (
                                         <>
                                             <Divider orientation="vertical" flexItem />
@@ -1132,13 +1152,17 @@ const StockDetail = () => {
                                     )}
                                 </Stack>
                                 <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-                                    {stockChartData.interval}
+                                    {loading ? <Skeleton width={140}/> : stockChartData.interval}
                                 </Typography>
                             </Stack>
                         </CardContent>
                         <Box sx={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
                             <Box sx={{ minWidth: 1200 }}>
-                                <StockDetailLineChart {...stockChartData} />
+                                {loading ? (
+                                    <Skeleton variant="rectangular" height={400} sx={{mx: 2, mb: 2, borderRadius: 1}}/>
+                                ) : (
+                                    <StockDetailLineChart {...stockChartData} />
+                                )}
                             </Box>
                         </Box>
                         <Box
@@ -1227,7 +1251,7 @@ const StockDetail = () => {
                                 </Grid>
                                 <Grid size={{xs: 12, md: 3}}>
                                     <Typography variant="subtitle2" gutterBottom>
-                                        {info.marketName}
+                                        {loading ? <Skeleton width={100}/> : info.marketName}
                                     </Typography>
                                 </Grid>
                                 <Grid size={{xs: 12, md: 3}}>
@@ -1237,7 +1261,7 @@ const StockDetail = () => {
                                 </Grid>
                                 <Grid size={{xs: 12, md: 3}}>
                                     <Typography variant="subtitle2" gutterBottom>
-                                        {info.upName}
+                                        {loading ? <Skeleton width={100}/> : info.upName}
                                     </Typography>
                                 </Grid>
                                 <Grid size={{xs: 12, md: 3}}>
@@ -1247,7 +1271,7 @@ const StockDetail = () => {
                                 </Grid>
                                 <Grid size={{xs: 12, md: 3}}>
                                     <Typography variant="subtitle2" gutterBottom>
-                                        {info.trdeQty.toLocaleString()}
+                                        {loading ? <Skeleton width={100}/> : info.trdeQty.toLocaleString()}
                                     </Typography>
                                 </Grid>
                                 <Grid size={{xs: 12, md: 3}}>
@@ -1257,7 +1281,7 @@ const StockDetail = () => {
                                 </Grid>
                                 <Grid size={{xs: 12, md: 3}}>
                                     <Typography variant="subtitle2" gutterBottom>
-                                        {info.trdePrica.toLocaleString()}
+                                        {loading ? <Skeleton width={100}/> : info.trdePrica.toLocaleString()}
                                     </Typography>
                                 </Grid>
                                 <Grid size={{xs: 12, md: 3}}>
@@ -1267,7 +1291,7 @@ const StockDetail = () => {
                                 </Grid>
                                 <Grid size={{xs: 12, md: 3}}>
                                     <Typography variant="subtitle2" gutterBottom>
-                                        {info.openPric.toLocaleString()}
+                                        {loading ? <Skeleton width={100}/> : info.openPric.toLocaleString()}
                                     </Typography>
                                 </Grid>
                                 <Grid size={{xs: 12, md: 3}}>
@@ -1277,7 +1301,7 @@ const StockDetail = () => {
                                 </Grid>
                                 <Grid size={{xs: 12, md: 3}}>
                                     <Typography variant="subtitle2" gutterBottom>
-                                        {info.curPrc.toLocaleString()}
+                                        {loading ? <Skeleton width={100}/> : info.curPrc.toLocaleString()}
                                     </Typography>
                                 </Grid>
                                 <Grid size={{xs: 12, md: 3}}>
@@ -1287,7 +1311,7 @@ const StockDetail = () => {
                                 </Grid>
                                 <Grid size={{xs: 12, md: 3}}>
                                     <Typography variant="subtitle2" gutterBottom>
-                                        {info.mac.toLocaleString()}
+                                        {loading ? <Skeleton width={100}/> : info.mac.toLocaleString()}
                                     </Typography>
                                 </Grid>
                                 <Grid size={{xs: 12, md: 3}}>
@@ -1297,7 +1321,7 @@ const StockDetail = () => {
                                 </Grid>
                                 <Grid size={{xs: 12, md: 3}}>
                                     <Typography variant="subtitle2" gutterBottom>
-                                        {`${info.forExhRt.toLocaleString()}%`}
+                                        {loading ? <Skeleton width={100}/> : `${info.forExhRt.toLocaleString()}%`}
                                     </Typography>
                                 </Grid>
                                 <Grid size={{xs: 12, md: 3}}>
@@ -1307,7 +1331,7 @@ const StockDetail = () => {
                                 </Grid>
                                 <Grid size={{xs: 12, md: 3}}>
                                     <Typography variant="subtitle2" gutterBottom>
-                                        {info._250lwst.toLocaleString()}
+                                        {loading ? <Skeleton width={100}/> : info._250lwst.toLocaleString()}
                                     </Typography>
                                 </Grid>
                                 <Grid size={{xs: 12, md: 3}}>
@@ -1317,7 +1341,7 @@ const StockDetail = () => {
                                 </Grid>
                                 <Grid size={{xs: 12, md: 3}}>
                                     <Typography variant="subtitle2" gutterBottom>
-                                        {info._250hgst.toLocaleString()}
+                                        {loading ? <Skeleton width={100}/> : info._250hgst.toLocaleString()}
                                     </Typography>
                                 </Grid>
                                 <Grid size={{xs: 12, md: 3}}>
@@ -1327,7 +1351,7 @@ const StockDetail = () => {
                                 </Grid>
                                 <Grid size={{xs: 12, md: 3}}>
                                     <Typography variant="subtitle2" gutterBottom>
-                                        {info.per.toLocaleString()}
+                                        {loading ? <Skeleton width={100}/> : info.per.toLocaleString()}
                                     </Typography>
                                 </Grid>
                                 <Grid size={{xs: 12, md: 3}}>
@@ -1337,7 +1361,7 @@ const StockDetail = () => {
                                 </Grid>
                                 <Grid size={{xs: 12, md: 3}}>
                                     <Typography variant="subtitle2" gutterBottom>
-                                        {info.eps.toLocaleString()}
+                                        {loading ? <Skeleton width={100}/> : info.eps.toLocaleString()}
                                     </Typography>
                                 </Grid>
                                 <Grid size={{xs: 12, md: 3}}>
@@ -1347,7 +1371,7 @@ const StockDetail = () => {
                                 </Grid>
                                 <Grid size={{xs: 12, md: 3}}>
                                     <Typography variant="subtitle2" gutterBottom>
-                                        {info.roe.toLocaleString()}
+                                        {loading ? <Skeleton width={100}/> : info.roe.toLocaleString()}
                                     </Typography>
                                 </Grid>
                                 <Grid size={{xs: 12, md: 3}}>
@@ -1357,7 +1381,7 @@ const StockDetail = () => {
                                 </Grid>
                                 <Grid size={{xs: 12, md: 3}}>
                                     <Typography variant="subtitle2" gutterBottom>
-                                        {info.pbr.toLocaleString()}
+                                        {loading ? <Skeleton width={100}/> : info.pbr.toLocaleString()}
                                     </Typography>
                                 </Grid>
                                 <Grid size={{xs: 12, md: 3}}>
@@ -1367,7 +1391,7 @@ const StockDetail = () => {
                                 </Grid>
                                 <Grid size={{xs: 12, md: 3}}>
                                     <Typography variant="subtitle2" gutterBottom>
-                                        {dividendYield !== null ? `${dividendYield}%` : '-'}
+                                        {loading ? <Skeleton width={100}/> : (dividendYield !== null ? `${dividendYield}%` : '-')}
                                     </Typography>
                                 </Grid>
                             </Grid>
@@ -1386,19 +1410,23 @@ const StockDetail = () => {
                                 <Grid size={{ xs: 12, md: 6 }}>
                                     <Card variant="outlined" sx={{ width: '100%' }}>
                                         <CardContent>
-                                            <InvestorBarChart data={barData} />
+                                            {loading ? (
+                                                <Skeleton variant="rectangular" height={300} sx={{borderRadius: 1}}/>
+                                            ) : (
+                                                <InvestorBarChart data={barData} />
+                                            )}
                                         </CardContent>
                                     </Card>
                                 </Grid>
                                 <Grid size={{ xs: 12, md: 6 }}>
                                     <Card variant="outlined" sx={{ width: '100%' }}>
-                                        {message.icon}
+                                        {!loading && message.icon}
                                         <CardContent>
                                             <Typography gutterBottom variant="h5" component="div">
-                                                {message.title}
+                                                {loading ? <Skeleton width={180}/> : message.title}
                                             </Typography>
                                             <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-                                                {message.message}
+                                                {loading ? <Skeleton width="80%"/> : message.message}
                                             </Typography>
                                         </CardContent>
                                     </Card>
@@ -1415,30 +1443,43 @@ const StockDetail = () => {
                             </Typography>
                         </AccordionSummary>
                         <AccordionDetails sx={{ overflow: 'visible' }}>
-                            <Box sx={{ px: 3, height: 100, overflow: 'visible' }}>
-                                <Slider
-                                    aria-label="Custom marks"
-                                    track={false}
-                                    value={info.curPrc}
-                                    valueLabelDisplay="auto"
-                                    disabled
-                                    max={dayRange[1].value}
-                                    min={dayRange[0].value}
-                                    marks={dayRange}
-                                />
-                            </Box>
-                            <Box sx={{ px: 3, height: 100, overflow: 'visible' }}>
-                                <Slider
-                                    aria-label="Custom marks"
-                                    track={false}
-                                    value={info.curPrc}
-                                    valueLabelDisplay="auto"
-                                    disabled
-                                    max={yearRange[1].value}
-                                    min={yearRange[0].value}
-                                    marks={yearRange}
-                                />
-                            </Box>
+                            {loading ? (
+                                <>
+                                    <Box sx={{ px: 3, height: 100 }}>
+                                        <Skeleton variant="rectangular" height={40} sx={{mt: 3, borderRadius: 1}}/>
+                                    </Box>
+                                    <Box sx={{ px: 3, height: 100 }}>
+                                        <Skeleton variant="rectangular" height={40} sx={{mt: 3, borderRadius: 1}}/>
+                                    </Box>
+                                </>
+                            ) : (
+                                <>
+                                    <Box sx={{ px: 3, height: 100, overflow: 'visible' }}>
+                                        <Slider
+                                            aria-label="Custom marks"
+                                            track={false}
+                                            value={info.curPrc}
+                                            valueLabelDisplay="auto"
+                                            disabled
+                                            max={dayRange[1].value}
+                                            min={dayRange[0].value}
+                                            marks={dayRange}
+                                        />
+                                    </Box>
+                                    <Box sx={{ px: 3, height: 100, overflow: 'visible' }}>
+                                        <Slider
+                                            aria-label="Custom marks"
+                                            track={false}
+                                            value={info.curPrc}
+                                            valueLabelDisplay="auto"
+                                            disabled
+                                            max={yearRange[1].value}
+                                            min={yearRange[0].value}
+                                            marks={yearRange}
+                                        />
+                                    </Box>
+                                </>
+                            )}
                         </AccordionDetails>
                     </Accordion>
                 </Grid>
@@ -1450,7 +1491,11 @@ const StockDetail = () => {
                             </Typography>
                         </AccordionSummary>
                         <AccordionDetails>
-                            <InvestorLineChart seriesData={investorChartData} date={investorDateData} />
+                            {loading ? (
+                                <Skeleton variant="rectangular" height={300} sx={{borderRadius: 1}}/>
+                            ) : (
+                                <InvestorLineChart seriesData={investorChartData} date={investorDateData} />
+                            )}
                         </AccordionDetails>
                     </Accordion>
                 </Grid>
@@ -1577,7 +1622,7 @@ const StockDetail = () => {
                         </Tabs>
                     </Box>
                     {tabValue !== 'news' ? (
-                        <CustomDataTable rows={tabData[tabValue].row} columns={tabData[tabValue].col} pageSize={20} />
+                        <CustomDataTable rows={tabData[tabValue].row} columns={tabData[tabValue].col} pageSize={20} loading={loading} />
                     ) : (
                         <Box sx={{mt: 2}}>
                             {newsItems.length > 0 ? (

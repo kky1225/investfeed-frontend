@@ -11,6 +11,7 @@ import ToggleButtonGroup, {toggleButtonGroupClasses} from "@mui/material/ToggleB
 import MenuItem from "@mui/material/MenuItem";
 import {Select, type SelectChangeEvent} from "@mui/material";
 import {styled} from "@mui/material/styles";
+import Skeleton from "@mui/material/Skeleton";
 import AddIcon from "@mui/icons-material/Add";
 import SwapHorizIcon from "@mui/icons-material/SwapHoriz";
 import OpenInFullIcon from "@mui/icons-material/OpenInFull";
@@ -256,7 +257,38 @@ export default function MultiViewPanel({asset, onSearch, onChartExpand, onRemove
         );
     }
 
-    if (!chartData) return null;
+    if (!chartData) {
+        return (
+            <Card variant="outlined" sx={{width: '100%'}}>
+                <CardContent>
+                    <Box sx={{display: 'flex', justifyContent: 'space-between', alignItems: 'center'}}>
+                        <Skeleton width={140}/>
+                        <Stack direction="row" spacing={0.5}>
+                            <Skeleton variant="circular" width={28} height={28}/>
+                            <Skeleton variant="circular" width={28} height={28}/>
+                            <Skeleton variant="circular" width={28} height={28}/>
+                            <Skeleton variant="circular" width={28} height={28}/>
+                        </Stack>
+                    </Box>
+                    <Stack direction="row" sx={{alignItems: 'center', gap: 1, mt: 1}}>
+                        <Skeleton width={140} height={40}/>
+                        <Skeleton width={60}/>
+                        <Skeleton variant="rounded" width={60} height={24}/>
+                    </Stack>
+                    <Skeleton width={160}/>
+                </CardContent>
+                <Box sx={{overflowX: 'auto'}}>
+                    <Box sx={{minWidth: 600}}>
+                        <Skeleton variant="rectangular" height={300} sx={{mx: 2, mb: 2, borderRadius: 1}}/>
+                    </Box>
+                </Box>
+                <Box display="flex" justifyContent="space-between" alignItems="center" sx={{px: 2, pb: 2}}>
+                    <Skeleton variant="rounded" width={260} height={32}/>
+                    <Skeleton variant="rounded" width={80} height={32}/>
+                </Box>
+            </Card>
+        );
+    }
 
     const trend = chartData.trend;
     const color = labelColors[trend];

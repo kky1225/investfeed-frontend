@@ -1,4 +1,4 @@
-import {useEffect, useState} from 'react';
+import {useEffect, useRef, useState} from 'react';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
 import Button from '@mui/material/Button';
@@ -15,22 +15,38 @@ import Menu from '@mui/material/Menu';
 import MenuItem from '@mui/material/MenuItem';
 import ListItemIcon from '@mui/material/ListItemIcon';
 import ListItemText from '@mui/material/ListItemText';
+import Tabs from '@mui/material/Tabs';
+import Tab from '@mui/material/Tab';
+import LinearProgress from '@mui/material/LinearProgress';
 import {DataGrid, type GridColDef} from '@mui/x-data-grid';
 import AddIcon from '@mui/icons-material/Add';
 import EditIcon from '@mui/icons-material/Edit';
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
 import MoreVertIcon from '@mui/icons-material/MoreVert';
-import {fetchManualCalendarEvents, createCalendarEvent, updateCalendarEvent, deleteCalendarEvent} from '../../api/calendar/EconomicCalendarApi';
-import type {CalendarEvent} from '../../type/EconomicCalendarType';
+import {
+    fetchManualCalendarEvents, createCalendarEvent, updateCalendarEvent, deleteCalendarEvent,
+    startBulkRefresh, fetchBulkRefreshStatus,
+} from '../../api/calendar/EconomicCalendarApi';
+import type {CalendarEvent, BulkRefreshStatus} from '../../type/EconomicCalendarType';
+
+type TabKey = 'manual' | 'bulk';
 
 export default function CalendarManagement() {
     const now = new Date();
+    const [tab, setTab] = useState<TabKey>('manual');
     const [year, setYear] = useState(now.getFullYear());
     const [events, setEvents] = useState<CalendarEvent[]>([]);
     const [loading, setLoading] = useState(true);
     const [snackbar, setSnackbar] = useState<{open: boolean; message: string; severity: 'success' | 'error'}>({
         open: false, message: '', severity: 'success'
     });
+
+    // Bulk refresh state
+    const [bulkFrom, setBulkFrom] = useState<number>(2021);
+    const [bulkTo, setBulkTo] = useState<number>(now.getFullYear());
+    const [bulkStatus, setBulkStatus] = useState<BulkRefreshStatus | null>(null);
+    const [bulkStarting, setBulkStarting] = useState(false);
+    const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
     // 등록/수정 공통 state
     const [formOpen, setFormOpen] = useState(false);
@@ -63,6 +79,44 @@ export default function CalendarManagement() {
     useEffect(() => {
         loadEvents();
     }, [year]);
+
+    // Bulk refresh 상태 폴링 — 탭 전환 시 초기 1회, 실행 중이면 2초마다
+    const loadBulkStatus = async () => {
+        try {
+            const res = await fetchBulkRefreshStatus();
+            if (res.result) setBulkStatus(res.result);
+        } catch { /* 무시 */ }
+    };
+
+    useEffect(() => {
+        if (tab !== 'bulk') {
+            if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
+            return;
+        }
+        loadBulkStatus();
+        pollRef.current = setInterval(loadBulkStatus, 1000);
+        return () => {
+            if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
+        };
+    }, [tab]);
+
+    const handleBulkRefresh = async () => {
+        if (bulkFrom > bulkTo) {
+            setSnackbar({open: true, message: '시작 연도가 종료 연도보다 클 수 없습니다.', severity: 'error'});
+            return;
+        }
+        setBulkStarting(true);
+        try {
+            const res = await startBulkRefresh({yearFrom: bulkFrom, yearTo: bulkTo});
+            if (res.result) setBulkStatus(res.result);
+            setSnackbar({open: true, message: '일괄 재생성을 시작했습니다.', severity: 'success'});
+        } catch (e: unknown) {
+            const msg = (e as {response?: {data?: {message?: string}}})?.response?.data?.message ?? '재생성 시작 실패';
+            setSnackbar({open: true, message: msg, severity: 'error'});
+        } finally {
+            setBulkStarting(false);
+        }
+    };
 
     const resetForm = () => {
         setFormOpen(false);
@@ -172,37 +226,117 @@ export default function CalendarManagement() {
         <Box sx={{width: '100%', maxWidth: {sm: '100%', md: '1700px'}}}>
             <Typography component="h2" variant="h6" sx={{mb: 2}}>일정 관리</Typography>
 
-            <Box sx={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2}}>
-                <Box sx={{display: 'flex', alignItems: 'center', gap: 1}}>
-                    <TextField size="small" type="number" value={year} onChange={e => setYear(Number(e.target.value))}
-                        sx={{width: 100}} slotProps={{htmlInput: {min: 2021, max: 2030}}}/>
-                    <Typography variant="body2">년</Typography>
+            <Tabs value={tab} onChange={(_, v) => setTab(v)} sx={{mb: 2, borderBottom: 1, borderColor: 'divider'}}>
+                <Tab label="수동 일정" value="manual"/>
+                <Tab label="API 이벤트 재생성" value="bulk"/>
+            </Tabs>
+
+            {tab === 'manual' && (
+                <Box>
+                    <Box sx={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2}}>
+                        <Box sx={{display: 'flex', alignItems: 'center', gap: 1}}>
+                            <TextField size="small" type="number" value={year} onChange={e => setYear(Number(e.target.value))}
+                                sx={{width: 100}} slotProps={{htmlInput: {min: 2021, max: 2030}}}/>
+                            <Typography variant="body2">년</Typography>
+                        </Box>
+                        <Button variant="contained" startIcon={<AddIcon/>} onClick={openCreateForm} size="small">
+                            일정 추가
+                        </Button>
+                    </Box>
+
+                    <DataGrid
+                        rows={events}
+                        columns={columns}
+                        loading={loading}
+                        autoHeight
+                        pageSizeOptions={[10, 20, 50, 100]}
+                        initialState={{pagination: {paginationModel: {pageSize: 20}}}}
+                        localeText={{noRowsLabel: '데이터가 없습니다'}}
+                        disableRowSelectionOnClick
+                        slotProps={{
+                            loadingOverlay: {
+                                variant: 'skeleton',
+                                noRowsVariant: 'skeleton',
+                            },
+                        }}
+                        sx={{
+                            '& .MuiDataGrid-cell': {
+                                display: 'flex',
+                                alignItems: 'center',
+                            },
+                        }}
+                    />
+
+                    <Typography variant="caption" color="text.secondary" sx={{display: 'block', mt: 3}}>
+                        한국 기준금리 발표 일정, 한국 GDP 발표 일정, 미국 기준금리(FOMC) 발표 일정은 직접 일정을 등록해야 합니다.
+                    </Typography>
                 </Box>
-                <Button variant="contained" startIcon={<AddIcon/>} onClick={openCreateForm} size="small">
-                    일정 추가
-                </Button>
-            </Box>
+            )}
 
-            <DataGrid
-                rows={events}
-                columns={columns}
-                loading={loading}
-                autoHeight
-                pageSizeOptions={[10, 20, 50, 100]}
-                initialState={{pagination: {paginationModel: {pageSize: 20}}}}
-                localeText={{noRowsLabel: '데이터가 없습니다'}}
-                disableRowSelectionOnClick
-                sx={{
-                    '& .MuiDataGrid-cell': {
-                        display: 'flex',
-                        alignItems: 'center',
-                    },
-                }}
-            />
+            {tab === 'bulk' && (
+                <Box>
+                    <Box sx={{display: 'flex', alignItems: 'center', gap: 1, mb: 2}}>
+                        <TextField
+                            size="small" type="number" label="시작 연도"
+                            value={bulkFrom}
+                            onChange={e => setBulkFrom(Number(e.target.value))}
+                            sx={{width: 120}}
+                            slotProps={{htmlInput: {min: 2000, max: 2100}}}
+                        />
+                        <Typography variant="body2">~</Typography>
+                        <TextField
+                            size="small" type="number" label="종료 연도"
+                            value={bulkTo}
+                            onChange={e => setBulkTo(Number(e.target.value))}
+                            sx={{width: 120}}
+                            slotProps={{htmlInput: {min: 2000, max: 2100}}}
+                        />
+                        <Box sx={{flex: 1}}/>
+                        {!(bulkStatus?.running ?? false) && (
+                            <Button
+                                variant="contained" size="small"
+                                onClick={handleBulkRefresh}
+                                disabled={bulkStarting}
+                            >
+                                재생성 실행
+                            </Button>
+                        )}
+                    </Box>
 
-            <Typography variant="caption" color="text.secondary" sx={{display: 'block', mt: 3}}>
-                한국 기준금리 발표 일정, 한국 GDP 발표 일정, 미국 기준금리(FOMC) 발표 일정은 직접 일정을 등록해야 합니다.
-            </Typography>
+                    {bulkStatus && (bulkStatus.running || bulkStatus.finishedAt) && (
+                        <Box sx={{mb: 2, p: 2, border: 1, borderColor: 'divider', borderRadius: 1}}>
+                            <Typography variant="subtitle2" sx={{mb: 1, fontWeight: 600}}>
+                                {bulkStatus.running ? '진행 중' : '완료'}
+                                {bulkStatus.yearFrom != null && ` — ${bulkStatus.yearFrom} ~ ${bulkStatus.yearTo}`}
+                            </Typography>
+                            {bulkStatus.totalMonths > 0 && (
+                                <Box sx={{mb: 1}}>
+                                    <LinearProgress
+                                        variant="determinate"
+                                        value={(bulkStatus.processedMonths / bulkStatus.totalMonths) * 100}
+                                        sx={{height: 8, borderRadius: 1}}
+                                    />
+                                    <Typography variant="caption" color="text.secondary" sx={{mt: 0.5, display: 'block'}}>
+                                        {bulkStatus.processedMonths} / {bulkStatus.totalMonths} 개월 처리
+                                        {bulkStatus.failedMonths > 0 && ` (실패 ${bulkStatus.failedMonths})`}
+                                        {bulkStatus.currentMonth && ` · 현재: ${bulkStatus.currentMonth}`}
+                                    </Typography>
+                                </Box>
+                            )}
+                            {bulkStatus.errorMessage && (
+                                <Typography variant="caption" color="error.main">
+                                    오류: {bulkStatus.errorMessage}
+                                </Typography>
+                            )}
+                        </Box>
+                    )}
+
+                    <Typography variant="caption" color="text.secondary" sx={{display: 'block', mt: 3}}>
+                        선택한 연도 범위의 모든 월에 대해 FRED / ECOS / 공휴일 API 데이터를 다시 받아와 DB 에 저장합니다.
+                        수동 등록 일정은 영향 받지 않습니다. 월당 약 15~30초 소요 (외부 API rate limit).
+                    </Typography>
+                </Box>
+            )}
 
             {/* 등록/수정 다이얼로그 */}
             <Dialog open={formOpen} onClose={resetForm} maxWidth="xs" fullWidth>

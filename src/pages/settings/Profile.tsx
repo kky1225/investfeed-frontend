@@ -14,7 +14,7 @@ import Typography from '@mui/material/Typography';
 import Stack from '@mui/material/Stack';
 import MuiCard from '@mui/material/Card';
 import Alert from '@mui/material/Alert';
-import CircularProgress from '@mui/material/CircularProgress';
+import Skeleton from '@mui/material/Skeleton';
 import { styled } from '@mui/material/styles';
 
 import ColorModeSelect from '../../components/ColorModeSelect.tsx';
@@ -193,8 +193,20 @@ export default function Profile(props: { disableCustomTheme?: boolean }) {
         return (
             <AppTheme {...props}>
                 <CssBaseline enableColorScheme />
-                <Container direction="column" justifyContent="center" alignItems="center">
-                    <CircularProgress />
+                <Container direction="column" justifyContent="space-between">
+                    <ColorModeSelect sx={{ position: 'fixed', top: '1rem', right: '1rem' }} />
+                    <Card variant="outlined">
+                        <Skeleton width={120} height={32}/>
+                        <Skeleton width={200} height={40} sx={{mb: 1}}/>
+                        {Array.from({length: 5}).map((_, i) => (
+                            <Box key={i} sx={{display: 'flex', flexDirection: 'column', gap: 0.5}}>
+                                <Skeleton width={60}/>
+                                <Skeleton variant="rounded" height={40}/>
+                            </Box>
+                        ))}
+                        <Skeleton variant="rounded" height={36} sx={{mt: 1}}/>
+                        <Skeleton width={80} sx={{mx: 'auto'}}/>
+                    </Card>
                 </Container>
             </AppTheme>
         );

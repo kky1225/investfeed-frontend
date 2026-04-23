@@ -7,6 +7,7 @@ import CloseIcon from "@mui/icons-material/Close";
 import Box from "@mui/material/Box";
 import Typography from "@mui/material/Typography";
 import Chip from "@mui/material/Chip";
+import Skeleton from "@mui/material/Skeleton";
 import ToggleButton from "@mui/material/ToggleButton";
 import ToggleButtonGroup from "@mui/material/ToggleButtonGroup";
 import MenuItem from "@mui/material/MenuItem";
@@ -135,14 +136,20 @@ export default function ChartDetailDialog({open, onClose, assetType, code, name}
                 </Box>
 
                 <Box sx={{height: 500}}>
-                    {chartData && assetType === 'STOCK' && (
-                        <StockDetailLineChart {...(chartData as CustomStockDetailLineChartProps)} />
-                    )}
-                    {chartData && assetType === 'CRYPTO' && (
-                        <CryptoDetailLineChart {...(chartData as CryptoDetailLineChartProps)} />
-                    )}
-                    {chartData && assetType === 'COMMODITY' && (
-                        <CommodityDetailLineChart {...(chartData as CommodityDetailLineChartProps)} />
+                    {!chartData ? (
+                        <Skeleton variant="rectangular" height={500} sx={{borderRadius: 1}}/>
+                    ) : (
+                        <>
+                            {assetType === 'STOCK' && (
+                                <StockDetailLineChart {...(chartData as CustomStockDetailLineChartProps)} />
+                            )}
+                            {assetType === 'CRYPTO' && (
+                                <CryptoDetailLineChart {...(chartData as CryptoDetailLineChartProps)} />
+                            )}
+                            {assetType === 'COMMODITY' && (
+                                <CommodityDetailLineChart {...(chartData as CommodityDetailLineChartProps)} />
+                            )}
+                        </>
                     )}
                 </Box>
             </DialogContent>

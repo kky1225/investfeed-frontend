@@ -9,6 +9,7 @@ import Tabs from "@mui/material/Tabs";
 import Tab from "@mui/material/Tab";
 import Card from "@mui/material/Card";
 import CardContent from "@mui/material/CardContent";
+import Skeleton from "@mui/material/Skeleton";
 import Collapse from "@mui/material/Collapse";
 import IconButton from "@mui/material/IconButton";
 import Menu from "@mui/material/Menu";
@@ -60,6 +61,7 @@ export default function RealizedPnlTab({myBrokers}: RealizedPnlTabProps) {
     const [anchorEl, setAnchorEl] = useState<HTMLElement | null>(null);
     const [menuTarget, setMenuTarget] = useState<RealizedPnlItem | null>(null);
     const [reloadKey, setReloadKey] = useState(0);
+    const [loading, setLoading] = useState(true);
     const reload = () => setReloadKey(prev => prev + 1);
     const {isBlind} = useBlindMode();
     const [showList, setShowList] = useState(!isBlind);
@@ -74,6 +76,8 @@ export default function RealizedPnlTab({myBrokers}: RealizedPnlTabProps) {
     useEffect(() => {
         if (myBrokers.length === 0 || !selectedBroker) return;
         let cancelled = false;
+
+        setLoading(true);
 
         (async () => {
             try {
@@ -99,6 +103,8 @@ export default function RealizedPnlTab({myBrokers}: RealizedPnlTabProps) {
                 setTotalPnl(filtered.reduce((sum, item) => sum + item.realizedPnl, 0));
             } catch (err) {
                 console.error(err);
+            } finally {
+                if (!cancelled) setLoading(false);
             }
         })();
 
@@ -226,8 +232,8 @@ export default function RealizedPnlTab({myBrokers}: RealizedPnlTabProps) {
                     <Typography variant="body2" sx={{color: 'text.secondary', mb: 0.5}}>
                         {viewMode === 'monthly' ? `${year}년 ${month}월` : viewMode === 'yearly' ? `${year}년` : '전체'} 실현손익
                     </Typography>
-                    <Typography variant="h4" sx={{fontWeight: 700, color: pnlColor}}>
-                        <BlindText>{totalPnl > 0 ? '+' : ''}{totalPnl.toLocaleString()}원</BlindText>
+                    <Typography variant="h4" sx={{fontWeight: 700, color: loading ? undefined : pnlColor}}>
+                        {loading ? <Skeleton width="40%"/> : <BlindText>{totalPnl > 0 ? '+' : ''}{totalPnl.toLocaleString()}원</BlindText>}
                     </Typography>
                 </CardContent>
             </Card>
@@ -249,6 +255,13 @@ export default function RealizedPnlTab({myBrokers}: RealizedPnlTabProps) {
                     disableRowSelectionOnClick
                     pageSizeOptions={[10, 20, 50, 100]}
                     initialState={{pagination: {paginationModel: {pageSize: 10}}}}
+                    loading={loading}
+                    slotProps={{
+                        loadingOverlay: {
+                            variant: 'skeleton',
+                            noRowsVariant: 'skeleton',
+                        },
+                    }}
                     localeText={{noRowsLabel: '데이터가 없습니다.'}}
                     sx={{
                         '& .MuiDataGrid-cell': {cursor: 'default', display: 'flex', alignItems: 'center'},

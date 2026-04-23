@@ -1,6 +1,10 @@
 import Typography from "@mui/material/Typography";
 import Box from "@mui/material/Box";
 import Grid from "@mui/material/Grid";
+import Card from "@mui/material/Card";
+import CardContent from "@mui/material/CardContent";
+import Stack from "@mui/material/Stack";
+import Skeleton from "@mui/material/Skeleton";
 import StockTable from "../../components/StockTable.tsx";
 import * as React from "react";
 import {useEffect, useRef, useState} from "react";
@@ -25,7 +29,7 @@ const InvestorList = () => {
     const [value, setValue] = useState(orgnTp === "6" ? 0 : 1);
     const [tradeValue, setTradeValue] = useState(trdeTp === "1" ? 0 : 1);
     const [row, setRow] = useState<StockGridRow[]>([]);
-    const [loading, setLoading] = useState(false);
+    const [loading, setLoading] = useState(true);
 
     const columns = [
         {
@@ -75,6 +79,8 @@ const InvestorList = () => {
         let interval: ReturnType<typeof setInterval>;
         let displayInterval: ReturnType<typeof setInterval>;
         let socket: WebSocket;
+
+        setLoading(true);
 
         (async () => {
             const items = await investorList(req);
@@ -195,8 +201,6 @@ const InvestorList = () => {
 
     const investorList = async (req: InvestorListReq) => {
         try {
-            setLoading(true);
-
             const data = await fetchInvestorList(req);
 
             if (data.code !== "0000") {
@@ -218,8 +222,6 @@ const InvestorList = () => {
                 }
             });
 
-            setLoading(false);
-
             setRow(ranking);
 
             return investorList.map((row: InvestorListItem) => {
@@ -227,6 +229,8 @@ const InvestorList = () => {
             });
         } catch (error) {
             console.log(error);
+        } finally {
+            setLoading(false);
         }
     }
 
@@ -301,7 +305,7 @@ const InvestorList = () => {
     return (
         <Box sx={{ width: '100%', maxWidth: { sm: '100%', md: '1700px' } }}>
             <Typography component="h2" variant="h6" sx={{ mb: 2 }}>
-                주식 목록
+                투자자별 목록
             </Typography>
             <Grid
                 container
@@ -320,7 +324,7 @@ const InvestorList = () => {
                             <Tab label="순매도" {...a11yProps(1)} />
                         </Tabs>
                     </Box>
-                    <StockTable rows={row} columns={columns} loading={loading} pageSize={100} />
+                    <StockTable rows={row} columns={columns} pageSize={100} loading={loading} />
                 </Box>
             </Grid>
         </Box>

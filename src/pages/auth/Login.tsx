@@ -111,7 +111,7 @@ export default function Login(props: { disableCustomTheme?: boolean }) {
 
     const startTimer = useCallback(() => {
         clearTimer();
-        setRemainingSeconds(300);
+        setRemainingSeconds(600);
         timerRef.current = setInterval(() => {
             setRemainingSeconds(prev => {
                 if (prev <= 1) {

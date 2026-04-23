@@ -194,11 +194,17 @@ export default function BrokerManagement() {
                 columns={columns}
                 loading={loading}
                 autoHeight
-                pageSizeOptions={[10, 25, 50]}
+                pageSizeOptions={[10, 20, 50, 100]}
                 initialState={{
                     pagination: {paginationModel: {pageSize: 10}},
                 }}
                 disableRowSelectionOnClick
+                slotProps={{
+                    loadingOverlay: {
+                        variant: 'skeleton',
+                        noRowsVariant: 'skeleton',
+                    },
+                }}
                 sx={{
                     '& .MuiDataGrid-cell': {
                         display: 'flex',

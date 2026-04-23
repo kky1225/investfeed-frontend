@@ -12,6 +12,7 @@ import DialogTitle from "@mui/material/DialogTitle";
 import DialogContent from "@mui/material/DialogContent";
 import DialogActions from "@mui/material/DialogActions";
 import TextField from "@mui/material/TextField";
+import Skeleton from "@mui/material/Skeleton";
 import EditIcon from "@mui/icons-material/Edit";
 
 interface HoldingSummaryCardProps {
@@ -22,10 +23,11 @@ interface HoldingSummaryCardProps {
     dailyPl?: string;
     balance?: string;
     editable?: boolean;
+    loading?: boolean;
     onBalanceUpdate?: (balance: number) => void;
 }
 
-export default function HoldingSummaryCard({totPurAmt, totEvltAmt, totEvltPl, totPrftRt, dailyPl, balance, editable, onBalanceUpdate}: HoldingSummaryCardProps) {
+export default function HoldingSummaryCard({totPurAmt, totEvltAmt, totEvltPl, totPrftRt, dailyPl, balance, editable, loading, onBalanceUpdate}: HoldingSummaryCardProps) {
     const profitColor = Number(totEvltPl) > 0 ? 'error.main' : Number(totEvltPl) < 0 ? 'info.main' : 'text.primary';
     const dailyPlColor = dailyPl ? (Number(dailyPl) > 0 ? 'error.main' : Number(dailyPl) < 0 ? 'info.main' : 'text.primary') : undefined;
     const [dialogOpen, setDialogOpen] = useState(false);
@@ -55,7 +57,7 @@ export default function HoldingSummaryCard({totPurAmt, totEvltAmt, totEvltPl, to
                         총 평가금액
                     </Typography>
                     <Typography variant="h4" sx={{fontWeight: 700, mb: 2}}>
-                        <BlindText>{Number(totEvltAmt).toLocaleString()}원</BlindText>
+                        {loading ? <Skeleton width="40%"/> : <BlindText>{Number(totEvltAmt).toLocaleString()}원</BlindText>}
                     </Typography>
 
                     <Divider sx={{mb: 2}}/>
@@ -65,20 +67,20 @@ export default function HoldingSummaryCard({totPurAmt, totEvltAmt, totEvltPl, to
                         <Box>
                             <Typography variant="body2" sx={{color: 'text.secondary'}}>투자 원금</Typography>
                             <Typography variant="body1" sx={{fontWeight: 600}}>
-                                <BlindText>{Number(totPurAmt).toLocaleString()}원</BlindText>
+                                {loading ? <Skeleton width={120}/> : <BlindText>{Number(totPurAmt).toLocaleString()}원</BlindText>}
                             </Typography>
                         </Box>
                         <Box>
                             <Typography variant="body2" sx={{color: 'text.secondary'}}>총 수익</Typography>
-                            <Typography variant="body1" sx={{fontWeight: 600, color: profitColor}}>
-                                <BlindText>{Number(totEvltPl) > 0 ? '+' : ''}{Number(totEvltPl).toLocaleString()}원 ({Number(totPrftRt) > 0 ? '+' : ''}{totPrftRt}%)</BlindText>
+                            <Typography variant="body1" sx={{fontWeight: 600, color: loading ? undefined : profitColor}}>
+                                {loading ? <Skeleton width={180}/> : <BlindText>{Number(totEvltPl) > 0 ? '+' : ''}{Number(totEvltPl).toLocaleString()}원 ({Number(totPrftRt) > 0 ? '+' : ''}{totPrftRt}%)</BlindText>}
                             </Typography>
                         </Box>
                         {dailyPl !== undefined && (
                             <Box>
                                 <Typography variant="body2" sx={{color: 'text.secondary'}}>일간 수익</Typography>
-                                <Typography variant="body1" sx={{fontWeight: 600, color: dailyPlColor}}>
-                                    <BlindText>{Number(dailyPl) > 0 ? '+' : ''}{Number(dailyPl).toLocaleString()}원</BlindText>
+                                <Typography variant="body1" sx={{fontWeight: 600, color: loading ? undefined : dailyPlColor}}>
+                                    {loading ? <Skeleton width={140}/> : <BlindText>{Number(dailyPl) > 0 ? '+' : ''}{Number(dailyPl).toLocaleString()}원</BlindText>}
                                 </Typography>
                             </Box>
                         )}
@@ -93,9 +95,9 @@ export default function HoldingSummaryCard({totPurAmt, totEvltAmt, totEvltPl, to
                                     <Typography variant="body2" sx={{color: 'text.secondary'}}>예수금</Typography>
                                     <Box sx={{display: 'flex', alignItems: 'center', gap: 0.5}}>
                                         <Typography variant="body1" sx={{fontWeight: 600}}>
-                                            <BlindText>{Number(balance).toLocaleString()}원</BlindText>
+                                            {loading ? <Skeleton width={120}/> : <BlindText>{Number(balance).toLocaleString()}원</BlindText>}
                                         </Typography>
-                                        {editable && (
+                                        {!loading && editable && (
                                             <EditIcon
                                                 onClick={handleDialogOpen}
                                                 sx={{fontSize: 16, color: 'text.secondary', cursor: 'pointer', '&:hover': {color: 'text.primary'}}}
@@ -107,7 +109,7 @@ export default function HoldingSummaryCard({totPurAmt, totEvltAmt, totEvltPl, to
                                     <Box>
                                         <Typography variant="body2" sx={{color: 'text.secondary'}}>총 자산</Typography>
                                         <Typography variant="body1" sx={{fontWeight: 600}}>
-                                            <BlindText>{totalAsset.toLocaleString()}원</BlindText>
+                                            {loading ? <Skeleton width={140}/> : <BlindText>{totalAsset.toLocaleString()}원</BlindText>}
                                         </Typography>
                                     </Box>
                                 )}

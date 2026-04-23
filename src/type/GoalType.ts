@@ -24,7 +24,7 @@ export interface GoalDashboardRes {
 }
 
 export const goalTypeLabel: Record<GoalType, string> = {
-    TOTAL_ASSET: '목표 총 자산',
+    TOTAL_ASSET: '총 자산 목표',
     MONTHLY_REALIZED_PNL: '월간 실현손익 목표',
     YEARLY_REALIZED_PNL: '연간 실현손익 목표',
 };

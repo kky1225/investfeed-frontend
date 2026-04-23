@@ -6,6 +6,7 @@ import IconButton from '@mui/material/IconButton';
 import Chip from '@mui/material/Chip';
 import Alert from '@mui/material/Alert';
 import Snackbar from '@mui/material/Snackbar';
+import Skeleton from '@mui/material/Skeleton';
 import Dialog from '@mui/material/Dialog';
 import DialogTitle from '@mui/material/DialogTitle';
 import DialogContent from '@mui/material/DialogContent';
@@ -513,7 +514,22 @@ export default function MenuManagement() {
             </Alert>
 
             {loading ? (
-                <Typography color="text.secondary" sx={{py: 4, textAlign: 'center'}}>로딩 중...</Typography>
+                <Stack spacing={1}>
+                    {Array.from({length: 8}).map((_, i) => (
+                        <Box key={i} sx={{
+                            display: 'flex', alignItems: 'center', gap: 1.5,
+                            p: 1.5, border: '1px solid', borderColor: 'divider', borderRadius: 1,
+                            pl: i % 3 === 2 ? 4 : 1.5,
+                        }}>
+                            <Skeleton variant="circular" width={20} height={20}/>
+                            <Skeleton variant="circular" width={24} height={24}/>
+                            <Skeleton width={140}/>
+                            <Box sx={{flex: 1}}/>
+                            <Skeleton variant="rounded" width={40} height={20}/>
+                            <Skeleton variant="circular" width={24} height={24}/>
+                        </Box>
+                    ))}
+                </Stack>
             ) : (
                 <DndContext
                     sensors={sensors}
