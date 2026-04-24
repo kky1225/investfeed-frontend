@@ -13,6 +13,6 @@ export const fetchCryptoHoldingStream = async (req: HoldingStreamReq) => {
 }
 
 export const reorderCryptoApiHoldings = async (req: HoldingReorderReq) => {
-    const res = await api.put(`/crypto/holding/reorder`, req);
+    const res = await api.patch(`/crypto/holding/reorder`, req);
     return res.data;
 }

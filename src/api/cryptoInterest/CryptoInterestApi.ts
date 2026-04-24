@@ -12,7 +12,7 @@ export const createCryptoInterestGroup = async (req: CreateCryptoGroupReq) => {
 }
 
 export const updateCryptoInterestGroup = async (groupId: number, req: UpdateCryptoGroupReq) => {
-    const res = await api.put(`/crypto/interest/groups/${groupId}`, req);
+    const res = await api.patch(`/crypto/interest/groups/${groupId}`, req);
     return res.data;
 }
 
@@ -22,7 +22,7 @@ export const deleteCryptoInterestGroup = async (groupId: number) => {
 }
 
 export const reorderCryptoInterestGroups = async (req: ReorderReq) => {
-    const res = await api.put(`/crypto/interest/groups/reorder`, req);
+    const res = await api.patch(`/crypto/interest/groups/reorder`, req);
     return res.data;
 }
 
@@ -42,11 +42,11 @@ export const deleteCryptoInterestItem = async (groupId: number, itemId: number) 
 }
 
 export const reorderCryptoInterestItems = async (groupId: number, req: ReorderReq) => {
-    const res = await api.put(`/crypto/interest/groups/${groupId}/items/reorder`, req);
+    const res = await api.patch(`/crypto/interest/groups/${groupId}/items/reorder`, req);
     return res.data;
 }
 
 export const fetchCryptoInterestItemsStream = async (groupId: number) => {
-    const res = await api.post(`/crypto/interest/groups/${groupId}/items/stream`);
+    const res = await api.get(`/crypto/interest/groups/${groupId}/items/stream`);
     return res.data;
 }

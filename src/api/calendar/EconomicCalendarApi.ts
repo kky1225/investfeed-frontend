@@ -3,27 +3,27 @@ import type {BulkRefreshReq, BulkRefreshStatus, CalendarEventsReq, IndicatorHist
 import type {ApiResponse} from '../../type/AuthType.ts';
 
 export const fetchEconomicIndicators = async () => {
-    const res = await api.post('/calendar/indicators');
+    const res = await api.get('/calendar/indicators');
     return res.data;
 };
 
 export const fetchIndicatorHistory = async (req: IndicatorHistoryReq) => {
-    const res = await api.post('/calendar/history', req);
+    const res = await api.get('/calendar/history', {params: req});
     return res.data;
 };
 
 export const fetchCalendarEvents = async (req: CalendarEventsReq) => {
-    const res = await api.post('/calendar/events', req);
+    const res = await api.get('/calendar/events', {params: req});
     return res.data;
 };
 
 export const fetchManualCalendarEvents = async (req: CalendarEventsReq) => {
-    const res = await api.post('/calendar/events/list', req);
+    const res = await api.get('/calendar/events/manual', {params: req});
     return res.data;
 };
 
 export const createCalendarEvent = async (req: ManualCalendarEventReq) => {
-    const res = await api.post('/calendar/events/create', req);
+    const res = await api.post('/calendar/events', req);
     return res.data;
 };
 

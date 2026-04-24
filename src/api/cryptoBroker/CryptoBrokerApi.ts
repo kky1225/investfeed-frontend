@@ -14,7 +14,7 @@ export const fetchMyCryptoBrokerList = async () => {
 }
 
 export const addMyCryptoBroker = async (req: AddMyBrokerReq) => {
-    const res = await api.post(`/crypto/broker/my/add`, req);
+    const res = await api.post(`/crypto/broker/my`, req);
     return res.data;
 }
 
@@ -30,12 +30,12 @@ export const fetchCryptoManualHoldingList = async (memberBrokerId: number) => {
 }
 
 export const createCryptoManualHolding = async (req: CreateManualHoldingReq) => {
-    const res = await api.post(`/crypto/holding/manual/create`, req);
+    const res = await api.post(`/crypto/holding/manual`, req);
     return res.data;
 }
 
 export const updateCryptoManualHolding = async (holdingId: number, req: UpdateManualHoldingReq) => {
-    const res = await api.put(`/crypto/holding/manual/${holdingId}`, req);
+    const res = await api.patch(`/crypto/holding/manual/${holdingId}`, req);
     return res.data;
 }
 
@@ -45,11 +45,11 @@ export const deleteCryptoManualHolding = async (holdingId: number) => {
 }
 
 export const updateCryptoBrokerBalance = async (memberBrokerId: number, req: UpdateBalanceReq) => {
-    const res = await api.put(`/crypto/holding/manual/balance/${memberBrokerId}`, req);
+    const res = await api.patch(`/crypto/holding/manual/balance/${memberBrokerId}`, req);
     return res.data;
 }
 
 export const reorderCryptoHoldings = async (req: HoldingReorderReq) => {
-    const res = await api.put(`/crypto/holding/manual/reorder`, req);
+    const res = await api.patch(`/crypto/holding/manual/reorder`, req);
     return res.data;
 }

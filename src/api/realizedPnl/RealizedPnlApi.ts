@@ -7,7 +7,7 @@ import {
 
 // 주식 실현손익
 export const fetchStockRealizedPnlList = async (year?: number, month?: number) => {
-    const res = await api.post('/stock/realizedpnl/list', {year, month});
+    const res = await api.get('/stock/realizedpnl', {params: {year, month}});
     return res.data;
 };
 
@@ -17,12 +17,12 @@ export const syncStockRealizedPnl = async (req: RealizedPnlSyncReq) => {
 };
 
 export const createStockManualPnl = async (req: ManualRealizedPnlCreateReq) => {
-    const res = await api.post('/stock/realizedpnl/manual/create', req);
+    const res = await api.post('/stock/realizedpnl/manual', req);
     return res.data;
 };
 
 export const updateStockManualPnl = async (id: number, req: ManualRealizedPnlUpdateReq) => {
-    const res = await api.put(`/stock/realizedpnl/manual/${id}`, req);
+    const res = await api.patch(`/stock/realizedpnl/manual/${id}`, req);
     return res.data;
 };
 
@@ -33,17 +33,17 @@ export const deleteStockManualPnl = async (id: number) => {
 
 // 코인 실현손익
 export const fetchCryptoRealizedPnlList = async (year?: number, month?: number) => {
-    const res = await api.post('/crypto/realizedpnl/list', {year, month});
+    const res = await api.get('/crypto/realizedpnl', {params: {year, month}});
     return res.data;
 };
 
 export const createCryptoManualPnl = async (req: ManualRealizedPnlCreateReq) => {
-    const res = await api.post('/crypto/realizedpnl/manual/create', req);
+    const res = await api.post('/crypto/realizedpnl/manual', req);
     return res.data;
 };
 
 export const updateCryptoManualPnl = async (id: number, req: ManualRealizedPnlUpdateReq) => {
-    const res = await api.put(`/crypto/realizedpnl/manual/${id}`, req);
+    const res = await api.patch(`/crypto/realizedpnl/manual/${id}`, req);
     return res.data;
 };
 

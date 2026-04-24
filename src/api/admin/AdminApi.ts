@@ -12,21 +12,21 @@ export const fetchMembers = async (): Promise<ApiResponse<MemberRes[]>> => {
 };
 
 export const lockAccount = async (loginId: string): Promise<ApiResponse<null>> => {
-    const res = await api.put<ApiResponse<null>>(`/auth/admin/members/${loginId}/lock`);
+    const res = await api.patch<ApiResponse<null>>(`/auth/admin/members/${loginId}/lock`);
     return res.data;
 };
 
 export const unlockAccount = async (loginId: string): Promise<ApiResponse<null>> => {
-    const res = await api.put<ApiResponse<null>>(`/auth/admin/members/${loginId}/unlock`);
+    const res = await api.patch<ApiResponse<null>>(`/auth/admin/members/${loginId}/unlock`);
     return res.data;
 };
 
 export const changeRole = async (loginId: string, role: string): Promise<ApiResponse<null>> => {
-    const res = await api.put<ApiResponse<null>>(`/auth/admin/members/${loginId}/role`, {role});
+    const res = await api.patch<ApiResponse<null>>(`/auth/admin/members/${loginId}/role`, {role});
     return res.data;
 };
 
 export const resetTotp = async (loginId: string): Promise<ApiResponse<null>> => {
-    const res = await api.put<ApiResponse<null>>(`/auth/admin/members/${loginId}/totp-reset`);
+    const res = await api.patch<ApiResponse<null>>(`/auth/admin/members/${loginId}/totp-reset`);
     return res.data;
 };

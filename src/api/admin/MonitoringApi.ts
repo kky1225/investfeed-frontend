@@ -34,7 +34,7 @@ export const fetchRedis = async (): Promise<ApiResponse<RedisCacheRes>> => {
 };
 
 export const invalidateRedisPrefix = async (prefix: string): Promise<ApiResponse<RedisInvalidateRes>> => {
-    const res = await api.post<ApiResponse<RedisInvalidateRes>>('/admin/monitoring/redis/invalidate', { prefix });
+    const res = await api.delete<ApiResponse<RedisInvalidateRes>>('/admin/monitoring/redis/cache', { params: { prefix } });
     return res.data;
 };
 

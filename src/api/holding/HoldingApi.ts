@@ -13,6 +13,6 @@ export const fetchHoldingStream = async (req: HoldingStreamReq) => {
 }
 
 export const reorderApiHoldings = async (req: HoldingReorderReq) => {
-    const res = await api.put(`/stock/holding/manual/reorder`, req);
+    const res = await api.patch(`/stock/holding/manual/reorder`, req);
     return res.data;
 }

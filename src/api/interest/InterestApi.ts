@@ -12,7 +12,7 @@ export const createInterestGroup = async (req: CreateGroupReq) => {
 };
 
 export const updateInterestGroup = async (groupId: number, req: UpdateGroupReq) => {
-    const res = await api.put(`/stock/interest/groups/${groupId}`, req);
+    const res = await api.patch(`/stock/interest/groups/${groupId}`, req);
     return res.data;
 };
 
@@ -37,16 +37,16 @@ export const deleteInterestItem = async (groupId: number, itemId: number) => {
 };
 
 export const reorderInterestGroups = async (req: ReorderReq) => {
-    const res = await api.put("/stock/interest/groups/reorder", req);
+    const res = await api.patch("/stock/interest/groups/reorder", req);
     return res.data;
 };
 
 export const reorderInterestItems = async (groupId: number, req: ReorderReq) => {
-    const res = await api.put(`/stock/interest/groups/${groupId}/items/reorder`, req);
+    const res = await api.patch(`/stock/interest/groups/${groupId}/items/reorder`, req);
     return res.data;
 };
 
 export const fetchInterestItemsStream = async (groupId: number) => {
-    const res = await api.post(`/stock/interest/groups/${groupId}/items/stream`);
+    const res = await api.get(`/stock/interest/groups/${groupId}/items/stream`);
     return res.data;
 };

@@ -13,12 +13,12 @@ export const fetchUnreadCount = async () => {
 };
 
 export const markAsRead = async (id: number) => {
-    const res = await api.put(`/notifications/${id}/read`);
+    const res = await api.patch(`/notifications/${id}/read`);
     return res.data;
 };
 
 export const markAllAsRead = async () => {
-    const res = await api.put("/notifications/read-all");
+    const res = await api.patch("/notifications/read-all");
     return res.data;
 };
 
@@ -38,7 +38,7 @@ export const deletePriceTarget = async (id: number) => {
 };
 
 export const fetchNotificationSetting = async () => {
-    const res = await api.post("/notifications/settings");
+    const res = await api.get("/notifications/settings");
     return res.data;
 };
 

@@ -8,7 +8,7 @@ export const fetchAdminBrokerList = async () => {
 }
 
 export const createBroker = async (req: CreateBrokerReq) => {
-    const res = await api.post(`/admin/broker/create`, req);
+    const res = await api.post(`/admin/broker`, req);
     return res.data;
 }
 
@@ -35,7 +35,7 @@ export const fetchMyBrokerList = async () => {
 }
 
 export const addMyBroker = async (req: AddMyBrokerReq) => {
-    const res = await api.post(`/stock/broker/my/add`, req);
+    const res = await api.post(`/stock/broker/my`, req);
     return res.data;
 }
 
@@ -51,12 +51,12 @@ export const fetchManualHoldingList = async (memberBrokerId: number) => {
 }
 
 export const createManualHolding = async (req: CreateManualHoldingReq) => {
-    const res = await api.post(`/stock/holding/manual/create`, req);
+    const res = await api.post(`/stock/holding/manual`, req);
     return res.data;
 }
 
 export const updateManualHolding = async (holdingId: number, req: UpdateManualHoldingReq) => {
-    const res = await api.put(`/stock/holding/manual/${holdingId}`, req);
+    const res = await api.patch(`/stock/holding/manual/${holdingId}`, req);
     return res.data;
 }
 
@@ -66,11 +66,11 @@ export const deleteManualHolding = async (holdingId: number) => {
 }
 
 export const updateBrokerBalance = async (memberBrokerId: number, req: UpdateBalanceReq) => {
-    const res = await api.put(`/stock/holding/manual/balance/${memberBrokerId}`, req);
+    const res = await api.patch(`/stock/holding/manual/balance/${memberBrokerId}`, req);
     return res.data;
 }
 
 export const reorderHoldings = async (req: HoldingReorderReq) => {
-    const res = await api.put(`/stock/holding/manual/reorder`, req);
+    const res = await api.patch(`/stock/holding/manual/reorder`, req);
     return res.data;
 }

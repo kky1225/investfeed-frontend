@@ -26,7 +26,7 @@ export const logout = async (): Promise<void> => {
 };
 
 export const changePassword = async (req: ChangePasswordReq): Promise<ApiResponse<null>> => {
-    const res = await api.put<ApiResponse<null>>('/auth/password', req);
+    const res = await api.patch<ApiResponse<null>>('/auth/password', req);
     return res.data;
 };
 
@@ -66,7 +66,7 @@ export const verifySecondaryPassword = async (req: SecondaryPasswordVerifyReq): 
 };
 
 export const changeSecondaryPassword = async (req: SecondaryPasswordChangeReq): Promise<ApiResponse<null>> => {
-    const res = await api.put<ApiResponse<null>>('/auth/secondary-password/change', req);
+    const res = await api.patch<ApiResponse<null>>('/auth/secondary-password/change', req);
     return res.data;
 };
 

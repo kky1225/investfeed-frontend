@@ -2,12 +2,12 @@ import api from '../../axios.ts';
 import type {InvestmentGoalCreateReq, InvestmentGoalUpdateReq} from '../../type/GoalType.ts';
 
 export const createGoal = async (req: InvestmentGoalCreateReq) => {
-    const res = await api.post('/goal/create', req);
+    const res = await api.post('/goal', req);
     return res.data;
 };
 
 export const updateGoal = async (id: number, req: InvestmentGoalUpdateReq) => {
-    const res = await api.put(`/goal/${id}`, req);
+    const res = await api.patch(`/goal/${id}`, req);
     return res.data;
 };
 
@@ -17,11 +17,11 @@ export const deleteGoal = async (id: number) => {
 };
 
 export const fetchGoals = async () => {
-    const res = await api.post('/goal/list');
+    const res = await api.get('/goal');
     return res.data;
 };
 
 export const fetchGoalDashboard = async () => {
-    const res = await api.post('/goal/dashboard');
+    const res = await api.get('/goal/dashboard');
     return res.data;
 };

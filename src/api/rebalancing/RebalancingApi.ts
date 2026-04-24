@@ -7,7 +7,7 @@ export const saveRebalancingSetting = async (req: RebalancingSettingReq) => {
 };
 
 export const fetchRebalancingStatus = async () => {
-    const res = await api.post('/rebalancing/status');
+    const res = await api.get('/rebalancing/status');
     return res.data;
 };
 
