@@ -1,3 +1,4 @@
+import type {AxiosRequestConfig} from 'axios';
 import api from '../../axios.ts';
 import type {InvestmentGoalCreateReq, InvestmentGoalUpdateReq} from '../../type/GoalType.ts';
 
@@ -21,7 +22,7 @@ export const fetchGoals = async () => {
     return res.data;
 };
 
-export const fetchGoalDashboard = async () => {
-    const res = await api.get('/goal/dashboard');
+export const fetchGoalDashboard = async (config?: AxiosRequestConfig) => {
+    const res = await api.get('/goal/dashboard', config);
     return res.data;
 };

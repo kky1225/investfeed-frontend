@@ -51,7 +51,8 @@ export default function BrokerManagement() {
         try {
             const res = await fetchAdminBrokerList();
             setBrokers(res.result?.brokers ?? []);
-        } catch {
+        } catch (error) {
+            console.error(error);
             setSnackbar({open: true, message: '증권사 목록을 불러오는데 실패했습니다.', severity: 'error'});
         } finally {
             setLoading(false);
@@ -106,6 +107,7 @@ export default function BrokerManagement() {
             resetForm();
             await loadBrokers();
         } catch (err) {
+            console.error(err);
             const axiosErr = err as {response?: {status?: number; data?: {code?: string; result?: Record<string, string>}}};
             if (axiosErr.response?.status === 400 && axiosErr.response?.data?.code === 'VALIDATION_4001') {
                 setFormErrors(axiosErr.response.data.result ?? {});
@@ -123,7 +125,8 @@ export default function BrokerManagement() {
             await deleteBroker(deleteTarget.id);
             setSnackbar({open: true, message: `${deleteTarget.name} 증권사가 삭제되었습니다.`, severity: 'success'});
             await loadBrokers();
-        } catch {
+        } catch (error) {
+            console.error(error);
             setSnackbar({open: true, message: '증권사 삭제에 실패했습니다.', severity: 'error'});
         }
         setDeleteTarget(null);

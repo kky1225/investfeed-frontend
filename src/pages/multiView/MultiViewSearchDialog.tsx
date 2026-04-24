@@ -55,7 +55,8 @@ export default function MultiViewSearchDialog({open, onClose, onSelect}: MultiVi
                         stkNm: item.stkNm,
                     })) ?? [];
                     setCommodityList(items);
-                } catch {
+                } catch (error) {
+                    console.error(error);
                     setCommodityList([]);
                 }
             })();
@@ -81,7 +82,8 @@ export default function MultiViewSearchDialog({open, onClose, onSelect}: MultiVi
                 const searchFn = tab === 0 ? fetchStockSearch : fetchCryptoSearch;
                 const data = await searchFn(keyword.trim());
                 setSearchResults(data.result ?? []);
-            } catch {
+            } catch (error) {
+                console.error(error);
                 setSearchResults([]);
             } finally {
                 setSearchLoading(false);

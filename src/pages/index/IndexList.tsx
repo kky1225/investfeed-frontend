@@ -11,6 +11,7 @@ import {useEffect, useRef, useState} from "react";
 import {fetchTimeNow} from "../../api/time/TimeApi.ts";
 import {MarketType} from "../../type/timeType.ts";
 import {ChartMinute, IndexListItem, IndexStream, IndexStreamRes} from "../../type/IndexType.ts";
+import FreshnessIndicator from "../../components/FreshnessIndicator.tsx";
 
 const IndexList = () => {
     const chartTimer = useRef<number>(0);
@@ -18,6 +19,8 @@ const IndexList = () => {
 
     const [indexDataList, setIndexDataList] = useState<IndexLineChartProps[]>([]);
     const [loading, setLoading] = useState(true);
+    const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+    const [pollError, setPollError] = useState(false);
 
     useEffect(() => {
         indexList();
@@ -51,7 +54,7 @@ const IndexList = () => {
             chartTimeout = setTimeout(() => {
                 indexList();
                 interval = setInterval(() => {
-                    indexList();
+                    indexList(true);
                 }, (60 * 1000));
             }, waitTime + 200);
         })();
@@ -104,8 +107,6 @@ const IndexList = () => {
         try {
             const data = await fetchIndexListStream();
 
-            console.log(data);
-
             if (data.code !== "0000") {
                 throw new Error(data.msg);
             }
@@ -114,15 +115,13 @@ const IndexList = () => {
         }
     }
 
-    const indexList = async () => {
+    const indexList = async (silent: boolean = false) => {
         try {
-            const data = await fetchIndexList();
+            const data = await fetchIndexList(silent ? { skipGlobalError: true } : undefined);
 
             if(data.code !== "0000") {
                 throw new Error(data.msg);
             }
-
-            console.log(data);
 
             const {
                 indexList
@@ -172,8 +171,11 @@ const IndexList = () => {
             });
 
             setIndexDataList(newIndexDataList);
+            setLastUpdated(new Date());
+            setPollError(false);
         }catch (error) {
             console.error(error);
+            if (silent) setPollError(true);
         } finally {
             setLoading(false);
         }
@@ -239,9 +241,13 @@ const IndexList = () => {
 
     return (
         <Box sx={{ width: '100%', maxWidth: { sm: '100%', md: '1700px' } }}>
-            <Typography component="h2" variant="h6" sx={{ mb: 2 }}>
-                주요 지수
-            </Typography>
+            <Box sx={{ display: 'flex', alignItems: 'center', mb: 2, gap: 2 }}>
+                <Typography component="h2" variant="h6">
+                    주요 지수
+                </Typography>
+                <Box sx={{ flex: 1 }}/>
+                <FreshnessIndicator lastUpdated={lastUpdated} error={pollError}/>
+            </Box>
             <Grid
                 container
                 spacing={2}

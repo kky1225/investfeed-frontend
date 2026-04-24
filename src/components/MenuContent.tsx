@@ -48,8 +48,8 @@ export default function MenuContent({collapsed = false}: MenuContentProps) {
         try {
             const res = await fetchMyMenus();
             if (res.result) setApiMenus(res.result);
-        } catch {
-            // 메뉴 로딩 실패 시 빈 메뉴
+        } catch (error) {
+            console.error(error);
         }
     }, []);
 

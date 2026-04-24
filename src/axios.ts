@@ -20,6 +20,8 @@ api.interceptors.response.use(
 
         const isLoginRequest = originalRequest.url?.startsWith('/auth/login');
         const isReissueRequest = originalRequest.url?.startsWith('/auth/reissue');
+        // 2차 비밀번호 관련 요청은 모든 에러(403/400/500/네트워크)를 SecondaryAuthDialog 내부에서 처리.
+        const isSecondaryPasswordRequest = originalRequest.url?.startsWith('/auth/secondary-password/');
 
         if (error.response?.status === 401 && !originalRequest._retry && !isLoginRequest && !isReissueRequest) {
             if (isRefreshing) {
@@ -46,10 +48,11 @@ api.interceptors.response.use(
                 processQueue(null);
                 return api(originalRequest);
             } catch (refreshError) {
+                console.error(refreshError);
                 processQueue(refreshError);
-                sessionStorage.removeItem('user');
-                sessionStorage.removeItem('passwordChangeRequired');
-                window.location.href = '/login';
+                // 세션 만료 — 기존 조용한 리다이렉트 대신 App.tsx 의 Dialog 가 확인 버튼을 띄우고
+                // 사용자가 확인하면 sessionStorage clear + /login 이동. 일반 에러 Dialog 와 분리.
+                window.dispatchEvent(new CustomEvent('show-session-expired'));
                 return Promise.reject(refreshError);
             } finally {
                 isRefreshing = false;
@@ -58,7 +61,6 @@ api.interceptors.response.use(
 
         if (error.response?.status === 403) {
             const code = error.response?.data?.code;
-            const isSecondaryPasswordRequest = originalRequest.url?.startsWith('/auth/secondary-password/');
             if (isSecondaryPasswordRequest) {
                 return Promise.reject(error);
             }
@@ -79,6 +81,23 @@ api.interceptors.response.use(
             const message = error.response?.data?.message || '접근 권한이 없습니다.';
             window.dispatchEvent(new CustomEvent('show-forbidden', { detail: { message } }));
             return new Promise(() => {});
+        }
+
+        // 전역 에러 Dialog 처리 — skip 조건에 해당하면 페이지 catch 로만 전달
+        const shouldSkip =
+            originalRequest.skipGlobalError === true ||        // 폴링 등 명시적 skip
+            isLoginRequest ||                                   // 로그인 API 는 Login.tsx 에서 직접 처리
+            isReissueRequest ||                                 // refresh 는 401 분기에서 이미 처리
+            isSecondaryPasswordRequest ||                       // 2차 비번 관련은 SecondaryAuthDialog 에서 자체 처리
+            (error.response?.status === 400 &&
+             error.response?.data?.code === 'VALIDATION_4001'); // 폼 Validation 은 페이지 setFormErrors
+
+        if (!shouldSkip) {
+            const message = error.response?.data?.message
+                ?? (error.response
+                    ? '일시적인 오류가 발생했습니다. 잠시 후 다시 시도해주세요.'
+                    : '네트워크 연결을 확인해주세요.');
+            window.dispatchEvent(new CustomEvent('show-global-error', { detail: { message } }));
         }
 
         return Promise.reject(error);

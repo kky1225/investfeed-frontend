@@ -8,16 +8,19 @@ export interface MarketIndexRes {
     updatedAt: string;
 }
 
+export interface CryptoSummary {
+    price: string;
+    changeAmount: string;
+    changeRate: string;
+    trend: string;
+}
+
 export interface MarketIndexDashboardRes {
     indices: MarketIndexRes[];
     fearGreed?: {
         current: { value: number; classification: string; date: string };
         history: { value: number; classification: string; date: string }[];
     } | null;
-    bitcoin?: {
-        price: string;
-        changeAmount: string;
-        changeRate: string;
-        trend: string;
-    } | null;
+    bitcoin?: CryptoSummary | null;
+    ethereum?: CryptoSummary | null;
 }

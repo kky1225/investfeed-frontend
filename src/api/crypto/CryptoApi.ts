@@ -1,8 +1,9 @@
+import type {AxiosRequestConfig} from "axios";
 import api from "../../axios.ts";
 import {CryptoDetailReq} from "../../type/CryptoType.ts";
 
-export const fetchCryptoList = async () => {
-    const res = await api.get(`/crypto/list`);
+export const fetchCryptoList = async (config?: AxiosRequestConfig) => {
+    const res = await api.get(`/crypto/list`, config);
     return res.data;
 }
 
@@ -16,13 +17,13 @@ export const fetchCryptoDetailStream = async (market: string) => {
     return res.data;
 }
 
-export const fetchCryptoDetail = async (req: CryptoDetailReq) => {
-    const res = await api.get(`/crypto/detail`, {params: req});
+export const fetchCryptoDetail = async (req: CryptoDetailReq, config?: AxiosRequestConfig) => {
+    const res = await api.get(`/crypto/detail`, {...config, params: req});
     return res.data;
 }
 
-export const fetchCryptoRankList = async () => {
-    const res = await api.get(`/crypto/rank`);
+export const fetchCryptoRankList = async (config?: AxiosRequestConfig) => {
+    const res = await api.get(`/crypto/rank`, config);
     return res.data;
 }
 

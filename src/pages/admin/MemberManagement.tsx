@@ -90,7 +90,8 @@ export default function MemberManagement() {
             if (res.result) {
                 setMembers(res.result);
             }
-        } catch {
+        } catch (error) {
+            console.error(error);
             setSnackbar({open: true, message: '회원 목록을 불러오는데 실패했습니다.', severity: 'error'});
         } finally {
             setLoading(false);
@@ -113,7 +114,8 @@ export default function MemberManagement() {
                 setSnackbar({open: true, message: `${loginId} 계정 잠금이 해제되었습니다.`, severity: 'success'});
             }
             await loadMembers();
-        } catch {
+        } catch (error) {
+            console.error(error);
             setSnackbar({
                 open: true,
                 message: action === 'lock' ? '계정 잠금에 실패했습니다.' : '잠금 해제에 실패했습니다.',
@@ -129,7 +131,8 @@ export default function MemberManagement() {
             await resetTotp(loginId);
             setSnackbar({open: true, message: `${loginId} 계정의 TOTP가 초기화되었습니다.`, severity: 'success'});
             await loadMembers();
-        } catch {
+        } catch (error) {
+            console.error(error);
             setSnackbar({open: true, message: 'TOTP 초기화에 실패했습니다.', severity: 'error'});
         }
     };
@@ -141,7 +144,8 @@ export default function MemberManagement() {
             await changeRole(loginId, newRole);
             setSnackbar({open: true, message: `${loginId} 계정의 역할이 변경되었습니다.`, severity: 'success'});
             await loadMembers();
-        } catch {
+        } catch (error) {
+            console.error(error);
             setSnackbar({open: true, message: '권한 변경에 실패했습니다.', severity: 'error'});
         }
     };
@@ -167,6 +171,7 @@ export default function MemberManagement() {
             setCreateForm(initialCreateForm);
             await loadMembers();
         } catch (err) {
+            console.error(err);
             const axiosErr = err as {response?: {status?: number; data?: {code?: string; message?: string; result?: Record<string, string>}}};
             if (axiosErr.response?.status === 400 && axiosErr.response?.data?.code === 'VALIDATION_4001') {
                 setCreateErrors((axiosErr.response.data.result ?? {}) as Partial<Record<keyof CreateMemberReq, string>>);

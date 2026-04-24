@@ -7,8 +7,8 @@ interface NotificationContextType {
     notifications: Notification[];
     unreadCount: number;
     loading: boolean;
-    loadNotifications: () => Promise<void>;
-    refreshAll: () => Promise<void>;
+    loadNotifications: (silent?: boolean) => Promise<boolean>;
+    refreshAll: (silent?: boolean) => Promise<boolean>;
     handleMarkAsRead: (id: number) => Promise<void>;
     handleMarkAllAsRead: () => Promise<void>;
 }
@@ -22,23 +22,25 @@ export function NotificationProvider({children}: { children: ReactNode }) {
     const [loading, setLoading] = useState(true);
     const wsRef = useRef<WebSocket | null>(null);
 
-    const loadNotifications = useCallback(async () => {
+    const loadNotifications = useCallback(async (silent: boolean = false) => {
         try {
-            const res = await fetchNotifications();
+            const res = await fetchNotifications(undefined, silent ? { skipGlobalError: true } : undefined);
             setNotifications(res.result ?? []);
-        } catch {
-            // ignore
+            return true;
+        } catch (error) {
+            console.error(error);
+            return false;
         } finally {
             setLoading(false);
         }
     }, []);
 
-    const loadUnreadCount = useCallback(async () => {
+    const loadUnreadCount = useCallback(async (silent: boolean = false) => {
         try {
-            const res = await fetchUnreadCount();
+            const res = await fetchUnreadCount(silent ? { skipGlobalError: true } : undefined);
             setUnreadCount(res.result ?? 0);
-        } catch {
-            // ignore
+        } catch (error) {
+            console.error(error);
         }
     }, []);
 
@@ -54,8 +56,9 @@ export function NotificationProvider({children}: { children: ReactNode }) {
         setUnreadCount(0);
     }, []);
 
-    const refreshAll = useCallback(async () => {
-        await Promise.all([loadNotifications(), loadUnreadCount()]);
+    const refreshAll = useCallback(async (silent: boolean = false) => {
+        const [ok] = await Promise.all([loadNotifications(silent), loadUnreadCount(silent)]);
+        return ok;
     }, [loadNotifications, loadUnreadCount]);
 
     useEffect(() => {
@@ -64,6 +67,7 @@ export function NotificationProvider({children}: { children: ReactNode }) {
         refreshAll();
 
         let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+        let reconnectAttempt = 0;
         let isCancelled = false;
 
         const connect = () => {
@@ -74,27 +78,34 @@ export function NotificationProvider({children}: { children: ReactNode }) {
             const ws = new WebSocket(wsUrl);
             wsRef.current = ws;
 
+            ws.onopen = () => {
+                reconnectAttempt = 0; // 연결 성공 시 backoff 리셋
+            };
+
             ws.onmessage = (event) => {
                 try {
                     const notification: Notification = JSON.parse(event.data);
                     setNotifications(prev => [notification, ...prev]);
                     setUnreadCount(prev => prev + 1);
-                } catch {
-                    // ignore
+                } catch (error) {
+                    console.error(error);
                 }
             };
 
-            ws.onerror = () => {
-                // silent
+            ws.onerror = (event) => {
+                console.error('[NotificationWS] connection error:', event);
+                // UI 알림 없음 — onclose 에서 reconnect 로 복구
             };
 
             ws.onclose = () => {
                 wsRef.current = null;
                 if (!isCancelled) {
+                    const delay = Math.min(3000 * Math.pow(2, reconnectAttempt), 60_000);
+                    reconnectAttempt++;
                     reconnectTimer = setTimeout(() => {
-                        refreshAll();
+                        refreshAll(true);
                         connect();
-                    }, 3000);
+                    }, delay);
                 }
             };
         };

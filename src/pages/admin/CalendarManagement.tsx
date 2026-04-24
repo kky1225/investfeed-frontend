@@ -69,7 +69,8 @@ export default function CalendarManagement() {
         try {
             const res = await fetchManualCalendarEvents({year, month: 0});
             setEvents(res.result ?? []);
-        } catch {
+        } catch (error) {
+            console.error(error);
             setSnackbar({open: true, message: '일정 목록을 불러오는데 실패했습니다.', severity: 'error'});
         } finally {
             setLoading(false);
@@ -80,12 +81,15 @@ export default function CalendarManagement() {
         loadEvents();
     }, [year]);
 
-    // Bulk refresh 상태 폴링 — 탭 전환 시 초기 1회, 실행 중이면 2초마다
-    const loadBulkStatus = async () => {
+    // Bulk refresh 상태 폴링 — 탭 전환 시 초기 1회, 실행 중이면 1초마다
+    const loadBulkStatus = async (silent: boolean = false) => {
         try {
-            const res = await fetchBulkRefreshStatus();
+            const res = await fetchBulkRefreshStatus(silent ? { skipGlobalError: true } : undefined);
             if (res.result) setBulkStatus(res.result);
-        } catch { /* 무시 */ }
+        } catch (error) {
+            console.error(error);
+            /* 무시 — 폴링 중 실패해도 다음 주기에 재시도 */
+        }
     };
 
     useEffect(() => {
@@ -93,8 +97,9 @@ export default function CalendarManagement() {
             if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
             return;
         }
+        // 초기 1회는 non-silent (사용자가 탭 열었으니 에러가 있으면 알림), 이후 폴링은 silent
         loadBulkStatus();
-        pollRef.current = setInterval(loadBulkStatus, 1000);
+        pollRef.current = setInterval(() => loadBulkStatus(true), 1000);
         return () => {
             if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
         };
@@ -111,6 +116,7 @@ export default function CalendarManagement() {
             if (res.result) setBulkStatus(res.result);
             setSnackbar({open: true, message: '일괄 재생성을 시작했습니다.', severity: 'success'});
         } catch (e: unknown) {
+            console.error(e);
             const msg = (e as {response?: {data?: {message?: string}}})?.response?.data?.message ?? '재생성 시작 실패';
             setSnackbar({open: true, message: msg, severity: 'error'});
         } finally {
@@ -170,7 +176,8 @@ export default function CalendarManagement() {
             }
             resetForm();
             loadEvents();
-        } catch {
+        } catch (error) {
+            console.error(error);
             setSnackbar({open: true, message: '일정 처리에 실패했습니다.', severity: 'error'});
         } finally {
             setFormLoading(false);
@@ -184,7 +191,8 @@ export default function CalendarManagement() {
             setSnackbar({open: true, message: '일정이 삭제되었습니다.', severity: 'success'});
             setDeleteTarget(null);
             loadEvents();
-        } catch {
+        } catch (error) {
+            console.error(error);
             setSnackbar({open: true, message: '일정 삭제에 실패했습니다.', severity: 'error'});
         }
     };

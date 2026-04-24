@@ -10,6 +10,7 @@ import {fetchTimeNow} from "../../api/time/TimeApi.ts";
 import {MarketType} from "../../type/timeType.ts";
 import CommodityLineChart, {CommodityLineChartProps} from "../../components/CommodityLineChart.tsx";
 import {fetchCommodityList, fetchCommodityListStream} from "../../api/commodity/CommodityApi.ts";
+import FreshnessIndicator from "../../components/FreshnessIndicator.tsx";
 import {ChartMinute, CommodityListItem, CommodityStream, CommodityStreamRes} from "../../type/CommodityType.ts";
 
 const CommodityList = () => {
@@ -18,6 +19,8 @@ const CommodityList = () => {
 
     const [commodityDataList, setCommodityDataList] = useState<CommodityLineChartProps[]>([]);
     const [loading, setLoading] = useState(true);
+    const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+    const [pollError, setPollError] = useState(false);
 
     useEffect(() => {
         commodityList();
@@ -51,7 +54,7 @@ const CommodityList = () => {
             chartTimeout = setTimeout(() => {
                 commodityList();
                 interval = setInterval(() => {
-                    commodityList();
+                    commodityList(true);
                 }, (60 * 1000));
             }, waitTime + 200);
         })();
@@ -104,8 +107,6 @@ const CommodityList = () => {
         try {
             const data = await fetchCommodityListStream();
 
-            console.log(data);
-
             if (data.code !== "0000") {
                 throw new Error(data.msg);
             }
@@ -114,15 +115,13 @@ const CommodityList = () => {
         }
     }
 
-    const commodityList = async () => {
+    const commodityList = async (silent: boolean = false) => {
         try {
-            const data = await fetchCommodityList();
+            const data = await fetchCommodityList(silent ? { skipGlobalError: true } : undefined);
 
             if(data.code !== "0000") {
                 throw new Error(data.msg);
             }
-
-            console.log(data);
 
             const {
                 commodityList
@@ -169,8 +168,11 @@ const CommodityList = () => {
             });
 
             setCommodityDataList(newCommodityDataList);
+            setLastUpdated(new Date());
+            setPollError(false);
         }catch (error) {
             console.error(error);
+            if (silent) setPollError(true);
         } finally {
             setLoading(false);
         }
@@ -236,9 +238,13 @@ const CommodityList = () => {
 
     return (
         <Box sx={{ width: '100%', maxWidth: { sm: '100%', md: '1700px' } }}>
-            <Typography component="h2" variant="h6" sx={{ mb: 2 }}>
-                원자재 목록
-            </Typography>
+            <Box sx={{ display: 'flex', alignItems: 'center', mb: 2, gap: 2 }}>
+                <Typography component="h2" variant="h6">
+                    원자재 목록
+                </Typography>
+                <Box sx={{ flex: 1 }}/>
+                <FreshnessIndicator lastUpdated={lastUpdated} error={pollError}/>
+            </Box>
             <Grid
                 container
                 spacing={2}

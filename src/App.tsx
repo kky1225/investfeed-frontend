@@ -2,15 +2,18 @@ import './App.css'
 import {useState, useEffect, useCallback} from "react";
 import {Route, Routes, useParams, useNavigate} from "react-router-dom";
 import Dialog from "@mui/material/Dialog";
-import DialogTitle from "@mui/material/DialogTitle";
 import DialogContent from "@mui/material/DialogContent";
-import DialogContentText from "@mui/material/DialogContentText";
 import DialogActions from "@mui/material/DialogActions";
 import Button from "@mui/material/Button";
 import Box from "@mui/material/Box";
+import Typography from "@mui/material/Typography";
+import {alpha} from "@mui/material/styles";
 import LockOutlinedIcon from "@mui/icons-material/LockOutlined";
+import ErrorOutlineIcon from "@mui/icons-material/ErrorOutline";
+import AccessTimeIcon from "@mui/icons-material/AccessTime";
 import Login from "./pages/auth/Login.tsx";
 import SecondaryAuthDialog from "./components/SecondaryAuthDialog.tsx";
+import AppTheme from "./components/AppTheme.tsx";
 import {processSecondaryAuthQueue} from "./axios.ts";
 import Dashboard from "./pages/dashboard/Dashboard.tsx";
 import MainLayout from "./layout/MainLayout.tsx";
@@ -64,6 +67,10 @@ function App() {
     const [secondaryAuth, setSecondaryAuth] = useState<{ open: boolean; mode: 'setup' | 'verify' }>({
         open: false, mode: 'verify'
     });
+    // 일반 에러 Dialog (500/네트워크 등). 이미 열려있으면 새 에러 무시.
+    const [globalError, setGlobalError] = useState<string | null>(null);
+    // 401 refresh 실패 시 세션 만료 Dialog. 확인 시 /login 으로 강제 이동.
+    const [sessionExpired, setSessionExpired] = useState(false);
 
     const handleForbidden = useCallback((e: Event) => {
         const { message } = (e as CustomEvent).detail;
@@ -76,14 +83,31 @@ function App() {
         setSecondaryAuth({ open: true, mode });
     }, []);
 
+    const handleGlobalError = useCallback((e: Event) => {
+        // 중복 방지: 이미 다른 에러/세션만료 Dialog 가 열려있으면 무시
+        setGlobalError(prev => {
+            if (prev !== null) return prev;
+            const detail = (e as CustomEvent).detail;
+            return detail?.message ?? '일시적인 오류가 발생했습니다. 잠시 후 다시 시도해주세요.';
+        });
+    }, []);
+
+    const handleSessionExpired = useCallback(() => {
+        setSessionExpired(prev => prev || true);
+    }, []);
+
     useEffect(() => {
         window.addEventListener('show-forbidden', handleForbidden);
         window.addEventListener('show-secondary-auth', handleSecondaryAuth);
+        window.addEventListener('show-global-error', handleGlobalError);
+        window.addEventListener('show-session-expired', handleSessionExpired);
         return () => {
             window.removeEventListener('show-forbidden', handleForbidden);
             window.removeEventListener('show-secondary-auth', handleSecondaryAuth);
+            window.removeEventListener('show-global-error', handleGlobalError);
+            window.removeEventListener('show-session-expired', handleSessionExpired);
         };
-    }, [handleForbidden, handleSecondaryAuth]);
+    }, [handleForbidden, handleSecondaryAuth, handleGlobalError, handleSessionExpired]);
 
     const handleForbiddenClose = () => {
         setForbidden({ open: false, message: '' });
@@ -94,23 +118,91 @@ function App() {
         }
     };
 
+    const handleSessionExpiredConfirm = () => {
+        sessionStorage.removeItem('user');
+        sessionStorage.removeItem('passwordChangeRequired');
+        setSessionExpired(false);
+        window.location.href = '/login';
+    };
+
     return (
-        <>
-            <Dialog open={forbidden.open} onClose={handleForbiddenClose} maxWidth="xs" fullWidth>
-                <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', pt: 3 }}>
+        <AppTheme>
+            <Dialog
+                open={forbidden.open}
+                onClose={handleForbiddenClose}
+                maxWidth="xs"
+                fullWidth
+                slotProps={{ paper: { sx: { borderRadius: 3 } } }}
+            >
+                <DialogContent sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', pt: 4, pb: 2 }}>
                     <Box sx={{
-                        width: 48, height: 48, borderRadius: '50%',
-                        bgcolor: 'error.light', display: 'flex', alignItems: 'center', justifyContent: 'center', mb: 1
+                        width: 56, height: 56, borderRadius: '50%',
+                        bgcolor: (theme) => alpha(theme.palette.error.main, 0.12),
+                        display: 'flex', alignItems: 'center', justifyContent: 'center', mb: 2
                     }}>
-                        <LockOutlinedIcon sx={{ color: 'error.contrastText' }} />
+                        <LockOutlinedIcon sx={{ color: 'error.main', fontSize: 28 }} />
                     </Box>
-                </Box>
-                <DialogTitle sx={{ textAlign: 'center', pb: 0.5 }}>접근 불가</DialogTitle>
-                <DialogContent>
-                    <DialogContentText sx={{ textAlign: 'center' }}>{forbidden.message}</DialogContentText>
+                    <Typography variant="h6" sx={{ fontWeight: 600, mb: 1 }}>접근 불가</Typography>
+                    <Typography variant="body2" color="text.secondary" sx={{ lineHeight: 1.6 }}>
+                        {forbidden.message}
+                    </Typography>
                 </DialogContent>
-                <DialogActions sx={{ justifyContent: 'center', pb: 2.5 }}>
-                    <Button variant="contained" onClick={handleForbiddenClose} autoFocus>확인</Button>
+                <DialogActions sx={{ px: 3, pb: 3, pt: 0 }}>
+                    <Button fullWidth variant="contained" onClick={handleForbiddenClose} autoFocus>
+                        확인
+                    </Button>
+                </DialogActions>
+            </Dialog>
+            <Dialog
+                open={!!globalError}
+                onClose={() => setGlobalError(null)}
+                maxWidth="xs"
+                fullWidth
+                slotProps={{ paper: { sx: { borderRadius: 3 } } }}
+            >
+                <DialogContent sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', pt: 4, pb: 2 }}>
+                    <Box sx={{
+                        width: 56, height: 56, borderRadius: '50%',
+                        bgcolor: (theme) => alpha(theme.palette.error.main, 0.12),
+                        display: 'flex', alignItems: 'center', justifyContent: 'center', mb: 2
+                    }}>
+                        <ErrorOutlineIcon sx={{ color: 'error.main', fontSize: 28 }} />
+                    </Box>
+                    <Typography variant="h6" sx={{ fontWeight: 600, mb: 1 }}>오류</Typography>
+                    <Typography variant="body2" color="text.secondary" sx={{ lineHeight: 1.6 }}>
+                        {globalError}
+                    </Typography>
+                </DialogContent>
+                <DialogActions sx={{ px: 3, pb: 3, pt: 0 }}>
+                    <Button fullWidth variant="contained" onClick={() => setGlobalError(null)} autoFocus>
+                        확인
+                    </Button>
+                </DialogActions>
+            </Dialog>
+            <Dialog
+                open={sessionExpired}
+                disableEscapeKeyDown
+                maxWidth="xs"
+                fullWidth
+                slotProps={{ paper: { sx: { borderRadius: 3 } } }}
+            >
+                <DialogContent sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', pt: 4, pb: 2 }}>
+                    <Box sx={{
+                        width: 56, height: 56, borderRadius: '50%',
+                        bgcolor: (theme) => alpha(theme.palette.warning.main, 0.12),
+                        display: 'flex', alignItems: 'center', justifyContent: 'center', mb: 2
+                    }}>
+                        <AccessTimeIcon sx={{ color: 'warning.main', fontSize: 28 }} />
+                    </Box>
+                    <Typography variant="h6" sx={{ fontWeight: 600, mb: 1 }}>세션 만료</Typography>
+                    <Typography variant="body2" color="text.secondary" sx={{ lineHeight: 1.6 }}>
+                        세션이 만료되었습니다. 다시 로그인해주세요.
+                    </Typography>
+                </DialogContent>
+                <DialogActions sx={{ px: 3, pb: 3, pt: 0 }}>
+                    <Button fullWidth variant="contained" onClick={handleSessionExpiredConfirm} autoFocus>
+                        확인
+                    </Button>
                 </DialogActions>
             </Dialog>
             <SecondaryAuthDialog
@@ -183,7 +275,7 @@ function App() {
                     </Route>
                 </Route>
             </Routes>
-        </>
+        </AppTheme>
     )
 }
 

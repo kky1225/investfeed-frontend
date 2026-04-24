@@ -30,7 +30,8 @@ const MainLayout = () => {
                 if (!res.result || res.result.length === 0) {
                     setHasApiKey(false);
                 }
-            } catch {
+            } catch (error) {
+                console.error(error);
                 setHasApiKey(false);
             }
         })();

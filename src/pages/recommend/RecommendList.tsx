@@ -16,17 +16,22 @@ import {
     RecommendListStreamRes
 } from "../../type/RecommendType.ts";
 import RecommendCard, {RecommendCardProps} from "../../components/RecommendCard.tsx";
+import FreshnessIndicator from "../../components/FreshnessIndicator.tsx";
 
 const RecommendList = () => {
     const [recommendDataList, setRecommendDataList] = useState<RecommendCardProps[]>([]);
     const [avoidDataList, setAvoidDataList] = useState<RecommendCardProps[]>([]);
     const [loading, setLoading] = useState(true);
+    const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+    const [pollError, setPollError] = useState(false);
 
     const chartTimer = useRef<number>(0);
     const marketTimer = useRef<number>(0);
 
     useEffect(() => {
         let socketTimeout: ReturnType<typeof setTimeout>;
+        let pollTimeout: ReturnType<typeof setTimeout>;
+        let pollInterval: ReturnType<typeof setInterval>;
         let socket: WebSocket;
 
         (async () => {
@@ -51,11 +56,24 @@ const RecommendList = () => {
                     }
                 }, marketTimer.current + 200);
             }
+
+            // 추천/회피 종목 1분 주기 폴링 (스케줄 주기 변동 대비 보수적 설정)
+            const now = Date.now() + chartTimer.current;
+            const waitTime = 60_000 - (now % 60_000);
+
+            pollTimeout = setTimeout(() => {
+                recommendList(true);
+                pollInterval = setInterval(() => {
+                    recommendList(true);
+                }, 60_000);
+            }, waitTime + 200);
         })();
 
         return () => {
             socket?.close();
             clearInterval(socketTimeout);
+            clearTimeout(pollTimeout);
+            clearInterval(pollInterval);
         }
     }, []);
 
@@ -95,9 +113,9 @@ const RecommendList = () => {
         }
     }
 
-    const recommendList = async () => {
+    const recommendList = async (silent: boolean = false) => {
         try {
-            const data = await fetchRecommendList();
+            const data = await fetchRecommendList(silent ? { skipGlobalError: true } : undefined);
 
             const { recommendList, avoidList } = data.result;
 
@@ -125,12 +143,15 @@ const RecommendList = () => {
 
             setAvoidDataList(newAvoidDataList);
             setRecommendDataList(newRecommendDataList);
+            setLastUpdated(new Date());
+            setPollError(false);
 
             return [...recommendList, ...avoidList].map((row: RecommendListItem) => {
                 return row.stkCd;
             });
         } catch (error) {
             console.error(error);
+            if (silent) setPollError(true);
         } finally {
             setLoading(false);
         }
@@ -139,8 +160,6 @@ const RecommendList = () => {
     const recommendListStream = async (req: RecommendListStreamReq) => {
         try {
             const data = await fetchRecommendListStream(req);
-
-            console.log(data);
 
             if (data.code !== "0000") {
                 throw new Error(data.msg);
@@ -200,9 +219,13 @@ const RecommendList = () => {
 
     return (
         <Box sx={{ width: '100%', maxWidth: { sm: '100%', md: '1700px' } }}>
-            <Typography component="h2" variant="h6" sx={{ mb: 2 }}>
-                추천 목록
-            </Typography>
+            <Box sx={{ display: 'flex', alignItems: 'center', mb: 2, gap: 2 }}>
+                <Typography component="h2" variant="h6">
+                    추천 목록
+                </Typography>
+                <Box sx={{ flex: 1 }}/>
+                <FreshnessIndicator lastUpdated={lastUpdated} error={pollError}/>
+            </Box>
             <Grid
                 container
                 spacing={2}

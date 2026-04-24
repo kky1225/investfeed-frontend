@@ -317,6 +317,7 @@ const Interest = () => {
             setSelectedGroup(created);
             setItems([]);
         } catch (err) {
+            console.error(err);
             const axiosErr = err as {response?: {status?: number; data?: {code?: string; result?: Record<string, string>}}};
             if (axiosErr.response?.status === 400 && axiosErr.response?.data?.code === 'VALIDATION_4001') {
                 setNewGroupError(axiosErr.response.data.result?.groupNm ?? "그룹명을 확인해주세요.");
@@ -342,6 +343,7 @@ const Interest = () => {
             setEditGroupOpen(false);
             setEditGroupId(null);
         } catch (err) {
+            console.error(err);
             const axiosErr = err as {response?: {status?: number; data?: {code?: string; result?: Record<string, string>}}};
             if (axiosErr.response?.status === 400 && axiosErr.response?.data?.code === 'VALIDATION_4001') {
                 setEditGroupError(axiosErr.response.data.result?.groupNm ?? "그룹명을 확인해주세요.");
@@ -419,7 +421,8 @@ const Interest = () => {
             try {
                 const data = await fetchStockSearch(keyword.trim());
                 setSearchResults(data.result ?? []);
-            } catch {
+            } catch (error) {
+                console.error(error);
                 setSearchResults([]);
             } finally {
                 setSearchLoading(false);
@@ -444,7 +447,8 @@ const Interest = () => {
             setSearchResults([]);
             setSelectedStock(null);
             setAddItemError("");
-        } catch {
+        } catch (error) {
+            console.error(error);
             setAddItemError("이미 추가된 종목이거나 오류가 발생했습니다.");
         }
     };

@@ -30,26 +30,30 @@ import {fetchGoalDashboard, deleteGoal} from "../../api/goal/GoalApi.ts";
 import type {InvestmentGoalRes} from "../../type/GoalType.ts";
 import {goalTypeLabel} from "../../type/GoalType.ts";
 import GoalSettingDialog from "../assetDashboard/GoalSettingDialog.tsx";
+import FreshnessIndicator from "../../components/FreshnessIndicator.tsx";
 
 export default function GoalPage() {
     const [goals, setGoals] = useState<InvestmentGoalRes[]>([]);
     const [loading, setLoading] = useState(true);
     const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+    const [pollError, setPollError] = useState(false);
     const [goalDialogOpen, setGoalDialogOpen] = useState(false);
     const [editGoal, setEditGoal] = useState<InvestmentGoalRes | null>(null);
     const [deleteTarget, setDeleteTarget] = useState<InvestmentGoalRes | null>(null);
     const [anchorEl, setAnchorEl] = useState<HTMLElement | null>(null);
     const [menuTarget, setMenuTarget] = useState<InvestmentGoalRes | null>(null);
 
-    const loadGoals = async () => {
+    const loadGoals = async (silent: boolean = false) => {
         try {
-            const res = await fetchGoalDashboard();
+            const res = await fetchGoalDashboard(silent ? { skipGlobalError: true } : undefined);
             if (res.code === "0000") {
                 setGoals(res.result?.goals ?? []);
                 setLastUpdated(new Date());
+                setPollError(false);
             }
-        } catch {
-            // 무시
+        } catch (error) {
+            console.error(error);
+            if (silent) setPollError(true);
         } finally {
             setLoading(false);
         }
@@ -66,9 +70,9 @@ export default function GoalPage() {
             const waitTime = 60_000 - (now % 60_000);
 
             timeout = setTimeout(() => {
-                loadGoals();
+                loadGoals(true);
                 interval = setInterval(() => {
-                    loadGoals();
+                    loadGoals(true);
                 }, 60_000);
             }, waitTime + 200);
         })();
@@ -102,11 +106,9 @@ export default function GoalPage() {
                 )}
             </Box>
 
-            {lastUpdated && !loading && (
+            {!loading && (
                 <Box sx={{display: 'flex', justifyContent: 'flex-end', mb: 1}}>
-                    <Typography variant="caption" color="text.secondary">
-                        {lastUpdated.toLocaleTimeString('ko-KR', {hour: '2-digit', minute: '2-digit'})} 기준
-                    </Typography>
+                    <FreshnessIndicator lastUpdated={lastUpdated} error={pollError}/>
                 </Box>
             )}
 

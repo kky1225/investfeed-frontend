@@ -1,4 +1,4 @@
-import {useEffect, useState} from 'react';
+import {useEffect, useRef, useState} from 'react';
 import {useNavigate} from 'react-router-dom';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
@@ -32,7 +32,10 @@ import NotificationsActiveIcon from '@mui/icons-material/NotificationsActive';
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
 import {useNotification} from '../../context/NotificationContext';
 import {fetchPriceTargets, deletePriceTarget} from '../../api/notification/NotificationApi';
+import {fetchTimeNow} from '../../api/time/TimeApi';
+import {MarketType} from '../../type/timeType';
 import type {Notification, AssetType, PriceTarget} from '../../type/NotificationType';
+import FreshnessIndicator from '../../components/FreshnessIndicator';
 
 type TabFilter = 'ALL' | AssetType;
 type TypeFilter = 'ALL' | '가격' | '목표' | '리밸런싱' | 'API_KEY';
@@ -117,7 +120,7 @@ function getNavigationPath(notification: Notification): string {
 
 export default function NotificationList() {
     const navigate = useNavigate();
-    const {notifications, loading, handleMarkAsRead, handleMarkAllAsRead} = useNotification();
+    const {notifications, loading, loadNotifications, handleMarkAsRead, handleMarkAllAsRead} = useNotification();
     const [tabFilter, setTabFilter] = useState<TabFilter>('ALL');
     const [unreadOnly, setUnreadOnly] = useState(false);
     const [typeFilter, setTypeFilter] = useState<TypeFilter>('ALL');
@@ -125,6 +128,9 @@ export default function NotificationList() {
     const [searchQuery, setSearchQuery] = useState('');
     const [priceTargets, setPriceTargets] = useState<PriceTarget[]>([]);
     const [priceTargetDialogOpen, setPriceTargetDialogOpen] = useState(false);
+    const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+    const [pollError, setPollError] = useState(false);
+    const chartTimer = useRef<number>(0);
 
     useEffect(() => {
         (async () => {
@@ -136,6 +142,62 @@ export default function NotificationList() {
             }
         })();
     }, []);
+
+    // 서버 시간과 클라이언트 시간 오차 보정 (다른 폴링 페이지와 동일 패턴)
+    const syncServerTime = async () => {
+        try {
+            const startTime = Date.now();
+            const data = await fetchTimeNow({marketType: MarketType.STOCK});
+            if (data.code !== '0000') return;
+            const endTime = Date.now();
+            const delayTime = endTime - startTime;
+            const revisionServerTime = data.result.time + delayTime / 2;
+            chartTimer.current = revisionServerTime - endTime;
+        } catch (error) {
+            console.error(error);
+        }
+    };
+
+    // 알림 1분 주기 폴링 — 서버 시간 기준 매분 정각에 발화
+    useEffect(() => {
+        setLastUpdated(new Date());
+
+        let interval: ReturnType<typeof setInterval>;
+        let timeout: ReturnType<typeof setTimeout>;
+
+        (async () => {
+            await syncServerTime();
+
+            const now = Date.now() + chartTimer.current;
+            const waitTime = 60_000 - (now % 60_000);
+
+            timeout = setTimeout(() => {
+                (async () => {
+                    const ok = await loadNotifications(true);
+                    if (ok) {
+                        setLastUpdated(new Date());
+                        setPollError(false);
+                    } else {
+                        setPollError(true);
+                    }
+                })();
+                interval = setInterval(async () => {
+                    const ok = await loadNotifications(true);
+                    if (ok) {
+                        setLastUpdated(new Date());
+                        setPollError(false);
+                    } else {
+                        setPollError(true);
+                    }
+                }, 60_000);
+            }, waitTime + 200);
+        })();
+
+        return () => {
+            clearTimeout(timeout);
+            clearInterval(interval);
+        };
+    }, [loadNotifications]);
 
     const handleDeletePriceTarget = async (id: number) => {
         try {
@@ -167,7 +229,10 @@ export default function NotificationList() {
     return (
         <Box sx={{width: '100%', maxWidth: 700, mx: 'auto'}}>
             <Box sx={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2}}>
-                <Typography variant="h5" fontWeight="bold">알림</Typography>
+                <Box sx={{display: 'flex', alignItems: 'baseline', gap: 1.5}}>
+                    <Typography variant="h5" fontWeight="bold">알림</Typography>
+                    {!loading && <FreshnessIndicator lastUpdated={lastUpdated} error={pollError}/>}
+                </Box>
                 <Box sx={{display: 'flex', gap: 1}}>
                     <Button
                         size="small"

@@ -13,6 +13,7 @@ import {fetchTimeNow} from "../../api/time/TimeApi.ts";
 import {MarketType} from "../../type/timeType.ts";
 import {fetchSectList, fetchSectListStream} from "../../api/sect/SectApi.ts";
 import SectCard, {SectCardProps} from "../../components/SectCard.tsx";
+import FreshnessIndicator from "../../components/FreshnessIndicator.tsx";
 
 const SectList = () => {
     const navigate = useNavigate();
@@ -24,6 +25,8 @@ const SectList = () => {
     const [value, setValue] = useState(indsCd === "001" ? 0 : 1);
     const [sectDataList, setSectDataList] = useState<SectCardProps[]>([]);
     const [loading, setLoading] = useState(true);
+    const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+    const [pollError, setPollError] = useState(false);
 
     const chartTimer = useRef<number>(0);
     const marketTimer = useRef<number>(0);
@@ -65,7 +68,7 @@ const SectList = () => {
             chartTimeout = setTimeout(() => {
                 sectList(req);
                 interval = setInterval(() => {
-                    sectList(req);
+                    sectList(req, true);
                 }, (60 * 1000));
             }, waitTime + 200);
         })();
@@ -114,11 +117,9 @@ const SectList = () => {
         }
     }
 
-    const sectList = async (req: SectListReq) => {
+    const sectList = async (req: SectListReq, silent: boolean = false) => {
         try {
-            const data = await fetchSectList(req);
-
-            console.log(data);
+            const data = await fetchSectList(req, silent ? { skipGlobalError: true } : undefined);
 
             const { sectList } = data.result;
 
@@ -133,12 +134,15 @@ const SectList = () => {
             });
 
             setSectDataList(newIndexDataList);
+            setLastUpdated(new Date());
+            setPollError(false);
 
             return sectList.map((row: SectListItem) => {
                 return row.stkCd;
             });
         } catch (error) {
             console.error(error);
+            if (silent) setPollError(true);
         } finally {
             setLoading(false);
         }
@@ -147,8 +151,6 @@ const SectList = () => {
     const sectListStream = async (req: SectListStreamReq) => {
         try {
             const data = await fetchSectListStream(req);
-
-            console.log(data);
 
             if (data.code !== "0000") {
                 throw new Error(data.msg);
@@ -223,9 +225,13 @@ const SectList = () => {
 
     return (
         <Box sx={{ width: '100%', maxWidth: { sm: '100%', md: '1700px' } }}>
-            <Typography component="h2" variant="h6" sx={{ mb: 2 }}>
-                업종 목록
-            </Typography>
+            <Box sx={{ display: 'flex', alignItems: 'center', mb: 2, gap: 2 }}>
+                <Typography component="h2" variant="h6">
+                    업종 목록
+                </Typography>
+                <Box sx={{ flex: 1 }}/>
+                <FreshnessIndicator lastUpdated={lastUpdated} error={pollError}/>
+            </Box>
             <Grid
                 container
                 spacing={2}

@@ -1,13 +1,14 @@
+import type {AxiosRequestConfig} from "axios";
 import api from "../../axios.ts";
 import {StockDetailReq, StockStreamReq} from "../../type/StockType.ts";
 
-export const fetchStockDetail = async (req: StockDetailReq) => {
-    const res = await api.get(`/stock/detail`, {params: req});
+export const fetchStockDetail = async (req: StockDetailReq, config?: AxiosRequestConfig) => {
+    const res = await api.get(`/stock/detail`, {...config, params: req});
     return res.data;
 }
 
-export const fetchStockChart = async (req: StockDetailReq) => {
-    const res = await api.get(`/stock/chart`, {params: req});
+export const fetchStockChart = async (req: StockDetailReq, config?: AxiosRequestConfig) => {
+    const res = await api.get(`/stock/chart`, {...config, params: req});
     return res.data;
 }
 

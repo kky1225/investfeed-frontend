@@ -93,7 +93,8 @@ export default function AppNavbar() {
                 }));
 
                 setSearchResults([...cryptoResults, ...stockResults]);
-            } catch {
+            } catch (error) {
+                console.error(error);
                 setSearchResults([]);
             } finally {
                 setSearchLoading(false);

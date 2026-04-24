@@ -102,7 +102,8 @@ export default function Profile(props: { disableCustomTheme?: boolean }) {
                     setName(res.result.name);
                     setPhone(res.result.phone);
                 }
-            } catch {
+            } catch (error) {
+                console.error(error);
                 setErrorMessage('프로필 정보를 불러오는데 실패했습니다.');
             } finally {
                 setInitialLoading(false);
@@ -167,6 +168,7 @@ export default function Profile(props: { disableCustomTheme?: boolean }) {
                 onConfirm: () => navigate('/'),
             });
         } catch (err: unknown) {
+            console.error(err);
             const axiosErr = err as { response?: { status?: number; data?: { code?: string; result?: Record<string, string> } } };
             const code = axiosErr.response?.data?.code ?? '';
             if (axiosErr.response?.status === 400 && code === 'VALIDATION_4001') {

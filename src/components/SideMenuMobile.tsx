@@ -59,7 +59,8 @@ export default function SideMenuMobile({ open, toggleDrawer }: SideMenuMobilePro
         handleClose();
         try {
             await logout();
-        } catch {
+        } catch (error) {
+            console.error(error);
             // 서버 오류여도 로컬 상태는 초기화
         } finally {
             clearAuth();

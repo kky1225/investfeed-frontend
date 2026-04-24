@@ -63,7 +63,7 @@ export default function ChangeSecondaryPasswordDialog({open, onSuccess, onClose}
                     const res = await fetchSecondaryPasswordLockStatus();
                     const seconds = res.result?.remainingSeconds ?? 0;
                     if (seconds > 0) startCountdown(seconds);
-                } catch { /* ignore */ }
+                } catch (error) { console.error(error); /* ignore — 잠금 상태 조회 실패해도 다이얼로그는 정상 표시 */ }
             })();
         }
     }, [open, startCountdown]);
@@ -106,6 +106,7 @@ export default function ChangeSecondaryPasswordDialog({open, onSuccess, onClose}
             setStep('new');
             setKey(prev => prev + 1);
         } catch (err: unknown) {
+            console.error(err);
             if (!handleLockError(err)) {
                 const axiosErr = err as { response?: { data?: { code?: string } } };
                 const errCode = axiosErr.response?.data?.code ?? '';
@@ -139,6 +140,7 @@ export default function ChangeSecondaryPasswordDialog({open, onSuccess, onClose}
             resetState();
             onSuccess();
         } catch (err: unknown) {
+            console.error(err);
             const axiosErr = err as { response?: { data?: { code?: string } } };
             const errCode = axiosErr.response?.data?.code ?? '';
             setError(ERROR_MESSAGES[errCode] ?? '2차 비밀번호 변경에 실패했습니다.');

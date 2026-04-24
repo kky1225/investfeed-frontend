@@ -1,8 +1,9 @@
+import type {AxiosRequestConfig} from "axios";
 import {InvestorListReq, InvestorStreamReq} from "../../type/InvestorType.ts";
 import api from "../../axios.ts";
 
-export const fetchInvestorList = async (req: InvestorListReq) => {
-    const res = await api.get("/stock/investor/list", {params: req});
+export const fetchInvestorList = async (req: InvestorListReq, config?: AxiosRequestConfig) => {
+    const res = await api.get("/stock/investor/list", {...config, params: req});
     return res.data;
 }
 

@@ -4,13 +4,10 @@ import Grid from "@mui/material/Grid";
 import {useEffect, useRef, useState} from "react";
 import {ThemeListItem, ThemeListReq} from "../../type/ThemeType.ts";
 import {fetchThemeList} from "../../api/theme/ThemeApi.ts";
+import FreshnessIndicator from "../../components/FreshnessIndicator.tsx";
 import ThemeTable, {ThemeGridRow} from "../../components/ThemeTable.tsx";
 import {GridColDef} from "@mui/x-data-grid";
 import Chip from "@mui/material/Chip";
-import Card from "@mui/material/Card";
-import CardContent from "@mui/material/CardContent";
-import Stack from "@mui/material/Stack";
-import Skeleton from "@mui/material/Skeleton";
 import NumberSpinner from "../../components/NumberSpinner.tsx";
 import FormControl from "@mui/material/FormControl";
 import MenuItem from "@mui/material/MenuItem";
@@ -22,6 +19,8 @@ const ThemeList = () => {
     });
     const [row, setRow] = useState<ThemeGridRow[]>([]);
     const [loading, setLoading] = useState(true);
+    const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+    const [pollError, setPollError] = useState(false);
     const columns: GridColDef[] = [
         {
             field: 'rank',
@@ -67,7 +66,7 @@ const ThemeList = () => {
             chartTimeout = setTimeout(() => {
                 themeList(req);
                 interval = setInterval(() => {
-                    themeList(req);
+                    themeList(req, true);
                 }, (60 * 1000));
             }, waitTime + 200);
         })();
@@ -78,11 +77,9 @@ const ThemeList = () => {
         }
     }, [req]);
 
-    const themeList = async (req: ThemeListReq) => {
+    const themeList = async (req: ThemeListReq, silent: boolean = false) => {
         try {
-            const data = await fetchThemeList(req);
-
-            console.log(data);
+            const data = await fetchThemeList(req, silent ? { skipGlobalError: true } : undefined);
 
             const { themeList } = data.result;
 
@@ -98,8 +95,11 @@ const ThemeList = () => {
             });
 
             setRow(newRowData);
+            setLastUpdated(new Date());
+            setPollError(false);
         } catch (error) {
             console.error(error);
+            if (silent) setPollError(true);
         } finally {
             setLoading(false);
         }
@@ -137,9 +137,13 @@ const ThemeList = () => {
 
     return (
         <Box sx={{ width: '100%', maxWidth: { sm: '100%', md: '1700px' } }}>
-            <Typography component="h2" variant="h6" sx={{ mb: 2 }}>
-                테마 목록
-            </Typography>
+            <Box sx={{ display: 'flex', alignItems: 'center', mb: 2, gap: 2 }}>
+                <Typography component="h2" variant="h6">
+                    테마 목록
+                </Typography>
+                <Box sx={{ flex: 1 }}/>
+                <FreshnessIndicator lastUpdated={lastUpdated} error={pollError}/>
+            </Box>
             <Grid
                 container
                 spacing={2}

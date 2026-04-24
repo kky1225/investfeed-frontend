@@ -37,6 +37,7 @@ import CheckIcon from "@mui/icons-material/Check";
 import PriorityHighIcon from "@mui/icons-material/PriorityHigh";
 import DoNotDisturbIcon from "@mui/icons-material/DoNotDisturb";
 import CustomDataTable from "../../components/CustomDataTable.tsx";
+import FreshnessIndicator from "../../components/FreshnessIndicator.tsx";
 import {GridColDef} from "@mui/x-data-grid";
 import {fetchTimeNow} from "../../api/time/TimeApi.ts";
 import {MarketType} from "../../type/timeType.ts";
@@ -174,6 +175,8 @@ const StockDetail = () => {
     const [dividendYield, setDividendYield] = useState<number | null>(null);
     const [priceTargetOpen, setPriceTargetOpen] = useState(false);
     const [loading, setLoading] = useState(true);
+    const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+    const [pollError, setPollError] = useState(false);
 
     useEffect(() => {
         let chartTimeout: ReturnType<typeof setTimeout>;
@@ -212,7 +215,7 @@ const StockDetail = () => {
             chartTimeout = setTimeout(() => {
                 stockDetail(req);
                 interval = setInterval(() => {
-                    stockDetail(req);
+                    stockDetail(req, true);
                 }, (60 * 1000));
             }, waitTime + 200);
         })();
@@ -225,11 +228,9 @@ const StockDetail = () => {
         }
     }, [req])
 
-    const stockDetail = async (req: StockDetailReq): Promise<Array<string>> => {
+    const stockDetail = async (req: StockDetailReq, silent: boolean = false): Promise<Array<string>> => {
         try {
-            const data = await fetchStockDetail(req);
-
-            console.log(data);
+            const data = await fetchStockDetail(req, silent ? { skipGlobalError: true } : undefined);
 
             const { stockInfo, stockChartList, stockInvestorChartList, stockInvestorList, stockProgramList, stockShortSellingList } = data.result;
 
@@ -688,10 +689,13 @@ const StockDetail = () => {
                     row: shortSellingRow
                 }
             });
+            setLastUpdated(new Date());
+            setPollError(false);
 
             return [stockInfo.stkCd];
         } catch(error) {
             console.error(error);
+            if (silent) setPollError(true);
 
             return [];
         } finally {
@@ -762,7 +766,7 @@ const StockDetail = () => {
                 throw new Error(data.msg);
             }
         } catch (error) {
-            console.log(error);
+            console.error(error);
         }
     }
 
@@ -1064,16 +1068,21 @@ const StockDetail = () => {
             });
             setAddedGroupIds(prev => new Set(prev).add(group.id));
             setSnackbar({open: true, message: `${group.groupNm}에 추가되었습니다.`, severity: 'success'});
-        } catch {
+        } catch (error) {
+            console.error(error);
             setSnackbar({open: true, message: '이미 추가된 종목이거나 오류가 발생했습니다.', severity: 'error'});
         }
     };
 
     return (
         <Box sx={{ width: '100%', maxWidth: { sm: '100%', md: '1700px' } }}>
-            <Typography component="h2" variant="h6" sx={{ mb: 2 }}>
-                주식 상세
-            </Typography>
+            <Box sx={{ display: 'flex', alignItems: 'center', mb: 2, gap: 2 }}>
+                <Typography component="h2" variant="h6">
+                    주식 상세
+                </Typography>
+                <Box sx={{ flex: 1 }}/>
+                <FreshnessIndicator lastUpdated={lastUpdated} error={pollError}/>
+            </Box>
             <Grid
                 container
                 spacing={2}

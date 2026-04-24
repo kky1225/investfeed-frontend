@@ -230,7 +230,8 @@ export default function MenuManagement() {
                 setFlatItems(flat);
                 setCollapsedIds(getParentIds(flat));
             }
-        } catch {
+        } catch (error) {
+            console.error(error);
             setSnackbar({open: true, message: '메뉴 목록을 불러오는데 실패했습니다.', severity: 'error'});
         } finally {
             setLoading(false);
@@ -404,7 +405,8 @@ export default function MenuManagement() {
             await updateMenuStructure({structures});
             setSnackbar({open: true, message: '메뉴 구조가 저장되었습니다.', severity: 'success'});
             await reloadMenus();
-        } catch {
+        } catch (error) {
+            console.error(error);
             setSnackbar({open: true, message: '메뉴 구조 저장에 실패했습니다.', severity: 'error'});
         }
     };
@@ -448,6 +450,7 @@ export default function MenuManagement() {
             setEditDialog({open: false, mode: 'create'});
             await reloadMenus();
         } catch (err) {
+            console.error(err);
             const axiosErr = err as {response?: {status?: number; data?: {code?: string; message?: string; result?: Record<string, string>}}};
             if (axiosErr.response?.status === 400 && axiosErr.response?.data?.code === 'VALIDATION_4001') {
                 setEditErrors((axiosErr.response.data.result ?? {}) as {name?: string});
@@ -465,6 +468,7 @@ export default function MenuManagement() {
             setDeleteDialog({open: false, item: null});
             await reloadMenus();
         } catch (error: any) {
+            console.error(error);
             setSnackbar({open: true, message: error?.response?.data?.message || '메뉴 삭제에 실패했습니다.', severity: 'error'});
         }
     };
@@ -487,7 +491,8 @@ export default function MenuManagement() {
             setSnackbar({open: true, message: '권한이 변경되었습니다.', severity: 'success'});
             setPermDialog({open: false, item: null});
             await reloadMenus();
-        } catch {
+        } catch (error) {
+            console.error(error);
             setSnackbar({open: true, message: '권한 변경에 실패했습니다.', severity: 'error'});
         }
     };

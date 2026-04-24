@@ -1,3 +1,4 @@
+import type {AxiosRequestConfig} from 'axios';
 import api from '../../axios';
 import type { ApiResponse } from '../../type/AuthType';
 import type {
@@ -18,18 +19,18 @@ import type {
     ErrorLogsReq,
 } from '../../type/MonitoringType';
 
-export const fetchSchedulerStatus = async (): Promise<ApiResponse<SchedulerStatusRes[]>> => {
-    const res = await api.get<ApiResponse<SchedulerStatusRes[]>>('/admin/monitoring/scheduler-status');
+export const fetchSchedulerStatus = async (config?: AxiosRequestConfig): Promise<ApiResponse<SchedulerStatusRes[]>> => {
+    const res = await api.get<ApiResponse<SchedulerStatusRes[]>>('/admin/monitoring/scheduler-status', config);
     return res.data;
 };
 
-export const fetchSchedulerLogs = async (req: SchedulerLogsReq): Promise<ApiResponse<PageRes<SchedulerLogRes>>> => {
-    const res = await api.post<ApiResponse<PageRes<SchedulerLogRes>>>('/admin/monitoring/scheduler-logs', req);
+export const fetchSchedulerLogs = async (req: SchedulerLogsReq, config?: AxiosRequestConfig): Promise<ApiResponse<PageRes<SchedulerLogRes>>> => {
+    const res = await api.post<ApiResponse<PageRes<SchedulerLogRes>>>('/admin/monitoring/scheduler-logs', req, config);
     return res.data;
 };
 
-export const fetchRedis = async (): Promise<ApiResponse<RedisCacheRes>> => {
-    const res = await api.get<ApiResponse<RedisCacheRes>>('/admin/monitoring/redis');
+export const fetchRedis = async (config?: AxiosRequestConfig): Promise<ApiResponse<RedisCacheRes>> => {
+    const res = await api.get<ApiResponse<RedisCacheRes>>('/admin/monitoring/redis', config);
     return res.data;
 };
 
@@ -38,8 +39,8 @@ export const invalidateRedisPrefix = async (prefix: string): Promise<ApiResponse
     return res.data;
 };
 
-export const fetchErrorLogs = async (req: ErrorLogsReq): Promise<ApiResponse<PageRes<ErrorLogRes>>> => {
-    const res = await api.post<ApiResponse<PageRes<ErrorLogRes>>>('/admin/monitoring/error-logs', req);
+export const fetchErrorLogs = async (req: ErrorLogsReq, config?: AxiosRequestConfig): Promise<ApiResponse<PageRes<ErrorLogRes>>> => {
+    const res = await api.post<ApiResponse<PageRes<ErrorLogRes>>>('/admin/monitoring/error-logs', req, config);
     return res.data;
 };
 
@@ -51,8 +52,8 @@ export const acknowledgeErrorLog = async (
     return res.data;
 };
 
-export const fetchSystemStatus = async (): Promise<ApiResponse<SystemStatusRes>> => {
-    const res = await api.get<ApiResponse<SystemStatusRes>>('/admin/monitoring/system-status');
+export const fetchSystemStatus = async (config?: AxiosRequestConfig): Promise<ApiResponse<SystemStatusRes>> => {
+    const res = await api.get<ApiResponse<SystemStatusRes>>('/admin/monitoring/system-status', config);
     return res.data;
 };
 
@@ -97,7 +98,7 @@ export const fetchErrorLogAckHistory = async (id: number): Promise<ApiResponse<L
     return res.data;
 };
 
-export const fetchSchedulerConfigLogs = async (req: SchedulerConfigLogsReq): Promise<ApiResponse<PageRes<SchedulerConfigLogRes>>> => {
-    const res = await api.post<ApiResponse<PageRes<SchedulerConfigLogRes>>>('/admin/monitoring/scheduler-config-logs', req);
+export const fetchSchedulerConfigLogs = async (req: SchedulerConfigLogsReq, config?: AxiosRequestConfig): Promise<ApiResponse<PageRes<SchedulerConfigLogRes>>> => {
+    const res = await api.post<ApiResponse<PageRes<SchedulerConfigLogRes>>>('/admin/monitoring/scheduler-config-logs', req, config);
     return res.data;
 };

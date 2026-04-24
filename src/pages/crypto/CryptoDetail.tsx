@@ -22,6 +22,7 @@ import {renderChangeAmount} from "../../components/CustomRender.tsx";
 import IconButton from "@mui/material/IconButton";
 import NotificationsActiveIcon from "@mui/icons-material/NotificationsActive";
 import PriceTargetDialog from "../../components/PriceTargetDialog.tsx";
+import FreshnessIndicator from "../../components/FreshnessIndicator.tsx";
 
 interface CryptoTickerData {
     market: string;
@@ -101,6 +102,8 @@ const CryptoDetail = () => {
     }
 
     const [loading, setLoading] = useState(true);
+    const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+    const [pollError, setPollError] = useState(false);
 
     const [info, setInfo] = useState<CryptoInfoProps>({
         openingPrice: 0,
@@ -149,7 +152,7 @@ const CryptoDetail = () => {
 
             // 차트 데이터는 60초마다 갱신
             interval = setInterval(() => {
-                cryptoDetail(req);
+                cryptoDetail(req, true);
             }, 60 * 1000);
         })();
 
@@ -159,9 +162,9 @@ const CryptoDetail = () => {
         }
     }, [req]);
 
-    const cryptoDetail = async (req: CryptoDetailReq) => {
+    const cryptoDetail = async (req: CryptoDetailReq, silent: boolean = false) => {
         try {
-            const data = await fetchCryptoDetail(req);
+            const data = await fetchCryptoDetail(req, silent ? { skipGlobalError: true } : undefined);
 
             if (data.code !== "0000") {
                 throw new Error(data.msg);
@@ -255,9 +258,12 @@ const CryptoDetail = () => {
                     label: <p>52주 최고가 <br />{cryptoInfo.highest52WeekPrice.toLocaleString()}</p>
                 }
             ]);
+            setLastUpdated(new Date());
+            setPollError(false);
 
         } catch (error) {
             console.error(error);
+            if (silent) setPollError(true);
         } finally {
             setLoading(false);
         }
@@ -409,9 +415,13 @@ const CryptoDetail = () => {
 
     return (
         <Box sx={{ width: '100%', maxWidth: { sm: '100%', md: '1700px' } }}>
-            <Typography component="h2" variant="h6" sx={{ mb: 2 }}>
-                암호화폐 상세
-            </Typography>
+            <Box sx={{ display: 'flex', alignItems: 'center', mb: 2, gap: 2 }}>
+                <Typography component="h2" variant="h6">
+                    암호화폐 상세
+                </Typography>
+                <Box sx={{ flex: 1 }}/>
+                <FreshnessIndicator lastUpdated={lastUpdated} error={pollError}/>
+            </Box>
             <Grid
                 container
                 spacing={2}

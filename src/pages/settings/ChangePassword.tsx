@@ -87,7 +87,7 @@ export default function ChangePassword(props: { disableCustomTheme?: boolean }) 
     const { clearAuth, passwordChangeRequired, clearPasswordChangeRequired } = useAuth();
 
     const forceLogout = async () => {
-        try { await logout(); } catch { /* ignore */ }
+        try { await logout(); } catch (error) { console.error(error); /* ignore - 로그아웃 실패해도 로컬 상태는 초기화 */ }
         clearPasswordChangeRequired();
         clearAuth();
         navigate('/login');
@@ -137,6 +137,7 @@ export default function ChangePassword(props: { disableCustomTheme?: boolean }) 
                 onConfirm: forceLogout,
             });
         } catch (err: unknown) {
+            console.error(err);
             const axiosErr = err as { response?: { status?: number; data?: { code?: string; result?: Record<string, string> } } };
             const code = axiosErr.response?.data?.code ?? '';
             if (axiosErr.response?.status === 400 && code === 'VALIDATION_4001') {

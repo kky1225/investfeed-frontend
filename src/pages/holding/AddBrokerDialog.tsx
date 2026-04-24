@@ -33,7 +33,8 @@ export default function AddBrokerDialog({open, onClose, myBrokers, onAdded}: Add
                 const data = await fetchBrokerList();
                 const all: Broker[] = data.result?.brokers ?? [];
                 setBrokers(all.filter(b => b.market === 'STOCK'));
-            } catch {
+            } catch (error) {
+                console.error(error);
                 setBrokers([]);
             }
         })();
@@ -45,7 +46,8 @@ export default function AddBrokerDialog({open, onClose, myBrokers, onAdded}: Add
             await addMyBroker({brokerId: broker.id});
             onAdded();
             onClose();
-        } catch {
+        } catch (error) {
+            console.error(error);
             setError("증권사 추가에 실패했습니다.");
         }
     };

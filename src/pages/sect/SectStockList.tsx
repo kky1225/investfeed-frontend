@@ -3,19 +3,12 @@ import Box from "@mui/material/Box";
 import Grid from "@mui/material/Grid";
 import {GridColDef} from "@mui/x-data-grid";
 import Chip from "@mui/material/Chip";
-import Card from "@mui/material/Card";
-import CardContent from "@mui/material/CardContent";
-import Stack from "@mui/material/Stack";
-import Skeleton from "@mui/material/Skeleton";
 import {useEffect, useRef, useState} from "react";
 import {useParams} from "react-router-dom";
-import {
-    SectStockGridRow,
-    SectStockListItem,
-    SectStockListReq,
-} from "../../type/SectType.ts";
+import {SectStockGridRow, SectStockListItem, SectStockListReq,} from "../../type/SectType.ts";
 import {fetchSectStockList} from "../../api/sect/SectApi.ts";
 import SectStockTableProps from "../../components/SectStockTable.tsx";
+import FreshnessIndicator from "../../components/FreshnessIndicator.tsx";
 
 const SectStockList = () => {
     const { indsCd } = useParams();
@@ -27,6 +20,8 @@ const SectStockList = () => {
 
     const [row, setRow] = useState<SectStockGridRow[]>([]);
     const [loading, setLoading] = useState(true);
+    const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+    const [pollError, setPollError] = useState(false);
     const columns: GridColDef[] = [
         {
             field: 'index',
@@ -86,7 +81,7 @@ const SectStockList = () => {
             chartTimeout = setTimeout(() => {
                 sectStockList(req);
                 interval = setInterval(() => {
-                    sectStockList(req);
+                    sectStockList(req, true);
                 }, (60 * 1000));
             }, waitTime + 200);
         })();
@@ -97,15 +92,13 @@ const SectStockList = () => {
         }
     }, [req]);
 
-    const sectStockList = async (req: SectStockListReq) => {
+    const sectStockList = async (req: SectStockListReq, silent: boolean = false) => {
         try {
-            const data = await fetchSectStockList(req);
+            const data = await fetchSectStockList(req, silent ? { skipGlobalError: true } : undefined);
 
             if (data.code !== "0000") {
                 throw new Error(data.msg);
             }
-
-            console.log(data);
 
             const { sectStockList } = data.result;
 
@@ -121,8 +114,11 @@ const SectStockList = () => {
             })
 
             setRow(newSectStockList);
+            setLastUpdated(new Date());
+            setPollError(false);
         } catch (error) {
-            console.log(error);
+            console.error(error);
+            if (silent) setPollError(true);
         } finally {
             setLoading(false);
         }
@@ -136,9 +132,13 @@ const SectStockList = () => {
 
     return (
         <Box sx={{ width: '100%', maxWidth: { sm: '100%', md: '1700px' } }}>
-            <Typography component="h2" variant="h6" sx={{ mb: 2 }}>
-                업종 주식 목록
-            </Typography>
+            <Box sx={{ display: 'flex', alignItems: 'center', mb: 2, gap: 2 }}>
+                <Typography component="h2" variant="h6">
+                    업종 주식 목록
+                </Typography>
+                <Box sx={{ flex: 1 }}/>
+                <FreshnessIndicator lastUpdated={lastUpdated} error={pollError}/>
+            </Box>
             <Grid
                 container
                 spacing={2}

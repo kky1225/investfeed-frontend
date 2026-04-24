@@ -1,3 +1,4 @@
+import type {AxiosRequestConfig} from 'axios';
 import api from '../../axios.ts';
 import type {BulkRefreshReq, BulkRefreshStatus, CalendarEventsReq, IndicatorHistoryReq, ManualCalendarEventReq} from '../../type/EconomicCalendarType.ts';
 import type {ApiResponse} from '../../type/AuthType.ts';
@@ -42,7 +43,7 @@ export const startBulkRefresh = async (req: BulkRefreshReq): Promise<ApiResponse
     return res.data;
 };
 
-export const fetchBulkRefreshStatus = async (): Promise<ApiResponse<BulkRefreshStatus>> => {
-    const res = await api.get<ApiResponse<BulkRefreshStatus>>('/admin/calendar/bulk-refresh/status');
+export const fetchBulkRefreshStatus = async (config?: AxiosRequestConfig): Promise<ApiResponse<BulkRefreshStatus>> => {
+    const res = await api.get<ApiResponse<BulkRefreshStatus>>('/admin/calendar/bulk-refresh/status', config);
     return res.data;
 };

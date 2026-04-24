@@ -33,7 +33,8 @@ export default function AddCryptoBrokerDialog({open, onClose, myBrokers, onAdded
                 const data = await fetchCryptoBrokerList();
                 const all: Broker[] = data.result?.brokers ?? [];
                 setBrokers(all);
-            } catch {
+            } catch (error) {
+                console.error(error);
                 setBrokers([]);
             }
         })();
@@ -45,7 +46,8 @@ export default function AddCryptoBrokerDialog({open, onClose, myBrokers, onAdded
             await addMyCryptoBroker({brokerId: broker.id});
             onAdded();
             onClose();
-        } catch {
+        } catch (error) {
+            console.error(error);
             setError("거래소 추가에 실패했습니다.");
         }
     };

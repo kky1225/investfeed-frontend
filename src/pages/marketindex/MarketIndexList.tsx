@@ -15,10 +15,11 @@ import Skeleton from "@mui/material/Skeleton";
 import ArrowDropUpIcon from "@mui/icons-material/ArrowDropUp";
 import ArrowDropDownIcon from "@mui/icons-material/ArrowDropDown";
 import RemoveIcon from "@mui/icons-material/Remove";
-import {MarketIndexRes} from "../../type/MarketIndexType.ts";
+import {MarketIndexRes, CryptoSummary} from "../../type/MarketIndexType.ts";
 import {fetchMarketIndexAll} from "../../api/marketindex/MarketIndexApi.ts";
 import FearGreedGauge from "../../components/FearGreedGauge.tsx";
 import type {FearGreedItem} from "../../type/CryptoType.ts";
+import FreshnessIndicator from "../../components/FreshnessIndicator.tsx";
 
 // 상단 티커 바에 표시할 핵심 지수
 const TICKER_TYPES = ['KOSPI', 'KOSDAQ', 'NASDAQ', 'USD_KRW'];
@@ -45,6 +46,45 @@ function TrendIcon({trend}: {trend: 'up' | 'down' | 'neutral'}) {
     return <RemoveIcon sx={{color: 'text.disabled', fontSize: 14}}/>;
 }
 
+// 암호화폐 요약 카드 — BTC/ETH 공용 (Upbit 실시간)
+function CryptoSummaryCard({title, data, loading}: {title: string; data: CryptoSummary | null; loading: boolean}) {
+    const trend: 'up' | 'down' | 'neutral' = data?.trend === 'UP' ? 'up' : data?.trend === 'DOWN' ? 'down' : 'neutral';
+    const color = trendColor[trend];
+    return (
+        <Card variant="outlined">
+            <CardContent>
+                <Stack direction="row" sx={{justifyContent: 'space-between', alignItems: 'center', mb: 1}}>
+                    <Typography variant="subtitle2">{title}</Typography>
+                    {loading ? (
+                        <Skeleton variant="rounded" width={50} height={20}/>
+                    ) : (
+                        <Chip size="small" label="실시간" variant="outlined" color="success" sx={{fontSize: '0.65rem', height: 20}}/>
+                    )}
+                </Stack>
+                <Typography variant="h5" sx={{fontWeight: 700, mb: 1}}>
+                    {loading ? <Skeleton width="60%"/> : `${Number(data!.price).toLocaleString()}원`}
+                </Typography>
+                <Stack direction="row" sx={{alignItems: 'center', gap: 0.5}}>
+                    {!loading && data && <TrendIcon trend={trend}/>}
+                    <Typography variant="body2" sx={{fontWeight: 600, color: data ? color : 'inherit'}}>
+                        {loading ? <Skeleton width={120}/> : `${Number(data!.changeAmount) > 0 ? '+' : ''}${Number(data!.changeAmount).toLocaleString()}원`}
+                    </Typography>
+                    {loading ? (
+                        <Skeleton variant="rounded" width={60} height={24}/>
+                    ) : (
+                        <Chip
+                            size="small"
+                            label={`${Number(data!.changeRate) > 0 ? '+' : ''}${data!.changeRate}%`}
+                            color={trend === 'up' ? 'error' : trend === 'down' ? 'info' : 'default'}
+                            sx={{fontWeight: 600}}
+                        />
+                    )}
+                </Stack>
+            </CardContent>
+        </Card>
+    );
+}
+
 // 공포탐욕 게이지 스켈레톤 (SVG + Chart 포함이라 별도 처리)
 function FearGreedSkeleton() {
     return (
@@ -65,20 +105,29 @@ export default function MarketIndexList() {
     const [data, setData] = useState<MarketIndexRes[]>([]);
     const [fearGreedCurrent, setFearGreedCurrent] = useState<FearGreedItem | null>(null);
     const [fearGreedHistory, setFearGreedHistory] = useState<FearGreedItem[]>([]);
-    const [bitcoin, setBitcoin] = useState<{price: string; changeAmount: string; changeRate: string; trend: string} | null>(null);
+    const [bitcoin, setBitcoin] = useState<CryptoSummary | null>(null);
+    const [ethereum, setEthereum] = useState<CryptoSummary | null>(null);
     const [loading, setLoading] = useState(true);
+    const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+    const [pollError, setPollError] = useState(false);
 
     const chartTimer = useRef<number>(0);
 
-    const loadData = async () => {
+    const loadData = async (silent: boolean = false) => {
         try {
-            const result = await fetchMarketIndexAll();
+            const result = await fetchMarketIndexAll(silent ? { skipGlobalError: true } : undefined);
             setData(result.indices);
             if (result.fearGreed) {
                 setFearGreedCurrent(result.fearGreed.current);
                 setFearGreedHistory(result.fearGreed.history);
             }
             setBitcoin(result.bitcoin ?? null);
+            setEthereum(result.ethereum ?? null);
+            setLastUpdated(new Date());
+            setPollError(false);
+        } catch (error) {
+            console.error(error);
+            if (silent) setPollError(true);
         } finally {
             setLoading(false);
         }
@@ -95,9 +144,9 @@ export default function MarketIndexList() {
             const waitTime = 60_000 - (now % 60_000);
 
             chartTimeout = setTimeout(() => {
-                loadData();
+                loadData(true);
                 interval = setInterval(() => {
-                    loadData();
+                    loadData(true);
                 }, 60 * 1000);
             }, waitTime + 2000);
         })();
@@ -116,11 +165,7 @@ export default function MarketIndexList() {
                 <Typography variant="h6" sx={{fontWeight: 600}}>
                     주요 지수
                 </Typography>
-                {!loading && data.length > 0 && (
-                    <Typography variant="caption" color="text.secondary">
-                        {new Date(data[0].updatedAt).toLocaleTimeString('ko-KR', {hour: '2-digit', minute: '2-digit'})} 기준
-                    </Typography>
-                )}
+                {!loading && <FreshnessIndicator lastUpdated={lastUpdated} error={pollError}/>}
             </Box>
 
             {/* 상단 티커 바 */}
@@ -168,7 +213,14 @@ export default function MarketIndexList() {
                                             {section.title}
                                         </Typography>
                                         <TableContainer>
-                                            <Table size="small">
+                                            <Table size="small" sx={{tableLayout: 'fixed'}}>
+                                                <colgroup>
+                                                    <col style={{width: '30%'}}/>
+                                                    <col style={{width: '22%'}}/>
+                                                    <col style={{width: '18%'}}/>
+                                                    <col style={{width: '15%'}}/>
+                                                    <col style={{width: '15%'}}/>
+                                                </colgroup>
                                                 <TableBody>
                                                     {items.map((item, i) => {
                                                         const trend = item ? getTrend(item.changeRate) : 'neutral';
@@ -176,19 +228,19 @@ export default function MarketIndexList() {
                                                         return (
                                                             <TableRow key={item?.type ?? i} sx={{'&:last-child td': {borderBottom: 0}}}>
                                                                 <TableCell>
-                                                                    <Typography variant="body2" sx={{fontWeight: 600}}>
+                                                                    <Typography variant="body2" sx={{fontWeight: 600}} noWrap>
                                                                         {item ? item.name : <Skeleton width="70%"/>}
                                                                     </Typography>
                                                                 </TableCell>
                                                                 <TableCell align="right">
-                                                                    <Typography variant="body2" sx={{fontWeight: 700}}>
+                                                                    <Typography variant="body2" sx={{fontWeight: 700}} noWrap>
                                                                         {item ? item.price : <Skeleton width={80} sx={{ml: 'auto'}}/>}
                                                                     </Typography>
                                                                 </TableCell>
                                                                 <TableCell align="right">
                                                                     <Stack direction="row" sx={{alignItems: 'center', justifyContent: 'flex-end'}}>
                                                                         {item && <TrendIcon trend={trend}/>}
-                                                                        <Typography variant="body2" sx={{color, fontWeight: 600}}>
+                                                                        <Typography variant="body2" sx={{color, fontWeight: 600}} noWrap>
                                                                             {item ? item.changeAmount : <Skeleton width={70}/>}
                                                                         </Typography>
                                                                     </Stack>
@@ -231,8 +283,8 @@ export default function MarketIndexList() {
                     </Stack>
                 </Grid>
 
-                {/* 우측: 공포 & 탐욕 지수 + 비트코인 */}
-                {(loading || fearGreedCurrent || bitcoin) && (
+                {/* 우측: 공포 & 탐욕 지수 + BTC + ETH */}
+                {(loading || fearGreedCurrent || bitcoin || ethereum) && (
                     <Grid size={{xs: 12, md: 4}}>
                         <Stack spacing={3}>
                             {loading ? (
@@ -241,47 +293,10 @@ export default function MarketIndexList() {
                                 <FearGreedGauge current={fearGreedCurrent} history={fearGreedHistory}/>
                             )}
                             {(loading || bitcoin) && (
-                                <Card variant="outlined">
-                                    <CardContent>
-                                        <Stack direction="row" sx={{justifyContent: 'space-between', alignItems: 'center', mb: 1}}>
-                                            <Typography variant="subtitle2">
-                                                비트코인 (BTC)
-                                            </Typography>
-                                            {loading ? (
-                                                <Skeleton variant="rounded" width={50} height={20}/>
-                                            ) : (
-                                                <Chip size="small" label="실시간" variant="outlined" color="success" sx={{fontSize: '0.65rem', height: 20}}/>
-                                            )}
-                                        </Stack>
-                                        <Typography variant="h5" sx={{fontWeight: 700, mb: 1}}>
-                                            {loading ? <Skeleton width="60%"/> : `${Number(bitcoin!.price).toLocaleString()}원`}
-                                        </Typography>
-                                        <Stack direction="row" sx={{alignItems: 'center', gap: 0.5}}>
-                                            {!loading && bitcoin && (
-                                                <TrendIcon trend={bitcoin.trend === 'UP' ? 'up' : bitcoin.trend === 'DOWN' ? 'down' : 'neutral'}/>
-                                            )}
-                                            <Typography
-                                                variant="body2"
-                                                sx={{
-                                                    fontWeight: 600,
-                                                    color: bitcoin ? (bitcoin.trend === 'UP' ? trendColor.up : bitcoin.trend === 'DOWN' ? trendColor.down : 'inherit') : 'inherit',
-                                                }}
-                                            >
-                                                {loading ? <Skeleton width={120}/> : `${Number(bitcoin!.changeAmount) > 0 ? '+' : ''}${Number(bitcoin!.changeAmount).toLocaleString()}원`}
-                                            </Typography>
-                                            {loading ? (
-                                                <Skeleton variant="rounded" width={60} height={24}/>
-                                            ) : (
-                                                <Chip
-                                                    size="small"
-                                                    label={`${Number(bitcoin!.changeRate) > 0 ? '+' : ''}${bitcoin!.changeRate}%`}
-                                                    color={bitcoin!.trend === 'UP' ? 'error' : bitcoin!.trend === 'DOWN' ? 'info' : 'default'}
-                                                    sx={{fontWeight: 600}}
-                                                />
-                                            )}
-                                        </Stack>
-                                    </CardContent>
-                                </Card>
+                                <CryptoSummaryCard title="비트코인 (BTC)" data={bitcoin} loading={loading}/>
+                            )}
+                            {(loading || ethereum) && (
+                                <CryptoSummaryCard title="이더리움 (ETH)" data={ethereum} loading={loading}/>
                             )}
                         </Stack>
                     </Grid>

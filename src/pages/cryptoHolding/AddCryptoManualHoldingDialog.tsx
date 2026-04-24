@@ -69,7 +69,8 @@ export default function AddCryptoManualHoldingDialog({open, onClose, brokerId, o
             try {
                 const data = await fetchCryptoSearch(keyword.trim());
                 setSearchResults(data.result ?? []);
-            } catch {
+            } catch (error) {
+                console.error(error);
                 setSearchResults([]);
             } finally {
                 setSearchLoading(false);
@@ -100,6 +101,7 @@ export default function AddCryptoManualHoldingDialog({open, onClose, brokerId, o
             onCreated();
             handleClose();
         } catch (err) {
+            console.error(err);
             const axiosErr = err as {response?: {status?: number; data?: {code?: string; result?: Record<string, string>}}};
             if (axiosErr.response?.status === 400 && axiosErr.response?.data?.code === 'VALIDATION_4001') {
                 setFormErrors((axiosErr.response.data.result ?? {}) as typeof formErrors);

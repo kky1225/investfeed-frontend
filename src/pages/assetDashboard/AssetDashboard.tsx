@@ -15,6 +15,7 @@ import AssetAllocationChart from "./AssetAllocationChart.tsx";
 import AssetGroupDetail from "./AssetGroupDetail.tsx";
 import BlindToggle from "../../components/BlindToggle.tsx";
 import BlindText from "../../components/BlindText.tsx";
+import FreshnessIndicator from "../../components/FreshnessIndicator.tsx";
 import LinearProgress from "@mui/material/LinearProgress";
 import Chip from "@mui/material/Chip";
 import {goalTypeLabel} from "../../type/GoalType.ts";
@@ -24,19 +25,22 @@ export default function AssetDashboard() {
     const [selectedGroup, setSelectedGroup] = useState<'stock' | 'crypto' | null>(null);
     const [loading, setLoading] = useState(true);
     const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+    const [pollError, setPollError] = useState(false);
     const lastUpdatedRef = useRef<Date | null>(null);
 
-    const loadDashboard = async () => {
+    const loadDashboard = async (silent: boolean = false) => {
         try {
-            const res = await fetchAssetDashboard();
+            const res = await fetchAssetDashboard(silent ? { skipGlobalError: true } : undefined);
             if (res.code === "0000") {
                 setData(res.result);
                 const now = new Date();
                 lastUpdatedRef.current = now;
                 setLastUpdated(now);
+                setPollError(false);
             }
         } catch (err) {
             console.error(err);
+            if (silent) setPollError(true);
         }
     };
 
@@ -52,9 +56,9 @@ export default function AssetDashboard() {
             const waitTime = 60_000 - (now % 60_000);
 
             timeout = setTimeout(() => {
-                loadDashboard();
+                loadDashboard(true);
                 interval = setInterval(() => {
-                    loadDashboard();
+                    loadDashboard(true);
                 }, 60_000);
             }, waitTime + 200);
         })();
@@ -90,11 +94,7 @@ export default function AssetDashboard() {
                     </Typography>
                     <BlindToggle/>
                 </Box>
-                {!loading && lastUpdated && (
-                    <Typography variant="caption" color="text.secondary">
-                        {lastUpdated.toLocaleTimeString('ko-KR', {hour: '2-digit', minute: '2-digit'})} 기준
-                    </Typography>
-                )}
+                {!loading && <FreshnessIndicator lastUpdated={lastUpdated} error={pollError}/>}
             </Box>
 
             <AssetSummaryCard

@@ -1,35 +1,31 @@
 import Typography from "@mui/material/Typography";
 import Box from "@mui/material/Box";
 import Grid from "@mui/material/Grid";
-import Card from "@mui/material/Card";
-import CardContent from "@mui/material/CardContent";
-import Stack from "@mui/material/Stack";
-import Skeleton from "@mui/material/Skeleton";
 import {GridColDef} from "@mui/x-data-grid";
 import StockTable from "../../components/StockTable.tsx";
+import * as React from "react";
 import {useEffect, useRef, useState} from "react";
 import {fetchStockStream} from "../../api/stock/StockApi.ts";
-import {Tab, Tabs } from "@mui/material";
-import * as React from "react";
+import {Tab, Tabs} from "@mui/material";
 import {fetchTimeNow} from "../../api/time/TimeApi.ts";
 import {MarketType} from "../../type/timeType.ts";
 import {
     StockGridRow,
-    StockListItem,
-    StockListReq,
     StockStream,
     StockStreamReq,
     StockStreamRes
 } from "../../type/StockType.ts";
+import {RankListReq, RankListItem} from "../../type/RankType.ts";
 import {useNavigate, useParams} from "react-router-dom";
 import {renderChip} from "../../components/CustomRender.tsx";
+import FreshnessIndicator from "../../components/FreshnessIndicator.tsx";
 import {fetchRankList} from "../../api/rank/RankApi.ts";
 
 const RankList = () => {
     const navigate = useNavigate();
     const { type } = useParams();
 
-    const [req, setReq] = useState<StockListReq>({
+    const [req, setReq] = useState<RankListReq>({
         type: type || "0",
     });
 
@@ -37,6 +33,8 @@ const RankList = () => {
     const [row, setRow] = useState<StockGridRow[]>([]);
     const [columns, setColumns] = useState<GridColDef[]>([]);
     const [loading, setLoading] = useState(true);
+    const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+    const [pollError, setPollError] = useState(false);
 
     const chartTimer = useRef<number>(0);
     const marketTimer = useRef<number>(0);
@@ -119,7 +117,7 @@ const RankList = () => {
             chartTimeout = setTimeout(() => {
                 stockList(req);
                 interval = setInterval(() => {
-                    stockList(req);
+                    stockList(req, true);
                 }, (60 * 1000));
             }, waitTime + 200);
         })();
@@ -169,19 +167,17 @@ const RankList = () => {
         }
     }
 
-    const stockList = async (req: StockListReq) => {
+    const stockList = async (req: RankListReq, silent: boolean = false) => {
         try {
-            const data = await fetchRankList(req);
+            const data = await fetchRankList(req, silent ? { skipGlobalError: true } : undefined);
 
             if (data.code !== "0000") {
                 throw new Error(data.msg);
             }
 
-            console.log(data);
-
             const { rankList } = data.result;
 
-            const ranking = rankList.map((stock: StockListItem) => {
+            const ranking = rankList.map((stock: RankListItem) => {
                 return {
                     id: stock.stkCd,
                     rank: stock.rank,
@@ -331,12 +327,15 @@ const RankList = () => {
 
             setColumns(col);
             setRow(ranking);
+            setLastUpdated(new Date());
+            setPollError(false);
 
-            return rankList.map((row: StockListItem) => {
+            return rankList.map((row: RankListItem) => {
                 return row.stkCd
             });
         } catch (error) {
-            console.log(error);
+            console.error(error);
+            if (silent) setPollError(true);
         } finally {
             setLoading(false);
         }
@@ -380,9 +379,13 @@ const RankList = () => {
 
     return (
         <Box sx={{ width: '100%', maxWidth: { sm: '100%', md: '1700px' } }}>
-            <Typography component="h2" variant="h6" sx={{ mb: 2 }}>
-                순위 목록
-            </Typography>
+            <Box sx={{ display: 'flex', alignItems: 'center', mb: 2, gap: 2 }}>
+                <Typography component="h2" variant="h6">
+                    순위 목록
+                </Typography>
+                <Box sx={{ flex: 1 }}/>
+                <FreshnessIndicator lastUpdated={lastUpdated} error={pollError}/>
+            </Box>
             <Grid
                 container
                 spacing={2}

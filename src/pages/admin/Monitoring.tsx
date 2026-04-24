@@ -48,6 +48,7 @@ import {
     fetchErrorLogAckHistory,
     fetchSystemStatus,
 } from '../../api/admin/MonitoringApi';
+import FreshnessIndicator from '../../components/FreshnessIndicator';
 import type {
     SchedulerStatusRes,
     SchedulerLogRes,
@@ -122,6 +123,7 @@ export default function Monitoring() {
     const [errorLogsSize, setErrorLogsSize] = useState(50);
     const [systemStatus, setSystemStatus] = useState<SystemStatusRes | null>(null);
     const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+    const [pollError, setPollError] = useState(false);
     const [errorAckTarget, setErrorAckTarget] = useState<ErrorLogRes | null>(null);
     const [errorAckNote, setErrorAckNote] = useState('');
     const [errorAckSaving, setErrorAckSaving] = useState(false);
@@ -144,15 +146,16 @@ export default function Monitoring() {
     const [menuAnchorEl, setMenuAnchorEl] = useState<HTMLElement | null>(null);
     const [menuTarget, setMenuTarget] = useState<SchedulerStatusRes | null>(null);
 
-    const loadAll = async () => {
+    const loadAll = async (silent: boolean = false) => {
+        const cfg = silent ? { skipGlobalError: true } : undefined;
         try {
             const [statusRes, logsRes, configLogsRes, redisRes, errorRes, sysRes] = await Promise.all([
-                fetchSchedulerStatus(),
-                fetchSchedulerLogs({page: logsPage, size: logsSize}),
-                fetchSchedulerConfigLogs({page: configLogsPage, size: configLogsSize}),
-                fetchRedis(),
-                fetchErrorLogs({page: errorLogsPage, size: errorLogsSize}),
-                fetchSystemStatus(),
+                fetchSchedulerStatus(cfg),
+                fetchSchedulerLogs({page: logsPage, size: logsSize}, cfg),
+                fetchSchedulerConfigLogs({page: configLogsPage, size: configLogsSize}, cfg),
+                fetchRedis(cfg),
+                fetchErrorLogs({page: errorLogsPage, size: errorLogsSize}, cfg),
+                fetchSystemStatus(cfg),
             ]);
             if (statusRes.result) setStatuses(statusRes.result);
             if (logsRes.result) {
@@ -170,8 +173,10 @@ export default function Monitoring() {
             }
             if (sysRes.result) setSystemStatus(sysRes.result);
             setLastUpdated(new Date());
+            setPollError(false);
         } catch (e) {
             console.error(e);
+            if (silent) setPollError(true);
         } finally {
             setLoading(false);
         }
@@ -182,15 +187,16 @@ export default function Monitoring() {
         let interval: ReturnType<typeof setInterval>;
 
         (async () => {
+            // 초기 로드는 non-silent — 서버 다운 시 사용자에게 1회 알림
             await loadAll();
 
             const now = Date.now();
             const waitTime = 60_000 - (now % 60_000);
 
             timeout = setTimeout(() => {
-                loadAll();
+                loadAll(true);
                 interval = setInterval(() => {
-                    loadAll();
+                    loadAll(true);
                 }, 60_000);
             }, waitTime + 200);
         })();
@@ -242,7 +248,9 @@ export default function Monitoring() {
         try {
             const res = await fetchErrorLogAckHistory(log.id);
             setErrorAckHistory(res.result ?? []);
-        } catch { /* 이력 조회 실패해도 다이얼로그는 열림 */ }
+        } catch (error) {
+            console.error(error);
+        }
     };
     const closeErrorAck = () => {
         if (errorAckSaving) return;
@@ -296,7 +304,10 @@ export default function Monitoring() {
         try {
             const res = await fetchSchedulerLogAckHistory(log.id);
             setAckHistory(res.result ?? []);
-        } catch { /* 이력 조회 실패해도 다이얼로그는 열림 */ }
+        } catch (error) {
+            console.error(error);
+            /* 이력 조회 실패해도 다이얼로그는 열림 */
+        }
     };
     const closeAck = () => {
         if (ackSaving) return;
@@ -436,11 +447,7 @@ export default function Monitoring() {
                     모니터링
                 </Typography>
                 <Box sx={{flex: 1}}/>
-                {lastUpdated && !loading && (
-                    <Typography variant="caption" color="text.secondary">
-                        {lastUpdated.toLocaleTimeString('ko-KR', {hour: '2-digit', minute: '2-digit'})} 기준
-                    </Typography>
-                )}
+                {!loading && <FreshnessIndicator lastUpdated={lastUpdated} error={pollError}/>}
             </Box>
 
             <Tabs value={tab} onChange={(_, v) => setTab(v)} sx={{mb: 2, borderBottom: 1, borderColor: 'divider'}}>

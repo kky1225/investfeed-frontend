@@ -61,6 +61,7 @@ export default function GoalSettingDialog({open, onClose, onSaved, editGoal, exi
             onSaved();
             handleClose();
         } catch (err) {
+            console.error(err);
             const axiosErr = err as {response?: {status?: number; data?: {code?: string; result?: Record<string, string>}}};
             if (axiosErr.response?.status === 400 && axiosErr.response?.data?.code === 'VALIDATION_4001') {
                 const result = axiosErr.response.data.result ?? {};

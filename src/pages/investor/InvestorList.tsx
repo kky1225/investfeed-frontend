@@ -1,10 +1,6 @@
 import Typography from "@mui/material/Typography";
 import Box from "@mui/material/Box";
 import Grid from "@mui/material/Grid";
-import Card from "@mui/material/Card";
-import CardContent from "@mui/material/CardContent";
-import Stack from "@mui/material/Stack";
-import Skeleton from "@mui/material/Skeleton";
 import StockTable from "../../components/StockTable.tsx";
 import * as React from "react";
 import {useEffect, useRef, useState} from "react";
@@ -16,6 +12,7 @@ import {useNavigate, useParams} from "react-router-dom";
 import {InvestorListItem, InvestorListReq, InvestorStreamReq} from "../../type/InvestorType.ts";
 import {fetchInvestorList, fetchInvestorStream} from "../../api/investor/InvestorApi.ts";
 import {renderChip, renderTradePricaColor} from "../../components/CustomRender.tsx";
+import FreshnessIndicator from "../../components/FreshnessIndicator.tsx";
 
 const InvestorList = () => {
     const navigate = useNavigate();
@@ -30,6 +27,9 @@ const InvestorList = () => {
     const [tradeValue, setTradeValue] = useState(trdeTp === "1" ? 0 : 1);
     const [row, setRow] = useState<StockGridRow[]>([]);
     const [loading, setLoading] = useState(true);
+    // 폴링 신선도 표시용: 마지막 성공 시각 + 최근 폴링 에러 여부
+    const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+    const [pollError, setPollError] = useState(false);
 
     const columns = [
         {
@@ -149,7 +149,7 @@ const InvestorList = () => {
             chartTimeout = setTimeout(() => {
                 investorList(req);
                 interval = setInterval(() => {
-                    investorList(req);
+                    investorList(req, true);
                 }, (60 * 1000));
             }, waitTime + 200);
         })();
@@ -199,15 +199,13 @@ const InvestorList = () => {
         }
     }
 
-    const investorList = async (req: InvestorListReq) => {
+    const investorList = async (req: InvestorListReq, silent: boolean = false) => {
         try {
-            const data = await fetchInvestorList(req);
+            const data = await fetchInvestorList(req, silent ? { skipGlobalError: true } : undefined);
 
             if (data.code !== "0000") {
                 throw new Error(data.msg);
             }
-
-            console.log(data);
 
             const { investorList } = data.result;
 
@@ -223,12 +221,17 @@ const InvestorList = () => {
             });
 
             setRow(ranking);
+            // 폴링 성공 시 신선도 갱신 + 에러 상태 해제
+            setLastUpdated(new Date());
+            setPollError(false);
 
             return investorList.map((row: InvestorListItem) => {
                 return row.stkCd
             });
         } catch (error) {
-            console.log(error);
+            console.error(error);
+            // 폴링 실패(silent) 시에만 신선도 인디케이터를 "경고" 로 표시. 초기 로드 실패는 전역 Dialog 가 이미 띄움.
+            if (silent) setPollError(true);
         } finally {
             setLoading(false);
         }
@@ -304,9 +307,13 @@ const InvestorList = () => {
 
     return (
         <Box sx={{ width: '100%', maxWidth: { sm: '100%', md: '1700px' } }}>
-            <Typography component="h2" variant="h6" sx={{ mb: 2 }}>
-                투자자별 목록
-            </Typography>
+            <Box sx={{ display: 'flex', alignItems: 'center', mb: 2, gap: 2 }}>
+                <Typography component="h2" variant="h6">
+                    투자자별 목록
+                </Typography>
+                <Box sx={{ flex: 1 }} />
+                <FreshnessIndicator lastUpdated={lastUpdated} error={pollError} />
+            </Box>
             <Grid
                 container
                 spacing={2}

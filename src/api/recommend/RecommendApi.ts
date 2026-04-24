@@ -1,8 +1,9 @@
+import type {AxiosRequestConfig} from "axios";
 import api from "../../axios.ts";
 import {StockStreamReq} from "../../type/StockType.ts";
 
-export const fetchRecommendList = async () => {
-    const res = await api.get(`/stock/recommend/list`);
+export const fetchRecommendList = async (config?: AxiosRequestConfig) => {
+    const res = await api.get(`/stock/recommend/list`, config);
     return res.data;
 }
 

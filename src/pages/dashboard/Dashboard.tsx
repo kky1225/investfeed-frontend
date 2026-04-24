@@ -6,15 +6,13 @@ import Grid from "@mui/material/Grid";
 import StatCard, {StatCardProps} from "../../components/StatCard.tsx";
 import Card from "@mui/material/Card";
 import CardContent from "@mui/material/CardContent";
-import Button from "@mui/material/Button";
 import Skeleton from "@mui/material/Skeleton";
 import {useMediaQuery} from "@mui/material";
-import InsightsRoundedIcon from '@mui/icons-material/InsightsRounded';
-import ChevronRightRoundedIcon from '@mui/icons-material/ChevronRightRounded';
 import Chip from "@mui/material/Chip";
 import {JSX, useEffect, useRef, useState} from "react";
-import { GridColDef, GridRowsProp } from '@mui/x-data-grid';
+import {GridColDef, GridRowsProp} from '@mui/x-data-grid';
 import CustomDataTable from "../../components/CustomDataTable.tsx";
+import FreshnessIndicator from "../../components/FreshnessIndicator.tsx";
 import InvestorBarChart from "../../components/InvestorBarChart.tsx";
 import ProgramBarChart from "../../components/ProgramBarChart.tsx";
 import CheckIcon from '@mui/icons-material/Check';
@@ -27,7 +25,7 @@ import {fetchDashboard} from "../../api/dashboard/DashboardApi.ts";
 import {fetchTimeNow} from "../../api/time/TimeApi.ts";
 import {MarketType} from "../../type/timeType.ts";
 import {fetchIndexListStream} from "../../api/index/IndexApi.ts";
-import {IndexStreamRes, IndexStream} from "../../type/IndexType.ts";
+import {IndexStream, IndexStreamRes} from "../../type/IndexType.ts";
 
 export default function Dashboard() {
     const navigate = useNavigate();
@@ -68,6 +66,7 @@ export default function Dashboard() {
 
     const [row, setRow] = useState<GridRowsProp[]>([]);
     const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+    const [pollError, setPollError] = useState(false);
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
@@ -102,7 +101,7 @@ export default function Dashboard() {
             chartTimeout = setTimeout(() => {
                 dashboard();
                 interval = setInterval(() => {
-                    dashboard();
+                    dashboard(true);
                 }, (60 * 1000));
             }, waitTime + 200);
         })();
@@ -115,15 +114,16 @@ export default function Dashboard() {
         }
     }, []);
 
-    const dashboard = async () => {
+    const dashboard = async (silent: boolean = false) => {
         try {
-            const data = await fetchDashboard();
+            const data = await fetchDashboard(silent ? { skipGlobalError: true } : undefined);
 
             if(data.code !== "0000") {
                 throw new Error(data.msg);
             }
 
             setLastUpdated(new Date());
+            setPollError(false);
 
             const {
                 indexList,
@@ -202,6 +202,7 @@ export default function Dashboard() {
             setRow(ranking);
         } catch (err) {
             console.error(err);
+            if (silent) setPollError(true);
         } finally {
             setLoading(false);
         }
@@ -478,11 +479,7 @@ export default function Dashboard() {
                 <Typography component="h2" variant="h6">
                     주요 지수
                 </Typography>
-                {!loading && lastUpdated && (
-                    <Typography variant="caption" color="text.secondary">
-                        {lastUpdated.toLocaleTimeString('ko-KR', {hour: '2-digit', minute: '2-digit'})} 기준
-                    </Typography>
-                )}
+                {!loading && <FreshnessIndicator lastUpdated={lastUpdated} error={pollError}/>}
             </Box>
             <Grid
                 container

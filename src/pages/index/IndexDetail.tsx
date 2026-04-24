@@ -17,6 +17,7 @@ import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import MenuItem from "@mui/material/MenuItem";
 import {GridColDef} from "@mui/x-data-grid";
 import CustomDataTable from "../../components/CustomDataTable.tsx";
+import FreshnessIndicator from "../../components/FreshnessIndicator.tsx";
 import {renderTradeColor} from "../../components/CustomRender.tsx";
 import * as React from "react";
 import IndexDetailLineChart, {CustomIndexDetailLineChartProps} from "../../components/IndexDetailLineChart.tsx";
@@ -99,6 +100,8 @@ const IndexDetail = () => {
     const [indexBarData, setIndexBarData] = useState<Array<number>>([0, 0, 0]);
     const [programBarData, setProgramBarData] = useState<Array<number>>([0, 0, 0]);
     const [loading, setLoading] = useState(true);
+    const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+    const [pollError, setPollError] = useState(false);
 
     interface StockInfoProps {
         trdeQty: number;
@@ -172,7 +175,7 @@ const IndexDetail = () => {
             chartTimeout = setTimeout(() => {
                 indexDetail(req);
                 interval = setInterval(() => {
-                    indexDetail(req);
+                    indexDetail(req, true);
                 }, (60 * 1000));
             }, waitTime + 200);
         })();
@@ -185,15 +188,13 @@ const IndexDetail = () => {
         }
     }, [req]);
 
-    const indexDetail = async (req: IndexDetailReq) => {
+    const indexDetail = async (req: IndexDetailReq, silent: boolean = false) => {
         try {
-            const data = await fetchIndexDetail(req);
+            const data = await fetchIndexDetail(req, silent ? { skipGlobalError: true } : undefined);
 
             if (data.code !== "0000") {
                 throw new Error(data.msg);
             }
-
-            console.log(data);
 
             const {
                 indexInfo, chartList, programChartList, programList, investorDailyList
@@ -535,8 +536,11 @@ const IndexDetail = () => {
                     row: programRow
                 }
             });
+            setLastUpdated(new Date());
+            setPollError(false);
         } catch(error) {
             console.error(error);
+            if (silent) setPollError(true);
         } finally {
             setLoading(false);
         }
@@ -581,8 +585,6 @@ const IndexDetail = () => {
     const indexDetailStream = async (req: IndexDetailSteamReq) => {
         try {
             const data = await fetchIndexDetailStream(req);
-
-            console.log(data);
 
             if (data.code !== "0000") {
                 throw new Error(data.msg);
@@ -837,9 +839,13 @@ const IndexDetail = () => {
 
     return (
         <Box sx={{ width: '100%', maxWidth: { sm: '100%', md: '1700px' } }}>
-            <Typography component="h2" variant="h6" sx={{ mb: 2 }}>
-                지수 상세
-            </Typography>
+            <Box sx={{ display: 'flex', alignItems: 'center', mb: 2, gap: 2 }}>
+                <Typography component="h2" variant="h6">
+                    지수 상세
+                </Typography>
+                <Box sx={{ flex: 1 }}/>
+                <FreshnessIndicator lastUpdated={lastUpdated} error={pollError}/>
+            </Box>
             <Grid
                 container
                 spacing={2}

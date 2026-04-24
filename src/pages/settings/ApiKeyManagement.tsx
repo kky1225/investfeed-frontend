@@ -82,7 +82,8 @@ export default function ApiKeyManagement() {
             if (res.result) {
                 setApiKeys(res.result);
             }
-        } catch {
+        } catch (error) {
+            console.error(error);
             setSnackbar({open: true, message: 'API Key 목록을 불러오는데 실패했습니다.', severity: 'error'});
         } finally {
             setLoading(false);
@@ -94,8 +95,8 @@ export default function ApiKeyManagement() {
             const data = await fetchBrokerList();
             const brokers: Broker[] = data.result?.brokers ?? [];
             setApiBrokers(brokers.filter(b => b.type === 'API'));
-        } catch {
-            // ignore
+        } catch (error) {
+            console.error(error);
         }
     };
 
@@ -129,6 +130,7 @@ export default function ApiKeyManagement() {
             setForm(initialForm);
             await loadApiKeys();
         } catch (err) {
+            console.error(err);
             const axiosErr = err as {response?: {status?: number; data?: {code?: string; message?: string; result?: Record<string, string>}}};
             if (axiosErr.response?.status === 400 && axiosErr.response?.data?.code === 'VALIDATION_4001') {
                 setFormErrors((axiosErr.response.data.result ?? {}) as typeof formErrors);
@@ -147,7 +149,8 @@ export default function ApiKeyManagement() {
             setSnackbar({open: true, message: 'API Key가 삭제되었습니다.', severity: 'success'});
             setDeleteDialog({open: false, id: 0, brokerName: ''});
             await loadApiKeys();
-        } catch {
+        } catch (error) {
+            console.error(error);
             setSnackbar({open: true, message: 'API Key 삭제에 실패했습니다.', severity: 'error'});
         }
     };

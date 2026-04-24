@@ -81,10 +81,17 @@ export default function MultiViewPanel({asset, onSearch, onChartExpand, onRemove
             return;
         }
         const chartType = toggle.startsWith('MINUTE') ? `MINUTE_${minute.current}` : toggle;
-        loadData(asset, chartType);
-    }, [asset?.code, asset?.type, reloadKey]);
+        loadData(asset, chartType, 0, false);
+    }, [asset?.code, asset?.type]);
 
-    // 실시간 스트림 업데이트 반영
+    const firstReloadRef = useRef(true);
+    useEffect(() => {
+        if (firstReloadRef.current) { firstReloadRef.current = false; return; }
+        if (!asset) return;
+        const chartType = toggle.startsWith('MINUTE') ? `MINUTE_${minute.current}` : toggle;
+        loadData(asset, chartType, 0, true);
+    }, [reloadKey]);
+
     useEffect(() => {
         if (!streamUpdate || !chartData) return;
         if (asset?.type === 'STOCK' || asset?.type === 'COMMODITY') {
@@ -113,11 +120,12 @@ export default function MultiViewPanel({asset, onSearch, onChartExpand, onRemove
         return 'neutral';
     };
 
-    const loadData = async (a: SelectedAsset, chartType: string, retryCount = 0) => {
+    const loadData = async (a: SelectedAsset, chartType: string, retryCount = 0, silent: boolean = false) => {
+        const cfg = silent ? { skipGlobalError: true } : undefined;
         try {
             if (a.type === 'STOCK') {
                 const stockChartType = chartType.startsWith('MINUTE') ? chartType as StockChartType : `${chartType}` as StockChartType;
-                const res = await fetchStockChart({stkCd: a.code, chartType: stockChartType});
+                const res = await fetchStockChart({stkCd: a.code, chartType: stockChartType}, cfg);
                 const {stockInfo, stockChartList} = res.result ?? {};
                 if (!stockInfo || !stockChartList) return;
 
@@ -154,7 +162,7 @@ export default function MultiViewPanel({asset, onSearch, onChartExpand, onRemove
                 });
             } else if (a.type === 'CRYPTO') {
                 const cryptoChartType = chartType.startsWith('MINUTE') ? chartType as CryptoChartType : `${chartType}` as CryptoChartType;
-                const res = await fetchCryptoDetail({market: a.code, chartType: cryptoChartType});
+                const res = await fetchCryptoDetail({market: a.code, chartType: cryptoChartType}, cfg);
                 const r = res.result;
                 if (!r?.chartList) return;
 
@@ -180,7 +188,7 @@ export default function MultiViewPanel({asset, onSearch, onChartExpand, onRemove
                 } as CryptoDetailLineChartProps);
             } else if (a.type === 'COMMODITY') {
                 const commodityChartType = chartType.startsWith('MINUTE') ? chartType as CommodityChartType : `${chartType}` as CommodityChartType;
-                const res = await fetchCommodityDetail({stkCd: a.code, chartType: commodityChartType});
+                const res = await fetchCommodityDetail({stkCd: a.code, chartType: commodityChartType}, cfg);
                 const {commodityInfo, commodityChartList} = res.result ?? {};
                 if (!commodityInfo || !commodityChartList) return;
 
@@ -210,7 +218,7 @@ export default function MultiViewPanel({asset, onSearch, onChartExpand, onRemove
             }
         } catch (err) {
             if (retryCount < 2) {
-                setTimeout(() => loadData(a, chartType, retryCount + 1), 1000 * (retryCount + 1));
+                setTimeout(() => loadData(a, chartType, retryCount + 1, silent), 1000 * (retryCount + 1));
             } else {
                 console.error(err);
             }

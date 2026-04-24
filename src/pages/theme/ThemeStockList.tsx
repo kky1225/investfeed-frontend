@@ -23,6 +23,7 @@ import {
 } from "../../type/ThemeType.ts";
 import {fetchThemeStockList, fetchThemeStockListStream} from "../../api/theme/ThemeApi.ts";
 import ThemeStockTableProps from "../../components/ThemeStockTable.tsx";
+import FreshnessIndicator from "../../components/FreshnessIndicator.tsx";
 
 const ThemeStockList = () => {
     const { themaGrpCd } = useParams();
@@ -34,6 +35,8 @@ const ThemeStockList = () => {
 
     const [row, setRow] = useState<ThemeStockGridRow[]>([]);
     const [loading, setLoading] = useState(true);
+    const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+    const [pollError, setPollError] = useState(false);
     const columns: GridColDef[] = [
         {
             field: 'index',
@@ -155,7 +158,7 @@ const ThemeStockList = () => {
             chartTimeout = setTimeout(() => {
                 themeStockList(req);
                 interval = setInterval(() => {
-                    themeStockList(req);
+                    themeStockList(req, true);
                 }, (60 * 1000));
             }, waitTime + 200);
         })();
@@ -205,15 +208,13 @@ const ThemeStockList = () => {
         }
     }
 
-    const themeStockList = async (req: ThemeStockListReq) => {
+    const themeStockList = async (req: ThemeStockListReq, silent: boolean = false) => {
         try {
-            const data = await fetchThemeStockList(req);
+            const data = await fetchThemeStockList(req, silent ? { skipGlobalError: true } : undefined);
 
             if (data.code !== "0000") {
                 throw new Error(data.msg);
             }
-
-            console.log(data);
 
             const { themeStockList } = data.result;
 
@@ -229,12 +230,15 @@ const ThemeStockList = () => {
             })
 
             setRow(newThemeStockList);
+            setLastUpdated(new Date());
+            setPollError(false);
 
             return themeStockList.map((row: ThemeStockListItem) => {
                 return row.stkCd
             });
         } catch (error) {
-            console.log(error);
+            console.error(error);
+            if (silent) setPollError(true);
         } finally {
             setLoading(false);
         }
@@ -274,9 +278,13 @@ const ThemeStockList = () => {
 
     return (
         <Box sx={{ width: '100%', maxWidth: { sm: '100%', md: '1700px' } }}>
-            <Typography component="h2" variant="h6" sx={{ mb: 2 }}>
-                테마 주식 목록
-            </Typography>
+            <Box sx={{ display: 'flex', alignItems: 'center', mb: 2, gap: 2 }}>
+                <Typography component="h2" variant="h6">
+                    테마 주식 목록
+                </Typography>
+                <Box sx={{ flex: 1 }}/>
+                <FreshnessIndicator lastUpdated={lastUpdated} error={pollError}/>
+            </Box>
             <Grid
                 container
                 spacing={2}

@@ -57,7 +57,7 @@ export default function SecondaryAuthDialog({open, mode, onSuccess, onClose}: Se
                     const res = await fetchSecondaryPasswordLockStatus();
                     const seconds = res.result?.remainingSeconds ?? 0;
                     if (seconds > 0) startCountdown(seconds);
-                } catch { /* ignore */ }
+                } catch (error) { console.error(error); /* ignore — 잠금 상태 조회 실패해도 다이얼로그는 정상 표시 */ }
             })();
         }
     }, [open, mode, startCountdown]);
@@ -119,6 +119,7 @@ export default function SecondaryAuthDialog({open, mode, onSuccess, onClose}: Se
             resetState();
             onSuccess();
         } catch (err: unknown) {
+            console.error(err);
             if (!handleLockError(err)) {
                 setError('2차 비밀번호 설정에 실패했습니다.');
             }
@@ -138,6 +139,7 @@ export default function SecondaryAuthDialog({open, mode, onSuccess, onClose}: Se
             resetState();
             onSuccess();
         } catch (err: unknown) {
+            console.error(err);
             if (!handleLockError(err)) {
                 setError('2차 비밀번호가 올바르지 않습니다.');
             }

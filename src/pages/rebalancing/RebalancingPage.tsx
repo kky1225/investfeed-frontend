@@ -30,6 +30,7 @@ import BlindToggle from "../../components/BlindToggle.tsx";
 import {useBlindMode} from "../../context/BlindModeContext.tsx";
 import type {RebalancingStatusRes, RatioDirection} from "../../type/RebalancingType.ts";
 import {saveRebalancingSetting, fetchRebalancingStatus, deleteRebalancingSetting} from "../../api/rebalancing/RebalancingApi.ts";
+import FreshnessIndicator from "../../components/FreshnessIndicator.tsx";
 
 const assetTypeLabel: Record<string, string> = {STOCK: '주식', CRYPTO: '코인', CASH: '현금'};
 
@@ -46,14 +47,15 @@ export default function RebalancingPage() {
     const [fieldErrors, setFieldErrors] = useState<{stockRatio?: boolean; cryptoRatio?: boolean; cashRatio?: boolean; maxStockRatio?: boolean}>({});
     const [deleteOpen, setDeleteOpen] = useState(false);
     const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+    const [pollError, setPollError] = useState(false);
     const [editMode, setEditMode] = useState(false);
     const [loaded, setLoaded] = useState(false);
     const {isBlind} = useBlindMode();
     const [showTable, setShowTable] = useState(!isBlind);
 
-    const loadStatus = async () => {
+    const loadStatus = async (silent: boolean = false) => {
         try {
-            const res = await fetchRebalancingStatus();
+            const res = await fetchRebalancingStatus(silent ? { skipGlobalError: true } : undefined);
             if (res.result) {
                 setStatus(res.result);
                 setStockRatio(String(res.result.setting.stockRatio));
@@ -64,8 +66,11 @@ export default function RebalancingPage() {
                 setCashDirection(res.result.setting.cashDirection);
                 setMaxStockRatio(String(res.result.setting.maxStockRatio));
                 setLastUpdated(new Date());
+                setPollError(false);
             }
-        } catch {
+        } catch (error) {
+            console.error(error);
+            if (silent) setPollError(true);
             // 설정 없음
         } finally {
             setLoaded(true);
@@ -87,9 +92,9 @@ export default function RebalancingPage() {
             const waitTime = 60_000 - (now % 60_000);
 
             timeout = setTimeout(() => {
-                loadStatus();
+                loadStatus(true);
                 interval = setInterval(() => {
-                    loadStatus();
+                    loadStatus(true);
                 }, 60_000);
             }, waitTime + 200);
         })();
@@ -128,6 +133,7 @@ export default function RebalancingPage() {
             setEditMode(false);
             await loadStatus();
         } catch (err) {
+            console.error(err);
             const axiosErr = err as {response?: {status?: number; data?: {code?: string; result?: Record<string, string>}}};
             if (axiosErr.response?.status === 400 && axiosErr.response?.data?.code === 'VALIDATION_4001') {
                 const result = axiosErr.response.data.result ?? {};
@@ -149,7 +155,8 @@ export default function RebalancingPage() {
             await deleteRebalancingSetting();
             setStatus(null);
             setStockRatio(""); setCryptoRatio(""); setCashRatio(""); setMaxStockRatio("");
-        } catch {
+        } catch (error) {
+            console.error(error);
             setError("설정 삭제에 실패했습니다.");
         }
         setDeleteOpen(false);
@@ -311,13 +318,9 @@ export default function RebalancingPage() {
 
             {status && (
                 <>
-                    {lastUpdated && (
-                        <Box sx={{display: 'flex', justifyContent: 'flex-end', mb: 1}}>
-                            <Typography variant="caption" color="text.secondary">
-                                {lastUpdated.toLocaleTimeString('ko-KR', {hour: '2-digit', minute: '2-digit'})} 기준
-                            </Typography>
-                        </Box>
-                    )}
+                    <Box sx={{display: 'flex', justifyContent: 'flex-end', mb: 1}}>
+                        <FreshnessIndicator lastUpdated={lastUpdated} error={pollError}/>
+                    </Box>
 
                     {/* 현재 비중 현황 */}
                     <Card variant="outlined" sx={{mb: 3}}>

@@ -63,7 +63,8 @@ export default function NotificationSettingPage() {
             try {
                 const res = await fetchNotificationSetting();
                 if (res.result) setSetting(res.result);
-            } catch {
+            } catch (error) {
+                console.error(error);
                 // 기본값 사용
             } finally {
                 setLoading(false);
@@ -79,7 +80,8 @@ export default function NotificationSettingPage() {
             await saveNotificationSetting(updated);
             setSaved(true);
             setTimeout(() => setSaved(false), 2000);
-        } catch {
+        } catch (error) {
+            console.error(error);
             setSetting(setting);
         }
     };

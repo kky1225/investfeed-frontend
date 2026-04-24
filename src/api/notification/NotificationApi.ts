@@ -1,14 +1,15 @@
+import type {AxiosRequestConfig} from "axios";
 import api from "../../axios.ts";
 import type {NotificationSettingReq} from "../../type/NotificationSettingType.ts";
 
-export const fetchNotifications = async (assetType?: string) => {
+export const fetchNotifications = async (assetType?: string, config?: AxiosRequestConfig) => {
     const params = assetType ? {assetType} : {};
-    const res = await api.get("/notifications", {params});
+    const res = await api.get("/notifications", {...config, params});
     return res.data;
 };
 
-export const fetchUnreadCount = async () => {
-    const res = await api.get("/notifications/unread-count");
+export const fetchUnreadCount = async (config?: AxiosRequestConfig) => {
+    const res = await api.get("/notifications/unread-count", config);
     return res.data;
 };
 

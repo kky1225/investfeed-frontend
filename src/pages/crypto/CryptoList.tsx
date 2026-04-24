@@ -7,6 +7,7 @@ import Stack from "@mui/material/Stack";
 import Skeleton from "@mui/material/Skeleton";
 import CryptoLineChart, {CryptoLineChartProps} from "../../components/CryptoLineChart.tsx";
 import FearGreedGauge from "../../components/FearGreedGauge.tsx";
+import FreshnessIndicator from "../../components/FreshnessIndicator.tsx";
 import {fetchCryptoList, fetchCryptoListStream} from "../../api/crypto/CryptoApi.ts";
 import {useEffect, useState} from "react";
 import {CryptoChartMinute, CryptoListItem, FearGreedItem} from "../../type/CryptoType.ts";
@@ -29,6 +30,8 @@ const CryptoList = () => {
     const [fearGreedCurrent, setFearGreedCurrent] = useState<FearGreedItem>({value: 0, classification: '', date: ''});
     const [fearGreedHistory, setFearGreedHistory] = useState<FearGreedItem[]>([]);
     const [loading, setLoading] = useState(true);
+    const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+    const [pollError, setPollError] = useState(false);
 
     useEffect(() => {
         let interval: ReturnType<typeof setInterval>;
@@ -43,7 +46,7 @@ const CryptoList = () => {
 
             // 차트 데이터는 60초마다 갱신 (캔들 데이터는 WebSocket으로 안 오므로)
             interval = setInterval(() => {
-                cryptoList();
+                cryptoList(true);
             }, 60 * 1000);
         })();
 
@@ -53,9 +56,9 @@ const CryptoList = () => {
         }
     }, []);
 
-    const cryptoList = async () => {
+    const cryptoList = async (silent: boolean = false) => {
         try {
-            const data = await fetchCryptoList();
+            const data = await fetchCryptoList(silent ? { skipGlobalError: true } : undefined);
 
             if (data.code !== "0000") {
                 throw new Error(data.msg);
@@ -98,8 +101,11 @@ const CryptoList = () => {
             });
 
             setCryptoDataList(newCryptoDataList);
+            setLastUpdated(new Date());
+            setPollError(false);
         } catch (error) {
             console.error(error);
+            if (silent) setPollError(true);
         } finally {
             setLoading(false);
         }
@@ -188,9 +194,13 @@ const CryptoList = () => {
 
     return (
         <Box sx={{width: '100%', maxWidth: {sm: '100%', md: '1700px'}}}>
-            <Typography component="h2" variant="h6" sx={{mb: 2}}>
-                암호화폐
-            </Typography>
+            <Box sx={{display: 'flex', alignItems: 'center', mb: 2, gap: 2}}>
+                <Typography component="h2" variant="h6">
+                    암호화폐
+                </Typography>
+                <Box sx={{flex: 1}}/>
+                <FreshnessIndicator lastUpdated={lastUpdated} error={pollError}/>
+            </Box>
             <Grid
                 container
                 spacing={2}

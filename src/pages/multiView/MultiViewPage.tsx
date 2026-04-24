@@ -48,8 +48,8 @@ export default function MultiViewPage() {
                     setPanels(parsed.filter((p: SelectedAsset | null) => p !== null));
                 }
             }
-        } catch {
-            // 무시
+        } catch (error) {
+            console.error(error);
         }
     }, []);
 

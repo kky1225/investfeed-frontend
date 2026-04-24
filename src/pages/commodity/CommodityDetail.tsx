@@ -34,6 +34,7 @@ import CommodityDetailLineChart, {CommodityDetailLineChartProps} from "../../com
 import {fetchTimeNow} from "../../api/time/TimeApi.ts";
 import {MarketType} from "../../type/timeType.ts";
 import {renderChangeAmount} from "../../components/CustomRender.tsx";
+import FreshnessIndicator from "../../components/FreshnessIndicator.tsx";
 
 const StyledToggleButtonGroup = styled(ToggleButtonGroup)(({ theme }) => ({
     border: 'none',
@@ -94,6 +95,8 @@ const CommodityDetail = () => {
     });
 
     const [loading, setLoading] = useState(true);
+    const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+    const [pollError, setPollError] = useState(false);
 
     const [dayRange, setDayRange] = useState<CommodityRangeProps[]>([
         {
@@ -189,7 +192,7 @@ const CommodityDetail = () => {
             chartTimeout = setTimeout(() => {
                 commodityDetail(req);
                 interval = setInterval(() => {
-                    commodityDetail(req);
+                    commodityDetail(req, true);
                 }, (60 * 1000));
             }, waitTime + 200);
         })();
@@ -202,15 +205,13 @@ const CommodityDetail = () => {
         }
     }, [req]);
 
-    const commodityDetail = async (req: CommodityDetailReq) => {
+    const commodityDetail = async (req: CommodityDetailReq, silent: boolean = false) => {
         try {
-            const data = await fetchCommodityDetail(req);
+            const data = await fetchCommodityDetail(req, silent ? { skipGlobalError: true } : undefined);
 
             if (data.code !== "0000") {
                 throw new Error(data.msg);
             }
-
-            console.log(data);
 
             const {
                 commodityInfo, commodityChartList
@@ -335,8 +336,11 @@ const CommodityDetail = () => {
             };
 
             setMessage(message);
+            setLastUpdated(new Date());
+            setPollError(false);
         } catch (err) {
             console.error(err);
+            if (silent) setPollError(true);
         } finally {
             setLoading(false);
         }
@@ -382,13 +386,11 @@ const CommodityDetail = () => {
         try {
             const data = await fetchCommodityDetailStream(req);
 
-            console.log(data);
-
             if (data.code !== "0000") {
                 throw new Error(data.msg);
             }
         } catch (error) {
-            console.log(error);
+            console.error(error);
         }
     }
 
@@ -494,8 +496,6 @@ const CommodityDetail = () => {
                 newAlignment = newAlignment + '_' + minute.current;
             }
 
-            console.log(newAlignment);
-
             setReq({
                 ...req,
                 chartType: newAlignment as CommodityChartType
@@ -548,9 +548,13 @@ const CommodityDetail = () => {
 
     return (
         <Box sx={{ width: '100%', maxWidth: { sm: '100%', md: '1700px' } }}>
-            <Typography component="h2" variant="h6" sx={{ mb: 2 }}>
-                원자재 상세
-            </Typography>
+            <Box sx={{ display: 'flex', alignItems: 'center', mb: 2, gap: 2 }}>
+                <Typography component="h2" variant="h6">
+                    원자재 상세
+                </Typography>
+                <Box sx={{ flex: 1 }}/>
+                <FreshnessIndicator lastUpdated={lastUpdated} error={pollError}/>
+            </Box>
             <Grid
                 container
                 spacing={2}

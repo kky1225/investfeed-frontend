@@ -109,9 +109,9 @@ export default function Login(props: { disableCustomTheme?: boolean }) {
         }
     }, []);
 
-    const startTimer = useCallback(() => {
+    const startTimer = useCallback((seconds: number) => {
         clearTimer();
-        setRemainingSeconds(600);
+        setRemainingSeconds(seconds);
         timerRef.current = setInterval(() => {
             setRemainingSeconds(prev => {
                 if (prev <= 1) {
@@ -160,18 +160,20 @@ export default function Login(props: { disableCustomTheme?: boolean }) {
         try {
             const res = await login({ loginId, password });
             if (res.result) {
-                startTimer();
                 if (res.result.totpSetupRequired) {
+                    startTimer(600); // 등록 10분
                     const setupRes = await totpSetup();
                     if (setupRes.result) {
                         setQrCodeImage(setupRes.result.qrCodeImage);
                     }
                     setStep('totp-setup');
                 } else {
+                    startTimer(300); // 인증 5분
                     setStep('totp-verify');
                 }
             }
         } catch (err: unknown) {
+            console.error(err);
             const axiosErr = err as { response?: { data?: { code?: string; message?: string; result?: { lockRemainingSeconds?: number } } } };
             const code = axiosErr.response?.data?.code;
             const lockSeconds = axiosErr.response?.data?.result?.lockRemainingSeconds;
@@ -222,6 +224,7 @@ export default function Login(props: { disableCustomTheme?: boolean }) {
                 }
             }
         } catch (err: unknown) {
+            console.error(err);
             const axiosErr = err as { response?: { status?: number } };
             if (axiosErr.response?.status === 401) {
                 clearTimer();
