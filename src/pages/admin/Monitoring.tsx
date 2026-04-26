@@ -31,25 +31,36 @@ import AccordionSummary from '@mui/material/AccordionSummary';
 import AccordionDetails from '@mui/material/AccordionDetails';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import {DataGrid, type GridColDef} from '@mui/x-data-grid';
+import FormControlLabel from '@mui/material/FormControlLabel';
+import Checkbox from '@mui/material/Checkbox';
+import {LocalizationProvider} from '@mui/x-date-pickers/LocalizationProvider';
+import {DatePicker} from '@mui/x-date-pickers/DatePicker';
+import {AdapterDayjs} from '@mui/x-date-pickers/AdapterDayjs';
+import type {Dayjs} from 'dayjs';
+import {SparkLineChart} from '@mui/x-charts/SparkLineChart';
+import LinearProgress from '@mui/material/LinearProgress';
 import {
-    fetchSchedulerStatus,
-    fetchSchedulerLogs,
-    fetchSchedulerConfigLogs,
+    fetchSchedulerOverview,
+    fetchConfigLogsOverview,
+    fetchRedisOverview,
+    fetchErrorLogsOverview,
+    fetchApiCallsOverview,
+    fetchSystemOverview,
     updateSchedulerTimeout,
     triggerScheduler,
     acknowledgeSchedulerLog,
     cancelAcknowledgeSchedulerLog,
     fetchSchedulerLogAckHistory,
-    fetchRedis,
     invalidateRedisPrefix,
-    fetchErrorLogs,
     acknowledgeErrorLog,
     cancelAcknowledgeErrorLog,
     fetchErrorLogAckHistory,
-    fetchSystemStatus,
+    bulkAcknowledgeSchedulerLogs,
+    bulkAcknowledgeErrorLogs,
 } from '../../api/admin/MonitoringApi';
 import FreshnessIndicator from '../../components/FreshnessIndicator';
 import type {
+    SchedulerCatalogRes,
     SchedulerStatusRes,
     SchedulerLogRes,
     SchedulerConfigLogRes,
@@ -58,35 +69,17 @@ import type {
     ErrorLogRes,
     SystemStatusRes,
     LogAckHistoryRes,
+    UnacknowledgedCountRes,
+    ApiCallStatsItemRes,
 } from '../../type/MonitoringType';
 
-type TabKey = 'scheduler' | 'config' | 'redis' | 'error' | 'system';
+type TabKey = 'scheduler' | 'config' | 'redis' | 'error' | 'apicall' | 'system';
 
 function formatDateTime(s: string | null): string {
     if (!s) return '-';
     const d = new Date(s);
     return `${d.getFullYear()}.${String(d.getMonth() + 1).padStart(2, '0')}.${String(d.getDate()).padStart(2, '0')} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}:${String(d.getSeconds()).padStart(2, '0')}`;
 }
-
-// 스케줄러 카탈로그. 실제로 한 번이라도 실행되어야 DB에 status 행이 생기므로,
-// 프론트에서 전체 목록을 먼저 그려두고 DB 데이터가 있는 건 덮어쓴다.
-type SchedulerType = 'FAST' | 'SLOW';
-const SCHEDULER_CATALOG: Array<{name: string; type: SchedulerType; label: string; cron: string}> = [
-    {name: 'PriceAlertScheduler',          type: 'FAST', label: '매분',         cron: '0 * * * * *'},
-    {name: 'MarketIndexScheduler',         type: 'FAST', label: '매분',         cron: '0 * * * * *'},
-    {name: 'InvestorCloseMarketScheduler', type: 'FAST', label: '매분(15:36~21:00)', cron: '0 * * * * *'},
-    {name: 'CalendarSyncScheduler',        type: 'SLOW', label: '매 30분',      cron: '0 */30 * * * *'},
-    {name: 'GoalAlertScheduler',           type: 'SLOW', label: '매시 정각',    cron: '0 0 * * * *'},
-    {name: 'RebalancingAlertScheduler',    type: 'SLOW', label: '매시 정각',    cron: '0 0 * * * *'},
-    {name: 'RecommendScheduler',           type: 'SLOW', label: '매시 30분',    cron: '0 30 * * * *'},
-    {name: 'HoldingSyncScheduler',         type: 'SLOW', label: '매일 00:00',   cron: '0 0 0 * * *'},
-    {name: 'SchedulerLogCleanupScheduler', type: 'SLOW', label: '매일 04:00',   cron: '0 0 4 * * *'},
-    {name: 'InterestSyncScheduler',        type: 'SLOW', label: '매일 05:15',   cron: '0 15 5 * * *'},
-    {name: 'IndexInvestorDailyScheduler',  type: 'SLOW', label: '매일 07:00',   cron: '0 0 7 * * *'},
-    {name: 'ApiKeyExpiryScheduler',        type: 'SLOW', label: '매일 09:00',   cron: '0 0 9 * * *'},
-    {name: 'StockDividendScheduler',       type: 'SLOW', label: '매일 13:30',   cron: '0 30 13 * * *'},
-    {name: 'HolidayRefreshScheduler',      type: 'SLOW', label: '매월 1일 00:05', cron: '0 5 0 1 * *'},
-];
 
 function formatUptime(sec: number): string {
     const d = Math.floor(sec / 86400);
@@ -107,6 +100,7 @@ const STATE_META: Record<SchedulerState, {color: string; label: string}> = {
 
 export default function Monitoring() {
     const [tab, setTab] = useState<TabKey>('scheduler');
+    const [catalog, setCatalog] = useState<SchedulerCatalogRes[]>([]);
     const [statuses, setStatuses] = useState<SchedulerStatusRes[]>([]);
     const [logs, setLogs] = useState<SchedulerLogRes[]>([]);
     const [logsTotal, setLogsTotal] = useState(0);
@@ -145,33 +139,96 @@ export default function Monitoring() {
     const [triggering, setTriggering] = useState(false);
     const [menuAnchorEl, setMenuAnchorEl] = useState<HTMLElement | null>(null);
     const [menuTarget, setMenuTarget] = useState<SchedulerStatusRes | null>(null);
+    // 스케줄러 로그 필터 ('' = 전체)
+    const [logsSchedulerFilter, setLogsSchedulerFilter] = useState<string>('');
+    const [logsStatusFilter, setLogsStatusFilter] = useState<string>('');
+    const [logsFromDate, setLogsFromDate] = useState<Dayjs | null>(null);
+    const [logsToDate, setLogsToDate] = useState<Dayjs | null>(null);
+    // 키워드 입력 — input 은 자유 편집, commit 은 fetch 트리거 (Enter/blur)
+    const [logsMessageInput, setLogsMessageInput] = useState<string>('');
+    const [logsMessageKeyword, setLogsMessageKeyword] = useState<string>('');
+    // 미확인 필터 (탭별)
+    const [logsUnackOnly, setLogsUnackOnly] = useState(false);
+    const [errorUnackOnly, setErrorUnackOnly] = useState(false);
+    // 에러 로그 필터
+    const [errorFromDate, setErrorFromDate] = useState<Dayjs | null>(null);
+    const [errorToDate, setErrorToDate] = useState<Dayjs | null>(null);
+    const [errorMessageInput, setErrorMessageInput] = useState<string>('');
+    const [errorMessageKeyword, setErrorMessageKeyword] = useState<string>('');
+    // 미확인 카운트
+    const [unackCount, setUnackCount] = useState<UnacknowledgedCountRes>({schedulerLogs: 0, errorLogs: 0});
+    // 일괄 확인 처리 다이얼로그
+    const [bulkAckTarget, setBulkAckTarget] = useState<'scheduler' | 'error' | null>(null);
+    const [bulkAckNote, setBulkAckNote] = useState('');
+    const [bulkAckSaving, setBulkAckSaving] = useState(false);
+    // 외부 API 호출 통계
+    const [apiCallStats, setApiCallStats] = useState<ApiCallStatsItemRes[]>([]);
 
-    const loadAll = async (silent: boolean = false) => {
+    /**
+     * 현재 탭에 필요한 데이터만 fetch.
+     * 각 탭 응답에 unackCount 가 포함돼 헤더 배지도 같이 갱신됨.
+     */
+    const loadCurrentTab = async (silent: boolean = false) => {
         const cfg = silent ? { skipGlobalError: true } : undefined;
         try {
-            const [statusRes, logsRes, configLogsRes, redisRes, errorRes, sysRes] = await Promise.all([
-                fetchSchedulerStatus(cfg),
-                fetchSchedulerLogs({page: logsPage, size: logsSize}, cfg),
-                fetchSchedulerConfigLogs({page: configLogsPage, size: configLogsSize}, cfg),
-                fetchRedis(cfg),
-                fetchErrorLogs({page: errorLogsPage, size: errorLogsSize}, cfg),
-                fetchSystemStatus(cfg),
-            ]);
-            if (statusRes.result) setStatuses(statusRes.result);
-            if (logsRes.result) {
-                setLogs(logsRes.result.content ?? []);
-                setLogsTotal(logsRes.result.totalElements ?? 0);
+            if (tab === 'scheduler') {
+                const res = await fetchSchedulerOverview({
+                    page: logsPage,
+                    size: logsSize,
+                    schedulerName: logsSchedulerFilter || null,
+                    status: logsStatusFilter || null,
+                    acknowledged: logsUnackOnly ? false : null,
+                    fromDate: logsFromDate ? logsFromDate.format('YYYY-MM-DD') : null,
+                    toDate: logsToDate ? logsToDate.format('YYYY-MM-DD') : null,
+                    messageKeyword: logsMessageKeyword || null,
+                }, cfg);
+                if (res.result) {
+                    setCatalog(res.result.catalog);
+                    setStatuses(res.result.statuses);
+                    setLogs(res.result.logs.content ?? []);
+                    setLogsTotal(res.result.logs.totalElements ?? 0);
+                    setUnackCount(res.result.unackCount);
+                }
+            } else if (tab === 'config') {
+                const res = await fetchConfigLogsOverview({page: configLogsPage, size: configLogsSize}, cfg);
+                if (res.result) {
+                    setConfigLogs(res.result.logs.content ?? []);
+                    setConfigLogsTotal(res.result.logs.totalElements ?? 0);
+                    setUnackCount(res.result.unackCount);
+                }
+            } else if (tab === 'redis') {
+                const res = await fetchRedisOverview(cfg);
+                if (res.result) {
+                    setRedisPrefixes(res.result.redis.prefixes ?? []);
+                    setUnackCount(res.result.unackCount);
+                }
+            } else if (tab === 'error') {
+                const res = await fetchErrorLogsOverview({
+                    page: errorLogsPage,
+                    size: errorLogsSize,
+                    acknowledged: errorUnackOnly ? false : null,
+                    fromDate: errorFromDate ? errorFromDate.format('YYYY-MM-DD') : null,
+                    toDate: errorToDate ? errorToDate.format('YYYY-MM-DD') : null,
+                    messageKeyword: errorMessageKeyword || null,
+                }, cfg);
+                if (res.result) {
+                    setErrorLogs(res.result.logs.content ?? []);
+                    setErrorLogsTotal(res.result.logs.totalElements ?? 0);
+                    setUnackCount(res.result.unackCount);
+                }
+            } else if (tab === 'apicall') {
+                const res = await fetchApiCallsOverview(cfg);
+                if (res.result) {
+                    setApiCallStats(res.result.stats.items ?? []);
+                    setUnackCount(res.result.unackCount);
+                }
+            } else if (tab === 'system') {
+                const res = await fetchSystemOverview(cfg);
+                if (res.result) {
+                    setSystemStatus(res.result.system);
+                    setUnackCount(res.result.unackCount);
+                }
             }
-            if (configLogsRes.result) {
-                setConfigLogs(configLogsRes.result.content ?? []);
-                setConfigLogsTotal(configLogsRes.result.totalElements ?? 0);
-            }
-            if (redisRes.result) setRedisPrefixes(redisRes.result.prefixes ?? []);
-            if (errorRes.result) {
-                setErrorLogs(errorRes.result.content ?? []);
-                setErrorLogsTotal(errorRes.result.totalElements ?? 0);
-            }
-            if (sysRes.result) setSystemStatus(sysRes.result);
             setLastUpdated(new Date());
             setPollError(false);
         } catch (e) {
@@ -188,15 +245,15 @@ export default function Monitoring() {
 
         (async () => {
             // 초기 로드는 non-silent — 서버 다운 시 사용자에게 1회 알림
-            await loadAll();
+            await loadCurrentTab();
 
             const now = Date.now();
             const waitTime = 60_000 - (now % 60_000);
 
             timeout = setTimeout(() => {
-                loadAll(true);
+                loadCurrentTab(true);
                 interval = setInterval(() => {
-                    loadAll(true);
+                    loadCurrentTab(true);
                 }, 60_000);
             }, waitTime + 200);
         })();
@@ -205,8 +262,7 @@ export default function Monitoring() {
             clearTimeout(timeout);
             clearInterval(interval);
         };
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [logsPage, logsSize, configLogsPage, configLogsSize, errorLogsPage, errorLogsSize]);
+    }, [tab, logsPage, logsSize, configLogsPage, configLogsSize, errorLogsPage, errorLogsSize, logsUnackOnly, errorUnackOnly, logsStatusFilter, logsSchedulerFilter, logsFromDate, logsToDate, logsMessageKeyword, errorFromDate, errorToDate, errorMessageKeyword]);
 
     const openEdit = (s: SchedulerStatusRes) => {
         setEditTarget(s);
@@ -231,7 +287,7 @@ export default function Monitoring() {
             await triggerScheduler(triggerTarget.schedulerName);
             setTriggerTarget(null);
             // 약간 지연 후 refresh (백그라운드 실행 반영 위해)
-            setTimeout(loadAll, 1500);
+            setTimeout(loadCurrentTab, 1500);
         } catch (e) {
             console.error('수동 실행 실패', e);
         } finally {
@@ -268,7 +324,7 @@ export default function Monitoring() {
                 const h = await fetchErrorLogAckHistory(res.result.id);
                 setErrorAckHistory(h.result ?? []);
             }
-            await loadAll();
+            await loadCurrentTab();
         } catch (e) {
             console.error('에러 로그 확인 저장 실패', e);
         } finally {
@@ -287,7 +343,7 @@ export default function Monitoring() {
                 const h = await fetchErrorLogAckHistory(res.result.id);
                 setErrorAckHistory(h.result ?? []);
             }
-            await loadAll();
+            await loadCurrentTab();
         } catch (e) {
             console.error('에러 로그 확인 취소 실패', e);
         } finally {
@@ -324,7 +380,7 @@ export default function Monitoring() {
                 const h = await fetchSchedulerLogAckHistory(res.result.id);
                 setAckHistory(h.result ?? []);
             }
-            await loadAll();
+            await loadCurrentTab();
         } catch (e) {
             console.error('스케줄러 로그 확인 저장 실패', e);
         } finally {
@@ -343,11 +399,43 @@ export default function Monitoring() {
                 const h = await fetchSchedulerLogAckHistory(res.result.id);
                 setAckHistory(h.result ?? []);
             }
-            await loadAll();
+            await loadCurrentTab();
         } catch (e) {
             console.error('스케줄러 로그 확인 취소 실패', e);
         } finally {
             setAckSaving(false);
+        }
+    };
+
+    const openBulkAck = async (target: 'scheduler' | 'error') => {
+        try {
+            await loadCurrentTab(true);
+        } catch (e) {
+            console.error(e);
+        }
+        setBulkAckTarget(target);
+        setBulkAckNote('');
+    };
+    const closeBulkAck = () => {
+        if (bulkAckSaving) return;
+        setBulkAckTarget(null);
+    };
+    const confirmBulkAck = async () => {
+        if (!bulkAckTarget) return;
+        setBulkAckSaving(true);
+        try {
+            const note = bulkAckNote.trim() || null;
+            if (bulkAckTarget === 'scheduler') {
+                await bulkAcknowledgeSchedulerLogs({note});
+            } else {
+                await bulkAcknowledgeErrorLogs({note});
+            }
+            setBulkAckTarget(null);
+            await loadCurrentTab();
+        } catch (e) {
+            console.error('일괄 확인 처리 실패', e);
+        } finally {
+            setBulkAckSaving(false);
         }
     };
 
@@ -359,7 +447,7 @@ export default function Monitoring() {
         try {
             await updateSchedulerTimeout(editTarget.schedulerName, {timeoutSec: n, reason: editReason || null});
             setEditTarget(null);
-            await loadAll();
+            await loadCurrentTab();
         } catch (e) {
             console.error('timeout 수정 실패', e);
         } finally {
@@ -370,8 +458,7 @@ export default function Monitoring() {
     const handleInvalidate = async (prefix: string) => {
         try {
             await invalidateRedisPrefix(prefix);
-            const redisRes = await fetchRedis();
-            if (redisRes.result) setRedisPrefixes(redisRes.result.prefixes ?? []);
+            await loadCurrentTab(true);
         } catch (e) {
             console.error('Redis 무효화 실패', e);
         }
@@ -440,9 +527,41 @@ export default function Monitoring() {
     ];
     const redisRows = redisPrefixes.map((p, i) => ({id: i, ...p}));
 
+    const commitLogsKeyword = () => {
+        if (logsMessageInput !== logsMessageKeyword) {
+            setLogsMessageKeyword(logsMessageInput);
+            setLogsPage(0);
+        }
+    };
+    const commitErrorKeyword = () => {
+        if (errorMessageInput !== errorMessageKeyword) {
+            setErrorMessageKeyword(errorMessageInput);
+            setErrorLogsPage(0);
+        }
+    };
+
     return (
-        <Box sx={{width: '100%', maxWidth: {sm: '100%', md: '1700px'}}}>
-            <Box sx={{display: 'flex', alignItems: 'center', mb: 2}}>
+        <LocalizationProvider dateAdapter={AdapterDayjs}>
+        <Box sx={{
+            width: '100%',
+            maxWidth: {sm: '100%', md: '1700px'},
+            '& .MuiInputAdornment-root .MuiIconButton-root': {
+                padding: '4px',
+                border: 'none',
+                backgroundColor: 'transparent',
+                '& .MuiSvgIcon-root': { fontSize: '1.1rem' },
+                '&:hover': {
+                    border: 'none',
+                    backgroundColor: 'transparent',
+                },
+                '&:focus, &:focus-visible, &.Mui-focusVisible': {
+                    outline: 'none',
+                    boxShadow: 'none',
+                    backgroundColor: 'transparent',
+                },
+            },
+        }}>
+            <Box sx={{display: 'flex', alignItems: 'center', mb: 1}}>
                 <Typography component="h2" variant="h6">
                     모니터링
                 </Typography>
@@ -450,11 +569,34 @@ export default function Monitoring() {
                 {!loading && <FreshnessIndicator lastUpdated={lastUpdated} error={pollError}/>}
             </Box>
 
+            {!loading && (
+                <Stack direction="row" spacing={2} sx={{mb: 2, alignItems: 'center'}}>
+                    <Typography variant="caption" sx={{color: 'text.secondary', fontWeight: 600}}>미확인:</Typography>
+                    <Chip
+                        label={`스케줄러 ${unackCount.schedulerLogs}건`}
+                        size="small"
+                        color={unackCount.schedulerLogs > 0 ? 'warning' : 'default'}
+                        variant={unackCount.schedulerLogs > 0 ? 'filled' : 'outlined'}
+                        onClick={() => setTab('scheduler')}
+                        sx={{cursor: 'pointer'}}
+                    />
+                    <Chip
+                        label={`에러 ${unackCount.errorLogs}건`}
+                        size="small"
+                        color={unackCount.errorLogs > 0 ? 'error' : 'default'}
+                        variant={unackCount.errorLogs > 0 ? 'filled' : 'outlined'}
+                        onClick={() => setTab('error')}
+                        sx={{cursor: 'pointer'}}
+                    />
+                </Stack>
+            )}
+
             <Tabs value={tab} onChange={(_, v) => setTab(v)} sx={{mb: 2, borderBottom: 1, borderColor: 'divider'}}>
                 <Tab label="스케줄러" value="scheduler"/>
                 <Tab label="설정 변경 이력" value="config"/>
                 <Tab label="Redis" value="redis"/>
                 <Tab label="에러 로그" value="error"/>
+                <Tab label="외부 API" value="apicall"/>
                 <Tab label="시스템" value="system"/>
             </Tabs>
 
@@ -466,26 +608,24 @@ export default function Monitoring() {
                     </Typography>
                     {(() => {
                         // 카드 렌더링 공통 헬퍼 — 문제/정상 그룹 모두에서 재사용
-                        const renderCard = (info: typeof SCHEDULER_CATALOG[number]) => {
-                            const s = statuses.find((x) => x.schedulerName === info.name);
+                        const renderCard = (info: SchedulerCatalogRes) => {
+                            const s = statuses.find((x) => x.schedulerName === info.schedulerName);
                             const state: SchedulerState = s?.state ?? 'PENDING';
                             const meta = STATE_META[state];
                             return (
-                                <Grid key={info.name} size={{xs: 12, sm: 6, md: 4}} sx={{display: 'flex'}}>
+                                <Grid key={info.schedulerName} size={{xs: 12, sm: 6, md: 4}} sx={{display: 'flex'}}>
                                     <Card variant="outlined" sx={{opacity: s ? 1 : 0.65, width: '100%', display: 'flex', flexDirection: 'column'}}>
                                         <CardContent sx={{flex: 1, display: 'flex', flexDirection: 'column'}}>
                                             <Stack direction="row" sx={{alignItems: 'center', gap: 1, mb: 1, flexWrap: 'wrap'}}>
                                                 <Tooltip title={meta.label} placement="top" arrow>
                                                     <Box sx={{width: 10, height: 10, borderRadius: '50%', bgcolor: meta.color, flexShrink: 0}}/>
                                                 </Tooltip>
-                                                <Typography variant="body2" sx={{fontWeight: 600}}>{info.name}</Typography>
-                                                <Chip label={info.type} size="small"
-                                                    color={info.type === 'FAST' ? 'info' : 'default'} variant="outlined"
+                                                <Typography variant="body2" sx={{fontWeight: 600}}>{info.schedulerName}</Typography>
+                                                <Chip label={info.schedulerType} size="small"
+                                                    color={info.schedulerType === 'FAST' ? 'info' : 'default'} variant="outlined"
                                                     sx={{fontSize: '0.65rem', height: 18}}/>
-                                                <Tooltip title={`cron: ${info.cron}`} placement="top" arrow>
-                                                    <Chip label={info.label} size="small" variant="outlined"
-                                                        sx={{fontSize: '0.65rem', height: 18, cursor: 'help'}}/>
-                                                </Tooltip>
+                                                <Chip label={info.label} size="small" variant="outlined"
+                                                    sx={{fontSize: '0.65rem', height: 18}}/>
                                             </Stack>
                                             <Box sx={{flex: 1}}>
                                                 {s ? (
@@ -555,8 +695,8 @@ export default function Monitoring() {
                         // 상태별 분류. PROBLEM 은 관리자 주목이 필요한 것(FAILED/STUCK/WARNING),
                         // NORMAL 은 평상시엔 접어두는 것(SUCCESS/PENDING).
                         const PROBLEM_STATES: SchedulerState[] = ['FAILED', 'STUCK', 'WARNING'];
-                        const catalogWithState = SCHEDULER_CATALOG.map((info) => {
-                            const s = statuses.find((x) => x.schedulerName === info.name);
+                        const catalogWithState = catalog.map((info) => {
+                            const s = statuses.find((x) => x.schedulerName === info.schedulerName);
                             const state: SchedulerState = s?.state ?? 'PENDING';
                             return {info, state};
                         });
@@ -569,7 +709,7 @@ export default function Monitoring() {
                         // 카드 내부 상태 점과 동일한 시각 언어. 레이블은 Tooltip 으로.
                         const StateDot = ({state, count}: {state: SchedulerState; count: number}) => (
                             <Tooltip title={STATE_META[state].label} placement="top" arrow>
-                                <Stack direction="row" spacing={0.75} sx={{alignItems: 'center', opacity: count === 0 ? 0.4 : 1, cursor: 'help'}}>
+                                <Stack direction="row" spacing={0.75} sx={{alignItems: 'center', opacity: count === 0 ? 0.4 : 1}}>
                                     <Box sx={{width: 10, height: 10, borderRadius: '50%', bgcolor: STATE_META[state].color}}/>
                                     <Typography variant="body2" sx={{fontWeight: 500}}>{count}</Typography>
                                 </Stack>
@@ -631,9 +771,83 @@ export default function Monitoring() {
                         );
                     })()}
 
-                    <Typography variant="subtitle2" sx={{mb: 1, color: 'text.secondary', fontWeight: 600}}>
-                        실행 이력
-                    </Typography>
+                    <Stack direction="row" sx={{alignItems: 'center', mb: 1}}>
+                        <Typography variant="subtitle2" sx={{color: 'text.secondary', fontWeight: 600}}>
+                            실행 이력
+                        </Typography>
+                        <Box sx={{flex: 1}}/>
+                        <Button
+                            size="small"
+                            variant="outlined"
+                            color="warning"
+                            disabled={unackCount.schedulerLogs === 0}
+                            onClick={() => openBulkAck('scheduler')}
+                        >
+                            일괄 확인
+                        </Button>
+                    </Stack>
+                    <Stack direction="row" sx={{alignItems: 'center', mb: 1, gap: 1, flexWrap: 'wrap'}}>
+                        <DatePicker
+                            label="시작일"
+                            value={logsFromDate}
+                            onChange={(v) => { setLogsFromDate(v); setLogsPage(0); }}
+                            format="YYYY-MM-DD"
+                            slotProps={{textField: {size: 'small', sx: {width: 180}}, field: {clearable: true}}}
+                        />
+                        <DatePicker
+                            label="종료일"
+                            value={logsToDate}
+                            onChange={(v) => { setLogsToDate(v); setLogsPage(0); }}
+                            format="YYYY-MM-DD"
+                            slotProps={{textField: {size: 'small', sx: {width: 180}}, field: {clearable: true}}}
+                        />
+                        <TextField
+                            size="small"
+                            label="메시지 키워드"
+                            placeholder="Enter 또는 포커스 해제 시 검색"
+                            value={logsMessageInput}
+                            onChange={(e) => setLogsMessageInput(e.target.value)}
+                            onKeyDown={(e) => { if (e.key === 'Enter') commitLogsKeyword(); }}
+                            onBlur={commitLogsKeyword}
+                            inputProps={{maxLength: 200}}
+                            sx={{minWidth: 200}}
+                        />
+                        <TextField
+                            select
+                            size="small"
+                            label="스케줄러"
+                            value={logsSchedulerFilter}
+                            onChange={(e) => { setLogsSchedulerFilter(e.target.value); setLogsPage(0); }}
+                            sx={{minWidth: 200}}
+                        >
+                            <MenuItem value="">전체</MenuItem>
+                            {catalog.map((c) => (
+                                <MenuItem key={c.schedulerName} value={c.schedulerName}>{c.schedulerName}</MenuItem>
+                            ))}
+                        </TextField>
+                        <TextField
+                            select
+                            size="small"
+                            label="상태"
+                            value={logsStatusFilter}
+                            onChange={(e) => { setLogsStatusFilter(e.target.value); setLogsPage(0); }}
+                            sx={{minWidth: 130}}
+                        >
+                            <MenuItem value="">전체</MenuItem>
+                            <MenuItem value="SUCCESS">SUCCESS</MenuItem>
+                            <MenuItem value="FAILED">FAILED</MenuItem>
+                            <MenuItem value="INTERRUPTED">INTERRUPTED</MenuItem>
+                        </TextField>
+                        <FormControlLabel
+                            control={<Checkbox
+                                size="small"
+                                checked={logsUnackOnly}
+                                onChange={(e) => { setLogsUnackOnly(e.target.checked); setLogsPage(0); }}
+                            />}
+                            label={<Typography variant="caption">미확인만 보기</Typography>}
+                            sx={{mr: 0}}
+                        />
+                    </Stack>
                     <DataGrid
                         rows={logs}
                         columns={logColumns}
@@ -694,6 +908,54 @@ export default function Monitoring() {
             {/* Tab 3: 에러 로그 */}
             {tab === 'error' && (
                 <Box>
+                    <Stack direction="row" sx={{alignItems: 'center', mb: 1}}>
+                        <Box sx={{flex: 1}}/>
+                        <Button
+                            size="small"
+                            variant="outlined"
+                            color="error"
+                            disabled={unackCount.errorLogs === 0}
+                            onClick={() => openBulkAck('error')}
+                        >
+                            일괄 확인
+                        </Button>
+                    </Stack>
+                    <Stack direction="row" sx={{alignItems: 'center', mb: 1, gap: 1, flexWrap: 'wrap'}}>
+                        <DatePicker
+                            label="시작일"
+                            value={errorFromDate}
+                            onChange={(v) => { setErrorFromDate(v); setErrorLogsPage(0); }}
+                            format="YYYY-MM-DD"
+                            slotProps={{textField: {size: 'small', sx: {width: 180}}, field: {clearable: true}}}
+                        />
+                        <DatePicker
+                            label="종료일"
+                            value={errorToDate}
+                            onChange={(v) => { setErrorToDate(v); setErrorLogsPage(0); }}
+                            format="YYYY-MM-DD"
+                            slotProps={{textField: {size: 'small', sx: {width: 180}}, field: {clearable: true}}}
+                        />
+                        <TextField
+                            size="small"
+                            label="메시지 키워드"
+                            placeholder="Enter 또는 포커스 해제 시 검색"
+                            value={errorMessageInput}
+                            onChange={(e) => setErrorMessageInput(e.target.value)}
+                            onKeyDown={(e) => { if (e.key === 'Enter') commitErrorKeyword(); }}
+                            onBlur={commitErrorKeyword}
+                            inputProps={{maxLength: 200}}
+                            sx={{minWidth: 200}}
+                        />
+                        <FormControlLabel
+                            control={<Checkbox
+                                size="small"
+                                checked={errorUnackOnly}
+                                onChange={(e) => { setErrorUnackOnly(e.target.checked); setErrorLogsPage(0); }}
+                            />}
+                            label={<Typography variant="caption">미확인만 보기</Typography>}
+                            sx={{mr: 0}}
+                        />
+                    </Stack>
                     <DataGrid
                         rows={errorLogs}
                         columns={errorColumns}
@@ -715,7 +977,112 @@ export default function Monitoring() {
                 </Box>
             )}
 
-            {/* Tab 4: 시스템 */}
+            {/* Tab 4: 외부 API */}
+            {tab === 'apicall' && (
+                <Box>
+                    <DataGrid
+                        rows={apiCallStats.map((item) => ({id: item.provider, ...item}))}
+                        columns={[
+                            {field: 'label', headerName: 'Provider', width: 160},
+                            {
+                                field: 'recent7Days',
+                                headerName: '7일 추세',
+                                width: 180,
+                                sortable: false,
+                                renderCell: (p) => {
+                                    const data = (p.value as ApiCallStatsItemRes['recent7Days']).map((d) => d.count);
+                                    return (
+                                        <Box sx={{width: '100%', height: '100%', display: 'flex', alignItems: 'center'}}>
+                                            <SparkLineChart
+                                                data={data}
+                                                height={36}
+                                                width={160}
+                                                showHighlight
+                                                showTooltip
+                                                xAxis={{
+                                                    data: (p.row as ApiCallStatsItemRes).recent7Days.map((d) => d.date),
+                                                    scaleType: 'point',
+                                                }}
+                                            />
+                                        </Box>
+                                    );
+                                },
+                            },
+                            {
+                                field: 'usageRatio',
+                                headerName: '사용률',
+                                flex: 1,
+                                minWidth: 240,
+                                sortable: false,
+                                renderCell: (p) => {
+                                    const ratio = p.value as number | null;
+                                    if (ratio == null) {
+                                        // 한도 미지정 — 빈 회색 bar + "-" 로 row 시각 리듬 유지
+                                        return (
+                                            <Box sx={{width: '100%', height: '100%', display: 'flex', alignItems: 'center', gap: 1}}>
+                                                <LinearProgress
+                                                    variant="determinate"
+                                                    value={0}
+                                                    sx={{
+                                                        flex: 1,
+                                                        height: 6,
+                                                        borderRadius: 3,
+                                                        backgroundColor: 'action.disabledBackground',
+                                                        '& .MuiLinearProgress-bar': {backgroundColor: 'transparent'},
+                                                    }}
+                                                />
+                                                <Typography variant="caption" color="text.disabled" sx={{minWidth: 40, textAlign: 'right'}}>
+                                                    -
+                                                </Typography>
+                                            </Box>
+                                        );
+                                    }
+                                    const pct = Math.min(ratio * 100, 100);
+                                    const color = ratio >= 0.8 ? 'error' : ratio >= 0.5 ? 'warning' : 'primary';
+                                    return (
+                                        <Box sx={{width: '100%', height: '100%', display: 'flex', alignItems: 'center', gap: 1}}>
+                                            <LinearProgress
+                                                variant="determinate"
+                                                value={pct}
+                                                color={color}
+                                                sx={{flex: 1, height: 6, borderRadius: 3}}
+                                            />
+                                            <Typography variant="caption" sx={{minWidth: 40, textAlign: 'right'}}>
+                                                {(ratio * 100).toFixed(1)}%
+                                            </Typography>
+                                        </Box>
+                                    );
+                                },
+                            },
+                            {
+                                field: 'todayCount',
+                                headerName: '오늘 호출',
+                                width: 110,
+                                type: 'number',
+                                valueFormatter: (v: number) => v?.toLocaleString() ?? '0',
+                            },
+                            {
+                                field: 'dailyLimit',
+                                headerName: '일간 한도',
+                                width: 110,
+                                type: 'number',
+                                valueFormatter: (v: number | null) => v == null ? '-' : v.toLocaleString(),
+                            },
+                        ]}
+                        loading={loading}
+                        disableRowSelectionOnClick
+                        autoHeight
+                        hideFooter
+                        rowHeight={56}
+                        slotProps={{loadingOverlay: {variant: 'skeleton', noRowsVariant: 'skeleton'}}}
+                    />
+                    <Typography variant="caption" color="text.secondary" sx={{display: 'block', mt: 3}}>
+                        최근 7일 일별 호출 추세를 표시합니다. 한도가 명시되지 않은 API 도 호출 폭증 감지를 위해 sparkline 은 항상 노출됩니다.
+                    </Typography>
+                </Box>
+            )}
+
+            {/* Tab 5: 시스템 */}
             {tab === 'system' && (
                 <Grid container spacing={2}>
                     <Grid size={{xs: 12, sm: 6, md: 3}}>
@@ -1200,6 +1567,37 @@ export default function Monitoring() {
                 </DialogActions>
             </Dialog>
 
+            <Dialog open={bulkAckTarget !== null} onClose={closeBulkAck} maxWidth="sm" fullWidth>
+                <DialogTitle>
+                    {bulkAckTarget === 'scheduler' ? '스케줄러 로그 일괄 확인' : '에러 로그 일괄 확인'}
+                </DialogTitle>
+                <DialogContent>
+                    <Typography variant="body2" sx={{mb: 2}}>
+                        전체 미확인 <b>{bulkAckTarget === 'scheduler' ? unackCount.schedulerLogs : unackCount.errorLogs}건</b>을 일괄 확인합니다.
+                    </Typography>
+                    <TextField
+                        label="사유 (선택)"
+                        placeholder="비워두면 '일괄 확인'으로 기록됩니다"
+                        size="small"
+                        fullWidth
+                        value={bulkAckNote}
+                        onChange={(e) => setBulkAckNote(e.target.value)}
+                        inputProps={{maxLength: 500}}
+                    />
+                </DialogContent>
+                <DialogActions>
+                    <Button onClick={closeBulkAck} disabled={bulkAckSaving}>취소</Button>
+                    <Button
+                        onClick={confirmBulkAck}
+                        disabled={bulkAckSaving || (bulkAckTarget === 'scheduler' ? unackCount.schedulerLogs === 0 : unackCount.errorLogs === 0)}
+                        variant="contained"
+                    >
+                        처리
+                    </Button>
+                </DialogActions>
+            </Dialog>
+
         </Box>
+        </LocalizationProvider>
     );
 }
