@@ -1,10 +1,5 @@
 export interface CommodityDetailReq {
-    stkCd: string, // 종목코드 M04020000 금 99.99_1kg, M04020100 미니금 99.99_100g
     chartType: CommodityChartType,
-}
-
-export interface CommodityDetailSteamReq {
-    stkCd: string, // 종목코드 M04020000 금 99.99_1kg, M04020100 미니금 99.99_100g
 }
 
 export enum CommodityChartType {

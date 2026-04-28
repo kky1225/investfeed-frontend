@@ -23,7 +23,7 @@ import InvestorBarChart from "../../components/InvestorBarChart.tsx";
 import {
     CommodityChart,
     CommodityChartType,
-    CommodityDetailReq, CommodityDetailSteamReq,
+    CommodityDetailReq,
     CommodityStream,
     CommodityStreamRes
 } from "../../type/CommodityType.ts";
@@ -60,11 +60,11 @@ interface CommodityRangeProps {
 
 const CommodityDetail = () => {
     const { id } = useParams();
+    const stkCd = id ?? "";
 
     const chartTimer = useRef<number>(0);
     const marketTimer = useRef<number>(0);
     const [req, setReq] = useState<CommodityDetailReq>({
-        stkCd: id ?? "",
         chartType: CommodityChartType.DAY
     });
 
@@ -175,7 +175,7 @@ const CommodityDetail = () => {
             const waitTime = 60_000 - (now % 60_000);
 
             if (marketInfo.isMarketOpen) {
-                await commodityDetailStream(req);
+                await commodityDetailStream();
                 socket = openSocket();
             } else {
                 socketTimeout = setTimeout(async () => {
@@ -183,7 +183,7 @@ const CommodityDetail = () => {
 
                     const again = await timeNow();
                     if (again.isMarketOpen) {
-                        await commodityDetailStream(req);
+                        await commodityDetailStream();
                         socket = openSocket();
                     }
                 }, marketTimer.current + 200);
@@ -207,7 +207,7 @@ const CommodityDetail = () => {
 
     const commodityDetail = async (req: CommodityDetailReq, silent: boolean = false) => {
         try {
-            const data = await fetchCommodityDetail(req, silent ? { skipGlobalError: true } : undefined);
+            const data = await fetchCommodityDetail(stkCd, req, silent ? { skipGlobalError: true } : undefined);
 
             if (data.code !== "0000") {
                 throw new Error(data.msg);
@@ -382,9 +382,9 @@ const CommodityDetail = () => {
         }
     }
 
-    const commodityDetailStream = async (req: CommodityDetailSteamReq) => {
+    const commodityDetailStream = async () => {
         try {
-            const data = await fetchCommodityDetailStream(req);
+            const data = await fetchCommodityDetailStream(stkCd);
 
             if (data.code !== "0000") {
                 throw new Error(data.msg);
@@ -413,7 +413,7 @@ const CommodityDetail = () => {
                 });
 
                 commodityList.forEach((commodity: CommodityStream) => {
-                    if(commodity.code === req.stkCd) {
+                    if(commodity.code === stkCd) {
                         setCommodityChartData((prev) => ({
                             ...prev,
                             value: commodity.value.replace(/^[+-]/, '').toLocaleString(),

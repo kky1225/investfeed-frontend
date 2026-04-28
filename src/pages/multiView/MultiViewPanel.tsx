@@ -125,7 +125,7 @@ export default function MultiViewPanel({asset, onSearch, onChartExpand, onRemove
         try {
             if (a.type === 'STOCK') {
                 const stockChartType = chartType.startsWith('MINUTE') ? chartType as StockChartType : `${chartType}` as StockChartType;
-                const res = await fetchStockChart({stkCd: a.code, chartType: stockChartType}, cfg);
+                const res = await fetchStockChart(a.code, {chartType: stockChartType}, cfg);
                 const {stockInfo, stockChartList} = res.result ?? {};
                 if (!stockInfo || !stockChartList) return;
 
@@ -162,7 +162,7 @@ export default function MultiViewPanel({asset, onSearch, onChartExpand, onRemove
                 });
             } else if (a.type === 'CRYPTO') {
                 const cryptoChartType = chartType.startsWith('MINUTE') ? chartType as CryptoChartType : `${chartType}` as CryptoChartType;
-                const res = await fetchCryptoDetail({market: a.code, chartType: cryptoChartType}, cfg);
+                const res = await fetchCryptoDetail(a.code, {chartType: cryptoChartType}, cfg);
                 const r = res.result;
                 if (!r?.chartList) return;
 
@@ -188,7 +188,7 @@ export default function MultiViewPanel({asset, onSearch, onChartExpand, onRemove
                 } as CryptoDetailLineChartProps);
             } else if (a.type === 'COMMODITY') {
                 const commodityChartType = chartType.startsWith('MINUTE') ? chartType as CommodityChartType : `${chartType}` as CommodityChartType;
-                const res = await fetchCommodityDetail({stkCd: a.code, chartType: commodityChartType}, cfg);
+                const res = await fetchCommodityDetail(a.code, {chartType: commodityChartType}, cfg);
                 const {commodityInfo, commodityChartList} = res.result ?? {};
                 if (!commodityInfo || !commodityChartList) return;
 

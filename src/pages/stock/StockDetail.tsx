@@ -90,8 +90,8 @@ interface StockRangeProps {
 
 const StockDetail = () => {
     const { id } = useParams();
+    const stkCd = id || "";
     const [req, setReq] = useState<StockDetailReq>({
-        stkCd: id || "",
         chartType: StockChartType.DAY
     });
 
@@ -230,7 +230,7 @@ const StockDetail = () => {
 
     const stockDetail = async (req: StockDetailReq, silent: boolean = false): Promise<Array<string>> => {
         try {
-            const data = await fetchStockDetail(req, silent ? { skipGlobalError: true } : undefined);
+            const data = await fetchStockDetail(stkCd, req, silent ? { skipGlobalError: true } : undefined);
 
             const { stockInfo, stockChartList, stockInvestorChartList, stockInvestorList, stockProgramList, stockShortSellingList } = data.result;
 
@@ -777,7 +777,7 @@ const StockDetail = () => {
 
             if (data.trnm === "REAL" && Array.isArray(data.data)) {
                 data.data.forEach((res: StockStreamRes) => {
-                    if (res.item !== req.stkCd) return;
+                    if (res.item !== stkCd) return;
                     const values = res.values;
 
                     if (res.type === "0H") {

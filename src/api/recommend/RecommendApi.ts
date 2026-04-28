@@ -3,7 +3,7 @@ import api from "../../axios.ts";
 import {StockStreamReq} from "../../type/StockType.ts";
 
 export const fetchRecommendList = async (config?: AxiosRequestConfig) => {
-    const res = await api.get(`/stock/recommend/list`, config);
+    const res = await api.get(`/stock/recommendations`, config);
     return res.data;
 }
 

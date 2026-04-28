@@ -20,7 +20,6 @@ export interface ThemeListItem {
 
 export interface ThemeStockListReq {
     dateTp: string,
-    themaGrpCd: string,
 }
 
 export interface ThemeStockListRes {
@@ -56,4 +55,11 @@ export interface ThemeStockListStream {
     value: string,
     fluRt: string,
     trend: string,
+}
+
+export interface ThemeStockListStreamRes {
+    type: string,
+    name: string,
+    item: string,
+    values: Array<ThemeStockListStream>
 }

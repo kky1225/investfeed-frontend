@@ -15,7 +15,7 @@ export const fetchAllMenus = async (): Promise<ApiResponse<MenuRes[]>> => {
 };
 
 export const fetchMyMenus = async (): Promise<ApiResponse<MenuRes[]>> => {
-    const res = await api.get<ApiResponse<MenuRes[]>>('/menus/me');
+    const res = await api.get<ApiResponse<MenuRes[]>>('/menus');
     return res.data;
 };
 

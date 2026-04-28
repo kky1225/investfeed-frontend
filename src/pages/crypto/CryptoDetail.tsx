@@ -61,9 +61,9 @@ interface CryptoRangeProps {
 
 const CryptoDetail = () => {
     const { id } = useParams();
+    const market = id || "";
 
     const [req, setReq] = useState<CryptoDetailReq>({
-        market: id || "",
         chartType: CryptoChartType.DAY
     });
 
@@ -164,7 +164,7 @@ const CryptoDetail = () => {
 
     const cryptoDetail = async (req: CryptoDetailReq, silent: boolean = false) => {
         try {
-            const data = await fetchCryptoDetail(req, silent ? { skipGlobalError: true } : undefined);
+            const data = await fetchCryptoDetail(market, req, silent ? { skipGlobalError: true } : undefined);
 
             if (data.code !== "0000") {
                 throw new Error(data.msg);

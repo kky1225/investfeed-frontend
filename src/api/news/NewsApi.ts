@@ -2,6 +2,6 @@ import api from '../../axios.ts';
 import type {NewsSearchReq} from '../../type/NewsType.ts';
 
 export const fetchNews = async (req: NewsSearchReq) => {
-    const res = await api.post('/news/search', req);
+    const res = await api.get('/news', { params: req });
     return res.data;
 };

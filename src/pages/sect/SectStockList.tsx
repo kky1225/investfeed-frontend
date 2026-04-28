@@ -12,9 +12,9 @@ import FreshnessIndicator from "../../components/FreshnessIndicator.tsx";
 
 const SectStockList = () => {
     const { indsCd } = useParams();
+    const sectIndsCd = indsCd || "001";
 
     const [req] = useState<SectStockListReq>({
-        indsCd: indsCd || "001",
         mrktTp: "0"
     });
 
@@ -94,7 +94,7 @@ const SectStockList = () => {
 
     const sectStockList = async (req: SectStockListReq, silent: boolean = false) => {
         try {
-            const data = await fetchSectStockList(req, silent ? { skipGlobalError: true } : undefined);
+            const data = await fetchSectStockList(sectIndsCd, req, silent ? { skipGlobalError: true } : undefined);
 
             if (data.code !== "0000") {
                 throw new Error(data.msg);

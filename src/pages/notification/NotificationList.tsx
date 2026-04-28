@@ -15,6 +15,7 @@ import Switch from '@mui/material/Switch';
 import TextField from '@mui/material/TextField';
 import InputAdornment from '@mui/material/InputAdornment';
 import MenuItem from '@mui/material/MenuItem';
+import Menu from '@mui/material/Menu';
 import SearchIcon from '@mui/icons-material/Search';
 import Divider from '@mui/material/Divider';
 import Skeleton from '@mui/material/Skeleton';
@@ -24,11 +25,10 @@ import DialogTitle from '@mui/material/DialogTitle';
 import DialogContent from '@mui/material/DialogContent';
 import DialogActions from '@mui/material/DialogActions';
 import IconButton from '@mui/material/IconButton';
-import SettingsIcon from '@mui/icons-material/Settings';
+import MoreVertIcon from '@mui/icons-material/MoreVert';
 import TrendingUpIcon from '@mui/icons-material/TrendingUp';
 import TrendingDownIcon from '@mui/icons-material/TrendingDown';
 import NotificationsNoneIcon from '@mui/icons-material/NotificationsNone';
-import NotificationsActiveIcon from '@mui/icons-material/NotificationsActive';
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
 import {useNotification} from '../../context/NotificationContext';
 import {fetchPriceTargets, deletePriceTarget} from '../../api/notification/NotificationApi';
@@ -130,6 +130,7 @@ export default function NotificationList() {
     const [priceTargetDialogOpen, setPriceTargetDialogOpen] = useState(false);
     const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
     const [pollError, setPollError] = useState(false);
+    const [moreMenuAnchor, setMoreMenuAnchor] = useState<HTMLElement | null>(null);
     const chartTimer = useRef<number>(0);
 
     useEffect(() => {
@@ -229,24 +230,37 @@ export default function NotificationList() {
     return (
         <Box sx={{width: '100%', maxWidth: 700, mx: 'auto'}}>
             <Box sx={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2}}>
-                <Box sx={{display: 'flex', alignItems: 'baseline', gap: 1.5}}>
-                    <Typography variant="h5" fontWeight="bold">알림</Typography>
-                    {!loading && <FreshnessIndicator lastUpdated={lastUpdated} error={pollError}/>}
-                </Box>
-                <Box sx={{display: 'flex', gap: 1}}>
-                    <Button
-                        size="small"
-                        startIcon={<NotificationsActiveIcon/>}
-                        onClick={() => setPriceTargetDialogOpen(true)}
-                    >
-                        목표가 관리{priceTargets.length > 0 ? ` (${priceTargets.length})` : ''}
-                    </Button>
-                    <IconButton size="small" onClick={() => navigate('/notification/settings')} title="알림 설정">
-                        <SettingsIcon fontSize="small"/>
-                    </IconButton>
+                <Typography variant="h5" fontWeight="bold">알림</Typography>
+                <Box sx={{display: 'flex', alignItems: 'center', gap: 1}}>
                     {hasUnread && (
                         <Button size="small" onClick={handleMarkAllAsRead}>모두 읽음</Button>
                     )}
+                    {!loading && <FreshnessIndicator lastUpdated={lastUpdated} error={pollError}/>}
+                    <IconButton
+                        size="small"
+                        onClick={(e) => setMoreMenuAnchor(e.currentTarget)}
+                        title="더보기"
+                    >
+                        <MoreVertIcon fontSize="small"/>
+                    </IconButton>
+                    <Menu
+                        anchorEl={moreMenuAnchor}
+                        open={Boolean(moreMenuAnchor)}
+                        onClose={() => setMoreMenuAnchor(null)}
+                    >
+                        <MenuItem onClick={() => {
+                            setMoreMenuAnchor(null);
+                            navigate('/notification/settings');
+                        }}>
+                            알림 설정
+                        </MenuItem>
+                        <MenuItem onClick={() => {
+                            setMoreMenuAnchor(null);
+                            setPriceTargetDialogOpen(true);
+                        }}>
+                            목표가 관리{priceTargets.length > 0 ? ` (${priceTargets.length})` : ''}
+                        </MenuItem>
+                    </Menu>
                 </Box>
             </Box>
 

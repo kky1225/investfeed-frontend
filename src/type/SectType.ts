@@ -25,7 +25,6 @@ export interface SectListStreamReq {
 }
 
 export interface SectStockListReq {
-    indsCd: string,
     mrktTp: string
 }
 

@@ -3,16 +3,16 @@ import {HoldingStreamReq} from "../../type/HoldingType.ts";
 import {HoldingReorderReq} from "../../type/BrokerType.ts";
 
 export const fetchHoldingList = async () => {
-    const res = await api.get(`/stock/holding/list`);
+    const res = await api.get(`/stock/holdings`);
     return res.data;
 }
 
 export const fetchHoldingStream = async (req: HoldingStreamReq) => {
-    const res = await api.post(`/stock/holding/stream`, req);
+    const res = await api.post(`/stock/holdings/stream`, req);
     return res.data;
 }
 
 export const reorderApiHoldings = async (req: HoldingReorderReq) => {
-    const res = await api.patch(`/stock/holding/manual/reorder`, req);
+    const res = await api.patch(`/stock/holdings/manual/reorder`, req);
     return res.data;
 }

@@ -3,74 +3,74 @@ import {AddMyBrokerReq, CreateBrokerReq, CreateManualHoldingReq, HoldingReorderR
 
 // 관리자용 - 증권사 마스터 관리 (2차 비밀번호 필요)
 export const fetchAdminBrokerList = async () => {
-    const res = await api.get(`/admin/broker/list`);
+    const res = await api.get(`/admin/brokers`);
     return res.data;
 }
 
 export const createBroker = async (req: CreateBrokerReq) => {
-    const res = await api.post(`/admin/broker`, req);
+    const res = await api.post(`/admin/brokers`, req);
     return res.data;
 }
 
 export const updateBroker = async (brokerId: number, req: CreateBrokerReq) => {
-    const res = await api.put(`/admin/broker/${brokerId}`, req);
+    const res = await api.put(`/admin/brokers/${brokerId}`, req);
     return res.data;
 }
 
 export const deleteBroker = async (brokerId: number) => {
-    const res = await api.delete(`/admin/broker/${brokerId}`);
+    const res = await api.delete(`/admin/brokers/${brokerId}`);
     return res.data;
 }
 
 // 사용자용 - 증권사 목록 (추가 시 선택용)
 export const fetchBrokerList = async () => {
-    const res = await api.get(`/stock/broker/list`);
+    const res = await api.get(`/stock/brokers`);
     return res.data;
 }
 
 // 사용자용 - 내 증권사 관리
 export const fetchMyBrokerList = async () => {
-    const res = await api.get(`/stock/broker/my/list`);
+    const res = await api.get(`/stock/brokers/my`);
     return res.data;
 }
 
 export const addMyBroker = async (req: AddMyBrokerReq) => {
-    const res = await api.post(`/stock/broker/my`, req);
+    const res = await api.post(`/stock/brokers/my`, req);
     return res.data;
 }
 
 export const removeMyBroker = async (memberBrokerId: number) => {
-    const res = await api.delete(`/stock/broker/my/${memberBrokerId}`);
+    const res = await api.delete(`/stock/brokers/my/${memberBrokerId}`);
     return res.data;
 }
 
 // 수동 보유주식
 export const fetchManualHoldingList = async (memberBrokerId: number) => {
-    const res = await api.get(`/stock/holding/manual/list/${memberBrokerId}`);
+    const res = await api.get(`/stock/holdings/manual/${memberBrokerId}`);
     return res.data;
 }
 
 export const createManualHolding = async (req: CreateManualHoldingReq) => {
-    const res = await api.post(`/stock/holding/manual`, req);
+    const res = await api.post(`/stock/holdings/manual`, req);
     return res.data;
 }
 
 export const updateManualHolding = async (holdingId: number, req: UpdateManualHoldingReq) => {
-    const res = await api.patch(`/stock/holding/manual/${holdingId}`, req);
+    const res = await api.patch(`/stock/holdings/manual/${holdingId}`, req);
     return res.data;
 }
 
 export const deleteManualHolding = async (holdingId: number) => {
-    const res = await api.delete(`/stock/holding/manual/${holdingId}`);
+    const res = await api.delete(`/stock/holdings/manual/${holdingId}`);
     return res.data;
 }
 
 export const updateBrokerBalance = async (memberBrokerId: number, req: UpdateBalanceReq) => {
-    const res = await api.patch(`/stock/holding/manual/balance/${memberBrokerId}`, req);
+    const res = await api.patch(`/stock/holdings/manual/balance/${memberBrokerId}`, req);
     return res.data;
 }
 
 export const reorderHoldings = async (req: HoldingReorderReq) => {
-    const res = await api.patch(`/stock/holding/manual/reorder`, req);
+    const res = await api.patch(`/stock/holdings/manual/reorder`, req);
     return res.data;
 }

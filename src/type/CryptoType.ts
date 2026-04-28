@@ -24,7 +24,6 @@ export interface CryptoChartMinute {
 }
 
 export interface CryptoDetailReq {
-    market: string,
     chartType: CryptoChartType,
 }
 

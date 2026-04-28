@@ -26,7 +26,7 @@ import {fetchIndexDetail, fetchIndexDetailStream} from "../../api/index/IndexApi
 import {
     IndexChartType,
     IndexDetailReq,
-    IndexDetailSteamReq, IndexStream, IndexStreamRes
+    IndexStream, IndexStreamRes
 } from "../../type/IndexType.ts";
 import RemoveIcon from "@mui/icons-material/Remove";
 import CheckIcon from "@mui/icons-material/Check";
@@ -65,11 +65,11 @@ interface IndexRangeProps {
 
 const IndexDetail = () => {
     const { id } = useParams();
+    const indsCd = id || "";
 
     const chartTimer = useRef<number>(0);
     const marketTimer = useRef<number>(0);
     const [req, setReq] = useState<IndexDetailReq>({
-        inds_cd: id || "",
         chart_type: IndexChartType.DAY
     });
 
@@ -158,7 +158,7 @@ const IndexDetail = () => {
             const waitTime = 60_000 - (now % 60_000);
 
             if (marketInfo.isMarketOpen) {
-                await indexDetailStream(req);
+                await indexDetailStream();
                 socket = openSocket();
             } else {
                 socketTimeout = setTimeout(async () => {
@@ -166,7 +166,7 @@ const IndexDetail = () => {
 
                     const again = await timeNow();
                     if (again.isMarketOpen) {
-                        await indexDetailStream(req);
+                        await indexDetailStream();
                         socket = openSocket();
                     }
                 }, marketTimer.current + 200);
@@ -190,7 +190,7 @@ const IndexDetail = () => {
 
     const indexDetail = async (req: IndexDetailReq, silent: boolean = false) => {
         try {
-            const data = await fetchIndexDetail(req, silent ? { skipGlobalError: true } : undefined);
+            const data = await fetchIndexDetail(indsCd, req, silent ? { skipGlobalError: true } : undefined);
 
             if (data.code !== "0000") {
                 throw new Error(data.msg);
@@ -582,9 +582,9 @@ const IndexDetail = () => {
         }
     }
 
-    const indexDetailStream = async (req: IndexDetailSteamReq) => {
+    const indexDetailStream = async () => {
         try {
-            const data = await fetchIndexDetailStream(req);
+            const data = await fetchIndexDetailStream(indsCd);
 
             if (data.code !== "0000") {
                 throw new Error(data.msg);
@@ -613,7 +613,7 @@ const IndexDetail = () => {
                 });
 
                 indexList.forEach((index: IndexStream) => {
-                    if(index.code === req.inds_cd) {
+                    if(index.code === indsCd) {
                         setSectChartData((prev) => ({
                             ...prev,
                             value: index.value.replace(/^[+-]/, ''),

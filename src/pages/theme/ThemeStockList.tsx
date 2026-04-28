@@ -12,14 +12,12 @@ import {fetchTimeNow} from "../../api/time/TimeApi.ts";
 import {MarketType} from "../../type/timeType.ts";
 import {useParams} from "react-router-dom";
 import {
-    SectStockListStreamReq, SectStockListStreamRes
-} from "../../type/SectType.ts";
-import {
     ThemeStockGridRow,
     ThemeStockListItem,
     ThemeStockListReq,
     ThemeStockListStream,
-    ThemeStockListStreamReq
+    ThemeStockListStreamReq,
+    ThemeStockListStreamRes
 } from "../../type/ThemeType.ts";
 import {fetchThemeStockList, fetchThemeStockListStream} from "../../api/theme/ThemeApi.ts";
 import ThemeStockTableProps from "../../components/ThemeStockTable.tsx";
@@ -27,10 +25,10 @@ import FreshnessIndicator from "../../components/FreshnessIndicator.tsx";
 
 const ThemeStockList = () => {
     const { themaGrpCd } = useParams();
+    const themeGrpCdParam = themaGrpCd || "100";
 
     const [req] = useState<ThemeStockListReq>({
-        dateTp: "1",
-        themaGrpCd: themaGrpCd || "100"
+        dateTp: "1"
     });
 
     const [row, setRow] = useState<ThemeStockGridRow[]>([]);
@@ -131,7 +129,7 @@ const ThemeStockList = () => {
                 }, 500);
             }
 
-            const connectSocket = async (req: SectStockListStreamReq) => {
+            const connectSocket = async (req: ThemeStockListStreamReq) => {
                 await fetchThemeStockListStream(req);
                 socket = openSocket();
                 updateDisplay();
@@ -210,7 +208,7 @@ const ThemeStockList = () => {
 
     const themeStockList = async (req: ThemeStockListReq, silent: boolean = false) => {
         try {
-            const data = await fetchThemeStockList(req, silent ? { skipGlobalError: true } : undefined);
+            const data = await fetchThemeStockList(themeGrpCdParam, req, silent ? { skipGlobalError: true } : undefined);
 
             if (data.code !== "0000") {
                 throw new Error(data.msg);
@@ -250,7 +248,7 @@ const ThemeStockList = () => {
             const data = JSON.parse(event.data);
 
             if (data.trnm === "REAL" && Array.isArray(data.data)) {
-                data.data.forEach((res: SectStockListStreamRes) => {
+                data.data.forEach((res: ThemeStockListStreamRes) => {
                     const values = res.values;
 
                     stockBufferMap.current.set(res.item, {

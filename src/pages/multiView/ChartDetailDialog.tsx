@@ -52,7 +52,7 @@ export default function ChartDetailDialog({open, onClose, assetType, code, name}
                     MONTH: StockChartType.MONTH,
                     YEAR: StockChartType.YEAR,
                 };
-                const data = await fetchStockChart({stkCd: code, chartType: chartTypeMap[type] ?? StockChartType.DAY});
+                const data = await fetchStockChart(code, {chartType: chartTypeMap[type] ?? StockChartType.DAY});
                 if (data.result) setChartData(data.result);
             } else if (assetType === 'CRYPTO') {
                 const chartTypeMap: Record<string, CryptoChartType> = {
@@ -62,7 +62,7 @@ export default function ChartDetailDialog({open, onClose, assetType, code, name}
                     MONTH: CryptoChartType.MONTH,
                     YEAR: CryptoChartType.YEAR,
                 };
-                const data = await fetchCryptoDetail({market: code, chartType: chartTypeMap[type] ?? CryptoChartType.DAY});
+                const data = await fetchCryptoDetail(code, {chartType: chartTypeMap[type] ?? CryptoChartType.DAY});
                 if (data.result) setChartData(data.result);
             } else if (assetType === 'COMMODITY') {
                 const chartTypeMap: Record<string, CommodityChartType> = {
@@ -71,7 +71,7 @@ export default function ChartDetailDialog({open, onClose, assetType, code, name}
                     WEEK: CommodityChartType.WEEK,
                     MONTH: CommodityChartType.MONTH,
                 };
-                const data = await fetchCommodityDetail({stkCd: code, chartType: chartTypeMap[type] ?? CommodityChartType.DAY});
+                const data = await fetchCommodityDetail(code, {chartType: chartTypeMap[type] ?? CommodityChartType.DAY});
                 if (data.result) setChartData(data.result);
             }
         } catch (err) {

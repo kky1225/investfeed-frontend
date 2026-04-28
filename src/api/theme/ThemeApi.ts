@@ -3,16 +3,16 @@ import {ThemeListReq, ThemeStockListReq, ThemeStockListStreamReq} from "../../ty
 import api from "../../axios.ts";
 
 export const fetchThemeList = async (req: ThemeListReq, config?: AxiosRequestConfig) => {
-    const res = await api.get(`/stock/theme/list`, {...config, params: req});
+    const res = await api.get(`/stock/themes`, {...config, params: req});
     return res.data;
 }
 
-export const fetchThemeStockList = async (req: ThemeStockListReq, config?: AxiosRequestConfig) => {
-    const res = await api.get(`/stock/theme/stock/list`, {...config, params: req});
+export const fetchThemeStockList = async (themaGrpCd: string, req: ThemeStockListReq, config?: AxiosRequestConfig) => {
+    const res = await api.get(`/stock/themes/${themaGrpCd}/stocks`, {...config, params: req});
     return res.data;
 }
 
 export const fetchThemeStockListStream = async (req: ThemeStockListStreamReq) => {
-    const res = await api.post(`/stock/theme/stock/list/stream`, {params: req});
+    const res = await api.post(`/stock/themes/stocks/stream`, {params: req});
     return res.data;
 }

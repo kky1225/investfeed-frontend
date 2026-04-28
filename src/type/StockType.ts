@@ -8,7 +8,6 @@ export interface StockGridRow {
 }
 
 export interface StockDetailReq {
-    stkCd: string, // 거래소별 종목코드(KRX:039490,NXT:039490_NX,SOR:039490_AL)
     chartType: StockChartType
 }
 
