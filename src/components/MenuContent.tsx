@@ -14,6 +14,7 @@ import {Fragment, useCallback, useEffect, useMemo, useRef, useState} from "react
 import {Collapse} from "@mui/material";
 import {ExpandLess, ExpandMore} from "@mui/icons-material";
 import {useAuth} from "../context/AuthContext";
+import {useApiKeyStatus} from "../context/ApiKeyStatusContext";
 import {fetchMyMenus} from "../api/menu/MenuApi";
 import {getMenuIcon} from "./MenuIconMap";
 import type {MenuRes} from "../type/MenuType";
@@ -24,15 +25,50 @@ interface MenuItemData {
     icon: React.ReactElement;
     url?: string;
     children?: MenuItemData[];
+    /** API Key 의존성 미충족으로 비활성화 상태 */
+    disabled: boolean;
+    /** disabled 사유 (툴팁 메시지). disabled=true 일 때만 의미 있음 */
+    disabledReason?: string;
 }
 
-const toMenuItemData = (menu: MenuRes): MenuItemData => ({
-    id: menu.id,
-    text: menu.name,
-    icon: getMenuIcon(menu.icon),
-    url: menu.url || undefined,
-    children: menu.children.length > 0 ? menu.children.map(toMenuItemData) : undefined,
-});
+interface MenuConversionContext {
+    isSatisfied: (ids: number[]) => boolean;
+    getBrokerNames: (ids: number[]) => string[];
+}
+
+const buildDisabledReason = (brokerNames: string[]): string =>
+    brokerNames.length > 0
+        ? `${brokerNames.join(', ')} API Key 등록이 필요합니다`
+        : 'API Key 등록이 필요합니다';
+
+const toMenuItemData = (menu: MenuRes, ctx: MenuConversionContext): MenuItemData => {
+    const children = menu.children.length > 0
+        ? menu.children.map((c) => toMenuItemData(c, ctx))
+        : undefined;
+
+    // 자기 자신의 broker 의존성 미충족
+    const selfMissing = !ctx.isSatisfied(menu.requiredBrokerIds);
+    // 자식이 있을 때 자식이 모두 disabled 면 부모도 disabled
+    const allChildrenDisabled = !!children && children.length > 0 && children.every((c) => c.disabled);
+    const disabled = selfMissing || allChildrenDisabled;
+
+    // disabled 사유: 자기 자신의 미충족 broker 우선, 없으면 자식들의 의존 broker 합집합
+    const missingIds = selfMissing
+        ? menu.requiredBrokerIds
+        : (allChildrenDisabled
+            ? Array.from(new Set(menu.children.flatMap((c) => c.requiredBrokerIds)))
+            : []);
+
+    return {
+        id: menu.id,
+        text: menu.name,
+        icon: getMenuIcon(menu.icon),
+        url: menu.url || undefined,
+        children,
+        disabled,
+        disabledReason: disabled ? buildDisabledReason(ctx.getBrokerNames(missingIds)) : undefined,
+    };
+};
 
 interface MenuContentProps {
     collapsed?: boolean;
@@ -42,6 +78,7 @@ export default function MenuContent({collapsed = false}: MenuContentProps) {
     const location = useLocation();
     const navigate = useNavigate();
     const {user} = useAuth();
+    const {isSatisfied, getBrokerNames} = useApiKeyStatus();
     const [apiMenus, setApiMenus] = useState<MenuRes[]>([]);
 
     const loadMenus = useCallback(async () => {
@@ -64,7 +101,10 @@ export default function MenuContent({collapsed = false}: MenuContentProps) {
         return () => window.removeEventListener('menu-updated', handler);
     }, [loadMenus]);
 
-    const menuItems = useMemo(() => apiMenus.map(toMenuItemData), [apiMenus]);
+    const menuItems = useMemo(
+        () => apiMenus.map((m) => toMenuItemData(m, {isSatisfied, getBrokerNames})),
+        [apiMenus, isSatisfied, getBrokerNames]
+    );
 
     const [openMenus, setOpenMenus] = useState<Set<string>>(new Set());
     const [popoverMenu, setPopoverMenu] = useState<string | null>(null);
@@ -76,10 +116,18 @@ export default function MenuContent({collapsed = false}: MenuContentProps) {
     }, [collapsed]);
 
     const handleMainMenuClick = (item: MenuItemData) => {
+        if (item.disabled) {
+            navigate('/settings/api-keys');
+            return;
+        }
         if (item.children) {
             setOpenMenus(prev => {
                 const next = new Set(prev);
-                next.has(item.text) ? next.delete(item.text) : next.add(item.text);
+                if (next.has(item.text)) {
+                    next.delete(item.text);
+                } else {
+                    next.add(item.text);
+                }
                 return next;
             });
         } else {
@@ -113,29 +161,49 @@ export default function MenuContent({collapsed = false}: MenuContentProps) {
         setPopoverMenu(null);
     };
 
+    const handleDisabledChildClick = () => {
+        navigate('/settings/api-keys');
+        setPopoverMenu(null);
+    };
+
     // 재귀 메뉴 렌더링 (펼침 모드)
-    const renderMenuItem = (item: MenuItemData, depth: number) => (
-        <Fragment key={item.id}>
-            <ListItem disablePadding sx={{display: 'block'}}>
-                <ListItemButton
-                    selected={location.pathname === item.url}
-                    onClick={() => handleMainMenuClick(item)}
-                    sx={{pl: 2 + depth * 2}}
-                >
-                    <ListItemIcon>{item.icon}</ListItemIcon>
-                    <ListItemText primary={item.text} />
-                    {item.children ? (openMenus.has(item.text) ? <ExpandLess /> : <ExpandMore />) : null}
-                </ListItemButton>
-            </ListItem>
-            {item.children && (
-                <Collapse in={openMenus.has(item.text)} timeout="auto" unmountOnExit>
-                    <List component="div" disablePadding>
-                        {item.children.map(child => renderMenuItem(child, depth + 1))}
-                    </List>
-                </Collapse>
-            )}
-        </Fragment>
-    );
+    const renderMenuItem = (item: MenuItemData, depth: number) => {
+        const button = (
+            <ListItemButton
+                selected={location.pathname === item.url}
+                onClick={() => handleMainMenuClick(item)}
+                sx={{
+                    pl: 2 + depth * 2,
+                    ...(item.disabled && {
+                        opacity: 0.5,
+                        '& .MuiListItemText-primary': {color: 'text.disabled'},
+                        '& .MuiListItemIcon-root': {color: 'text.disabled'},
+                    }),
+                }}
+            >
+                <ListItemIcon>{item.icon}</ListItemIcon>
+                <ListItemText primary={item.text} />
+                {item.children ? (openMenus.has(item.text) ? <ExpandLess /> : <ExpandMore />) : null}
+            </ListItemButton>
+        );
+
+        return (
+            <Fragment key={item.id}>
+                <ListItem disablePadding sx={{display: 'block'}}>
+                    {item.disabled
+                        ? <Tooltip title={item.disabledReason ?? ''} placement="right" arrow>{button}</Tooltip>
+                        : button}
+                </ListItem>
+                {item.children && !item.disabled && (
+                    <Collapse in={openMenus.has(item.text)} timeout="auto" unmountOnExit>
+                        <List component="div" disablePadding>
+                            {item.children.map(child => renderMenuItem(child, depth + 1))}
+                        </List>
+                    </Collapse>
+                )}
+            </Fragment>
+        );
+    };
 
     // 중첩 팝오버 아이템 (접힘 모드)
     const NestedPopoverItem = ({item}: {item: MenuItemData}) => {
@@ -151,16 +219,46 @@ export default function MenuContent({collapsed = false}: MenuContentProps) {
             timeout.current = setTimeout(() => setOpen(false), 150);
         };
 
+        const disabledStyle = item.disabled ? {
+            opacity: 0.5,
+            '& .MuiListItemText-primary': {color: 'text.disabled'},
+            '& .MuiListItemIcon-root': {color: 'text.disabled'},
+        } : {};
+
         if (!item.children) {
+            const button = (
+                <ListItemButton
+                    selected={location.pathname === item.url}
+                    onClick={() => {
+                        if (item.disabled) handleDisabledChildClick();
+                        else if (item.url) handleChildClick(item.url);
+                    }}
+                    sx={disabledStyle}
+                >
+                    <ListItemIcon sx={{minWidth: 32}}>{item.icon}</ListItemIcon>
+                    <ListItemText primary={item.text} />
+                </ListItemButton>
+            );
             return (
                 <ListItem disablePadding>
-                    <ListItemButton
-                        selected={location.pathname === item.url}
-                        onClick={() => item.url && handleChildClick(item.url)}
-                    >
-                        <ListItemIcon sx={{minWidth: 32}}>{item.icon}</ListItemIcon>
-                        <ListItemText primary={item.text} />
-                    </ListItemButton>
+                    {item.disabled
+                        ? <Tooltip title={item.disabledReason ?? ''} placement="right" arrow>{button}</Tooltip>
+                        : button}
+                </ListItem>
+            );
+        }
+
+        // 자식이 있는 항목: disabled 면 sub-popper 도 열지 않고 클릭 시 등록 페이지 이동
+        if (item.disabled) {
+            return (
+                <ListItem disablePadding>
+                    <Tooltip title={item.disabledReason ?? ''} placement="right" arrow>
+                        <ListItemButton onClick={handleDisabledChildClick} sx={disabledStyle}>
+                            <ListItemIcon sx={{minWidth: 32}}>{item.icon}</ListItemIcon>
+                            <ListItemText primary={item.text} />
+                            <ExpandMore fontSize="small" sx={{color: 'text.secondary'}} />
+                        </ListItemButton>
+                    </Tooltip>
                 </ListItem>
             );
         }
@@ -210,22 +308,49 @@ export default function MenuContent({collapsed = false}: MenuContentProps) {
                             <>
                                 <ListItem disablePadding sx={{display: 'block'}}>
                                     {item.children ? (
-                                        <ListItemButton
-                                            ref={(el) => { anchorRefs.current[item.text] = el; }}
-                                            onMouseEnter={() => handlePopoverOpen(item.text)}
-                                            onMouseLeave={handlePopoverClose}
-                                            sx={{justifyContent: 'center', px: 1.5}}
-                                        >
-                                            <ListItemIcon sx={{minWidth: 0, justifyContent: 'center'}}>
-                                                {item.icon}
-                                            </ListItemIcon>
-                                        </ListItemButton>
+                                        item.disabled ? (
+                                            <Tooltip title={item.disabledReason ?? ''} placement="right" arrow>
+                                                <ListItemButton
+                                                    onClick={() => navigate('/settings/api-keys')}
+                                                    sx={{
+                                                        justifyContent: 'center', px: 1.5,
+                                                        opacity: 0.5,
+                                                        '& .MuiListItemIcon-root': {color: 'text.disabled'},
+                                                    }}
+                                                >
+                                                    <ListItemIcon sx={{minWidth: 0, justifyContent: 'center'}}>
+                                                        {item.icon}
+                                                    </ListItemIcon>
+                                                </ListItemButton>
+                                            </Tooltip>
+                                        ) : (
+                                            <ListItemButton
+                                                ref={(el) => { anchorRefs.current[item.text] = el; }}
+                                                onMouseEnter={() => handlePopoverOpen(item.text)}
+                                                onMouseLeave={handlePopoverClose}
+                                                sx={{justifyContent: 'center', px: 1.5}}
+                                            >
+                                                <ListItemIcon sx={{minWidth: 0, justifyContent: 'center'}}>
+                                                    {item.icon}
+                                                </ListItemIcon>
+                                            </ListItemButton>
+                                        )
                                     ) : (
-                                        <Tooltip title={item.text} placement="right" arrow>
+                                        <Tooltip
+                                            title={item.disabled ? (item.disabledReason ?? '') : item.text}
+                                            placement="right"
+                                            arrow
+                                        >
                                             <ListItemButton
                                                 selected={location.pathname === item.url}
                                                 onClick={() => handleMainMenuClick(item)}
-                                                sx={{justifyContent: 'center', px: 1.5}}
+                                                sx={{
+                                                    justifyContent: 'center', px: 1.5,
+                                                    ...(item.disabled && {
+                                                        opacity: 0.5,
+                                                        '& .MuiListItemIcon-root': {color: 'text.disabled'},
+                                                    }),
+                                                }}
                                             >
                                                 <ListItemIcon sx={{minWidth: 0, justifyContent: 'center'}}>
                                                     {item.icon}
@@ -234,7 +359,7 @@ export default function MenuContent({collapsed = false}: MenuContentProps) {
                                         </Tooltip>
                                     )}
                                 </ListItem>
-                                {item.children && (
+                                {item.children && !item.disabled && (
                                     <Popper
                                         open={popoverMenu === item.text}
                                         anchorEl={anchorRefs.current[item.text]}

@@ -19,8 +19,11 @@ import FreshnessIndicator from "../../components/FreshnessIndicator.tsx";
 import LinearProgress from "@mui/material/LinearProgress";
 import Chip from "@mui/material/Chip";
 import {goalTypeLabel} from "../../type/GoalType.ts";
+import ApiKeyRequiredEmptyState from "../../components/ApiKeyRequiredEmptyState.tsx";
+import {useApiKeyStatus} from "../../context/ApiKeyStatusContext.tsx";
 
 export default function AssetDashboard() {
+    const {apiBrokers, myApiBrokerIds, validBrokerIds, isLoaded: apiKeyLoaded} = useApiKeyStatus();
     const [data, setData] = useState<AssetDashboardRes | null>(null);
     const [selectedGroup, setSelectedGroup] = useState<'stock' | 'crypto' | null>(null);
     const [loading, setLoading] = useState(true);
@@ -45,6 +48,14 @@ export default function AssetDashboard() {
     };
 
     useEffect(() => {
+        if (!apiKeyLoaded) return;
+
+        const hasMissing = [...myApiBrokerIds].some(id => !validBrokerIds.has(id));
+        if (hasMissing) {
+            setLoading(false);
+            return;
+        }
+
         let timeout: ReturnType<typeof setTimeout>;
         let interval: ReturnType<typeof setInterval>;
 
@@ -67,7 +78,7 @@ export default function AssetDashboard() {
             clearTimeout(timeout);
             clearInterval(interval);
         };
-    }, []);
+    }, [apiKeyLoaded, myApiBrokerIds, validBrokerIds]);
 
     if (!loading && !data) {
         return (
@@ -78,6 +89,23 @@ export default function AssetDashboard() {
                 <Typography variant="body2" color="text.secondary">
                     자산 데이터를 불러올 수 없습니다.
                 </Typography>
+            </Box>
+        );
+    }
+
+    const missingBrokerNames = apiBrokers
+        .filter(b => myApiBrokerIds.has(b.id) && !validBrokerIds.has(b.id))
+        .map(b => b.name);
+
+    if (apiKeyLoaded && missingBrokerNames.length > 0) {
+        const joined = missingBrokerNames.join(', ');
+        return (
+            <Box sx={{width: '100%', maxWidth: {sm: '100%', md: '1700px'}, py: 4}}>
+                <Typography component="h2" variant="h6" sx={{mb: 3}}>통합 자산 대시보드</Typography>
+                <ApiKeyRequiredEmptyState
+                    brokerName={joined}
+                    description={`통합 자산을 정확히 계산하려면 ${joined} API Key 를 등록해주세요.`}
+                />
             </Box>
         );
     }

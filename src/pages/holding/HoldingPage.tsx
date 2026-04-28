@@ -1,4 +1,4 @@
-import {useEffect, useState} from "react";
+import {useEffect, useMemo, useState} from "react";
 import {useNavigate, useParams} from "react-router-dom";
 import Box from "@mui/material/Box";
 import Typography from "@mui/material/Typography";
@@ -13,38 +13,32 @@ import DialogActions from "@mui/material/DialogActions";
 import AddIcon from "@mui/icons-material/Add";
 import LinkIcon from "@mui/icons-material/Link";
 import CloseIcon from "@mui/icons-material/Close";
-import {fetchMyBrokerList, removeMyBroker} from "../../api/broker/BrokerApi.ts";
+import {removeMyBroker} from "../../api/broker/BrokerApi.ts";
 import type {MemberBroker} from "../../type/BrokerType.ts";
 import HoldingList from "./HoldingList.tsx";
 import ManualHoldingTab from "./ManualHoldingTab.tsx";
 import AddBrokerDialog from "./AddBrokerDialog.tsx";
 import BlindToggle from "../../components/BlindToggle.tsx";
 import RealizedPnlTab from "./RealizedPnlTab.tsx";
+import ApiKeyRequiredEmptyState from "../../components/ApiKeyRequiredEmptyState.tsx";
+import {useApiKeyStatus} from "../../context/ApiKeyStatusContext.tsx";
 
 export default function HoldingPage() {
     const navigate = useNavigate();
     const {brokerId} = useParams<{brokerId?: string}>();
-    const [myBrokers, setMyBrokers] = useState<MemberBroker[]>([]);
+    const {myStockBrokers, isBrokerValid, invalidateMyStockBrokers} = useApiKeyStatus();
     const [selectedTab, setSelectedTab] = useState(0);
     const [addBrokerOpen, setAddBrokerOpen] = useState(false);
     const [deleteTarget, setDeleteTarget] = useState<MemberBroker | null>(null);
     const [mainTab, setMainTab] = useState(0);
 
-    const loadMyBrokers = async () => {
-        try {
-            const data = await fetchMyBrokerList();
-            const list: MemberBroker[] = data.result?.brokers ?? [];
-            const stockBrokers = list.filter(b => b.market === 'STOCK');
-            stockBrokers.sort((a, b) => a.orderIndex - b.orderIndex);
-            setMyBrokers(stockBrokers);
-        } catch (err) {
-            console.error(err);
-        }
-    };
-
-    useEffect(() => {
-        loadMyBrokers();
-    }, []);
+    const myBrokers = useMemo(
+        () => myStockBrokers
+            .filter(b => b.market === 'STOCK')
+            .slice()
+            .sort((a, b) => a.orderIndex - b.orderIndex),
+        [myStockBrokers]
+    );
 
     useEffect(() => {
         if (myBrokers.length === 0) return;
@@ -67,7 +61,7 @@ export default function HoldingPage() {
         if (!deleteTarget) return;
         try {
             await removeMyBroker(deleteTarget.id);
-            await loadMyBrokers();
+            await invalidateMyStockBrokers();   // Context 갱신 = 페이지 자동 재렌더
             navigate('/stock/holding/list', {replace: true});
         } catch (err) {
             console.error(err);
@@ -80,6 +74,9 @@ export default function HoldingPage() {
         if (!broker) return null;
 
         if (broker.type === "API") {
+            if (!isBrokerValid(broker.brokerId)) {
+                return <ApiKeyRequiredEmptyState brokerName={broker.name}/>;
+            }
             return <HoldingList/>;
         }
 
@@ -149,8 +146,6 @@ export default function HoldingPage() {
             <AddBrokerDialog
                 open={addBrokerOpen}
                 onClose={() => setAddBrokerOpen(false)}
-                myBrokers={myBrokers}
-                onAdded={loadMyBrokers}
             />
 
             <Dialog open={Boolean(deleteTarget)} onClose={() => setDeleteTarget(null)} maxWidth="xs" fullWidth>

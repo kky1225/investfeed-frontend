@@ -1,4 +1,4 @@
-import {useEffect, useState} from "react";
+import {useEffect, useMemo, useState} from "react";
 import {useNavigate, useParams} from "react-router-dom";
 import Box from "@mui/material/Box";
 import Typography from "@mui/material/Typography";
@@ -13,37 +13,29 @@ import DialogActions from "@mui/material/DialogActions";
 import AddIcon from "@mui/icons-material/Add";
 import LinkIcon from "@mui/icons-material/Link";
 import CloseIcon from "@mui/icons-material/Close";
-import {fetchMyCryptoBrokerList, removeMyCryptoBroker} from "../../api/cryptoBroker/CryptoBrokerApi.ts";
+import {removeMyCryptoBroker} from "../../api/cryptoBroker/CryptoBrokerApi.ts";
 import type {MemberBroker} from "../../type/BrokerType.ts";
 import CryptoHoldingList from "./CryptoHoldingList.tsx";
 import CryptoManualHoldingTab from "./CryptoManualHoldingTab.tsx";
 import AddCryptoBrokerDialog from "./AddCryptoBrokerDialog.tsx";
 import BlindToggle from "../../components/BlindToggle.tsx";
 import CryptoRealizedPnlTab from "./CryptoRealizedPnlTab.tsx";
+import ApiKeyRequiredEmptyState from "../../components/ApiKeyRequiredEmptyState.tsx";
+import {useApiKeyStatus} from "../../context/ApiKeyStatusContext.tsx";
 
 export default function CryptoHoldingPage() {
     const navigate = useNavigate();
     const {brokerId} = useParams<{brokerId?: string}>();
-    const [myBrokers, setMyBrokers] = useState<MemberBroker[]>([]);
+    const {myCryptoBrokers, isBrokerValid, invalidateMyCryptoBrokers} = useApiKeyStatus();
     const [selectedTab, setSelectedTab] = useState(0);
     const [addBrokerOpen, setAddBrokerOpen] = useState(false);
     const [deleteTarget, setDeleteTarget] = useState<MemberBroker | null>(null);
     const [mainTab, setMainTab] = useState(0);
 
-    const loadMyBrokers = async () => {
-        try {
-            const data = await fetchMyCryptoBrokerList();
-            const list: MemberBroker[] = data.result?.brokers ?? [];
-            list.sort((a, b) => a.orderIndex - b.orderIndex);
-            setMyBrokers(list);
-        } catch (err) {
-            console.error(err);
-        }
-    };
-
-    useEffect(() => {
-        loadMyBrokers();
-    }, []);
+    const myBrokers = useMemo(
+        () => myCryptoBrokers.slice().sort((a, b) => a.orderIndex - b.orderIndex),
+        [myCryptoBrokers]
+    );
 
     useEffect(() => {
         if (myBrokers.length === 0) return;
@@ -66,7 +58,7 @@ export default function CryptoHoldingPage() {
         if (!deleteTarget) return;
         try {
             await removeMyCryptoBroker(deleteTarget.id);
-            await loadMyBrokers();
+            await invalidateMyCryptoBrokers();
             navigate('/crypto/holding/list', {replace: true});
         } catch (err) {
             console.error(err);
@@ -79,6 +71,9 @@ export default function CryptoHoldingPage() {
         if (!broker) return null;
 
         if (broker.type === "API") {
+            if (!isBrokerValid(broker.brokerId)) {
+                return <ApiKeyRequiredEmptyState brokerName={broker.name}/>;
+            }
             return <CryptoHoldingList/>;
         }
 
@@ -148,8 +143,6 @@ export default function CryptoHoldingPage() {
             <AddCryptoBrokerDialog
                 open={addBrokerOpen}
                 onClose={() => setAddBrokerOpen(false)}
-                myBrokers={myBrokers}
-                onAdded={loadMyBrokers}
             />
 
             <Dialog open={Boolean(deleteTarget)} onClose={() => setDeleteTarget(null)} maxWidth="xs" fullWidth>

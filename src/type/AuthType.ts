@@ -102,5 +102,6 @@ export interface MemberRes {
     permanentLock: boolean;
     totpEnabled: boolean;
     secondaryPasswordEnabled: boolean;
+    apiKeyLocked: boolean;
     createdAt: string;
 }

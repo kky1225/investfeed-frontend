@@ -26,7 +26,8 @@ import Menu from '@mui/material/Menu';
 import ListItemIcon from '@mui/material/ListItemIcon';
 import ListItemText from '@mui/material/ListItemText';
 import KeyOffIcon from '@mui/icons-material/KeyOff';
-import {createMember, fetchMembers, lockAccount, unlockAccount, changeRole, resetTotp} from '../../api/admin/AdminApi';
+import VpnKeyIcon from '@mui/icons-material/VpnKey';
+import {createMember, fetchMembers, lockAccount, unlockAccount, changeRole, resetTotp, unlockApiKey} from '../../api/admin/AdminApi';
 import type {CreateMemberReq, MemberRes} from '../../type/AuthType';
 
 function formatDateTime(dateStr: string | null) {
@@ -67,7 +68,7 @@ export default function MemberManagement() {
     const [snackbar, setSnackbar] = useState<{ open: boolean; message: string; severity: 'success' | 'error' }>({
         open: false, message: '', severity: 'success'
     });
-    const [confirmDialog, setConfirmDialog] = useState<{ open: boolean; loginId: string; action: 'lock' | 'unlock' }>({
+    const [confirmDialog, setConfirmDialog] = useState<{ open: boolean; loginId: string; action: 'lock' | 'unlock' | 'api-key-unlock' }>({
         open: false, loginId: '', action: 'unlock'
     });
     const [createDialog, setCreateDialog] = useState(false);
@@ -109,6 +110,9 @@ export default function MemberManagement() {
             if (action === 'lock') {
                 await lockAccount(loginId);
                 setSnackbar({open: true, message: `${loginId} 계정이 잠금되었습니다.`, severity: 'success'});
+            } else if (action === 'api-key-unlock') {
+                await unlockApiKey(loginId);
+                setSnackbar({open: true, message: `${loginId} 계정의 API Key 등록 잠금이 해제되었습니다.`, severity: 'success'});
             } else {
                 await unlockAccount(loginId);
                 setSnackbar({open: true, message: `${loginId} 계정 잠금이 해제되었습니다.`, severity: 'success'});
@@ -116,11 +120,6 @@ export default function MemberManagement() {
             await loadMembers();
         } catch (error) {
             console.error(error);
-            setSnackbar({
-                open: true,
-                message: action === 'lock' ? '계정 잠금에 실패했습니다.' : '잠금 해제에 실패했습니다.',
-                severity: 'error'
-            });
         }
     };
 
@@ -331,19 +330,35 @@ export default function MemberManagement() {
                         <ListItemText>TOTP 초기화</ListItemText>
                     </MenuItem>
                 )}
+                {menuTarget && menuTarget.apiKeyLocked && (
+                    <MenuItem onClick={() => {
+                        setConfirmDialog({open: true, loginId: menuTarget.loginId, action: 'api-key-unlock'});
+                        setAnchorEl(null);
+                    }}>
+                        <ListItemIcon><VpnKeyIcon fontSize="small"/></ListItemIcon>
+                        <ListItemText>API Key 잠금 해제</ListItemText>
+                    </MenuItem>
+                )}
             </Menu>
 
             {/* 잠금/해제 확인 다이얼로그 */}
             <Dialog open={confirmDialog.open} onClose={() => setConfirmDialog({open: false, loginId: '', action: 'unlock'})} disableRestoreFocus>
                 <DialogTitle>
-                    {confirmDialog.action === 'lock' ? '계정 잠금' : '계정 잠금 해제'}
+                    {confirmDialog.action === 'lock' && '계정 잠금'}
+                    {confirmDialog.action === 'unlock' && '계정 잠금 해제'}
+                    {confirmDialog.action === 'api-key-unlock' && 'API Key 등록 잠금 해제'}
                 </DialogTitle>
                 <DialogContent>
                     <DialogContentText>
-                        {confirmDialog.action === 'lock'
-                            ? <><strong>{confirmDialog.loginId}</strong> 계정을 잠금하시겠습니까? 해당 계정은 로그인할 수 없게 됩니다.</>
-                            : <><strong>{confirmDialog.loginId}</strong> 계정의 잠금을 해제하고 실패 횟수를 초기화하시겠습니까?</>
-                        }
+                        {confirmDialog.action === 'lock' && (
+                            <><strong>{confirmDialog.loginId}</strong> 계정을 잠금하시겠습니까? 해당 계정은 로그인할 수 없게 됩니다.</>
+                        )}
+                        {confirmDialog.action === 'unlock' && (
+                            <><strong>{confirmDialog.loginId}</strong> 계정의 잠금을 해제하고 실패 횟수를 초기화하시겠습니까?</>
+                        )}
+                        {confirmDialog.action === 'api-key-unlock' && (
+                            <><strong>{confirmDialog.loginId}</strong> 계정의 API Key 등록 잠금을 해제하시겠습니까? 검증 실패 횟수도 초기화됩니다.</>
+                        )}
                     </DialogContentText>
                 </DialogContent>
                 <DialogActions>

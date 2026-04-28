@@ -7,6 +7,7 @@ export interface MenuRes {
     orderIndex: number;
     visible: boolean;
     permissions: MenuPermissionRes[];
+    requiredBrokerIds: number[];
     children: MenuRes[];
 }
 
@@ -22,6 +23,7 @@ export interface CreateMenuReq {
     parentId: number | null;
     orderIndex: number;
     visible: boolean;
+    requiredBrokerIds: number[];
 }
 
 export interface UpdateMenuReq {
@@ -30,6 +32,10 @@ export interface UpdateMenuReq {
     icon: string | null;
     parentId: number | null;
     visible: boolean;
+}
+
+export interface UpdateMenuBrokersReq {
+    brokerIds: number[];
 }
 
 export interface MenuStructureItem {
@@ -61,4 +67,5 @@ export interface FlatMenuItem {
     visible: boolean;
     depth: number;
     permissions: MenuPermissionRes[];
+    requiredBrokerIds: number[];
 }

@@ -31,8 +31,11 @@ import type {InvestmentGoalRes} from "../../type/GoalType.ts";
 import {goalTypeLabel} from "../../type/GoalType.ts";
 import GoalSettingDialog from "../assetDashboard/GoalSettingDialog.tsx";
 import FreshnessIndicator from "../../components/FreshnessIndicator.tsx";
+import ApiKeyRequiredEmptyState from "../../components/ApiKeyRequiredEmptyState.tsx";
+import {useApiKeyStatus} from "../../context/ApiKeyStatusContext.tsx";
 
 export default function GoalPage() {
+    const {apiBrokers, myApiBrokerIds, validBrokerIds, isLoaded: apiKeyLoaded} = useApiKeyStatus();
     const [goals, setGoals] = useState<InvestmentGoalRes[]>([]);
     const [loading, setLoading] = useState(true);
     const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
@@ -60,6 +63,14 @@ export default function GoalPage() {
     };
 
     useEffect(() => {
+        if (!apiKeyLoaded) return;
+
+        const hasMissing = [...myApiBrokerIds].some(id => !validBrokerIds.has(id));
+        if (hasMissing) {
+            setLoading(false);
+            return;
+        }
+
         let timeout: ReturnType<typeof setTimeout>;
         let interval: ReturnType<typeof setInterval>;
 
@@ -81,7 +92,7 @@ export default function GoalPage() {
             clearTimeout(timeout);
             clearInterval(interval);
         };
-    }, []);
+    }, [apiKeyLoaded, myApiBrokerIds, validBrokerIds]);
 
     const handleDelete = async () => {
         if (!deleteTarget) return;
@@ -89,6 +100,23 @@ export default function GoalPage() {
         await loadGoals();
         setDeleteTarget(null);
     };
+
+    const missingBrokerNames = apiBrokers
+        .filter(b => myApiBrokerIds.has(b.id) && !validBrokerIds.has(b.id))
+        .map(b => b.name);
+
+    if (apiKeyLoaded && missingBrokerNames.length > 0) {
+        const joined = missingBrokerNames.join(', ');
+        return (
+            <Box sx={{width: '100%', maxWidth: {sm: '100%', md: '1700px'}, py: 4}}>
+                <Typography component="h2" variant="h6" sx={{mb: 3}}>투자 목표</Typography>
+                <ApiKeyRequiredEmptyState
+                    brokerName={joined}
+                    description={`목표 달성률을 정확히 계산하려면 ${joined} API Key 를 등록해주세요.`}
+                />
+            </Box>
+        );
+    }
 
     return (
         <Box sx={{width: '100%', maxWidth: {sm: '100%', md: '1700px'}}}>

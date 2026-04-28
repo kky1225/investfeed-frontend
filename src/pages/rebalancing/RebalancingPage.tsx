@@ -31,10 +31,13 @@ import {useBlindMode} from "../../context/BlindModeContext.tsx";
 import type {RebalancingStatusRes, RatioDirection} from "../../type/RebalancingType.ts";
 import {saveRebalancingSetting, fetchRebalancingStatus, deleteRebalancingSetting} from "../../api/rebalancing/RebalancingApi.ts";
 import FreshnessIndicator from "../../components/FreshnessIndicator.tsx";
+import ApiKeyRequiredEmptyState from "../../components/ApiKeyRequiredEmptyState.tsx";
+import {useApiKeyStatus} from "../../context/ApiKeyStatusContext.tsx";
 
 const assetTypeLabel: Record<string, string> = {STOCK: '주식', CRYPTO: '코인', CASH: '현금'};
 
 export default function RebalancingPage() {
+    const {apiBrokers, myApiBrokerIds, validBrokerIds, isLoaded: apiKeyLoaded} = useApiKeyStatus();
     const [status, setStatus] = useState<RebalancingStatusRes | null>(null);
     const [stockRatio, setStockRatio] = useState("");
     const [stockDirection, setStockDirection] = useState<RatioDirection>("MAX");
@@ -82,6 +85,11 @@ export default function RebalancingPage() {
     }, [isBlind]);
 
     useEffect(() => {
+        if (!apiKeyLoaded) return;
+
+        const hasMissing = [...myApiBrokerIds].some(id => !validBrokerIds.has(id));
+        if (hasMissing) return;
+
         let timeout: ReturnType<typeof setTimeout>;
         let interval: ReturnType<typeof setInterval>;
 
@@ -103,7 +111,7 @@ export default function RebalancingPage() {
             clearTimeout(timeout);
             clearInterval(interval);
         };
-    }, []);
+    }, [apiKeyLoaded, myApiBrokerIds, validBrokerIds]);
 
     const handleSave = async () => {
         const fieldErrs: {stockRatio?: boolean; cryptoRatio?: boolean; cashRatio?: boolean; maxStockRatio?: boolean} = {};
@@ -176,6 +184,23 @@ export default function RebalancingPage() {
     ];
 
     const directionLabel = (d: string) => d === 'MIN' ? '이상' : '이하';
+
+    const missingBrokerNames = apiBrokers
+        .filter(b => myApiBrokerIds.has(b.id) && !validBrokerIds.has(b.id))
+        .map(b => b.name);
+
+    if (apiKeyLoaded && missingBrokerNames.length > 0) {
+        const joined = missingBrokerNames.join(', ');
+        return (
+            <Box sx={{width: '100%', maxWidth: {sm: '100%', md: '1700px'}, py: 4}}>
+                <Typography component="h2" variant="h6" sx={{mb: 3}}>리밸런싱</Typography>
+                <ApiKeyRequiredEmptyState
+                    brokerName={joined}
+                    description={`자산 비율을 정확히 계산하려면 ${joined} API Key 를 등록해주세요.`}
+                />
+            </Box>
+        );
+    }
 
     return (
         <Box sx={{width: '100%', maxWidth: {sm: '100%', md: '1700px'}}}>

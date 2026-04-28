@@ -19,6 +19,9 @@ import Select from '@mui/material/Select';
 import MenuItem from '@mui/material/MenuItem';
 import Switch from '@mui/material/Switch';
 import FormControlLabel from '@mui/material/FormControlLabel';
+import FormGroup from '@mui/material/FormGroup';
+import Checkbox from '@mui/material/Checkbox';
+import FormHelperText from '@mui/material/FormHelperText';
 import Paper from '@mui/material/Paper';
 import Stack from '@mui/material/Stack';
 import Tooltip from '@mui/material/Tooltip';
@@ -26,6 +29,7 @@ import AddIcon from '@mui/icons-material/Add';
 import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
 import SecurityIcon from '@mui/icons-material/Security';
+import VpnKeyIcon from '@mui/icons-material/VpnKey';
 import SaveIcon from '@mui/icons-material/Save';
 import DragIndicatorIcon from '@mui/icons-material/DragIndicator';
 import MoreVertIcon from '@mui/icons-material/MoreVert';
@@ -52,11 +56,13 @@ import {
     deleteMenu,
     fetchAllMenus,
     updateMenu,
+    updateMenuBrokers,
     updateMenuPermissions,
     updateMenuStructure
 } from '../../api/menu/MenuApi';
 import type {FlatMenuItem, MenuRes} from '../../type/MenuType';
 import {getMenuIcon, iconOptions} from '../../components/MenuIconMap';
+import {useApiKeyStatus} from '../../context/ApiKeyStatusContext';
 
 type DropPosition = 'before' | 'inside' | 'after';
 
@@ -66,6 +72,7 @@ const flattenTree = (menus: MenuRes[], depth = 0): FlatMenuItem[] =>
             id: menu.id, name: menu.name, url: menu.url, icon: menu.icon,
             parentId: menu.parentId, orderIndex: menu.orderIndex,
             visible: menu.visible, depth, permissions: menu.permissions,
+            requiredBrokerIds: menu.requiredBrokerIds,
         },
         ...flattenTree(menu.children, depth + 1),
     ]);
@@ -207,8 +214,15 @@ export default function MenuManagement() {
     const [dropTarget, setDropTarget] = useState<{id: number; position: DropPosition} | null>(null);
     const pointerY = useRef(0);
 
+    const {apiBrokers} = useApiKeyStatus();
     const [editDialog, setEditDialog] = useState<{open: boolean; mode: 'create' | 'edit'; menuId?: number}>({open: false, mode: 'create'});
-    const [editForm, setEditForm] = useState<{name: string; url: string; icon: string; parentId: string; visible: boolean}>({
+    const [editForm, setEditForm] = useState<{
+        name: string;
+        url: string;
+        icon: string;
+        parentId: string;
+        visible: boolean;
+    }>({
         name: '', url: '', icon: '', parentId: '', visible: true
     });
     const [editErrors, setEditErrors] = useState<{name?: string}>({});
@@ -217,6 +231,8 @@ export default function MenuManagement() {
     const [menuTargetItem, setMenuTargetItem] = useState<FlatMenuItem | null>(null);
     const [permDialog, setPermDialog] = useState<{open: boolean; item: FlatMenuItem | null}>({open: false, item: null});
     const [permForm, setPermForm] = useState<{USER: boolean; ADMIN: boolean; GUEST: boolean}>({USER: true, ADMIN: true, GUEST: true});
+    const [brokerDialog, setBrokerDialog] = useState<{open: boolean; item: FlatMenuItem | null}>({open: false, item: null});
+    const [brokerForm, setBrokerForm] = useState<{brokerIds: number[]}>({brokerIds: []});
 
     const sensors = useSensors(useSensor(PointerSensor, {activationConstraint: {distance: 8}}));
 
@@ -303,12 +319,22 @@ export default function MenuManagement() {
     const handleToggleCollapse = (id: number) => {
         setCollapsedIds(prev => {
             const next = new Set(prev);
-            next.has(id) ? next.delete(id) : next.add(id);
+            if (next.has(id)) {
+                next.delete(id);
+            } else {
+                next.add(id);
+            }
             return next;
         });
     };
     const isAllCollapsed = collapsedIds.size > 0 && collapsedIds.size >= getParentIds(flatItems).size;
-    const handleToggleAll = () => isAllCollapsed ? setCollapsedIds(new Set()) : setCollapsedIds(getParentIds(flatItems));
+    const handleToggleAll = () => {
+        if (isAllCollapsed) {
+            setCollapsedIds(new Set());
+        } else {
+            setCollapsedIds(getParentIds(flatItems));
+        }
+    };
 
     const visibleItems = flatItems.filter(item => {
         let pid = item.parentId;
@@ -424,6 +450,17 @@ export default function MenuManagement() {
         setEditDialog({open: true, mode: 'edit', menuId: item.id});
     };
 
+    const toggleBrokerForm = (brokerId: number) => {
+        setBrokerForm(prev => {
+            const has = prev.brokerIds.includes(brokerId);
+            return {
+                brokerIds: has
+                    ? prev.brokerIds.filter(id => id !== brokerId)
+                    : [...prev.brokerIds, brokerId],
+            };
+        });
+    };
+
     const handleSaveMenu = async () => {
         const errors: {name?: string} = {};
         if (!editForm.name.trim()) errors.name = '메뉴명을 입력해주세요.';
@@ -438,6 +475,8 @@ export default function MenuManagement() {
                     name: editForm.name, url: editForm.url || null, icon: editForm.icon || null,
                     parentId: editForm.parentId ? parseInt(editForm.parentId) : null,
                     orderIndex: flatItems.length, visible: editForm.visible,
+                    // API Key 의존성은 생성 후 "권한 설정" 다이얼로그에서 별도로 지정한다.
+                    requiredBrokerIds: [],
                 });
                 setSnackbar({open: true, message: '메뉴가 생성되었습니다.', severity: 'success'});
             } else {
@@ -474,11 +513,11 @@ export default function MenuManagement() {
     };
 
     const handleOpenPermission = (item: FlatMenuItem) => {
-        const permMap = {USER: true, ADMIN: true, GUEST: true};
+        const roleMap = {USER: true, ADMIN: true, GUEST: true};
         item.permissions.forEach(p => {
-            if (p.role in permMap) permMap[p.role as keyof typeof permMap] = p.readable;
+            if (p.role in roleMap) roleMap[p.role as keyof typeof roleMap] = p.readable;
         });
-        setPermForm(permMap);
+        setPermForm(roleMap);
         setPermDialog({open: true, item});
     };
 
@@ -494,6 +533,29 @@ export default function MenuManagement() {
         } catch (error) {
             console.error(error);
             setSnackbar({open: true, message: '권한 변경에 실패했습니다.', severity: 'error'});
+        }
+    };
+
+    const handleOpenBroker = (item: FlatMenuItem) => {
+        setBrokerForm({brokerIds: item.requiredBrokerIds});
+        setBrokerDialog({open: true, item});
+    };
+
+    const handleSaveBroker = async () => {
+        if (!brokerDialog.item) return;
+        try {
+            await updateMenuBrokers(brokerDialog.item.id, {brokerIds: brokerForm.brokerIds});
+            setSnackbar({open: true, message: 'API Key 권한이 변경되었습니다.', severity: 'success'});
+            setBrokerDialog({open: false, item: null});
+            await reloadMenus();
+        } catch (err) {
+            console.error(err);
+            const axiosErr = err as {response?: {data?: {message?: string}}};
+            setSnackbar({
+                open: true,
+                message: axiosErr.response?.data?.message || 'API Key 권한 변경에 실패했습니다.',
+                severity: 'error',
+            });
         }
     };
 
@@ -610,6 +672,10 @@ export default function MenuManagement() {
                     <ListItemIcon><SecurityIcon fontSize="small"/></ListItemIcon>
                     <ListItemText>권한 설정</ListItemText>
                 </MenuItem>
+                <MenuItem onClick={() => { if (menuTargetItem) handleOpenBroker(menuTargetItem); setMenuAnchorEl(null); }}>
+                    <ListItemIcon><VpnKeyIcon fontSize="small"/></ListItemIcon>
+                    <ListItemText>API Key 권한 설정</ListItemText>
+                </MenuItem>
                 <MenuItem onClick={() => { if (menuTargetItem) handleOpenEdit(menuTargetItem); setMenuAnchorEl(null); }}>
                     <ListItemIcon><EditIcon fontSize="small"/></ListItemIcon>
                     <ListItemText>수정</ListItemText>
@@ -633,7 +699,7 @@ export default function MenuManagement() {
                 </DialogActions>
             </Dialog>
 
-            {/* 권한 설정 다이얼로그 */}
+            {/* 권한 설정 다이얼로그 (역할 권한 전용) */}
             <Dialog open={permDialog.open} onClose={() => setPermDialog({open: false, item: null})} maxWidth="xs" fullWidth>
                 <DialogTitle>권한 설정 - {permDialog.item?.name}</DialogTitle>
                 <DialogContent>
@@ -650,6 +716,39 @@ export default function MenuManagement() {
                 <DialogActions>
                     <Button onClick={() => setPermDialog({open: false, item: null})}>취소</Button>
                     <Button onClick={handleSavePermission} variant="contained">저장</Button>
+                </DialogActions>
+            </Dialog>
+
+            {/* API Key 권한 설정 다이얼로그 */}
+            <Dialog open={brokerDialog.open} onClose={() => setBrokerDialog({open: false, item: null})} maxWidth="xs" fullWidth>
+                <DialogTitle>API Key 권한 설정 - {brokerDialog.item?.name}</DialogTitle>
+                <DialogContent>
+                    <FormHelperText sx={{ml: 0, mt: 0, mb: 2}}>
+                        선택한 API Key 가 모두 등록되어야 사용자에게 활성화됩니다. 선택하지 않으면 모든 사용자에게 활성화됩니다.
+                    </FormHelperText>
+                    {apiBrokers.length === 0 ? (
+                        <FormHelperText sx={{ml: 0}}>등록된 API 타입 broker 가 없습니다.</FormHelperText>
+                    ) : (
+                        <FormGroup>
+                            {apiBrokers.map(b => (
+                                <FormControlLabel
+                                    key={b.id}
+                                    control={
+                                        <Checkbox
+                                            size="small"
+                                            checked={brokerForm.brokerIds.includes(b.id)}
+                                            onChange={() => toggleBrokerForm(b.id)}
+                                        />
+                                    }
+                                    label={b.name}
+                                />
+                            ))}
+                        </FormGroup>
+                    )}
+                </DialogContent>
+                <DialogActions>
+                    <Button onClick={() => setBrokerDialog({open: false, item: null})}>취소</Button>
+                    <Button onClick={handleSaveBroker} variant="contained">저장</Button>
                 </DialogActions>
             </Dialog>
 

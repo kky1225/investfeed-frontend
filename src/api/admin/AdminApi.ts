@@ -30,3 +30,8 @@ export const resetTotp = async (loginId: string): Promise<ApiResponse<null>> => 
     const res = await api.patch<ApiResponse<null>>(`/auth/admin/members/${loginId}/totp-reset`);
     return res.data;
 };
+
+export const unlockApiKey = async (loginId: string): Promise<ApiResponse<null>> => {
+    const res = await api.patch<ApiResponse<null>>(`/auth/admin/members/${loginId}/api-key-unlock`);
+    return res.data;
+};

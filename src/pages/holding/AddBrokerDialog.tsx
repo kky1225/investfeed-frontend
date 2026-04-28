@@ -11,20 +11,21 @@ import Chip from "@mui/material/Chip";
 import Typography from "@mui/material/Typography";
 import LinkIcon from "@mui/icons-material/Link";
 import {fetchBrokerList, addMyBroker} from "../../api/broker/BrokerApi.ts";
-import type {Broker, MemberBroker} from "../../type/BrokerType.ts";
+import type {Broker} from "../../type/BrokerType.ts";
+import {useApiKeyStatus} from "../../context/ApiKeyStatusContext.tsx";
 
 interface AddBrokerDialogProps {
     open: boolean;
     onClose: () => void;
-    myBrokers: MemberBroker[];
-    onAdded: () => void;
 }
 
-export default function AddBrokerDialog({open, onClose, myBrokers, onAdded}: AddBrokerDialogProps) {
+export default function AddBrokerDialog({open, onClose}: AddBrokerDialogProps) {
+    // 본인이 이미 추가한 broker 는 Context 에서 직접 가져옴 (parent 가 prop 으로 전달 불필요)
+    const {myStockBrokers, invalidateMyStockBrokers} = useApiKeyStatus();
     const [brokers, setBrokers] = useState<Broker[]>([]);
     const [error, setError] = useState("");
 
-    const myBrokerIds = new Set(myBrokers.map(b => b.brokerId));
+    const myBrokerIds = new Set(myStockBrokers.map(b => b.brokerId));
 
     useEffect(() => {
         if (!open) return;
@@ -44,7 +45,7 @@ export default function AddBrokerDialog({open, onClose, myBrokers, onAdded}: Add
         try {
             setError("");
             await addMyBroker({brokerId: broker.id});
-            onAdded();
+            await invalidateMyStockBrokers();   // Context 갱신 = parent 페이지 자동 재렌더
             onClose();
         } catch (error) {
             console.error(error);

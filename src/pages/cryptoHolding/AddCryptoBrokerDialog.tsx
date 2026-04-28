@@ -11,20 +11,21 @@ import Chip from "@mui/material/Chip";
 import Typography from "@mui/material/Typography";
 import LinkIcon from "@mui/icons-material/Link";
 import {fetchCryptoBrokerList, addMyCryptoBroker} from "../../api/cryptoBroker/CryptoBrokerApi.ts";
-import type {Broker, MemberBroker} from "../../type/BrokerType.ts";
+import type {Broker} from "../../type/BrokerType.ts";
+import {useApiKeyStatus} from "../../context/ApiKeyStatusContext.tsx";
 
 interface AddCryptoBrokerDialogProps {
     open: boolean;
     onClose: () => void;
-    myBrokers: MemberBroker[];
-    onAdded: () => void;
 }
 
-export default function AddCryptoBrokerDialog({open, onClose, myBrokers, onAdded}: AddCryptoBrokerDialogProps) {
+export default function AddCryptoBrokerDialog({open, onClose}: AddCryptoBrokerDialogProps) {
+    // 본인이 이미 추가한 broker 는 Context 에서 직접 가져옴 (parent 가 prop 으로 전달 불필요)
+    const {myCryptoBrokers, invalidateMyCryptoBrokers} = useApiKeyStatus();
     const [brokers, setBrokers] = useState<Broker[]>([]);
     const [error, setError] = useState("");
 
-    const myBrokerIds = new Set(myBrokers.map(b => b.brokerId));
+    const myBrokerIds = new Set(myCryptoBrokers.map(b => b.brokerId));
 
     useEffect(() => {
         if (!open) return;
@@ -44,7 +45,7 @@ export default function AddCryptoBrokerDialog({open, onClose, myBrokers, onAdded
         try {
             setError("");
             await addMyCryptoBroker({brokerId: broker.id});
-            onAdded();
+            await invalidateMyCryptoBrokers();   // Context 갱신 = parent 페이지 자동 재렌더
             onClose();
         } catch (error) {
             console.error(error);

@@ -1,4 +1,4 @@
-import {useEffect, useState} from 'react';
+import {useState} from 'react';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
 import Button from '@mui/material/Button';
@@ -28,10 +28,9 @@ import CssBaseline from '@mui/material/CssBaseline';
 import {useNavigate} from 'react-router-dom';
 import ColorModeSelect from '../../components/ColorModeSelect';
 import AppTheme from '../../components/AppTheme';
-import {fetchApiKeys, createApiKey, deleteApiKey} from '../../api/auth/AuthApi';
-import {fetchBrokerList} from '../../api/broker/BrokerApi';
-import type {ApiKeyReq, ApiKeyRes} from '../../type/AuthType';
-import type {Broker} from '../../type/BrokerType';
+import {createApiKey, deleteApiKey} from '../../api/auth/AuthApi';
+import {useApiKeyStatus} from '../../context/ApiKeyStatusContext';
+import type {ApiKeyReq} from '../../type/AuthType';
 
 function formatDateTime(dateStr: string) {
     const date = new Date(dateStr);
@@ -61,9 +60,7 @@ const initialForm: ApiKeyReq = {brokerId: 0, appKey: '', secretKey: '', expiresA
 
 export default function ApiKeyManagement() {
     const navigate = useNavigate();
-    const [apiKeys, setApiKeys] = useState<ApiKeyRes[]>([]);
-    const [apiBrokers, setApiBrokers] = useState<Broker[]>([]);
-    const [loading, setLoading] = useState(true);
+    const {apiKeys, apiBrokers, isLoaded: apiKeyLoaded, invalidateApiKeys} = useApiKeyStatus();
     const [snackbar, setSnackbar] = useState<{open: boolean; message: string; severity: 'success' | 'error'}>({
         open: false, message: '', severity: 'success'
     });
@@ -75,35 +72,7 @@ export default function ApiKeyManagement() {
         open: false, id: 0, brokerName: ''
     });
 
-    const loadApiKeys = async () => {
-        setLoading(true);
-        try {
-            const res = await fetchApiKeys();
-            if (res.result) {
-                setApiKeys(res.result);
-            }
-        } catch (error) {
-            console.error(error);
-            setSnackbar({open: true, message: 'API Key 목록을 불러오는데 실패했습니다.', severity: 'error'});
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    const loadBrokers = async () => {
-        try {
-            const data = await fetchBrokerList();
-            const brokers: Broker[] = data.result?.brokers ?? [];
-            setApiBrokers(brokers.filter(b => b.type === 'API'));
-        } catch (error) {
-            console.error(error);
-        }
-    };
-
-    useEffect(() => {
-        loadApiKeys();
-        loadBrokers();
-    }, []);
+    const loading = !apiKeyLoaded;
 
     const openFormDialog = () => {
         const defaultBrokerId = apiBrokers.length > 0 ? apiBrokers[0].id : 0;
@@ -128,7 +97,7 @@ export default function ApiKeyManagement() {
             setSnackbar({open: true, message: 'API Key가 등록되었습니다.', severity: 'success'});
             setFormDialog(false);
             setForm(initialForm);
-            await loadApiKeys();
+            await invalidateApiKeys();
         } catch (err) {
             console.error(err);
             const axiosErr = err as {response?: {status?: number; data?: {code?: string; message?: string; result?: Record<string, string>}}};
@@ -136,8 +105,7 @@ export default function ApiKeyManagement() {
                 setFormErrors((axiosErr.response.data.result ?? {}) as typeof formErrors);
                 return;
             }
-            const message = axiosErr.response?.data?.message || 'API Key 등록에 실패했습니다.';
-            setSnackbar({open: true, message, severity: 'error'});
+            // 그 외 오류(AUTH_4022 잘못된 키 / AUTH_4023 등록 잠금 등)는 axios 전역 인터셉터가 에러 다이얼로그로 표시
         } finally {
             setFormLoading(false);
         }
@@ -148,7 +116,7 @@ export default function ApiKeyManagement() {
             await deleteApiKey(deleteDialog.id);
             setSnackbar({open: true, message: 'API Key가 삭제되었습니다.', severity: 'success'});
             setDeleteDialog({open: false, id: 0, brokerName: ''});
-            await loadApiKeys();
+            await invalidateApiKeys();
         } catch (error) {
             console.error(error);
             setSnackbar({open: true, message: 'API Key 삭제에 실패했습니다.', severity: 'error'});
