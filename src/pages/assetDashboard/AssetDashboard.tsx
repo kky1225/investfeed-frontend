@@ -29,13 +29,11 @@ export default function AssetDashboard() {
 
     const hasMissing = apiKeyLoaded && [...myApiBrokerIds].some(id => !validBrokerIds.has(id));
 
-    const {data: res, isLoading, lastUpdated, pollError} = usePollingQuery(
+    const {data, isLoading, lastUpdated, pollError} = usePollingQuery<AssetDashboardRes>(
         ['assetDashboard'],
         (config) => fetchAssetDashboard(config),
         {enabled: apiKeyLoaded && !hasMissing},
     );
-
-    const data: AssetDashboardRes | null = res ? (res.result ?? null) : null;
     const loading = !apiKeyLoaded ? true : hasMissing ? false : (isLoading && !data);
 
     if (!loading && !data) {

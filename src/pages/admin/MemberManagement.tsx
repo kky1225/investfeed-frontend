@@ -84,13 +84,13 @@ export default function MemberManagement() {
 
     const {data: membersData, isLoading: loading, isError: membersError} = useQuery<MemberRes[]>({
         queryKey: ['admin', 'members'],
-        queryFn: async () => unwrapResponse(await fetchMembers(), [] as MemberRes[]),
+        queryFn: async ({signal}) => unwrapResponse(await fetchMembers({signal, skipGlobalError: true}), [] as MemberRes[]),
     });
     const members = membersData ?? [];
 
     const {data: rolesData} = useQuery<RoleRes[]>({
         queryKey: ['admin', 'roles'],
-        queryFn: async () => unwrapResponse(await fetchRoles(), [] as RoleRes[]),
+        queryFn: async ({signal}) => unwrapResponse(await fetchRoles({signal, skipGlobalError: true}), [] as RoleRes[]),
     });
     const roles = rolesData ?? [];
 

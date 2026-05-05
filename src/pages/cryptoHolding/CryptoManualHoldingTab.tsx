@@ -198,7 +198,7 @@ export default function CryptoManualHoldingTab({broker}: CryptoManualHoldingTabP
     } | null;
     const {data: holdingData, isLoading: loading} = useQuery<ManualHoldingData>({
         queryKey: ['cryptoManualHoldingList', broker.id],
-        queryFn: async () => unwrapResponse<ManualHoldingData>(await fetchCryptoManualHoldingList(broker.id), null),
+        queryFn: async ({signal}) => unwrapResponse<ManualHoldingData>(await fetchCryptoManualHoldingList(broker.id, {signal, skipGlobalError: true}), null),
         refetchOnWindowFocus: false,
     });
 

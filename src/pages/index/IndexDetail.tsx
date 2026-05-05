@@ -27,6 +27,7 @@ import {useMarketWebSocket} from "../detail/useMarketWebSocket.ts";
 import {
     IndexChartType,
     IndexDetailReq,
+    IndexDetailRes,
     IndexStream, IndexStreamRes
 } from "../../type/IndexType.ts";
 import RemoveIcon from "@mui/icons-material/Remove";
@@ -244,7 +245,7 @@ const IndexDetail = () => {
         chart_type: IndexChartType.DAY
     });
 
-    const {data: res, isLoading, lastUpdated, pollError} = usePollingQuery(
+    const {data: result, isLoading, lastUpdated, pollError} = usePollingQuery<IndexDetailRes>(
         ['indexDetail', indsCd, req.chart_type],
         (config) => fetchIndexDetail(indsCd, req, config),
     );
@@ -262,9 +263,9 @@ const IndexDetail = () => {
 
     // 폴링 결과 → base sectChartData
     const baseSectChartData = useMemo<CustomIndexDetailLineChartProps>(() => {
-        if (res?.code !== "0000" || !res.result) return INITIAL_CHART_DATA;
+        if (!result) return INITIAL_CHART_DATA;
         try {
-            const {indexInfo, chartList} = res.result;
+            const {indexInfo, chartList} = result;
 
             let dateList;
             let lineData, barDataList;
@@ -308,7 +309,7 @@ const IndexDetail = () => {
                 : `${year}.${month}.${day} ${hour}:${mm}`;
 
             return {
-                id: chartList.indsCd,
+                id: indexInfo.indsCd,
                 title: indexInfo.indsNm,
                 value: Number(indexInfo.curPrc.replace(/^[+-]/, '')).toLocaleString(),
                 fluRt: indexInfo.fluRt,
@@ -318,7 +319,7 @@ const IndexDetail = () => {
                 trend: trendColor(indexInfo.predPreSig),
                 seriesData: [
                     {
-                        id: chartList.indsCd,
+                        id: indexInfo.indsCd,
                         showMark: false,
                         curve: 'linear',
                         area: true,
@@ -329,38 +330,38 @@ const IndexDetail = () => {
                 ],
                 barDataList,
                 dateList,
-            };
+            } as CustomIndexDetailLineChartProps;
         } catch (error) {
             console.error(error);
             return INITIAL_CHART_DATA;
         }
-    }, [res, req.chart_type]);
+    }, [result, req.chart_type]);
 
     const dayRange = useMemo<IndexRangeProps[]>(() => {
-        if (res?.code !== "0000" || !res.result) return INITIAL_DAY_RANGE;
-        const {indexInfo} = res.result;
+        if (!result) return INITIAL_DAY_RANGE;
+        const {indexInfo} = result;
         const dayMin = indexInfo.lowPric.replace(/^[+-]/, '');
         const dayMax = indexInfo.highPric.replace(/^[+-]/, '');
         return [
             {value: parseFloat(dayMin), label: <p>1일 최저가 <br />{dayMin}</p>},
             {value: parseFloat(dayMax), label: <p>1일 최고가 <br />{dayMax}</p>},
         ];
-    }, [res]);
+    }, [result]);
 
     const yearRange = useMemo<IndexRangeProps[]>(() => {
-        if (res?.code !== "0000" || !res.result) return INITIAL_YEAR_RANGE;
-        const {indexInfo} = res.result;
+        if (!result) return INITIAL_YEAR_RANGE;
+        const {indexInfo} = result;
         const yearMin = indexInfo['_250lwst'].replace(/^[+-]/, '');
         const yearMax = indexInfo['_250hgst'].replace(/^[+-]/, '');
         return [
             {value: parseFloat(yearMin), label: <p>52주 최저가 <br />{yearMin}</p>},
             {value: parseFloat(yearMax), label: <p>52주 최고가 <br />{yearMax}</p>},
         ];
-    }, [res]);
+    }, [result]);
 
     const info = useMemo<StockInfoProps>(() => {
-        if (res?.code !== "0000" || !res.result) return INITIAL_INFO;
-        const {indexInfo} = res.result;
+        if (!result) return INITIAL_INFO;
+        const {indexInfo} = result;
         return {
             trdeQty: Number(indexInfo.trdeQty),
             trdePrica: Number(indexInfo.trdePrica),
@@ -369,39 +370,39 @@ const IndexDetail = () => {
             _250lwst: Number(indexInfo._250lwst.replace(/^[+-]/, '')),
             _250hgst: Number(indexInfo._250hgst.replace(/^[+-]/, ''))
         };
-    }, [res]);
+    }, [result]);
 
     const indexBarData = useMemo<number[]>(() => {
-        if (res?.code !== "0000" || !res.result) return INITIAL_BAR_DATA;
-        const {indexInfo} = res.result;
+        if (!result) return INITIAL_BAR_DATA;
+        const {indexInfo} = result;
         return [Number(indexInfo.indNetprps), Number(indexInfo.frgnrNetprps), Number(indexInfo.orgnNetprps)];
-    }, [res]);
+    }, [result]);
 
     const programBarData = useMemo<number[]>(() => {
-        if (res?.code !== "0000" || !res.result) return INITIAL_BAR_DATA;
-        const {indexInfo} = res.result;
+        if (!result) return INITIAL_BAR_DATA;
+        const {indexInfo} = result;
         return [
             Math.round(Number(indexInfo.dfrtTrdeNetprps) / 100),
             Math.round(Number(indexInfo.ndiffproTrdeNetprps) / 100),
             Math.round(Number(indexInfo.allNetprps) / 100)
         ];
-    }, [res]);
+    }, [result]);
 
     const indexMessage = useMemo<MessageProps>(() => {
-        if (res?.code !== "0000" || !res.result) return INITIAL_MESSAGE;
-        const {indexInfo} = res.result;
+        if (!result) return INITIAL_MESSAGE;
+        const {indexInfo} = result;
         return checkInvestor(indexInfo.indsNm, Number(indexInfo.frgnrNetprps), Number(indexInfo.orgnNetprps));
-    }, [res]);
+    }, [result]);
 
     const programMessage = useMemo<MessageProps>(() => {
-        if (res?.code !== "0000" || !res.result) return INITIAL_MESSAGE;
-        const {indexInfo} = res.result;
+        if (!result) return INITIAL_MESSAGE;
+        const {indexInfo} = result;
         return checkProgram(indexInfo.indsNm, Number(indexInfo.dfrtTrdeNetprps), Number(indexInfo.ndiffproTrdeNetprps));
-    }, [res]);
+    }, [result]);
 
     const programChartData = useMemo<MakeOptional<LineSeriesType, 'type'>[]>(() => {
-        if (res?.code !== "0000" || !res.result) return INITIAL_PROGRAM_CHART_DATA;
-        const {programChartList} = res.result;
+        if (!result) return INITIAL_PROGRAM_CHART_DATA;
+        const {programChartList} = result;
         return [
             {
                 id: 'direct', label: '차익', showMark: false, curve: 'linear', area: true,
@@ -419,24 +420,24 @@ const IndexDetail = () => {
                 data: programChartList.map(item => Math.round(Number(item.allNetprps) / 100)),
             }
         ];
-    }, [res]);
+    }, [result]);
 
     const programDateData = useMemo<string[]>(() => {
-        if (res?.code !== "0000" || !res.result) return [];
-        return res.result.programChartList.map(item => item.cntrTm);
-    }, [res]);
+        if (!result) return [];
+        return result.programChartList.map(item => item.cntrTm);
+    }, [result]);
 
     const tabData = useMemo<{
         investor: { col: GridColDef[]; row: any[] };
         program: { col: GridColDef[]; row: any[] };
     }>(() => {
-        if (res?.code !== "0000" || !res.result) {
+        if (!result) {
             return {
                 investor: { col: INVESTOR_COLUMNS, row: [] },
                 program: { col: PROGRAM_COLUMNS, row: [] }
             };
         }
-        const {programList, investorDailyList} = res.result;
+        const {programList, investorDailyList} = result;
         const programRow = programList.map((item: {
             dt: string; dfrtTrdeTdy: string; ndiffproTrdeTdy: string; allTdy: string;
         }) => ({
@@ -467,7 +468,7 @@ const IndexDetail = () => {
             investor: { col: INVESTOR_COLUMNS, row: investorRow },
             program: { col: PROGRAM_COLUMNS, row: programRow },
         };
-    }, [res]);
+    }, [result]);
 
     // 최종 sectChartData = base + WS overlay 머지
     const sectChartData = useMemo<CustomIndexDetailLineChartProps>(() => ({

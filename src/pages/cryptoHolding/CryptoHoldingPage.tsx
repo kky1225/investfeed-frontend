@@ -21,12 +21,14 @@ import AddCryptoBrokerDialog from "./AddCryptoBrokerDialog.tsx";
 import BlindToggle from "../../components/BlindToggle.tsx";
 import CryptoRealizedPnlTab from "./CryptoRealizedPnlTab.tsx";
 import ApiKeyRequiredEmptyState from "../../components/ApiKeyRequiredEmptyState.tsx";
-import {useApiKeyStatus} from "../../context/ApiKeyStatusContext.tsx";
+import {useQueryClient} from "@tanstack/react-query";
+import {useApiKeyStatus, apiKeyStatusKeys} from "../../context/ApiKeyStatusContext.tsx";
 
 export default function CryptoHoldingPage() {
     const navigate = useNavigate();
     const {brokerId} = useParams<{brokerId?: string}>();
-    const {myCryptoBrokers, isBrokerValid, invalidateMyCryptoBrokers} = useApiKeyStatus();
+    const {myCryptoBrokers, isBrokerValid} = useApiKeyStatus();
+    const queryClient = useQueryClient();
     const [selectedTab, setSelectedTab] = useState(0);
     const [addBrokerOpen, setAddBrokerOpen] = useState(false);
     const [deleteTarget, setDeleteTarget] = useState<MemberBroker | null>(null);
@@ -65,7 +67,7 @@ export default function CryptoHoldingPage() {
         try {
             const res = await removeMyCryptoBroker(deleteTarget.id);
             if (res.code !== "0000") throw new Error(res.message || `거래소 삭제 실패 (${res.code})`);
-            await invalidateMyCryptoBrokers();
+            await queryClient.invalidateQueries({queryKey: apiKeyStatusKeys.myCryptoBrokers});
             navigate('/crypto/holding/list', {replace: true});
         } catch (err) {
             console.error(err);

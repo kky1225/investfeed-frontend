@@ -1,9 +1,10 @@
+import type {AxiosRequestConfig} from "axios";
 import api from "../../axios.ts";
 import {HoldingStreamReq} from "../../type/HoldingType.ts";
 import {HoldingReorderReq} from "../../type/BrokerType.ts";
 
-export const fetchHoldingList = async () => {
-    const res = await api.get(`/stock/holdings`);
+export const fetchHoldingList = async (config?: AxiosRequestConfig) => {
+    const res = await api.get(`/stock/holdings`, config);
     return res.data;
 }
 

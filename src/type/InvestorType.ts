@@ -25,3 +25,7 @@ export interface InvestorStream {
     fluRt: string,
     trend: string,
 }
+
+export interface InvestorListRes {
+    investorList: InvestorListItem[],
+}

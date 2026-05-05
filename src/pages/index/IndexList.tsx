@@ -10,7 +10,7 @@ import {fetchIndexList, fetchIndexStream} from "../../api/index/IndexApi.ts";
 import {useEffect, useMemo, useRef, useState} from "react";
 import {fetchTimeNow} from "../../api/time/TimeApi.ts";
 import {MarketType} from "../../type/timeType.ts";
-import {ChartMinute, IndexListItem, IndexStream, IndexStreamRes} from "../../type/IndexType.ts";
+import {ChartMinute, IndexListItem, IndexListRes, IndexStream, IndexStreamRes} from "../../type/IndexType.ts";
 import FreshnessIndicator from "../../components/FreshnessIndicator.tsx";
 import {usePollingQuery} from "../../lib/pollingQuery.ts";
 
@@ -42,15 +42,15 @@ const IndexList = () => {
     // 실시간 stream으로 들어오는 부분 갱신값. polling 결과(query.data)에 덮어쓰기 형태로 합쳐 렌더.
     const [liveOverlay, setLiveOverlay] = useState<Map<string, LiveIndexUpdate>>(new Map());
 
-    const {data: res, isLoading, lastUpdated, pollError} = usePollingQuery(
+    const {data: result, isLoading, lastUpdated, pollError} = usePollingQuery<IndexListRes>(
         ['indexList'],
         (config) => fetchIndexList(config),
     );
 
     // 폴링 결과 + 실시간 overlay 합산하여 차트 데이터 도출
     const indexDataList: IndexLineChartProps[] = useMemo(() => {
-        if (res?.code !== "0000" || !res.result) return [];
-        const list: IndexListItem[] = res.result.indexList ?? [];
+        if (!result) return [];
+        const list: IndexListItem[] = result.indexList ?? [];
         if (list.length === 0) return [];
 
         const year = list[0].chartMinuteList[0]?.cntrTm?.substring(0, 4) ?? '';
@@ -95,7 +95,7 @@ const IndexList = () => {
                 dateList: newDateList
             };
         });
-    }, [res, liveOverlay]);
+    }, [result, liveOverlay]);
 
     const loading = isLoading;
 

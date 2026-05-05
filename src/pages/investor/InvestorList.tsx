@@ -9,7 +9,7 @@ import {fetchTimeNow} from "../../api/time/TimeApi.ts";
 import {MarketType} from "../../type/timeType.ts";
 import {StockGridRow, StockStream, StockStreamRes} from "../../type/StockType.ts";
 import {useNavigate, useParams} from "react-router-dom";
-import {InvestorListItem, InvestorListReq, InvestorStreamReq} from "../../type/InvestorType.ts";
+import {InvestorListItem, InvestorListReq, InvestorListRes, InvestorStreamReq} from "../../type/InvestorType.ts";
 import {fetchInvestorList, fetchInvestorStream} from "../../api/investor/InvestorApi.ts";
 import {renderChip, renderTradePricaColor} from "../../components/CustomRender.tsx";
 import FreshnessIndicator from "../../components/FreshnessIndicator.tsx";
@@ -40,14 +40,14 @@ const InvestorList = () => {
     const chartTimer = useRef<number>(0);
     const marketTimer = useRef<number>(0);
 
-    const {data: res, isLoading, lastUpdated, pollError} = usePollingQuery(
+    const {data: result, isLoading, lastUpdated, pollError} = usePollingQuery<InvestorListRes>(
         ['investorList', req.orgnTp, req.trdeTp],
         (config) => fetchInvestorList(req, config),
     );
 
     const row: StockGridRow[] = useMemo(() => {
-        if (res?.code !== "0000" || !res.result) return [];
-        const list: InvestorListItem[] = res.result.investorList ?? [];
+        if (!result) return [];
+        const list: InvestorListItem[] = result.investorList ?? [];
         return list.map((investor, index) => {
             const live = liveOverlay.get(investor.stkCd);
             return {
@@ -60,7 +60,7 @@ const InvestorList = () => {
                 trend: live?.trend,
             } as StockGridRow;
         });
-    }, [res, liveOverlay]);
+    }, [result, liveOverlay]);
 
     const loading = isLoading;
 
@@ -146,8 +146,8 @@ const InvestorList = () => {
 
     // WebSocket 라이프사이클 — query 결과 stkCd 들로 stream 등록.
     useEffect(() => {
-        if (res?.code !== "0000" || !res.result) return;
-        const items = (res.result.investorList ?? []).map((s: InvestorListItem) => s.stkCd);
+        if (!result) return;
+        const items = (result.investorList ?? []).map((s: InvestorListItem) => s.stkCd);
         if (items.length === 0) return;
 
         const key = `${req.orgnTp}|${req.trdeTp}|${items.join(',')}`;
@@ -206,7 +206,7 @@ const InvestorList = () => {
             clearTimeout(socketTimeout);
             clearInterval(displayInterval);
         };
-    }, [res, req.orgnTp, req.trdeTp]);
+    }, [result, req.orgnTp, req.trdeTp]);
 
     const handleChange = (_event: React.SyntheticEvent, newValue: number) => {
         const newOrgnTp = newValue === 0 ? "6" : "7";

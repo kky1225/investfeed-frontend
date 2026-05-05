@@ -35,9 +35,8 @@ export default function PriceTargetDialog({open, onClose, assetType, assetCode, 
 
     const {data: allTargetsData} = useQuery<PriceTarget[]>({
         queryKey: ['priceTargets'],
-        queryFn: async () => unwrapResponse(await fetchPriceTargets(), [] as PriceTarget[]),
+        queryFn: async ({signal}) => unwrapResponse(await fetchPriceTargets({signal, skipGlobalError: true}), [] as PriceTarget[]),
         enabled: open,
-        // optimistic create/delete 와의 race condition 방지
         refetchOnWindowFocus: false,
     });
     const targets = useMemo(

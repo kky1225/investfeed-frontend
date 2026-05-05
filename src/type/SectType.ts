@@ -66,3 +66,11 @@ export interface SectStockGridRow {
     predPreSig: string;
     nowTrdeQty: string;
 }
+
+export interface SectListRes {
+    sectList: SectListItem[],
+}
+
+export interface SectStockListRes {
+    sectStockList: SectStockListItem[],
+}

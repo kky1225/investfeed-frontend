@@ -61,7 +61,7 @@ export default function NotificationSettingPage() {
 
     const {data: setting, isLoading: loading} = useQuery<NotificationSettingRes | null>({
         queryKey: ['notificationSetting'],
-        queryFn: async () => unwrapResponse<NotificationSettingRes | null>(await fetchNotificationSetting(), null),
+        queryFn: async ({signal}) => unwrapResponse<NotificationSettingRes | null>(await fetchNotificationSetting({signal, skipGlobalError: true}), null),
         // optimistic toggle 과의 race condition 방지
         refetchOnWindowFocus: false,
     });

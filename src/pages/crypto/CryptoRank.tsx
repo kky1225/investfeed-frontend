@@ -7,6 +7,7 @@ import {GridColDef} from "@mui/x-data-grid";
 import {DataGrid} from "@mui/x-data-grid";
 import {fetchCryptoRankList, fetchCryptoRankStream} from "../../api/crypto/CryptoApi.ts";
 import {CryptoRankItem} from "../../type/CryptoType.ts";
+import {unwrapResponse} from "../../lib/apiResponse.ts";
 import {useNavigate} from "react-router-dom";
 import {renderChip} from "../../components/CustomRender.tsx";
 
@@ -81,18 +82,13 @@ const CryptoRank = () => {
     const [liveOverlay, setLiveOverlay] = useState<Map<string, CryptoTickerStream>>(new Map());
     const bufferMap = useRef<Map<string, CryptoTickerStream>>(new Map());
 
-    const {data: res, isLoading: loading} = useQuery({
+    const {data: items, isLoading: loading} = useQuery<CryptoRankItem[]>({
         queryKey: ['cryptoRankList'],
-        queryFn: async ({signal}) => {
-            const data = await fetchCryptoRankList({signal, skipGlobalError: true});
-            if (data.code !== "0000") throw new Error(data.message || `랭킹 조회 실패 (${data.code})`);
-            return data;
-        },
+        queryFn: async ({signal}) => unwrapResponse(await fetchCryptoRankList({signal, skipGlobalError: true}), [] as CryptoRankItem[]),
     });
 
     const rows: CryptoRankRow[] = useMemo(() => {
-        if (!res) return [];
-        const items: CryptoRankItem[] = res.result ?? [];
+        if (!items) return [];
         return items.map((item, index) => {
             const live = liveOverlay.get(item.market);
             return {
@@ -105,7 +101,7 @@ const CryptoRank = () => {
                 accTradePrice24h: live?.accTradePrice24h ?? item.accTradePrice24h,
             };
         });
-    }, [res, liveOverlay]);
+    }, [items, liveOverlay]);
 
     // WebSocket 라이프사이클 (스트림 등록 + buffer flush)
     useEffect(() => {

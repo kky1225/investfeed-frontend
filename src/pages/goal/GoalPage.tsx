@@ -29,7 +29,7 @@ import MoreVertIcon from "@mui/icons-material/MoreVert";
 import BlindText from "../../components/BlindText.tsx";
 import BlindToggle from "../../components/BlindToggle.tsx";
 import {fetchGoalDashboard, deleteGoal} from "../../api/goal/GoalApi.ts";
-import type {InvestmentGoalRes} from "../../type/GoalType.ts";
+import type {GoalDashboardRes, InvestmentGoalRes} from "../../type/GoalType.ts";
 import {goalTypeLabel} from "../../type/GoalType.ts";
 import GoalSettingDialog from "../assetDashboard/GoalSettingDialog.tsx";
 import FreshnessIndicator from "../../components/FreshnessIndicator.tsx";
@@ -47,13 +47,13 @@ export default function GoalPage() {
 
     const hasMissing = apiKeyLoaded && [...myApiBrokerIds].some(id => !validBrokerIds.has(id));
 
-    const {data: res, isLoading, lastUpdated, pollError} = usePollingQuery(
+    const {data: result, isLoading, lastUpdated, pollError} = usePollingQuery<GoalDashboardRes>(
         ['goalDashboard'],
         (config) => fetchGoalDashboard(config),
         {enabled: apiKeyLoaded && !hasMissing},
     );
 
-    const goals: InvestmentGoalRes[] = res ? (res?.goals ?? []) : [];
+    const goals: InvestmentGoalRes[] = result?.goals ?? [];
     const loading = !apiKeyLoaded || (isLoading && !hasMissing);
 
     const reloadGoals = async () => {

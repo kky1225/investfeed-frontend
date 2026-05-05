@@ -271,14 +271,14 @@ export default function MenuManagement() {
     // 권한 목록 / 어드민 broker 목록은 정적 — useQuery 결과 직접 사용 (별도 useState 불필요)
     const {data: permissionsData} = useQuery<PermissionRes[]>({
         queryKey: ['admin', 'permissions'],
-        queryFn: async () => unwrapResponse(await fetchPermissions(), [] as PermissionRes[]),
+        queryFn: async ({signal}) => unwrapResponse(await fetchPermissions({signal, skipGlobalError: true}), [] as PermissionRes[]),
     });
     const permissions = permissionsData ?? [];
 
     const {data: apiBrokersData} = useQuery<Broker[]>({
         queryKey: ['admin', 'apiBrokers'],
-        queryFn: async () => {
-            const data = unwrapResponse<{brokers?: Broker[]} | null>(await fetchAdminBrokerList(), null);
+        queryFn: async ({signal}) => {
+            const data = unwrapResponse<{brokers?: Broker[]} | null>(await fetchAdminBrokerList({signal, skipGlobalError: true}), null);
             const all: Broker[] = data?.brokers ?? [];
             return all.filter(b => b.type === 'API');
         },

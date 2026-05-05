@@ -1,3 +1,4 @@
+import type {AxiosRequestConfig} from 'axios';
 import api from '../../axios.ts';
 import {
     ManualRealizedPnlCreateReq,
@@ -6,13 +7,13 @@ import {
 } from '../../type/RealizedPnlType.ts';
 
 // 주식 실현손익
-export const fetchStockRealizedPnlList = async (year?: number, month?: number) => {
-    const res = await api.get('/stock/realized-pnl', {params: {year, month}});
+export const fetchStockRealizedPnlList = async (year?: number, month?: number, config?: AxiosRequestConfig) => {
+    const res = await api.get('/stock/realized-pnl', {...config, params: {year, month}});
     return res.data;
 };
 
-export const syncStockRealizedPnl = async (req: RealizedPnlSyncReq) => {
-    const res = await api.post('/stock/realized-pnl/sync', req);
+export const syncStockRealizedPnl = async (req: RealizedPnlSyncReq, config?: AxiosRequestConfig) => {
+    const res = await api.post('/stock/realized-pnl/sync', req, config);
     return res.data;
 };
 
@@ -32,8 +33,8 @@ export const deleteStockManualPnl = async (id: number) => {
 };
 
 // 코인 실현손익
-export const fetchCryptoRealizedPnlList = async (year?: number, month?: number) => {
-    const res = await api.get('/crypto/realized-pnl', {params: {year, month}});
+export const fetchCryptoRealizedPnlList = async (year?: number, month?: number, config?: AxiosRequestConfig) => {
+    const res = await api.get('/crypto/realized-pnl', {...config, params: {year, month}});
     return res.data;
 };
 

@@ -1,15 +1,16 @@
+import type {AxiosRequestConfig} from "axios";
 import api from "../../axios.ts";
 import {AddMyBrokerReq, CreateManualHoldingReq, HoldingReorderReq, UpdateBalanceReq, UpdateManualHoldingReq} from "../../type/BrokerType.ts";
 
 // 사용자용 - 거래소 목록 (추가 시 선택용)
-export const fetchCryptoBrokerList = async () => {
-    const res = await api.get(`/crypto/brokers`);
+export const fetchCryptoBrokerList = async (config?: AxiosRequestConfig) => {
+    const res = await api.get(`/crypto/brokers`, config);
     return res.data;
 }
 
 // 사용자용 - 내 거래소 관리
-export const fetchMyCryptoBrokerList = async () => {
-    const res = await api.get(`/crypto/brokers/my`);
+export const fetchMyCryptoBrokerList = async (config?: AxiosRequestConfig) => {
+    const res = await api.get(`/crypto/brokers/my`, config);
     return res.data;
 }
 
@@ -24,8 +25,8 @@ export const removeMyCryptoBroker = async (memberBrokerId: number) => {
 }
 
 // 수동 보유코인
-export const fetchCryptoManualHoldingList = async (memberBrokerId: number) => {
-    const res = await api.get(`/crypto/holdings/manual/${memberBrokerId}`);
+export const fetchCryptoManualHoldingList = async (memberBrokerId: number, config?: AxiosRequestConfig) => {
+    const res = await api.get(`/crypto/holdings/manual/${memberBrokerId}`, config);
     return res.data;
 }
 

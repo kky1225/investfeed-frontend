@@ -1,9 +1,10 @@
+import type {AxiosRequestConfig} from "axios";
 import api from "../../axios.ts";
 import {AddMyBrokerReq, CreateBrokerReq, CreateManualHoldingReq, HoldingReorderReq, UpdateBalanceReq, UpdateManualHoldingReq} from "../../type/BrokerType.ts";
 
 // 관리자용 - 증권사 마스터 관리 (2차 비밀번호 필요)
-export const fetchAdminBrokerList = async () => {
-    const res = await api.get(`/admin/brokers`);
+export const fetchAdminBrokerList = async (config?: AxiosRequestConfig) => {
+    const res = await api.get(`/admin/brokers`, config);
     return res.data;
 }
 
@@ -23,14 +24,14 @@ export const deleteBroker = async (brokerId: number) => {
 }
 
 // 사용자용 - 증권사 목록 (추가 시 선택용)
-export const fetchBrokerList = async () => {
-    const res = await api.get(`/stock/brokers`);
+export const fetchBrokerList = async (config?: AxiosRequestConfig) => {
+    const res = await api.get(`/stock/brokers`, config);
     return res.data;
 }
 
 // 사용자용 - 내 증권사 관리
-export const fetchMyBrokerList = async () => {
-    const res = await api.get(`/stock/brokers/my`);
+export const fetchMyBrokerList = async (config?: AxiosRequestConfig) => {
+    const res = await api.get(`/stock/brokers/my`, config);
     return res.data;
 }
 
@@ -45,8 +46,8 @@ export const removeMyBroker = async (memberBrokerId: number) => {
 }
 
 // 수동 보유주식
-export const fetchManualHoldingList = async (memberBrokerId: number) => {
-    const res = await api.get(`/stock/holdings/manual/${memberBrokerId}`);
+export const fetchManualHoldingList = async (memberBrokerId: number, config?: AxiosRequestConfig) => {
+    const res = await api.get(`/stock/holdings/manual/${memberBrokerId}`, config);
     return res.data;
 }
 

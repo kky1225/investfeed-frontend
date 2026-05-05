@@ -56,3 +56,36 @@ export interface CommodityChart {
     trdePrica: string,
     trdeQty: string
 }
+
+export interface CommodityInfo {
+    stkCd: string,
+    stkNm: string,
+    curPrc: string,
+    predPreSig: string,
+    predPre: string,
+    fluRt: string,
+    trdeQty: string,
+    trdePrica: string,
+    highPric: string,
+    openPric: string,
+    lowPric: string,
+    _250hgst: string,
+    _250lwst: string,
+    tm: string,
+    indNetprps: number,
+    frgnrNetprps: number,
+    orgnNetprps: number,
+    nxtEnable: string,
+    orderWarning: string,
+    marketCode: string,
+    marketName: string,
+}
+
+export interface CommodityListRes {
+    commodityList: CommodityListItem[],
+}
+
+export interface CommodityDetailRes {
+    commodityInfo: CommodityInfo,
+    commodityChartList: CommodityChart[],
+}

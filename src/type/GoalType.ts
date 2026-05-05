@@ -19,6 +19,10 @@ export interface InvestmentGoalRes {
     createdAt: string;
 }
 
+export interface GoalDashboardRes {
+    goals: InvestmentGoalRes[];
+}
+
 export const goalTypeLabel: Record<GoalType, string> = {
     TOTAL_ASSET: '총 자산 목표',
     MONTHLY_REALIZED_PNL: '월간 실현손익 목표',

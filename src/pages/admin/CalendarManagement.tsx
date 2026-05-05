@@ -28,6 +28,7 @@ import {
     startBulkRefresh, fetchBulkRefreshStatus,
 } from '../../api/calendar/EconomicCalendarApi';
 import type {CalendarEvent, BulkRefreshStatus} from '../../type/EconomicCalendarType';
+import {unwrapResponse} from '../../lib/apiResponse';
 import {useAlert} from '../../context/AlertContext';
 
 type TabKey = 'manual' | 'bulk';
@@ -61,29 +62,27 @@ export default function CalendarManagement() {
     const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
     const [menuTarget, setMenuTarget] = useState<CalendarEvent | null>(null);
 
-    const {data: eventsRes, isLoading: loading} = useQuery({
-        queryKey: ['calendarEvents', year],
-        queryFn: async ({signal}) => {
-            const data = await fetchManualCalendarEvents({year, month: 0}, {signal, skipGlobalError: true});
-            if (data.code !== "0000") throw new Error(data.message || `캘린더 조회 실패 (${data.code})`);
-            return data;
-        },
+    const {data: events = [], isLoading: loading} = useQuery<CalendarEvent[]>({
+        queryKey: ['admin', 'calendarEvents', year],
+        queryFn: async ({signal}) => unwrapResponse(
+            await fetchManualCalendarEvents({year, month: 0}, {signal, skipGlobalError: true}),
+            [] as CalendarEvent[],
+        ),
     });
-    const events: CalendarEvent[] = eventsRes?.result ?? [];
 
     const reloadEvents = () => {
-        queryClient.invalidateQueries({queryKey: ['calendarEvents', year]});
+        queryClient.invalidateQueries({queryKey: ['admin', 'calendarEvents', year]});
     };
 
     // Bulk refresh 상태 폴링 — 탭이 'bulk'일 때만 1초마다
-    const {data: bulkRes} = usePollingQuery(
-        ['calendarBulkStatus'],
+    const {data: bulkStatus} = usePollingQuery<BulkRefreshStatus>(
+        ['admin', 'calendarBulkStatus'],
         (config) => fetchBulkRefreshStatus(config),
         {enabled: tab === 'bulk', intervalMs: 1000},
     );
 
     // 시작 직후 즉시 UI 반영 위해 localBulkStatus를 fallback으로. 폴링 결과가 도착하면 그것을 우선시.
-    const effectiveBulkStatus: BulkRefreshStatus | null = bulkRes?.result ?? localBulkStatus;
+    const effectiveBulkStatus: BulkRefreshStatus | null = bulkStatus ?? localBulkStatus;
 
     const handleBulkRefresh = async () => {
         if (bulkFrom > bulkTo) {

@@ -1,3 +1,4 @@
+import type {AxiosRequestConfig} from 'axios';
 import api from '../../axios';
 import type { ApiResponse, CreateMemberReq, MemberRes } from '../../type/AuthType';
 import type { CreateRoleReq, RoleOrderItem, RoleRes, UpdateRoleReq } from '../../type/RoleType';
@@ -7,8 +8,8 @@ export const createMember = async (req: CreateMemberReq): Promise<ApiResponse<nu
     return res.data;
 };
 
-export const fetchMembers = async (): Promise<ApiResponse<MemberRes[]>> => {
-    const res = await api.get<ApiResponse<MemberRes[]>>('/admin/members');
+export const fetchMembers = async (config?: AxiosRequestConfig): Promise<ApiResponse<MemberRes[]>> => {
+    const res = await api.get<ApiResponse<MemberRes[]>>('/admin/members', config);
     return res.data;
 };
 
@@ -37,8 +38,8 @@ export const unlockApiKey = async (loginId: string): Promise<ApiResponse<null>> 
     return res.data;
 };
 
-export const fetchRoles = async (): Promise<ApiResponse<RoleRes[]>> => {
-    const res = await api.get<ApiResponse<RoleRes[]>>('/admin/roles');
+export const fetchRoles = async (config?: AxiosRequestConfig): Promise<ApiResponse<RoleRes[]>> => {
+    const res = await api.get<ApiResponse<RoleRes[]>>('/admin/roles', config);
     return res.data;
 };
 

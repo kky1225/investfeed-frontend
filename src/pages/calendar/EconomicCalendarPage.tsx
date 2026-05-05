@@ -51,10 +51,10 @@ export default function EconomicCalendarPage() {
         lastUpdated: string | null;
     }>({
         queryKey: ['economicCalendar', year, month],
-        queryFn: async () => {
+        queryFn: async ({signal}) => {
             const [eventsRes, indicatorsRes] = await Promise.all([
-                fetchCalendarEvents({year, month}),
-                fetchEconomicIndicators(),
+                fetchCalendarEvents({year, month}, {signal, skipGlobalError: true}),
+                fetchEconomicIndicators({signal, skipGlobalError: true}),
             ]);
             if (eventsRes.code !== "0000") throw new Error(eventsRes.message || `캘린더 조회 실패 (${eventsRes.code})`);
             if (indicatorsRes.code !== "0000") throw new Error(indicatorsRes.message || `지표 조회 실패 (${indicatorsRes.code})`);
@@ -72,10 +72,10 @@ export default function EconomicCalendarPage() {
     // selectedIndicator 변경 시 history 자동 fetch
     const {data: historyData, isLoading: chartLoading} = useQuery<IndicatorHistoryRes | null>({
         queryKey: ['indicatorHistory', selectedIndicator?.code, selectedIndicator?.country],
-        queryFn: async () => {
+        queryFn: async ({signal}) => {
             if (!selectedIndicator) return null;
             return unwrapResponse<IndicatorHistoryRes | null>(
-                await fetchIndicatorHistory({code: selectedIndicator.code, country: selectedIndicator.country}),
+                await fetchIndicatorHistory({code: selectedIndicator.code, country: selectedIndicator.country}, {signal, skipGlobalError: true}),
                 null,
             );
         },

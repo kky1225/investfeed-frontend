@@ -1,3 +1,4 @@
+import type {AxiosRequestConfig} from 'axios';
 import api from '../../axios';
 import type {ApiResponse} from '../../type/AuthType';
 import type {
@@ -8,8 +9,8 @@ import type {
     UpdatePermissionReq,
 } from '../../type/PermissionType';
 
-export const fetchPermissionCatalog = async (): Promise<ApiResponse<PermissionRes[]>> => {
-    const res = await api.get<ApiResponse<PermissionRes[]>>('/admin/permissions/catalog');
+export const fetchPermissionCatalog = async (config?: AxiosRequestConfig): Promise<ApiResponse<PermissionRes[]>> => {
+    const res = await api.get<ApiResponse<PermissionRes[]>>('/admin/permissions/catalog', config);
     return res.data;
 };
 

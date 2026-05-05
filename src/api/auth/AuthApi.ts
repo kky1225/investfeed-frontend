@@ -1,3 +1,4 @@
+import type {AxiosRequestConfig} from 'axios';
 import api from '../../axios';
 import type { LoginReq, ChangePasswordReq, UpdateProfileReq, ApiKeyReq, ApiKeyRes, TokenRes, PreAuthRes, TotpSetupRes, TotpVerifyReq, SecondaryPasswordSetupReq, SecondaryPasswordVerifyReq, SecondaryPasswordChangeReq, MemberRes, ApiResponse } from '../../type/AuthType';
 
@@ -30,8 +31,8 @@ export const changePassword = async (req: ChangePasswordReq): Promise<ApiRespons
     return res.data;
 };
 
-export const fetchProfile = async (): Promise<ApiResponse<MemberRes>> => {
-    const res = await api.get<ApiResponse<MemberRes>>('/auth/profile');
+export const fetchProfile = async (config?: AxiosRequestConfig): Promise<ApiResponse<MemberRes>> => {
+    const res = await api.get<ApiResponse<MemberRes>>('/auth/profile', config);
     return res.data;
 };
 
@@ -40,8 +41,8 @@ export const updateProfile = async (req: UpdateProfileReq): Promise<ApiResponse<
     return res.data;
 };
 
-export const fetchApiKeys = async (): Promise<ApiResponse<ApiKeyRes[]>> => {
-    const res = await api.get<ApiResponse<ApiKeyRes[]>>('/auth/api-keys');
+export const fetchApiKeys = async (config?: AxiosRequestConfig): Promise<ApiResponse<ApiKeyRes[]>> => {
+    const res = await api.get<ApiResponse<ApiKeyRes[]>>('/auth/api-keys', config);
     return res.data;
 };
 

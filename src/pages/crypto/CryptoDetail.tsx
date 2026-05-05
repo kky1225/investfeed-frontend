@@ -17,7 +17,7 @@ import MenuItem from "@mui/material/MenuItem";
 import CryptoDetailLineChart, {CryptoDetailLineChartProps} from "../../components/CryptoDetailLineChart.tsx";
 import {fetchCryptoDetail, fetchCryptoStream} from "../../api/crypto/CryptoApi.ts";
 import {useCryptoWebSocket} from "../detail/useCryptoWebSocket.ts";
-import {CryptoChart, CryptoChartType, CryptoDetailReq} from "../../type/CryptoType.ts";
+import {CryptoChart, CryptoChartType, CryptoDetailReq, CryptoDetailRes} from "../../type/CryptoType.ts";
 import {useParams} from "react-router-dom";
 import {renderChangeAmount} from "../../components/CustomRender.tsx";
 import IconButton from "@mui/material/IconButton";
@@ -157,7 +157,7 @@ const CryptoDetail = () => {
 
     const [priceTargetOpen, setPriceTargetOpen] = useState(false);
 
-    const {data: res, isLoading, lastUpdated, pollError} = usePollingQuery(
+    const {data: result, isLoading, lastUpdated, pollError} = usePollingQuery<CryptoDetailRes>(
         ['cryptoDetail', market, req.chartType],
         (config) => fetchCryptoDetail(market, req, config),
     );
@@ -178,9 +178,9 @@ const CryptoDetail = () => {
 
     // 폴링 결과 → base chartData (useMemo)
     const baseChartData = useMemo<CryptoDetailLineChartProps>(() => {
-        if (res?.code !== "0000" || !res.result) return INITIAL_CHART_DATA;
+        if (!result) return INITIAL_CHART_DATA;
         try {
-            const {cryptoInfo, chartList} = res.result;
+            const {cryptoInfo, chartList} = result;
 
             let dateList: string[];
             let lineData: number[];
@@ -233,17 +233,17 @@ const CryptoDetail = () => {
                 ],
                 barDataList: barDataList,
                 dateList: dateList
-            };
+            } as CryptoDetailLineChartProps;
         } catch (error) {
             console.error(error);
             return INITIAL_CHART_DATA;
         }
-    }, [res, req.chartType]);
+    }, [result, req.chartType]);
 
     // 폴링 결과 → base info
     const baseInfo = useMemo<CryptoInfoProps>(() => {
-        if (res?.code !== "0000" || !res.result) return INITIAL_INFO;
-        const {cryptoInfo} = res.result;
+        if (!result) return INITIAL_INFO;
+        const {cryptoInfo} = result;
         return {
             openingPrice: cryptoInfo.openingPrice,
             highPrice: cryptoInfo.highPrice,
@@ -253,17 +253,17 @@ const CryptoDetail = () => {
             accTradeVolume24h: cryptoInfo.accTradeVolume24h,
             accTradePrice24h: cryptoInfo.accTradePrice24h,
         };
-    }, [res]);
+    }, [result]);
 
     // dayRange — WS 갱신 없음, 단순 useMemo
     const dayRange = useMemo<CryptoRangeProps[]>(() => {
-        if (res?.code !== "0000" || !res.result) {
+        if (!result) {
             return [
                 {value: 0, label: <p>당일 최저가 <br />0</p>},
                 {value: 0, label: <p>당일 최고가 <br />0</p>},
             ];
         }
-        const {cryptoInfo} = res.result;
+        const {cryptoInfo} = result;
         return [
             {
                 value: cryptoInfo.lowPrice,
@@ -274,17 +274,17 @@ const CryptoDetail = () => {
                 label: <p>당일 최고가 <br />{cryptoInfo.highPrice.toLocaleString()}</p>
             }
         ];
-    }, [res]);
+    }, [result]);
 
     // yearRange — WS 갱신 없음, 단순 useMemo
     const yearRange = useMemo<CryptoRangeProps[]>(() => {
-        if (res?.code !== "0000" || !res.result) {
+        if (!result) {
             return [
                 {value: 0, label: <p>52주 최저가 <br />0</p>},
                 {value: 0, label: <p>52주 최고가 <br />0</p>},
             ];
         }
-        const {cryptoInfo} = res.result;
+        const {cryptoInfo} = result;
         return [
             {
                 value: cryptoInfo.lowest52WeekPrice,
@@ -295,7 +295,7 @@ const CryptoDetail = () => {
                 label: <p>52주 최고가 <br />{cryptoInfo.highest52WeekPrice.toLocaleString()}</p>
             }
         ];
-    }, [res]);
+    }, [result]);
 
     // 최종 chartData / info = base + WS overlay 머지
     const chartData = useMemo<CryptoDetailLineChartProps>(() => ({

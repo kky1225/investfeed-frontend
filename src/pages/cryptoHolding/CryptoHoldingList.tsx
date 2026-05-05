@@ -124,7 +124,7 @@ const CryptoHoldingList = () => {
     } | null;
     const {data: holdingData, isLoading: loading} = useQuery<HoldingListData>({
         queryKey: ['cryptoHoldingList'],
-        queryFn: async () => unwrapResponse<HoldingListData>(await fetchCryptoHoldingList(), null),
+        queryFn: async ({signal}) => unwrapResponse<HoldingListData>(await fetchCryptoHoldingList({signal, skipGlobalError: true}), null),
         refetchOnWindowFocus: false,
     });
 

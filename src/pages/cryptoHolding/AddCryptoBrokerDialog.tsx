@@ -1,5 +1,5 @@
 import {useState} from "react";
-import {useQuery} from "@tanstack/react-query";
+import {useQuery, useQueryClient} from "@tanstack/react-query";
 import Dialog from "@mui/material/Dialog";
 import DialogTitle from "@mui/material/DialogTitle";
 import DialogContent from "@mui/material/DialogContent";
@@ -13,7 +13,8 @@ import Typography from "@mui/material/Typography";
 import LinkIcon from "@mui/icons-material/Link";
 import {fetchCryptoBrokerList, addMyCryptoBroker} from "../../api/cryptoBroker/CryptoBrokerApi.ts";
 import type {Broker} from "../../type/BrokerType.ts";
-import {useApiKeyStatus} from "../../context/ApiKeyStatusContext.tsx";
+import {useApiKeyStatus, apiKeyStatusKeys} from "../../context/ApiKeyStatusContext.tsx";
+import {unwrapResponse} from "../../lib/apiResponse.ts";
 
 interface AddCryptoBrokerDialogProps {
     open: boolean;
@@ -22,18 +23,15 @@ interface AddCryptoBrokerDialogProps {
 
 export default function AddCryptoBrokerDialog({open, onClose}: AddCryptoBrokerDialogProps) {
     // 본인이 이미 추가한 broker 는 Context 에서 직접 가져옴 (parent 가 prop 으로 전달 불필요)
-    const {myCryptoBrokers, invalidateMyCryptoBrokers} = useApiKeyStatus();
+    const {myCryptoBrokers} = useApiKeyStatus();
+    const queryClient = useQueryClient();
     const [error, setError] = useState("");
 
     const myBrokerIds = new Set(myCryptoBrokers.map(b => b.brokerId));
 
     const {data: brokersData} = useQuery<Broker[]>({
         queryKey: ['cryptoBrokerList'],
-        queryFn: async () => {
-            const data = await fetchCryptoBrokerList();
-            if (data.code !== "0000") throw new Error(data.message || `거래소 조회 실패 (${data.code})`);
-            return data.result?.brokers ?? [];
-        },
+        queryFn: async ({signal}) => unwrapResponse(await fetchCryptoBrokerList({signal, skipGlobalError: true}), {brokers: [] as Broker[]}).brokers ?? [],
         enabled: open,
     });
     const brokers = brokersData ?? [];
@@ -43,7 +41,7 @@ export default function AddCryptoBrokerDialog({open, onClose}: AddCryptoBrokerDi
             setError("");
             const res = await addMyCryptoBroker({brokerId: broker.id});
             if (res.code !== "0000") throw new Error(res.message || `거래소 추가 실패 (${res.code})`);
-            await invalidateMyCryptoBrokers();   // Context 갱신 = parent 페이지 자동 재렌더
+            await queryClient.invalidateQueries({queryKey: apiKeyStatusKeys.myCryptoBrokers});
             onClose();
         } catch (error) {
             console.error(error);

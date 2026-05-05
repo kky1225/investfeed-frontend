@@ -24,6 +24,8 @@ import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { fetchProfile, updateProfile } from '../../api/auth/AuthApi';
 import { useAuth } from '../../context/AuthContext';
+import { unwrapResponse } from '../../lib/apiResponse';
+import type { MemberRes } from '../../type/AuthType';
 
 const ERROR_MESSAGES: Record<string, string> = {
     AUTH_4010: '인증 정보가 유효하지 않습니다. 다시 로그인해 주세요.',
@@ -91,27 +93,22 @@ export default function Profile(props: { disableCustomTheme?: boolean }) {
     const navigate = useNavigate();
     const { user, updateUser } = useAuth();
 
-    const {data: profileRes, isLoading: initialLoading, isError: profileError} = useQuery({
+    const {data: profile, isLoading: initialLoading, isError: profileError} = useQuery<MemberRes | null>({
         queryKey: ['profile'],
-        queryFn: async () => {
-            const res = await fetchProfile();
-            if (res.code !== "0000") throw new Error(res.message || `프로필 조회 실패 (${res.code})`);
-            return res;
-        },
+        queryFn: async ({signal}) => unwrapResponse<MemberRes | null>(await fetchProfile({signal, skipGlobalError: true}), null),
     });
 
     // 서버 응답 도착 시 form 입력 필드를 한 번만 초기화 (이후 사용자 편집 보존).
     // React 공식 "Resetting state when a prop changes" 패턴 — useEffect 대신 render 중 비교.
-    const fetchedLoginId = profileRes?.result?.loginId ?? null;
+    const fetchedLoginId = profile?.loginId ?? null;
     const [syncedLoginId, setSyncedLoginId] = useState<string | null>(null);
     if (fetchedLoginId && fetchedLoginId !== syncedLoginId) {
         setSyncedLoginId(fetchedLoginId);
-        const r = profileRes!.result!;
-        setLoginId(r.loginId);
-        setNickname(r.nickname);
-        setEmail(r.email);
-        setName(r.name);
-        setPhone(r.phone);
+        setLoginId(profile!.loginId);
+        setNickname(profile!.nickname);
+        setEmail(profile!.email);
+        setName(profile!.name);
+        setPhone(profile!.phone);
     }
     // profileError 변화에 따른 에러 메시지 — render 중 비교 (errorMessage 사용자 편집 가능성 고려)
     const [prevProfileError, setPrevProfileError] = useState(false);

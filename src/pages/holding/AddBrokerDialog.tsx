@@ -1,5 +1,5 @@
 import {useState} from "react";
-import {useQuery} from "@tanstack/react-query";
+import {useQuery, useQueryClient} from "@tanstack/react-query";
 import Dialog from "@mui/material/Dialog";
 import DialogTitle from "@mui/material/DialogTitle";
 import DialogContent from "@mui/material/DialogContent";
@@ -13,7 +13,8 @@ import Typography from "@mui/material/Typography";
 import LinkIcon from "@mui/icons-material/Link";
 import {fetchBrokerList, addMyBroker} from "../../api/broker/BrokerApi.ts";
 import type {Broker} from "../../type/BrokerType.ts";
-import {useApiKeyStatus} from "../../context/ApiKeyStatusContext.tsx";
+import {unwrapResponse} from "../../lib/apiResponse.ts";
+import {useApiKeyStatus, apiKeyStatusKeys} from "../../context/ApiKeyStatusContext.tsx";
 
 interface AddBrokerDialogProps {
     open: boolean;
@@ -22,17 +23,17 @@ interface AddBrokerDialogProps {
 
 export default function AddBrokerDialog({open, onClose}: AddBrokerDialogProps) {
     // 본인이 이미 추가한 broker 는 Context 에서 직접 가져옴 (parent 가 prop 으로 전달 불필요)
-    const {myStockBrokers, invalidateMyStockBrokers} = useApiKeyStatus();
+    const {myStockBrokers} = useApiKeyStatus();
+    const queryClient = useQueryClient();
     const [error, setError] = useState("");
 
     const myBrokerIds = new Set(myStockBrokers.map(b => b.brokerId));
 
     const {data: brokersData} = useQuery<Broker[]>({
         queryKey: ['brokerList', 'stock'],
-        queryFn: async () => {
-            const data = await fetchBrokerList();
-            if (data.code !== "0000") throw new Error(data.message || `증권사 조회 실패 (${data.code})`);
-            return (data.result?.brokers ?? []).filter((b: Broker) => b.market === 'STOCK');
+        queryFn: async ({signal}) => {
+            const result = unwrapResponse(await fetchBrokerList({signal, skipGlobalError: true}), {brokers: [] as Broker[]});
+            return (result.brokers ?? []).filter((b: Broker) => b.market === 'STOCK');
         },
         enabled: open,
     });
@@ -43,7 +44,7 @@ export default function AddBrokerDialog({open, onClose}: AddBrokerDialogProps) {
             setError("");
             const res = await addMyBroker({brokerId: broker.id});
             if (res.code !== "0000") throw new Error(res.message || `증권사 추가 실패 (${res.code})`);
-            await invalidateMyStockBrokers();   // Context 갱신 = parent 페이지 자동 재렌더
+            await queryClient.invalidateQueries({queryKey: apiKeyStatusKeys.myStockBrokers});
             onClose();
         } catch (error) {
             console.error(error);

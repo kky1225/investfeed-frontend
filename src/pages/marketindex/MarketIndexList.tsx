@@ -14,7 +14,7 @@ import Skeleton from "@mui/material/Skeleton";
 import ArrowDropUpIcon from "@mui/icons-material/ArrowDropUp";
 import ArrowDropDownIcon from "@mui/icons-material/ArrowDropDown";
 import RemoveIcon from "@mui/icons-material/Remove";
-import {MarketIndexRes, CryptoSummary} from "../../type/MarketIndexType.ts";
+import {MarketIndexRes, MarketIndexDashboardRes, CryptoSummary} from "../../type/MarketIndexType.ts";
 import {fetchMarketIndexAll} from "../../api/marketindex/MarketIndexApi.ts";
 import FearGreedGauge from "../../components/FearGreedGauge.tsx";
 import FreshnessIndicator from "../../components/FreshnessIndicator.tsx";
@@ -101,7 +101,7 @@ function FearGreedSkeleton() {
 }
 
 export default function MarketIndexList() {
-    const {data: result, isLoading: loading, lastUpdated, pollError} = usePollingQuery(
+    const {data: result, isLoading: loading, lastUpdated, pollError} = usePollingQuery<MarketIndexDashboardRes>(
         ['marketIndexAll'],
         (config) => fetchMarketIndexAll(config),
     );

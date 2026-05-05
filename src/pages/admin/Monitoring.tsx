@@ -1,5 +1,6 @@
 import {useState} from 'react';
 import {useQuery, useQueryClient} from '@tanstack/react-query';
+import {unwrapResponse} from '../../lib/apiResponse';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
 import Tabs from '@mui/material/Tabs';
@@ -161,20 +162,16 @@ export default function Monitoring() {
             logsFromDate ? logsFromDate.format('YYYY-MM-DD') : null,
             logsToDate ? logsToDate.format('YYYY-MM-DD') : null,
             logsMessageKeyword],
-        queryFn: async ({signal}) => {
-            const data = await fetchSchedulerOverview({
-                page: logsPage,
-                size: logsSize,
-                schedulerName: logsSchedulerFilter || null,
-                status: logsStatusFilter || null,
-                acknowledged: logsUnackOnly ? false : null,
-                fromDate: logsFromDate ? logsFromDate.format('YYYY-MM-DD') : null,
-                toDate: logsToDate ? logsToDate.format('YYYY-MM-DD') : null,
-                messageKeyword: logsMessageKeyword || null,
-            }, {signal, skipGlobalError: true});
-            if (data.code !== "0000") throw new Error(data.message || `스케줄러 조회 실패 (${data.code})`);
-            return data;
-        },
+        queryFn: async ({signal}) => unwrapResponse(await fetchSchedulerOverview({
+            page: logsPage,
+            size: logsSize,
+            schedulerName: logsSchedulerFilter || null,
+            status: logsStatusFilter || null,
+            acknowledged: logsUnackOnly ? false : null,
+            fromDate: logsFromDate ? logsFromDate.format('YYYY-MM-DD') : null,
+            toDate: logsToDate ? logsToDate.format('YYYY-MM-DD') : null,
+            messageKeyword: logsMessageKeyword || null,
+        }, {signal, skipGlobalError: true}), null),
         enabled: tab === 'scheduler',
         refetchInterval: 60_000,
         refetchIntervalInBackground: false,
@@ -182,14 +179,10 @@ export default function Monitoring() {
 
     const configQuery = useQuery({
         queryKey: ['monitoring', 'config', configLogsPage, configLogsSize],
-        queryFn: async ({signal}) => {
-            const data = await fetchConfigLogsOverview(
-                {page: configLogsPage, size: configLogsSize},
-                {signal, skipGlobalError: true},
-            );
-            if (data.code !== "0000") throw new Error(data.message || `설정 로그 조회 실패 (${data.code})`);
-            return data;
-        },
+        queryFn: async ({signal}) => unwrapResponse(await fetchConfigLogsOverview(
+            {page: configLogsPage, size: configLogsSize},
+            {signal, skipGlobalError: true},
+        ), null),
         enabled: tab === 'config',
         refetchInterval: 60_000,
         refetchIntervalInBackground: false,
@@ -197,11 +190,7 @@ export default function Monitoring() {
 
     const redisQuery = useQuery({
         queryKey: ['monitoring', 'redis'],
-        queryFn: async ({signal}) => {
-            const data = await fetchRedisOverview({signal, skipGlobalError: true});
-            if (data.code !== "0000") throw new Error(data.message || `Redis 조회 실패 (${data.code})`);
-            return data;
-        },
+        queryFn: async ({signal}) => unwrapResponse(await fetchRedisOverview({signal, skipGlobalError: true}), null),
         enabled: tab === 'redis',
         refetchInterval: 60_000,
         refetchIntervalInBackground: false,
@@ -212,18 +201,14 @@ export default function Monitoring() {
             errorFromDate ? errorFromDate.format('YYYY-MM-DD') : null,
             errorToDate ? errorToDate.format('YYYY-MM-DD') : null,
             errorMessageKeyword],
-        queryFn: async ({signal}) => {
-            const data = await fetchErrorLogsOverview({
-                page: errorLogsPage,
-                size: errorLogsSize,
-                acknowledged: errorUnackOnly ? false : null,
-                fromDate: errorFromDate ? errorFromDate.format('YYYY-MM-DD') : null,
-                toDate: errorToDate ? errorToDate.format('YYYY-MM-DD') : null,
-                messageKeyword: errorMessageKeyword || null,
-            }, {signal, skipGlobalError: true});
-            if (data.code !== "0000") throw new Error(data.message || `에러 로그 조회 실패 (${data.code})`);
-            return data;
-        },
+        queryFn: async ({signal}) => unwrapResponse(await fetchErrorLogsOverview({
+            page: errorLogsPage,
+            size: errorLogsSize,
+            acknowledged: errorUnackOnly ? false : null,
+            fromDate: errorFromDate ? errorFromDate.format('YYYY-MM-DD') : null,
+            toDate: errorToDate ? errorToDate.format('YYYY-MM-DD') : null,
+            messageKeyword: errorMessageKeyword || null,
+        }, {signal, skipGlobalError: true}), null),
         enabled: tab === 'error',
         refetchInterval: 60_000,
         refetchIntervalInBackground: false,
@@ -231,11 +216,7 @@ export default function Monitoring() {
 
     const apiCallQuery = useQuery({
         queryKey: ['monitoring', 'apicall'],
-        queryFn: async ({signal}) => {
-            const data = await fetchApiCallsOverview({signal, skipGlobalError: true});
-            if (data.code !== "0000") throw new Error(data.message || `API 호출 조회 실패 (${data.code})`);
-            return data;
-        },
+        queryFn: async ({signal}) => unwrapResponse(await fetchApiCallsOverview({signal, skipGlobalError: true}), null),
         enabled: tab === 'apicall',
         refetchInterval: 60_000,
         refetchIntervalInBackground: false,
@@ -243,11 +224,7 @@ export default function Monitoring() {
 
     const systemQuery = useQuery({
         queryKey: ['monitoring', 'system'],
-        queryFn: async ({signal}) => {
-            const data = await fetchSystemOverview({signal, skipGlobalError: true});
-            if (data.code !== "0000") throw new Error(data.message || `시스템 조회 실패 (${data.code})`);
-            return data;
-        },
+        queryFn: async ({signal}) => unwrapResponse(await fetchSystemOverview({signal, skipGlobalError: true}), null),
         enabled: tab === 'system',
         refetchInterval: 60_000,
         refetchIntervalInBackground: false,
@@ -262,27 +239,27 @@ export default function Monitoring() {
         : systemQuery;
 
     // 탭별 데이터 파생
-    const catalog: SchedulerCatalogRes[] = schedulerQuery.data?.result?.catalog ?? [];
-    const statuses: SchedulerStatusRes[] = schedulerQuery.data?.result?.statuses ?? [];
-    const logs: SchedulerLogRes[] = schedulerQuery.data?.result?.logs?.content ?? [];
-    const logsTotal = schedulerQuery.data?.result?.logs?.totalElements ?? 0;
-    const configLogs: SchedulerConfigLogRes[] = configQuery.data?.result?.logs?.content ?? [];
-    const configLogsTotal = configQuery.data?.result?.logs?.totalElements ?? 0;
-    const redisPrefixes: RedisPrefixRes[] = redisQuery.data?.result?.redis?.prefixes ?? [];
-    const errorLogs: ErrorLogRes[] = errorQuery.data?.result?.logs?.content ?? [];
-    const errorLogsTotal = errorQuery.data?.result?.logs?.totalElements ?? 0;
-    const apiCallStats: ApiCallStatsItemRes[] = apiCallQuery.data?.result?.stats?.items ?? [];
-    const systemStatus: SystemStatusRes | null = systemQuery.data?.result?.system ?? null;
+    const catalog: SchedulerCatalogRes[] = schedulerQuery.data?.catalog ?? [];
+    const statuses: SchedulerStatusRes[] = schedulerQuery.data?.statuses ?? [];
+    const logs: SchedulerLogRes[] = schedulerQuery.data?.logs?.content ?? [];
+    const logsTotal = schedulerQuery.data?.logs?.totalElements ?? 0;
+    const configLogs: SchedulerConfigLogRes[] = configQuery.data?.logs?.content ?? [];
+    const configLogsTotal = configQuery.data?.logs?.totalElements ?? 0;
+    const redisPrefixes: RedisPrefixRes[] = redisQuery.data?.redis?.prefixes ?? [];
+    const errorLogs: ErrorLogRes[] = errorQuery.data?.logs?.content ?? [];
+    const errorLogsTotal = errorQuery.data?.logs?.totalElements ?? 0;
+    const apiCallStats: ApiCallStatsItemRes[] = apiCallQuery.data?.stats?.items ?? [];
+    const systemStatus: SystemStatusRes | null = systemQuery.data?.system ?? null;
 
     // unackCount — 가장 최근 응답한 query 결과에서 (모든 탭 응답에 포함)
     const unackCount: UnacknowledgedCountRes =
-        activeQuery.data?.result?.unackCount
-        ?? schedulerQuery.data?.result?.unackCount
-        ?? configQuery.data?.result?.unackCount
-        ?? redisQuery.data?.result?.unackCount
-        ?? errorQuery.data?.result?.unackCount
-        ?? apiCallQuery.data?.result?.unackCount
-        ?? systemQuery.data?.result?.unackCount
+        activeQuery.data?.unackCount
+        ?? schedulerQuery.data?.unackCount
+        ?? configQuery.data?.unackCount
+        ?? redisQuery.data?.unackCount
+        ?? errorQuery.data?.unackCount
+        ?? apiCallQuery.data?.unackCount
+        ?? systemQuery.data?.unackCount
         ?? {schedulerLogs: 0, errorLogs: 0};
 
     const loading = activeQuery.isLoading;

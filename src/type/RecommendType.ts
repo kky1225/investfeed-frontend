@@ -25,3 +25,8 @@ export interface RecommendListStream {
     fluRt: string,
     trend: string,
 }
+
+export interface RecommendListRes {
+    recommendList: RecommendListItem[],
+    avoidList: RecommendListItem[],
+}

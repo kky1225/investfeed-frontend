@@ -24,6 +24,7 @@ import {useParams} from "react-router-dom";
 import {
     StockChartType,
     StockDetailReq,
+    StockDetailRes,
     StockStreamReq,
     StockStreamRes,
     StockDividendItem,
@@ -300,7 +301,7 @@ const StockDetail = () => {
         setLiveExpectedPriceOverlay(undefined);
     }
 
-    const {data: res, isLoading, lastUpdated, pollError} = usePollingQuery(
+    const {data: result, isLoading, lastUpdated, pollError} = usePollingQuery<StockDetailRes>(
         ['stockDetail', stkCd, req.chartType],
         (config) => fetchStockDetail(stkCd, req, config),
     );
@@ -340,9 +341,9 @@ const StockDetail = () => {
 
     // 폴링 결과 → 파생값들 (useMemo 들). 모두 같은 res 를 읽어 각자 가공만 함.
     const baseStockChartData = useMemo<CustomStockDetailLineChartProps>(() => {
-        if (res?.code !== "0000" || !res.result) return INITIAL_CHART_DATA;
+        if (!result) return INITIAL_CHART_DATA;
         try {
-            const {stockInfo, stockChartList} = res.result;
+            const {stockInfo, stockChartList} = result;
 
             let dateList;
             let lineData, barDataList;
@@ -405,17 +406,17 @@ const StockDetail = () => {
                 ],
                 barDataList: barDataList,
                 dateList: dateList
-            };
+            } as unknown as CustomStockDetailLineChartProps;
         } catch (error) {
             console.error(error);
             return INITIAL_CHART_DATA;
         }
-    }, [res, req.chartType, id]);
+    }, [result, req.chartType, id]);
 
     // 폴링 base expectedPrice (expCntrPric 가 있을 때만 객체, 없으면 null)
     const baseExpectedPrice = useMemo<ExpectedPriceShape | null>(() => {
-        if (res?.code !== "0000" || !res.result) return null;
-        const {stockInfo} = res.result;
+        if (!result) return null;
+        const {stockInfo} = result;
         const expPric = stockInfo.expCntrPric;
         if (!expPric || Number(expPric) === 0) return null;
         return {
@@ -423,11 +424,11 @@ const StockDetail = () => {
             fluRt: stockInfo.expCntrFluRt || undefined,
             trend: stockInfo.expCntrPreSig ? trendColor(stockInfo.expCntrPreSig) : undefined,
         };
-    }, [res]);
+    }, [result]);
 
     const info = useMemo<StockInfoProps>(() => {
-        if (res?.code !== "0000" || !res.result) return INITIAL_INFO;
-        const {stockInfo} = res.result;
+        if (!result) return INITIAL_INFO;
+        const {stockInfo} = result;
         return {
             marketName: stockInfo.marketName || '-',
             upName: stockInfo.upName || '-',
@@ -445,17 +446,17 @@ const StockDetail = () => {
             roe: Number(stockInfo.roe),
             pbr: Number(stockInfo.pbr)
         };
-    }, [res]);
+    }, [result]);
 
     const dividendData = useMemo<StockDividendItem[]>(() => {
-        if (res?.code !== "0000" || !res.result) return [];
-        return (res.result as {dividendList?: StockDividendItem[]}).dividendList || [];
-    }, [res]);
+        if (!result) return [];
+        return (result as {dividendList?: StockDividendItem[]}).dividendList || [];
+    }, [result]);
 
     const dividendYield = useMemo<number | null>(() => {
-        if (res?.code !== "0000" || !res.result) return null;
-        const {stockInfo} = res.result;
-        const dvdList = (res.result as {dividendList?: StockDividendItem[]}).dividendList || [];
+        if (!result) return null;
+        const {stockInfo} = result;
+        const dvdList = (result as {dividendList?: StockDividendItem[]}).dividendList || [];
         if (dvdList.length === 0) return null;
         const lastYear = (new Date().getFullYear() - 1).toString();
         const lastYearAmt = dvdList
@@ -466,51 +467,51 @@ const StockDetail = () => {
             return Math.round(lastYearAmt / curPrc * 10000) / 100;
         }
         return null;
-    }, [res]);
+    }, [result]);
 
     const barData = useMemo<number[]>(() => {
-        if (res?.code !== "0000" || !res.result) return INITIAL_BAR_DATA;
-        const {stockInvestorList} = res.result;
+        if (!result) return INITIAL_BAR_DATA;
+        const {stockInvestorList} = result;
         if (!stockInvestorList?.[0]) return INITIAL_BAR_DATA;
         return [
             Number(stockInvestorList[0].indInvsr.toLocaleString()),
             Number(stockInvestorList[0].frgnrInvsr.toLocaleString()),
             Number(stockInvestorList[0].orgn.toLocaleString())
         ];
-    }, [res]);
+    }, [result]);
 
     const message = useMemo<MessageProps>(() => {
-        if (res?.code !== "0000" || !res.result) return INITIAL_MESSAGE;
-        const {stockInfo, stockInvestorList} = res.result;
+        if (!result) return INITIAL_MESSAGE;
+        const {stockInfo, stockInvestorList} = result;
         if (!stockInvestorList?.[0]) return INITIAL_MESSAGE;
-        return checkInvestor(stockInfo.stkNm, stockInvestorList[0].frgnrInvsr, stockInvestorList[0].orgn);
-    }, [res]);
+        return checkInvestor(stockInfo.stkNm, Number(stockInvestorList[0].frgnrInvsr), Number(stockInvestorList[0].orgn));
+    }, [result]);
 
     const dayRange = useMemo<StockRangeProps[]>(() => {
-        if (res?.code !== "0000" || !res.result) return INITIAL_DAY_RANGE;
-        const {stockInfo} = res.result;
+        if (!result) return INITIAL_DAY_RANGE;
+        const {stockInfo} = result;
         const dayMin = Number(stockInfo.lowPric.replace(/^[+-]/, ''));
         const dayMax = Number(stockInfo.highPric.replace(/^[+-]/, ''));
         return [
             {value: dayMin, label: <p>1일 최저가 <br />{dayMin.toLocaleString()}</p>},
             {value: dayMax, label: <p>1일 최고가 <br />{dayMax.toLocaleString()}</p>},
         ];
-    }, [res]);
+    }, [result]);
 
     const yearRange = useMemo<StockRangeProps[]>(() => {
-        if (res?.code !== "0000" || !res.result) return INITIAL_YEAR_RANGE;
-        const {stockInfo} = res.result;
+        if (!result) return INITIAL_YEAR_RANGE;
+        const {stockInfo} = result;
         const yearMin = Number(stockInfo._250lwst.replace(/^[+-]/, ''));
         const yearMax = Number(stockInfo._250hgst.replace(/^[+-]/, ''));
         return [
             {value: yearMin, label: <p>52주 최저가 <br />{yearMin.toLocaleString()}</p>},
             {value: yearMax, label: <p>52주 최고가 <br />{yearMax.toLocaleString()}</p>},
         ];
-    }, [res]);
+    }, [result]);
 
     const investorChartData = useMemo<MakeOptional<LineSeriesType, 'type'>[]>(() => {
-        if (res?.code !== "0000" || !res.result) return INITIAL_INVESTOR_CHART_DATA;
-        const {stockInvestorChartList} = res.result;
+        if (!result) return INITIAL_INVESTOR_CHART_DATA;
+        const {stockInvestorChartList} = result;
         return [
             {id: 'direct', label: '외국인', showMark: false, curve: 'linear', area: true, stackOrder: 'ascending', color: 'green',
                 data: stockInvestorChartList.map(item => Number(item.frgnrInvsr))},
@@ -519,16 +520,16 @@ const StockDetail = () => {
             {id: 'organic', label: '연기금', showMark: false, curve: 'linear', area: true, stackOrder: 'ascending', color: 'red',
                 data: stockInvestorChartList.map(item => Number(item.penfnd_etc))},
         ];
-    }, [res]);
+    }, [result]);
 
     const investorDateData = useMemo<string[]>(() => {
-        if (res?.code !== "0000" || !res.result) return [];
-        return res.result.stockInvestorChartList.map(item => item.tm);
-    }, [res]);
+        if (!result) return [];
+        return result.stockInvestorChartList.map(item => item.tm);
+    }, [result]);
 
     const tabData = useMemo<TabDataShape>(() => {
-        if (res?.code !== "0000" || !res.result) return INITIAL_TAB_DATA;
-        const {stockInvestorList, stockProgramList, stockShortSellingList} = res.result;
+        if (!result) return INITIAL_TAB_DATA;
+        const {stockInvestorList, stockProgramList, stockShortSellingList} = result;
         const investorRow = stockInvestorList.map((item: {
             dt: string; indInvsr: string; frgnrInvsr: string; orgn: string; fnncInvt: string; insrnc: string; etcFnnc: string; invtrt: string; samoFund: string; penfndEtc: string; bank: string; natn: string; etcCorp: string; natfor: string;
         }) => ({
@@ -574,7 +575,7 @@ const StockDetail = () => {
             program: { col: PROGRAM_COLUMNS, row: programRow },
             shortSelling: { col: SHORT_SELLING_COLUMNS, row: shortSellingRow },
         };
-    }, [res]);
+    }, [result]);
 
     // 최종 stockChartData / expectedPrice = base + WS overlay 머지
     const stockChartData = useMemo<CustomStockDetailLineChartProps>(() => ({
@@ -593,8 +594,8 @@ const StockDetail = () => {
     // loadProgramChart 가 초기 로드 후, 폴링이 들어올 때마다 오늘의 prmNetprpsQty 를 누적.
     // (이건 useMemo 로 못 풂 — prev 에 append 하는 stateful accumulation 패턴.)
     useEffect(() => {
-        if (res?.code !== "0000" || !res.result) return;
-        const {stockProgramList} = res.result;
+        if (!result) return;
+        const {stockProgramList} = result;
         if (!stockProgramList || stockProgramList.length === 0) return;
 
         const todayProgram = stockProgramList[0];
@@ -604,7 +605,7 @@ const StockDetail = () => {
 
         setProgramChartData(prev => prev.length === 0 ? prev : [...prev, netQty]);
         setProgramDateData(prev => prev.length === 0 ? prev : [...prev, hhmm]);
-    }, [res]);
+    }, [result]);
 
     const loadProgramChart = async () => {
         if (!id || programChartLoaded) return;

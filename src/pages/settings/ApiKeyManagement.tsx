@@ -28,7 +28,8 @@ import {useNavigate} from 'react-router-dom';
 import ColorModeSelect from '../../components/ColorModeSelect';
 import AppTheme from '../../components/AppTheme';
 import {createApiKey, deleteApiKey} from '../../api/auth/AuthApi';
-import {useApiKeyStatus} from '../../context/ApiKeyStatusContext';
+import {useQueryClient} from '@tanstack/react-query';
+import {useApiKeyStatus, apiKeyStatusKeys} from '../../context/ApiKeyStatusContext';
 import {useAlert} from '../../context/AlertContext';
 import type {ApiKeyReq} from '../../type/AuthType';
 
@@ -61,7 +62,8 @@ const initialForm: ApiKeyReq = {brokerId: 0, appKey: '', secretKey: '', expiresA
 export default function ApiKeyManagement() {
     const navigate = useNavigate();
     const showAlert = useAlert();
-    const {apiKeys, apiBrokers, isLoaded: apiKeyLoaded, invalidateApiKeys} = useApiKeyStatus();
+    const {apiKeys, apiBrokers, isLoaded: apiKeyLoaded} = useApiKeyStatus();
+    const queryClient = useQueryClient();
     const [formDialog, setFormDialog] = useState(false);
     const [form, setForm] = useState<ApiKeyReq>(initialForm);
     const [formLoading, setFormLoading] = useState(false);
@@ -96,7 +98,7 @@ export default function ApiKeyManagement() {
             showAlert('API Key가 등록되었습니다.', 'success');
             setFormDialog(false);
             setForm(initialForm);
-            await invalidateApiKeys();
+            await queryClient.invalidateQueries({queryKey: apiKeyStatusKeys.apiKeys});
         } catch (err) {
             console.error(err);
             const axiosErr = err as {response?: {status?: number; data?: {code?: string; message?: string; result?: Record<string, string>}}};
@@ -116,7 +118,7 @@ export default function ApiKeyManagement() {
             if (res.code !== "0000") throw new Error(res.message || `API Key 삭제 실패 (${res.code})`);
             showAlert('API Key가 삭제되었습니다.', 'success');
             setDeleteDialog({open: false, id: 0, brokerName: ''});
-            await invalidateApiKeys();
+            await queryClient.invalidateQueries({queryKey: apiKeyStatusKeys.apiKeys});
         } catch (error) {
             console.error(error);
             showAlert('API Key 삭제에 실패했습니다.', 'error');

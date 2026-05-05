@@ -24,6 +24,7 @@ import {
     CommodityChart,
     CommodityChartType,
     CommodityDetailReq,
+    CommodityDetailRes,
     CommodityStream,
     CommodityStreamRes
 } from "../../type/CommodityType.ts";
@@ -182,7 +183,7 @@ const CommodityDetail = () => {
         chartType: CommodityChartType.DAY
     });
 
-    const {data: res, isLoading, lastUpdated, pollError} = usePollingQuery(
+    const {data: result, isLoading, lastUpdated, pollError} = usePollingQuery<CommodityDetailRes>(
         ['commodityDetail', stkCd, req.chartType],
         (config) => fetchCommodityDetail(stkCd, req, config),
     );
@@ -200,9 +201,9 @@ const CommodityDetail = () => {
 
     // 폴링 결과 → base chartData
     const baseCommodityChartData = useMemo<CommodityDetailLineChartProps>(() => {
-        if (res?.code !== "0000" || !res.result) return INITIAL_CHART_DATA;
+        if (!result) return INITIAL_CHART_DATA;
         try {
-            const {commodityInfo, commodityChartList} = res.result;
+            const {commodityInfo, commodityChartList} = result;
 
             let dateList;
             let lineData, barDataList;
@@ -268,41 +269,41 @@ const CommodityDetail = () => {
                 ],
                 barDataList: barDataList,
                 dateList: dateList
-            };
+            } as unknown as CommodityDetailLineChartProps;
         } catch (err) {
             console.error(err);
             return INITIAL_CHART_DATA;
         }
-    }, [res, req.chartType, id]);
+    }, [result, req.chartType, id]);
 
     // dayRange — WS 갱신 없음
     const dayRange = useMemo<CommodityRangeProps[]>(() => {
-        if (res?.code !== "0000" || !res.result) return INITIAL_DAY_RANGE;
-        const {commodityInfo} = res.result;
+        if (!result) return INITIAL_DAY_RANGE;
+        const {commodityInfo} = result;
         const dayMin = commodityInfo['lowPric'].replace(/^[+-]/, '');
         const dayMax = commodityInfo['highPric'].replace(/^[+-]/, '');
         return [
             {value: Number(dayMin), label: <p>1일 최저가 <br />{Number(dayMin).toLocaleString()}</p>},
             {value: Number(dayMax), label: <p>1일 최고가 <br />{Number(dayMax).toLocaleString()}</p>},
         ];
-    }, [res]);
+    }, [result]);
 
     // yearRange — WS 갱신 없음
     const yearRange = useMemo<CommodityRangeProps[]>(() => {
-        if (res?.code !== "0000" || !res.result) return INITIAL_YEAR_RANGE;
-        const {commodityInfo} = res.result;
+        if (!result) return INITIAL_YEAR_RANGE;
+        const {commodityInfo} = result;
         const yearMin = Number(commodityInfo._250lwst.replace(/^[+-]/, ''));
         const yearMax = Number(commodityInfo._250hgst.replace(/^[+-]/, ''));
         return [
             {value: yearMin, label: <p>52주 최저가 <br />{yearMin.toLocaleString()}</p>},
             {value: yearMax, label: <p>52주 최고가 <br />{yearMax.toLocaleString()}</p>},
         ];
-    }, [res]);
+    }, [result]);
 
     // info — WS 갱신 없음
     const info = useMemo<CommodityInfoProps>(() => {
-        if (res?.code !== "0000" || !res.result) return INITIAL_INFO;
-        const {commodityInfo} = res.result;
+        if (!result) return INITIAL_INFO;
+        const {commodityInfo} = result;
         return {
             trdeQty: Number(commodityInfo.trdeQty),
             trdePrica: Number(commodityInfo.trdePrica),
@@ -311,21 +312,21 @@ const CommodityDetail = () => {
             _250hgst: Number(commodityInfo._250hgst.replace(/^[+-]/, '')),
             _250lwst: Number(commodityInfo._250lwst.replace(/^[+-]/, '')),
         };
-    }, [res]);
+    }, [result]);
 
     // barData — WS 갱신 없음
     const barData = useMemo<number[]>(() => {
-        if (res?.code !== "0000" || !res.result) return INITIAL_BAR_DATA;
-        const {commodityInfo} = res.result;
+        if (!result) return INITIAL_BAR_DATA;
+        const {commodityInfo} = result;
         return [commodityInfo.indNetprps, commodityInfo.frgnrNetprps, commodityInfo.orgnNetprps];
-    }, [res]);
+    }, [result]);
 
     // message — WS 갱신 없음
     const message = useMemo<MessageProps>(() => {
-        if (res?.code !== "0000" || !res.result) return INITIAL_MESSAGE;
-        const {commodityInfo} = res.result;
+        if (!result) return INITIAL_MESSAGE;
+        const {commodityInfo} = result;
         return checkInvestor(commodityInfo.stkNm, commodityInfo.frgnrNetprps, commodityInfo.orgnNetprps);
-    }, [res]);
+    }, [result]);
 
     // 최종 commodityChartData = base + WS overlay 머지
     const commodityChartData = useMemo<CommodityDetailLineChartProps>(() => ({

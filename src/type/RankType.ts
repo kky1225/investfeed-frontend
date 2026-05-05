@@ -10,3 +10,7 @@ export interface RankListItem {
     curPrc: string,
     trdePrica: string,
 }
+
+export interface RankListRes {
+    rankList: RankListItem[],
+}

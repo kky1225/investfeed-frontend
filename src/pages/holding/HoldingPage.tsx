@@ -21,12 +21,14 @@ import AddBrokerDialog from "./AddBrokerDialog.tsx";
 import BlindToggle from "../../components/BlindToggle.tsx";
 import RealizedPnlTab from "./RealizedPnlTab.tsx";
 import ApiKeyRequiredEmptyState from "../../components/ApiKeyRequiredEmptyState.tsx";
-import {useApiKeyStatus} from "../../context/ApiKeyStatusContext.tsx";
+import {useQueryClient} from "@tanstack/react-query";
+import {useApiKeyStatus, apiKeyStatusKeys} from "../../context/ApiKeyStatusContext.tsx";
 
 export default function HoldingPage() {
     const navigate = useNavigate();
     const {brokerId} = useParams<{brokerId?: string}>();
-    const {myStockBrokers, isBrokerValid, invalidateMyStockBrokers} = useApiKeyStatus();
+    const {myStockBrokers, isBrokerValid} = useApiKeyStatus();
+    const queryClient = useQueryClient();
     const [selectedTab, setSelectedTab] = useState(0);
     const [addBrokerOpen, setAddBrokerOpen] = useState(false);
     const [deleteTarget, setDeleteTarget] = useState<MemberBroker | null>(null);
@@ -68,7 +70,7 @@ export default function HoldingPage() {
         try {
             const res = await removeMyBroker(deleteTarget.id);
             if (res.code !== "0000") throw new Error(res.message || `증권사 삭제 실패 (${res.code})`);
-            await invalidateMyStockBrokers();   // Context 갱신 = 페이지 자동 재렌더
+            await queryClient.invalidateQueries({queryKey: apiKeyStatusKeys.myStockBrokers});
             navigate('/stock/holding/list', {replace: true});
         } catch (err) {
             console.error(err);

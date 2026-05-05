@@ -94,7 +94,7 @@ export default function RoleManagement() {
 
     const {data: rolesData, isLoading: loading, isError: rolesError} = useQuery<RoleRes[]>({
         queryKey: ['admin', 'roles'],
-        queryFn: async () => unwrapResponse(await fetchRoles(), [] as RoleRes[]),
+        queryFn: async ({signal}) => unwrapResponse(await fetchRoles({signal, skipGlobalError: true}), [] as RoleRes[]),
     });
     const fetchedRoles = rolesData ?? [];
     const roles = orderOverride ?? fetchedRoles;

@@ -1,5 +1,6 @@
 import {createContext, useContext, useEffect, useRef, ReactNode, useCallback} from 'react';
-import {useQuery, useQueryClient} from '@tanstack/react-query';
+import {useQueryClient} from '@tanstack/react-query';
+import {usePollingQuery} from '../lib/pollingQuery';
 import {useAuth} from './AuthContext';
 import {fetchNotifications, fetchUnreadCount, markAsRead, markAllAsRead} from '../api/notification/NotificationApi';
 import type {Notification} from '../type/NotificationType';
@@ -21,54 +22,30 @@ const NotificationContext = createContext<NotificationContextType | null>(null);
 const NOTIFICATIONS_KEY = ['notifications'] as const;
 const UNREAD_COUNT_KEY = ['notifications', 'unreadCount'] as const;
 
-interface NotificationsRes {
-    code: string;
-    msg?: string;
-    result: Notification[];
-}
-
-interface UnreadCountRes {
-    code: string;
-    msg?: string;
-    result: number;
-}
-
 export function NotificationProvider({children}: { children: ReactNode }) {
     const {isAuthenticated} = useAuth();
     const queryClient = useQueryClient();
     const wsRef = useRef<WebSocket | null>(null);
 
     // 알림 목록 — 인증된 경우에만 1분 폴링
-    const notificationsQuery = useQuery<NotificationsRes>({
-        queryKey: NOTIFICATIONS_KEY,
-        queryFn: async ({signal}) => {
-            const res = await fetchNotifications(undefined, {signal, skipGlobalError: true});
-            if (res.code !== "0000") throw new Error(res.message || `알림 조회 실패 (${res.code})`);
-            return res;
-        },
-        enabled: isAuthenticated,
-        refetchInterval: 60_000,
-        refetchIntervalInBackground: false,
-    });
+    const notificationsQuery = usePollingQuery<Notification[]>(
+        NOTIFICATIONS_KEY,
+        (config) => fetchNotifications(undefined, config),
+        {enabled: isAuthenticated, fallback: []},
+    );
 
     // 미읽음 카운트 — 인증된 경우에만 1분 폴링
-    const unreadCountQuery = useQuery<UnreadCountRes>({
-        queryKey: UNREAD_COUNT_KEY,
-        queryFn: async ({signal}) => {
-            const res = await fetchUnreadCount({signal, skipGlobalError: true});
-            if (res.code !== "0000") throw new Error(res.message || `미읽음 카운트 조회 실패 (${res.code})`);
-            return res;
-        },
-        enabled: isAuthenticated,
-        refetchInterval: 60_000,
-        refetchIntervalInBackground: false,
-    });
+    const unreadCountQuery = usePollingQuery<number>(
+        UNREAD_COUNT_KEY,
+        (config) => fetchUnreadCount(config),
+        {enabled: isAuthenticated, fallback: 0},
+    );
 
-    const notifications: Notification[] = notificationsQuery.data?.result ?? [];
-    const unreadCount: number = unreadCountQuery.data?.result ?? 0;
+    const notifications: Notification[] = notificationsQuery.data ?? [];
+    const unreadCount: number = unreadCountQuery.data ?? 0;
     const loading = notificationsQuery.isLoading;
-    const lastUpdated: Date | null = notificationsQuery.data ? new Date(notificationsQuery.dataUpdatedAt) : null;
-    const pollError: boolean = !!notificationsQuery.error;
+    const lastUpdated = notificationsQuery.lastUpdated;
+    const pollError = notificationsQuery.pollError;
 
     // 기존 외부 인터페이스 호환을 위한 wrapper
     const loadNotifications = useCallback(async (_silent: boolean = false) => {
@@ -98,33 +75,24 @@ export function NotificationProvider({children}: { children: ReactNode }) {
         const res = await markAsRead(id);
         if (res.code !== "0000") throw new Error(res.message || `알림 읽음 처리 실패 (${res.code})`);
         // optimistic cache 갱신
-        queryClient.setQueryData<NotificationsRes | undefined>(NOTIFICATIONS_KEY, (prev) => {
+        queryClient.setQueryData<Notification[] | null>(NOTIFICATIONS_KEY, (prev) => {
             if (!prev) return prev;
-            return {
-                ...prev,
-                result: prev.result.map(n => n.id === id ? {...n, isRead: true} : n),
-            };
+            return prev.map(n => n.id === id ? {...n, isRead: true} : n);
         });
-        queryClient.setQueryData<UnreadCountRes | undefined>(UNREAD_COUNT_KEY, (prev) => {
-            if (!prev) return prev;
-            return {...prev, result: Math.max(0, prev.result - 1)};
+        queryClient.setQueryData<number | null>(UNREAD_COUNT_KEY, (prev) => {
+            if (prev == null) return prev;
+            return Math.max(0, prev - 1);
         });
     }, [queryClient]);
 
     const handleMarkAllAsRead = useCallback(async () => {
         const res = await markAllAsRead();
         if (res.code !== "0000") throw new Error(res.message || `전체 알림 읽음 처리 실패 (${res.code})`);
-        queryClient.setQueryData<NotificationsRes | undefined>(NOTIFICATIONS_KEY, (prev) => {
+        queryClient.setQueryData<Notification[] | null>(NOTIFICATIONS_KEY, (prev) => {
             if (!prev) return prev;
-            return {
-                ...prev,
-                result: prev.result.map(n => ({...n, isRead: true})),
-            };
+            return prev.map(n => ({...n, isRead: true}));
         });
-        queryClient.setQueryData<UnreadCountRes | undefined>(UNREAD_COUNT_KEY, (prev) => {
-            if (!prev) return prev;
-            return {...prev, result: 0};
-        });
+        queryClient.setQueryData<number | null>(UNREAD_COUNT_KEY, () => 0);
     }, [queryClient]);
 
     // WebSocket 라이프사이클 — 신규 알림 push 수신
@@ -150,17 +118,13 @@ export function NotificationProvider({children}: { children: ReactNode }) {
             ws.onmessage = (event) => {
                 try {
                     const notification: Notification = JSON.parse(event.data);
-                    queryClient.setQueryData<NotificationsRes | undefined>(NOTIFICATIONS_KEY, (prev) => {
-                        if (!prev) {
-                            return {code: '0000', result: [notification]};
-                        }
-                        return {...prev, result: [notification, ...prev.result]};
+                    queryClient.setQueryData<Notification[] | null>(NOTIFICATIONS_KEY, (prev) => {
+                        if (!prev) return [notification];
+                        return [notification, ...prev];
                     });
-                    queryClient.setQueryData<UnreadCountRes | undefined>(UNREAD_COUNT_KEY, (prev) => {
-                        if (!prev) {
-                            return {code: '0000', result: 1};
-                        }
-                        return {...prev, result: prev.result + 1};
+                    queryClient.setQueryData<number | null>(UNREAD_COUNT_KEY, (prev) => {
+                        if (prev == null) return 1;
+                        return prev + 1;
                     });
                 } catch (error) {
                     console.error(error);

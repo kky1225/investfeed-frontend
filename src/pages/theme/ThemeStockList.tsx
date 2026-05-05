@@ -11,6 +11,7 @@ import {
     ThemeStockGridRow,
     ThemeStockListItem,
     ThemeStockListReq,
+    ThemeStockListRes,
     ThemeStockListStream,
     ThemeStockListStreamReq,
     ThemeStockListStreamRes
@@ -42,14 +43,14 @@ const ThemeStockList = () => {
     const chartTimer = useRef<number>(0);
     const marketTimer = useRef<number>(0);
 
-    const {data: res, isLoading, lastUpdated, pollError} = usePollingQuery(
+    const {data: result, isLoading, lastUpdated, pollError} = usePollingQuery<ThemeStockListRes>(
         ['themeStockList', themeGrpCdParam, DEFAULT_REQ.dateTp],
         (config) => fetchThemeStockList(themeGrpCdParam, DEFAULT_REQ, config),
     );
 
     const row: ThemeStockGridRow[] = useMemo(() => {
-        if (res?.code !== "0000" || !res.result) return [];
-        const list: ThemeStockListItem[] = res.result.themeStockList ?? [];
+        if (!result) return [];
+        const list: ThemeStockListItem[] = result.themeStockList ?? [];
         return list.map((themeStock) => {
             const live = liveOverlay.get(themeStock.stkCd);
             return {
@@ -61,7 +62,7 @@ const ThemeStockList = () => {
                 dtPrftRtN: themeStock.dtPrftRtN,
             };
         });
-    }, [res, liveOverlay]);
+    }, [result, liveOverlay]);
 
     const loading = isLoading;
 
@@ -151,8 +152,8 @@ const ThemeStockList = () => {
 
     // WebSocket 라이프사이클 — query 결과 stkCd 들로 stream 등록.
     useEffect(() => {
-        if (res?.code !== "0000" || !res.result) return;
-        const items = (res.result.themeStockList ?? []).map((s: ThemeStockListItem) => s.stkCd);
+        if (!result) return;
+        const items = (result.themeStockList ?? []).map((s: ThemeStockListItem) => s.stkCd);
         if (items.length === 0) return;
 
         const key = `${themeGrpCdParam}|${items.join(',')}`;
@@ -212,7 +213,7 @@ const ThemeStockList = () => {
             clearTimeout(socketTimeout);
             clearInterval(displayInterval);
         };
-    }, [res, themeGrpCdParam]);
+    }, [result, themeGrpCdParam]);
 
     function renderStatus(status: number) {
         const colors = status == 0 ? 'default' : status > 0 ? 'error' : 'info';

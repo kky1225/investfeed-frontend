@@ -75,3 +75,39 @@ export interface FearGreedItem {
 export interface CryptoHoldingBuffer {
     curPrc?: string;
 }
+
+export interface CryptoDetailInfo {
+    market: string | null,
+    koreanName: string | null,
+    englishName: string | null,
+    tradePrice: number,
+    openingPrice: number,
+    highPrice: number,
+    lowPrice: number,
+    prevClosingPrice: number,
+    change: string,
+    signedChangeRate: number,
+    signedChangePrice: number,
+    accTradePrice24h: number,
+    accTradeVolume24h: number,
+    highest52WeekPrice: number,
+    highest52WeekDate: string | null,
+    lowest52WeekPrice: number,
+    lowest52WeekDate: string | null,
+    tradeDateTimeKst: string,
+}
+
+export interface FearGreedRes {
+    current: FearGreedItem,
+    history: FearGreedItem[],
+}
+
+export interface CryptoListRes {
+    cryptoList: CryptoListItem[],
+    fearGreed: FearGreedRes,
+}
+
+export interface CryptoDetailRes {
+    cryptoInfo: CryptoDetailInfo,
+    chartList: CryptoChart[],
+}

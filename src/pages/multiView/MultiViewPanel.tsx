@@ -131,19 +131,19 @@ export default function MultiViewPanel({asset, onSearch, onChartExpand, onRemove
     // asset / chartType / reloadKey 변경 시 자동 fetch (queryKey 에 모두 포함)
     const {data: queryData} = useQuery({
         queryKey: ['multiViewPanel', asset?.type, asset?.code, chartType, reloadKey ?? 0],
-        queryFn: async () => {
+        queryFn: async ({signal}) => {
             if (!asset) return null;
             if (asset.type === 'STOCK') {
                 const stockChartType = chartType as StockChartType;
-                return unwrapResponse(await fetchMultiViewStockChart(asset.code, {chartType: stockChartType}), null);
+                return unwrapResponse(await fetchMultiViewStockChart(asset.code, {chartType: stockChartType}, {signal, skipGlobalError: true}), null);
             }
             if (asset.type === 'CRYPTO') {
                 const cryptoChartType = chartType as CryptoChartType;
-                return unwrapResponse(await fetchMultiViewCryptoDetail(asset.code, {chartType: cryptoChartType}), null);
+                return unwrapResponse(await fetchMultiViewCryptoDetail(asset.code, {chartType: cryptoChartType}, {signal, skipGlobalError: true}), null);
             }
             if (asset.type === 'COMMODITY') {
                 const commodityChartType = chartType as CommodityChartType;
-                return unwrapResponse(await fetchMultiViewCommodityDetail(asset.code, {chartType: commodityChartType}), null);
+                return unwrapResponse(await fetchMultiViewCommodityDetail(asset.code, {chartType: commodityChartType}, {signal, skipGlobalError: true}), null);
             }
             return null;
         },

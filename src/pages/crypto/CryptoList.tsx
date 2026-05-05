@@ -10,7 +10,7 @@ import FearGreedGauge from "../../components/FearGreedGauge.tsx";
 import FreshnessIndicator from "../../components/FreshnessIndicator.tsx";
 import {fetchCryptoList, fetchCryptoStream} from "../../api/crypto/CryptoApi.ts";
 import {useEffect, useMemo, useRef, useState} from "react";
-import {CryptoChartMinute, CryptoListItem, FearGreedItem} from "../../type/CryptoType.ts";
+import {CryptoChartMinute, CryptoListItem, CryptoListRes, FearGreedItem} from "../../type/CryptoType.ts";
 import {usePollingQuery} from "../../lib/pollingQuery.ts";
 
 interface CryptoTickerData {
@@ -74,15 +74,15 @@ const CryptoList = () => {
     const [liveOverlay, setLiveOverlay] = useState<Map<string, LiveCryptoUpdate>>(new Map());
     const subscribedMarketsRef = useRef<string>('');
 
-    const {data: res, isLoading, lastUpdated, pollError} = usePollingQuery(
+    const {data: result, isLoading, lastUpdated, pollError} = usePollingQuery<CryptoListRes>(
         ['cryptoList'],
         (config) => fetchCryptoList(config),
     );
 
     // 폴링 결과 + 실시간 overlay 합산
     const cryptoDataList: CryptoLineChartProps[] = useMemo(() => {
-        if (res?.code !== "0000" || !res.result) return [];
-        const list: CryptoListItem[] = res.result.cryptoList ?? [];
+        if (!result) return [];
+        const list: CryptoListItem[] = result.cryptoList ?? [];
 
         return list.map((item: CryptoListItem) => {
             const live = liveOverlay.get(item.market);
@@ -114,10 +114,10 @@ const CryptoList = () => {
                 dateList: dateList,
             };
         });
-    }, [res, liveOverlay]);
+    }, [result, liveOverlay]);
 
-    const fearGreedCurrent: FearGreedItem = res?.result?.fearGreed?.current ?? {value: 0, classification: '', date: ''};
-    const fearGreedHistory: FearGreedItem[] = res?.result?.fearGreed?.history ?? [];
+    const fearGreedCurrent: FearGreedItem = result?.fearGreed?.current ?? {value: 0, classification: '', date: ''};
+    const fearGreedHistory: FearGreedItem[] = result?.fearGreed?.history ?? [];
     const loading = isLoading;
 
     const cryptoListStream = async (markets: string[]) => {
@@ -160,8 +160,8 @@ const CryptoList = () => {
     // 폴링 결과로 markets 가 도출되면 그 시점에 stream 등록 + WebSocket 연결.
     // 24시간 거래라 시장 시간 체크 불필요.
     useEffect(() => {
-        if (!res?.result?.cryptoList) return;
-        const markets = (res.result.cryptoList as CryptoListItem[]).map((c) => c.market);
+        if (!result?.cryptoList) return;
+        const markets = (result.cryptoList as CryptoListItem[]).map((c) => c.market);
         if (markets.length === 0) return;
 
         const key = markets.join(',');
@@ -178,7 +178,7 @@ const CryptoList = () => {
         return () => {
             socket?.close();
         };
-    }, [res]);
+    }, [result]);
 
     return (
         <Box sx={{width: '100%', maxWidth: {sm: '100%', md: '1700px'}}}>

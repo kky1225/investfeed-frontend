@@ -15,7 +15,7 @@ import {
     StockStreamReq,
     StockStreamRes
 } from "../../type/StockType.ts";
-import {RankListItem, RankListReq} from "../../type/RankType.ts";
+import {RankListItem, RankListReq, RankListRes} from "../../type/RankType.ts";
 import {useNavigate, useParams} from "react-router-dom";
 import {renderChip} from "../../components/CustomRender.tsx";
 import FreshnessIndicator from "../../components/FreshnessIndicator.tsx";
@@ -98,14 +98,14 @@ const RankList = () => {
     const chartTimer = useRef<number>(0);
     const marketTimer = useRef<number>(0);
 
-    const {data: res, isLoading, lastUpdated, pollError} = usePollingQuery(
+    const {data: result, isLoading, lastUpdated, pollError} = usePollingQuery<RankListRes>(
         ['rankList', req.type],
         (config) => fetchRankList(req, config),
     );
 
     const row: StockGridRow[] = useMemo(() => {
-        if (res?.code !== "0000" || !res.result) return [];
-        const list: RankListItem[] = res.result.rankList ?? [];
+        if (!result) return [];
+        const list: RankListItem[] = result.rankList ?? [];
         return list.map((stock) => {
             const live = liveOverlay.get(stock.stkCd);
             return {
@@ -118,7 +118,7 @@ const RankList = () => {
                 trend: live?.trend,
             } as StockGridRow;
         });
-    }, [res, liveOverlay]);
+    }, [result, liveOverlay]);
 
     const columns: GridColDef[] = useMemo(() => buildColumns(req.type), [req.type]);
     const loading = isLoading;
@@ -168,8 +168,8 @@ const RankList = () => {
 
     // WebSocket 라이프사이클 — query 결과 stkCd 들로 stream 등록.
     useEffect(() => {
-        if (res?.code !== "0000" || !res.result) return;
-        const items = (res.result.rankList ?? []).map((s: RankListItem) => s.stkCd);
+        if (!result) return;
+        const items = (result.rankList ?? []).map((s: RankListItem) => s.stkCd);
         if (items.length === 0) return;
 
         const key = `${req.type}|${items.join(',')}`;
@@ -227,7 +227,7 @@ const RankList = () => {
             clearTimeout(socketTimeout);
             clearInterval(displayInterval);
         };
-    }, [res, req.type]);
+    }, [result, req.type]);
 
     const handleChange = (_event: React.SyntheticEvent, newValue: number) => {
         setValue(newValue);

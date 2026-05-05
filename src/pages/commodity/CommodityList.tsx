@@ -11,7 +11,7 @@ import {MarketType} from "../../type/timeType.ts";
 import CommodityLineChart, {CommodityLineChartProps} from "../../components/CommodityLineChart.tsx";
 import {fetchCommodityList, fetchCommodityStream} from "../../api/commodity/CommodityApi.ts";
 import FreshnessIndicator from "../../components/FreshnessIndicator.tsx";
-import {ChartMinute, CommodityListItem, CommodityStream, CommodityStreamRes} from "../../type/CommodityType.ts";
+import {ChartMinute, CommodityListItem, CommodityListRes, CommodityStream, CommodityStreamRes} from "../../type/CommodityType.ts";
 import {usePollingQuery} from "../../lib/pollingQuery.ts";
 
 interface LiveCommodityUpdate {
@@ -40,14 +40,14 @@ const CommodityList = () => {
     const marketTimer = useRef<number>(0);
     const [liveOverlay, setLiveOverlay] = useState<Map<string, LiveCommodityUpdate>>(new Map());
 
-    const {data: res, isLoading, lastUpdated, pollError} = usePollingQuery(
+    const {data: result, isLoading, lastUpdated, pollError} = usePollingQuery<CommodityListRes>(
         ['commodityList'],
         (config) => fetchCommodityList(config),
     );
 
     const commodityDataList: CommodityLineChartProps[] = useMemo(() => {
-        if (res?.code !== "0000" || !res.result) return [];
-        const list: CommodityListItem[] = res.result.commodityList ?? [];
+        if (!result) return [];
+        const list: CommodityListItem[] = result.commodityList ?? [];
         if (list.length === 0) return [];
 
         const year = list[0].chartMinuteList[0]?.cntrTm?.substring(0, 4) ?? '';
@@ -87,7 +87,7 @@ const CommodityList = () => {
                 dateList: newDateList
             };
         });
-    }, [res, liveOverlay]);
+    }, [result, liveOverlay]);
 
     const loading = isLoading;
 

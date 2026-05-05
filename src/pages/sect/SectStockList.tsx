@@ -5,7 +5,7 @@ import {GridColDef} from "@mui/x-data-grid";
 import Chip from "@mui/material/Chip";
 import {useMemo} from "react";
 import {useParams} from "react-router-dom";
-import {SectStockGridRow, SectStockListItem, SectStockListReq,} from "../../type/SectType.ts";
+import {SectStockGridRow, SectStockListItem, SectStockListReq, SectStockListRes,} from "../../type/SectType.ts";
 import {fetchSectStockList} from "../../api/sect/SectApi.ts";
 import SectStockTableProps from "../../components/SectStockTable.tsx";
 import FreshnessIndicator from "../../components/FreshnessIndicator.tsx";
@@ -17,14 +17,14 @@ const SectStockList = () => {
     const {indsCd} = useParams();
     const sectIndsCd = indsCd || "001";
 
-    const {data: res, isLoading, lastUpdated, pollError} = usePollingQuery(
+    const {data: result, isLoading, lastUpdated, pollError} = usePollingQuery<SectStockListRes>(
         ['sectStockList', sectIndsCd, DEFAULT_REQ.mrktTp],
         (config) => fetchSectStockList(sectIndsCd, DEFAULT_REQ, config),
     );
 
     const row: SectStockGridRow[] = useMemo(() => {
-        if (res?.code !== "0000" || !res.result) return [];
-        return (res.result.sectStockList ?? []).map((sectStock: SectStockListItem) => ({
+        if (!result) return [];
+        return (result.sectStockList ?? []).map((sectStock: SectStockListItem) => ({
             id: sectStock.stkCd,
             stkNm: sectStock.stkNm,
             fluRt: sectStock.fluRt,
@@ -32,7 +32,7 @@ const SectStockList = () => {
             predPreSig: sectStock.predPreSig,
             nowTrdeQty: sectStock.nowTrdeQty,
         }));
-    }, [res]);
+    }, [result]);
 
     const loading = isLoading;
 

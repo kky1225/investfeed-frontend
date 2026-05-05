@@ -32,8 +32,8 @@ export default function BrokerManagement() {
 
     const {data: brokersData, isLoading: loading, isError: brokersError} = useQuery<Broker[]>({
         queryKey: ['admin', 'brokers'],
-        queryFn: async () => {
-            const data = unwrapResponse<{brokers?: Broker[]} | null>(await fetchAdminBrokerList(), null);
+        queryFn: async ({signal}) => {
+            const data = unwrapResponse<{brokers?: Broker[]} | null>(await fetchAdminBrokerList({signal, skipGlobalError: true}), null);
             return data?.brokers ?? [];
         },
     });

@@ -3,18 +3,18 @@ import api from '../../axios.ts';
 import type {BulkRefreshReq, BulkRefreshStatus, CalendarEventsReq, IndicatorHistoryReq, ManualCalendarEventReq} from '../../type/EconomicCalendarType.ts';
 import type {ApiResponse} from '../../type/AuthType.ts';
 
-export const fetchEconomicIndicators = async () => {
-    const res = await api.get('/calendar/indicators');
+export const fetchEconomicIndicators = async (config?: AxiosRequestConfig) => {
+    const res = await api.get('/calendar/indicators', config);
     return res.data;
 };
 
-export const fetchIndicatorHistory = async (req: IndicatorHistoryReq) => {
-    const res = await api.get('/calendar/history', {params: req});
+export const fetchIndicatorHistory = async (req: IndicatorHistoryReq, config?: AxiosRequestConfig) => {
+    const res = await api.get('/calendar/history', {...config, params: req});
     return res.data;
 };
 
-export const fetchCalendarEvents = async (req: CalendarEventsReq) => {
-    const res = await api.get('/calendar/events', {params: req});
+export const fetchCalendarEvents = async (req: CalendarEventsReq, config?: AxiosRequestConfig) => {
+    const res = await api.get('/calendar/events', {...config, params: req});
     return res.data;
 };
 

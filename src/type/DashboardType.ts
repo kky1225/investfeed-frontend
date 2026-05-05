@@ -27,3 +27,8 @@ export interface InvestorTradeRankList {
     pridStkpcFluRt: string,
     nettrdeAmt: string
 }
+
+export interface DashboardRes {
+    indexList: DashboardIndexListItem[] | null,
+    investorTradeRankList: InvestorTradeRankList[] | null,
+}

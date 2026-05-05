@@ -198,7 +198,7 @@ export default function ManualHoldingTab({broker}: ManualHoldingTabProps) {
     } | null;
     const {data: holdingData, isLoading: loading} = useQuery<ManualHoldingData>({
         queryKey: ['manualHoldingList', broker.id],
-        queryFn: async () => unwrapResponse<ManualHoldingData>(await fetchManualHoldingList(broker.id), null),
+        queryFn: async ({signal}) => unwrapResponse<ManualHoldingData>(await fetchManualHoldingList(broker.id, {signal, skipGlobalError: true}), null),
         refetchOnWindowFocus: false,
     });
 

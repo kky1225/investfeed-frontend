@@ -28,8 +28,8 @@ export const createPriceTarget = async (req: import("../../type/NotificationType
     return res.data;
 };
 
-export const fetchPriceTargets = async () => {
-    const res = await api.get("/notifications/price-targets");
+export const fetchPriceTargets = async (config?: AxiosRequestConfig) => {
+    const res = await api.get("/notifications/price-targets", config);
     return res.data;
 };
 
@@ -38,8 +38,8 @@ export const deletePriceTarget = async (id: number) => {
     return res.data;
 };
 
-export const fetchNotificationSetting = async () => {
-    const res = await api.get("/notifications/settings");
+export const fetchNotificationSetting = async (config?: AxiosRequestConfig) => {
+    const res = await api.get("/notifications/settings", config);
     return res.data;
 };
 

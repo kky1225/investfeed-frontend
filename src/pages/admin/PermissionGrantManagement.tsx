@@ -37,13 +37,13 @@ export default function PermissionGrantManagement() {
 
     const {data: permissionsData, isLoading: loading, isError: permError} = useQuery<PermissionRes[]>({
         queryKey: ['admin', 'permissionGrants'],
-        queryFn: async () => unwrapResponse(await fetchPermissionGrants(), [] as PermissionRes[]),
+        queryFn: async ({signal}) => unwrapResponse(await fetchPermissionGrants({signal, skipGlobalError: true}), [] as PermissionRes[]),
     });
     const permissions = permissionsData ?? [];
 
     const {data: rolesData} = useQuery<RoleRes[]>({
         queryKey: ['admin', 'roles'],
-        queryFn: async () => unwrapResponse(await fetchRoles(), [] as RoleRes[]),
+        queryFn: async ({signal}) => unwrapResponse(await fetchRoles({signal, skipGlobalError: true}), [] as RoleRes[]),
     });
     const roles = rolesData ?? [];
 

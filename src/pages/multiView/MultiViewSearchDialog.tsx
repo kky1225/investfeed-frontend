@@ -18,6 +18,7 @@ import {fetchStockSearch} from "../../api/stock/StockApi.ts";
 import {fetchCryptoSearch} from "../../api/crypto/CryptoApi.ts";
 import {fetchCommodityList} from "../../api/commodity/CommodityApi.ts";
 import type {MultiViewAssetType, SelectedAsset} from "../../type/MultiViewType.ts";
+import {unwrapResponse} from "../../lib/apiResponse.ts";
 
 interface MultiViewSearchDialogProps {
     open: boolean;
@@ -41,10 +42,9 @@ export default function MultiViewSearchDialog({open, onClose, onSelect}: MultiVi
     // 원자재 목록 — open && tab === 2 일 때만 fetch (lazy load)
     const {data: commodityListData} = useQuery<SearchItem[]>({
         queryKey: ['multiView', 'commodityList'],
-        queryFn: async () => {
-            const data = await fetchCommodityList();
-            if (data.code !== "0000") throw new Error(data.message || `원자재 목록 조회 실패 (${data.code})`);
-            return (data.result?.commodityList ?? []).map((item: {stkCd: string; stkNm: string}) => ({
+        queryFn: async ({signal}) => {
+            const result = unwrapResponse(await fetchCommodityList({signal, skipGlobalError: true}), {commodityList: [] as {stkCd: string; stkNm: string}[]});
+            return (result.commodityList ?? []).map((item: {stkCd: string; stkNm: string}) => ({
                 stkCd: item.stkCd,
                 stkNm: item.stkNm,
             }));

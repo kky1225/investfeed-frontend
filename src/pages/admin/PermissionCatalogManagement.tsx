@@ -66,7 +66,7 @@ export default function PermissionCatalogManagement() {
 
     const {data: permissionsData, isLoading: loading, isError: permError} = useQuery<PermissionRes[]>({
         queryKey: ['admin', 'permissionCatalog'],
-        queryFn: async () => unwrapResponse(await fetchPermissionCatalog(), [] as PermissionRes[]),
+        queryFn: async ({signal}) => unwrapResponse(await fetchPermissionCatalog({signal, skipGlobalError: true}), [] as PermissionRes[]),
     });
     const permissions = permissionsData ?? [];
 

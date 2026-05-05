@@ -20,7 +20,7 @@ import PriorityHighIcon from '@mui/icons-material/PriorityHigh';
 import RemoveIcon from '@mui/icons-material/Remove';
 import DoNotDisturbIcon from '@mui/icons-material/DoNotDisturb';
 import {useNavigate} from "react-router-dom";
-import {ChartDay, DashboardIndexListItem, InvestorTradeRankList} from "../../type/DashboardType.ts";
+import {ChartDay, DashboardIndexListItem, DashboardRes, InvestorTradeRankList} from "../../type/DashboardType.ts";
 import {fetchDashboard, fetchDashboardStream} from "../../api/dashboard/DashboardApi.ts";
 import {fetchTimeNow} from "../../api/time/TimeApi.ts";
 import {MarketType} from "../../type/timeType.ts";
@@ -63,12 +63,10 @@ export default function Dashboard() {
 
     const [liveOverlay, setLiveOverlay] = useState<Map<string, LiveIndexUpdate>>(new Map());
 
-    const {data: res, isLoading, lastUpdated, pollError} = usePollingQuery(
+    const {data: result, isLoading, lastUpdated, pollError} = usePollingQuery<DashboardRes>(
         ['stockDashboard'],
         (config) => fetchDashboard(config),
     );
-
-    const result = res ? res.result : null;
 
     // 폴링 결과 + 실시간 overlay 합산
     const indexDataList: StatCardProps[] = useMemo(() => {

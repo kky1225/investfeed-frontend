@@ -11,6 +11,7 @@ import {MarketType} from "../../type/timeType.ts";
 import {fetchRecommendList, fetchRecommendListStream} from "../../api/recommend/RecommendApi.ts";
 import {
     RecommendListItem,
+    RecommendListRes,
     RecommendListStream,
     RecommendListStreamReq,
     RecommendListStreamRes
@@ -36,14 +37,14 @@ const RecommendList = () => {
     const chartTimer = useRef<number>(0);
     const marketTimer = useRef<number>(0);
 
-    const {data: res, isLoading, lastUpdated, pollError} = usePollingQuery(
+    const {data: result, isLoading, lastUpdated, pollError} = usePollingQuery<RecommendListRes>(
         ['recommendList'],
         (config) => fetchRecommendList(config),
     );
 
     const recommendDataList: RecommendCardProps[] = useMemo(() => {
-        if (res?.code !== "0000" || !res.result) return [];
-        const list: RecommendListItem[] = res.result.recommendList ?? [];
+        if (!result) return [];
+        const list: RecommendListItem[] = result.recommendList ?? [];
         return list.map((item) => {
             const live = liveOverlay.get(item.stkCd);
             return {
@@ -55,11 +56,11 @@ const RecommendList = () => {
                 trend: live?.trend ?? trendColor(item.preSig),
             };
         });
-    }, [res, liveOverlay]);
+    }, [result, liveOverlay]);
 
     const avoidDataList: RecommendCardProps[] = useMemo(() => {
-        if (res?.code !== "0000" || !res.result) return [];
-        const list: RecommendListItem[] = res.result.avoidList ?? [];
+        if (!result) return [];
+        const list: RecommendListItem[] = result.avoidList ?? [];
         return list.map((item) => {
             const live = liveOverlay.get(item.stkCd);
             return {
@@ -71,7 +72,7 @@ const RecommendList = () => {
                 trend: live?.trend ?? trendColor(item.preSig),
             };
         });
-    }, [res, liveOverlay]);
+    }, [result, liveOverlay]);
 
     const loading = isLoading;
 
@@ -141,10 +142,10 @@ const RecommendList = () => {
 
     // WebSocket 라이프사이클 — recommend/avoid 종목 stkCd 들로 stream 등록.
     useEffect(() => {
-        if (res?.code !== "0000" || !res.result) return;
+        if (!result) return;
         const items = [
-            ...(res.result.recommendList ?? []),
-            ...(res.result.avoidList ?? []),
+            ...(result.recommendList ?? []),
+            ...(result.avoidList ?? []),
         ].map((r: RecommendListItem) => r.stkCd);
         if (items.length === 0) return;
 
@@ -177,7 +178,7 @@ const RecommendList = () => {
             socket?.close();
             clearTimeout(socketTimeout);
         };
-    }, [res]);
+    }, [result]);
 
     return (
         <Box sx={{width: '100%', maxWidth: {sm: '100%', md: '1700px'}}}>

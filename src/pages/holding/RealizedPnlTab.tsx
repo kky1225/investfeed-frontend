@@ -41,6 +41,7 @@ import {
 } from "../../api/realizedPnl/RealizedPnlApi.ts";
 import AddManualPnlDialog from "./AddManualPnlDialog.tsx";
 import EditManualPnlDialog from "./EditManualPnlDialog.tsx";
+import {unwrapResponse} from "../../lib/apiResponse.ts";
 
 type ViewMode = 'monthly' | 'yearly' | 'all';
 
@@ -74,21 +75,17 @@ export default function RealizedPnlTab({myBrokers}: RealizedPnlTabProps) {
 
     // 조회 조건 / broker 변경 시 자동 재요청. invalidateQueries 로 수동 reload.
     const {data: allItems, isLoading: loading} = useQuery<RealizedPnlItem[]>({
-        queryKey: ['stockRealizedPnl', selectedBroker?.brokerId, viewMode, year, month, isApiBroker],
-        queryFn: async () => {
+        queryKey: ['stockRealizedPnl', selectedBroker?.brokerId, viewMode, year, month],
+        queryFn: async ({signal}) => {
             if (isApiBroker) {
                 const syncReq = viewMode === 'monthly' ? {year, month}
                     : viewMode === 'yearly' ? {year}
                     : {};
-                const syncData = await syncStockRealizedPnl(syncReq);
-                if (syncData.code !== "0000") throw new Error(syncData.message || `실현손익 조회 실패 (${syncData.code})`);
-                return syncData.result?.items ?? [];
+                return unwrapResponse(await syncStockRealizedPnl(syncReq, {signal, skipGlobalError: true}), {items: [] as RealizedPnlItem[]}).items ?? [];
             } else {
                 const yearParam = viewMode !== 'all' ? year : undefined;
                 const monthParam = viewMode === 'monthly' ? month : undefined;
-                const data = await fetchStockRealizedPnlList(yearParam, monthParam);
-                if (data.code !== "0000") throw new Error(data.message || `실현손익 조회 실패 (${data.code})`);
-                return data.result?.items ?? [];
+                return unwrapResponse(await fetchStockRealizedPnlList(yearParam, monthParam, {signal, skipGlobalError: true}), {items: [] as RealizedPnlItem[]}).items ?? [];
             }
         },
         enabled: myBrokers.length > 0 && !!selectedBroker,

@@ -16,7 +16,7 @@ export interface ThemeListItem {
 
 export interface ThemeGridRow {
     id: string;
-    rank: string;
+    rank: number;
     themaNm: string,
     fluSig: string,
     fluRt: string;
@@ -63,4 +63,12 @@ export interface ThemeStockListStreamRes {
     name: string,
     item: string,
     values: Array<ThemeStockListStream>
+}
+
+export interface ThemeListRes {
+    themeList: ThemeListItem[],
+}
+
+export interface ThemeStockListRes {
+    themeStockList: ThemeStockListItem[],
 }

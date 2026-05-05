@@ -8,7 +8,7 @@ import Skeleton from "@mui/material/Skeleton";
 import {useEffect, useMemo, useRef, useState} from "react";
 import {useNavigate, useParams} from "react-router-dom";
 import * as React from "react";
-import {SectListItem, SectListReq, SectListStream, SectListStreamReq, SectListStreamRes} from "../../type/SectType.ts";
+import {SectListItem, SectListReq, SectListRes, SectListStream, SectListStreamReq, SectListStreamRes} from "../../type/SectType.ts";
 import {fetchTimeNow} from "../../api/time/TimeApi.ts";
 import {MarketType} from "../../type/timeType.ts";
 import {fetchSectList, fetchSectListStream} from "../../api/sect/SectApi.ts";
@@ -37,14 +37,14 @@ const SectList = () => {
     const marketTimer = useRef<number>(0);
     const subscribedKeyRef = useRef<string>('');
 
-    const {data: res, isLoading, lastUpdated, pollError} = usePollingQuery(
+    const {data: result, isLoading, lastUpdated, pollError} = usePollingQuery<SectListRes>(
         ['sectList', req.indsCd],
         (config) => fetchSectList(req, config),
     );
 
     const sectDataList: SectCardProps[] = useMemo(() => {
-        if (res?.code !== "0000" || !res.result) return [];
-        const list: SectListItem[] = res.result.sectList ?? [];
+        if (!result) return [];
+        const list: SectListItem[] = result.sectList ?? [];
         return list.map((sect: SectListItem) => {
             const live = liveOverlay.get(sect.stkCd);
             return {
@@ -55,7 +55,7 @@ const SectList = () => {
                 trend: live?.trend ?? trendColor(sect.preSig),
             };
         });
-    }, [res, liveOverlay]);
+    }, [result, liveOverlay]);
 
     const loading = isLoading;
 
@@ -125,8 +125,8 @@ const SectList = () => {
 
     // WebSocket 라이프사이클 — sectList 결과의 stkCd 들로 stream 등록.
     useEffect(() => {
-        if (res?.code !== "0000" || !res.result) return;
-        const items = (res.result.sectList ?? []).map((s: SectListItem) => s.stkCd);
+        if (!result) return;
+        const items = (result.sectList ?? []).map((s: SectListItem) => s.stkCd);
         if (items.length === 0) return;
 
         const key = `${req.indsCd}|${items.join(',')}`;
@@ -161,7 +161,7 @@ const SectList = () => {
             socket?.close();
             clearTimeout(socketTimeout);
         };
-    }, [res, req.indsCd]);
+    }, [result, req.indsCd]);
 
     const handleChange = (_event: React.SyntheticEvent, index: number) => {
         const newValue = index === 1 ? "101" : "001";

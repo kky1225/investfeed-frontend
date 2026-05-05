@@ -64,14 +64,14 @@ export default function RebalancingPage() {
 
     const hasMissing = apiKeyLoaded && [...myApiBrokerIds].some(id => !validBrokerIds.has(id));
 
-    const {data: res, isFetched, lastUpdated, pollError} = usePollingQuery(
+    const {data: pollStatus, isFetched, lastUpdated, pollError} = usePollingQuery<RebalancingStatusRes>(
         ['rebalancingStatus'],
         (config) => fetchRebalancingStatus(config),
         {enabled: apiKeyLoaded && !hasMissing},
     );
 
     const status: RebalancingStatusRes | null =
-        statusOverride === 'cleared' ? null : (statusOverride ?? res?.result ?? null);
+        statusOverride === 'cleared' ? null : (statusOverride ?? pollStatus ?? null);
     const loaded = !apiKeyLoaded ? false : hasMissing ? true : isFetched;
 
     const reloadStatus = async () => {

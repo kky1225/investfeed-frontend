@@ -127,7 +127,7 @@ const HoldingList = () => {
     } | null;
     const {data: holdingData, isLoading: loading} = useQuery<HoldingListData>({
         queryKey: ['holdingList'],
-        queryFn: async () => unwrapResponse<HoldingListData>(await fetchHoldingList(), null),
+        queryFn: async ({signal}) => unwrapResponse<HoldingListData>(await fetchHoldingList({signal, skipGlobalError: true}), null),
         refetchOnWindowFocus: false,
     });
 

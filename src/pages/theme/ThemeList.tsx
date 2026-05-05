@@ -2,7 +2,7 @@ import {Box, InputLabel, Select, SelectChangeEvent} from "@mui/material";
 import Typography from "@mui/material/Typography";
 import Grid from "@mui/material/Grid";
 import {useState} from "react";
-import {ThemeGridRow, ThemeListItem, ThemeListReq} from "../../type/ThemeType.ts";
+import {ThemeGridRow, ThemeListItem, ThemeListReq, ThemeListRes} from "../../type/ThemeType.ts";
 import {fetchThemeList} from "../../api/theme/ThemeApi.ts";
 import FreshnessIndicator from "../../components/FreshnessIndicator.tsx";
 import ThemeTable from "../../components/ThemeTable.tsx";
@@ -19,12 +19,12 @@ const ThemeList = () => {
         fluPlAmtTp: "3"
     });
 
-    const {data, isLoading, lastUpdated, pollError} = usePollingQuery(
+    const {data, isLoading, lastUpdated, pollError} = usePollingQuery<ThemeListRes>(
         ['themeList', req],
         (config) => fetchThemeList(req, config),
     );
 
-    const row: ThemeGridRow[] = (data?.result?.themeList ?? []).map(
+    const row: ThemeGridRow[] = (data?.themeList ?? []).map(
         (theme: ThemeListItem, index: number) => ({
             id: theme.themaGrpCd,
             rank: index + 1,
