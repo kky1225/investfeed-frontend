@@ -1,4 +1,4 @@
-import {useEffect, useState} from "react";
+import {useMemo, useState} from "react";
 import Dialog from "@mui/material/Dialog";
 import DialogTitle from "@mui/material/DialogTitle";
 import DialogContent from "@mui/material/DialogContent";
@@ -20,28 +20,31 @@ interface EditCryptoManualHoldingDialogProps {
 export default function EditCryptoManualHoldingDialog({open, onClose, holding, onUpdated}: EditCryptoManualHoldingDialogProps) {
     const [purPrice, setPurPrice] = useState("");
     const [quantity, setQuantity] = useState("");
-    const [purAmt, setPurAmt] = useState("");
-    const [purAmtManual, setPurAmtManual] = useState(false);
+    // purAmtOverride: null = 자동 계산, string = 사용자 직접 입력 (또는 holding 초기값)
+    const [purAmtOverride, setPurAmtOverride] = useState<string | null>(null);
     const [formErrors, setFormErrors] = useState<{purPrice?: string; quantity?: string; purAmt?: string}>({});
 
-    useEffect(() => {
-        if (holding) {
+    // open + holding 변경 시 form 초기화 — open 을 키에 포함해 같은 holding 으로 다시 열 때도 리셋
+    const resetKey = `${open}|${holding?.id ?? 'none'}`;
+    const [prevResetKey, setPrevResetKey] = useState('');
+    if (resetKey !== prevResetKey) {
+        setPrevResetKey(resetKey);
+        if (open && holding) {
             setPurPrice(String(holding.purPrice));
             setQuantity(String(holding.quantity));
-            setPurAmt(String(holding.purAmt));
-            setPurAmtManual(false);
+            setPurAmtOverride(String(holding.purAmt));
         }
-    }, [holding]);
+    }
 
-    useEffect(() => {
-        if (!purAmtManual && purPrice && quantity) {
-            setPurAmt(String(Number(purPrice) * Number(quantity)));
-        }
-    }, [purPrice, quantity, purAmtManual]);
+    // purAmt = override 가 있으면 그 값, 없으면 자동 계산
+    const purAmt = useMemo<string>(() => {
+        if (purAmtOverride !== null) return purAmtOverride;
+        if (purPrice && quantity) return String(Number(purPrice) * Number(quantity));
+        return "";
+    }, [purAmtOverride, purPrice, quantity]);
 
     const handleClose = () => {
         setFormErrors({});
-        setPurAmtManual(false);
         onClose();
     };
 
@@ -57,11 +60,12 @@ export default function EditCryptoManualHoldingDialog({open, onClose, holding, o
         }
         setFormErrors({});
         try {
-            await updateCryptoManualHolding(holding.id, {
+            const res = await updateCryptoManualHolding(holding.id, {
                 purPrice: Number(purPrice),
                 quantity: Number(quantity),
                 purAmt: Number(purAmt),
             });
+            if (res.code !== "0000") throw new Error(res.message || `수동 보유코인 수정 실패 (${res.code})`);
             onUpdated();
             handleClose();
         } catch (err) {
@@ -106,8 +110,7 @@ export default function EditCryptoManualHoldingDialog({open, onClose, holding, o
                         size="small"
                         value={purAmt ? Number(purAmt).toLocaleString() : ''}
                         onChange={e => {
-                            setPurAmt(e.target.value.replace(/,/g, '').replace(/[^0-9]/g, ''));
-                            setPurAmtManual(true);
+                            setPurAmtOverride(e.target.value.replace(/,/g, '').replace(/[^0-9]/g, ''));
                             if (formErrors.purAmt) setFormErrors(prev => ({...prev, purAmt: undefined}));
                         }}
                         error={!!formErrors.purAmt}

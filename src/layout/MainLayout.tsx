@@ -11,9 +11,9 @@ import Header from "../components/Header.tsx";
 import Stack from "@mui/material/Stack";
 import Alert from "@mui/material/Alert";
 import Button from "@mui/material/Button";
-import {useCallback, useEffect, useState} from "react";
-import {fetchMyMenus} from "../api/menu/MenuApi.ts";
+import {useEffect} from "react";
 import {useApiKeyStatus} from "../context/ApiKeyStatusContext.tsx";
+import {useMenuTree} from "../context/MenuContext.tsx";
 import type {MenuRes} from "../type/MenuType";
 
 const xThemeComponents = {
@@ -37,28 +37,7 @@ const MainLayout = () => {
     const navigate = useNavigate();
     const location = useLocation();
     const {apiBrokers, validBrokerIds, myApiBrokerIds, isLoaded: apiKeyLoaded, isSatisfied} = useApiKeyStatus();
-
-    const [menuTree, setMenuTree] = useState<MenuRes[]>([]);
-    const [menuLoaded, setMenuLoaded] = useState(false);
-
-    const loadMenus = useCallback(async () => {
-        try {
-            const res = await fetchMyMenus();
-            if (res.result) setMenuTree(res.result);
-        } catch (error) {
-            console.error(error);
-        } finally {
-            setMenuLoaded(true);
-        }
-    }, []);
-
-    useEffect(() => { loadMenus(); }, [loadMenus]);
-
-    useEffect(() => {
-        const handler = () => { loadMenus(); };
-        window.addEventListener('menu-updated', handler);
-        return () => window.removeEventListener('menu-updated', handler);
-    }, [loadMenus]);
+    const {menuTree, menuLoaded} = useMenuTree();
 
     useEffect(() => {
         if (!apiKeyLoaded || !menuLoaded) return;

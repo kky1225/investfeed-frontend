@@ -19,7 +19,7 @@ import { styled } from '@mui/material/styles';
 import ColorModeSelect from '../../components/ColorModeSelect.tsx';
 import AppTheme from '../../components/AppTheme.tsx';
 import { useState } from 'react';
-import { useNavigate, Link as RouterLink } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { changePassword, logout } from '../../api/auth/AuthApi';
 import { useAuth } from '../../context/AuthContext';
 
@@ -130,7 +130,8 @@ export default function ChangePassword(props: { disableCustomTheme?: boolean }) 
         setLoading(true);
         setErrorMessage('');
         try {
-            await changePassword({ currentPassword, newPassword });
+            const res = await changePassword({ currentPassword, newPassword });
+            if (res.code !== "0000") throw new Error(res.message || `비밀번호 변경 실패 (${res.code})`);
             setDialog({
                 title: '비밀번호 변경 완료',
                 message: '비밀번호가 변경되었습니다. 새 비밀번호로 다시 로그인해 주세요.',
@@ -254,7 +255,7 @@ export default function ChangePassword(props: { disableCustomTheme?: boolean }) 
                     {!passwordChangeRequired && (
                         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
                             <Typography sx={{ textAlign: 'center' }}>
-                                <Link component={RouterLink} to="/" variant="body2">
+                                <Link component="button" type="button" onClick={() => navigate(-1)} variant="body2">
                                     돌아가기
                                 </Link>
                             </Typography>

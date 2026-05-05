@@ -1,4 +1,6 @@
-import React, {createContext, useCallback, useContext, useEffect, useMemo, useState} from "react";
+import React, {createContext, useCallback, useContext, useMemo, useState} from "react";
+import {useQuery} from "@tanstack/react-query";
+import {unwrapResponse} from "../../lib/apiResponse.ts";
 import {useNavigate} from "react-router-dom";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
@@ -17,8 +19,11 @@ import CustomPieChart from "../../components/CustomPieChart.tsx";
 import {HoldingStock} from "../../type/HoldingType.ts";
 import {fetchHoldingList, reorderApiHoldings} from "../../api/holding/HoldingApi.ts";
 import {renderChip, renderTradeColor} from "../../components/CustomRender.tsx";
+import BlindText from "../../components/BlindText.tsx";
 import HoldingSummaryCard from "./HoldingSummaryCard.tsx";
-import {useHoldingStream, HoldingBuffer} from "./useHoldingStream.ts";
+import {useHoldingStream} from "./useHoldingStream.ts";
+import type {HoldingBuffer} from "../../type/HoldingType.ts";
+import {fetchHoldingStream} from "../../api/holding/HoldingApi.ts";
 import {useBlindMode} from "../../context/BlindModeContext.tsx";
 
 // ─── DataGrid 행 드래그 (Context 패턴) ───────────────────────────────────────
@@ -88,104 +93,124 @@ const calcDailyPl = (stocks: HoldingStock[]) =>
 
 const HoldingList = () => {
     const navigate = useNavigate();
-    const [holdings, setHoldings] = useState<HoldingStock[]>([]);
-    const [totPurAmt, setTotPurAmt] = useState("0");
-    const [totEvltAmt, setTotEvltAmt] = useState("0");
-    const [totEvltPl, setTotEvltPl] = useState("0");
-    const [totPrftRt, setTotPrftRt] = useState("0");
-    const [balance, setBalance] = useState("0");
-    const [dailyPl, setDailyPl] = useState("0");
     const [showChart, setShowChart] = useState(false);
     const {isBlind} = useBlindMode();
+
+    // showList 는 isBlind 변경 시 리셋되지만 사용자가 토글로도 변경 가능. "reset state during render" 패턴.
     const [showList, setShowList] = useState(!isBlind);
-    const [stkCds, setStkCds] = useState<string[]>([]);
+    const [prevIsBlind, setPrevIsBlind] = useState(isBlind);
+    if (isBlind !== prevIsBlind) {
+        setPrevIsBlind(isBlind);
+        setShowList(!isBlind);
+    }
+
+    const [orderOverride, setOrderOverride] = useState<number[] | null>(null);
     const [orderDirty, setOrderDirty] = useState(false);
     const [savingOrder, setSavingOrder] = useState(false);
-    const [loading, setLoading] = useState(true);
+
+    // WebSocket 으로 들어오는 실시간 부분 갱신 overlay (curPrc/rmndQty/purPric 등)
+    const [liveOverlay, setLiveOverlay] = useState<Map<string, HoldingBuffer>>(new Map());
 
     const sensors = useSensors(
         useSensor(PointerSensor, {activationConstraint: {distance: 5}}),
         useSensor(TouchSensor, {activationConstraint: {delay: 200, tolerance: 5}})
     );
 
-    useEffect(() => {
-        setShowList(!isBlind);
-    }, [isBlind]);
+    // 한 번만 fetch (폴링 X). useQuery 가 mount 시 자동 호출 + cancel 처리.
+    type HoldingListData = {
+        holdingList?: HoldingStock[];
+        totPurAmt?: string;
+        totEvltAmt?: string;
+        totEvltPl?: string;
+        totPrftRt?: string;
+        balance?: string;
+    } | null;
+    const {data: holdingData, isLoading: loading} = useQuery<HoldingListData>({
+        queryKey: ['holdingList'],
+        queryFn: async () => unwrapResponse<HoldingListData>(await fetchHoldingList(), null),
+        refetchOnWindowFocus: false,
+    });
 
-    useEffect(() => {
-        (async () => {
-            try {
-                const data = await fetchHoldingList();
-                if (data.code !== "0000") return;
+    const fetchedHoldings: HoldingStock[] = holdingData?.holdingList ?? [];
 
-                const result = data.result;
-                setTotPurAmt(result.totPurAmt);
-                setTotEvltAmt(result.totEvltAmt);
-                setTotEvltPl(result.totEvltPl);
-                setTotPrftRt(result.totPrftRt);
-                setBalance(result.balance ?? "0");
-
-                const stocks: HoldingStock[] = result.holdingList ?? [];
-                if (stocks.length > 0) {
-                    setHoldings(stocks);
-                    setDailyPl(String(calcDailyPl(stocks)));
-                    setStkCds(stocks.map(s => s.stkCd));
+    // 사용자 드래그 order + WebSocket overlay 적용한 최종 holdings
+    const holdings = useMemo<HoldingStock[]>(() => {
+        // 1. order override 적용 (드래그 결과)
+        let ordered = fetchedHoldings;
+        if (orderOverride) {
+            const byId = new Map(fetchedHoldings.map(h => [h.id, h]));
+            const sorted: HoldingStock[] = [];
+            const seen = new Set<number>();
+            for (const id of orderOverride) {
+                const h = byId.get(id);
+                if (h) {
+                    sorted.push(h);
+                    seen.add(id);
                 }
-            } catch (err) {
-                console.error(err);
-            } finally {
-                setLoading(false);
             }
-        })();
-    }, []);
+            // override 에 없는 새 종목은 뒤에 append
+            fetchedHoldings.forEach(h => { if (!seen.has(h.id)) sorted.push(h); });
+            ordered = sorted;
+        }
+
+        // 2. WebSocket overlay 적용 (curPrc/rmndQty/purPric 갱신 + 파생 필드 재계산)
+        return ordered.map(stock => {
+            const buffer = liveOverlay.get(stock.stkCd);
+            if (!buffer) return stock;
+
+            const curPrc = buffer.curPrc ?? stock.curPrc;
+            const rmndQty = buffer.rmndQty ?? stock.rmndQty;
+            const evltAmt = String(Number(curPrc) * Number(rmndQty));
+            const evltvPrft = String(Number(evltAmt) - Number(stock.purAmt));
+            const prftRtVal = Number(stock.purAmt) !== 0
+                ? Number(evltvPrft) / Number(stock.purAmt) * 100 : 0;
+            const prftRt = prftRtVal > 0 ? `+${prftRtVal.toFixed(2)}` : prftRtVal.toFixed(2);
+
+            return {...stock, curPrc, rmndQty, evltAmt, evltvPrft, prftRt};
+        });
+    }, [fetchedHoldings, orderOverride, liveOverlay]);
+
+    // 요약 카드 totals (holdings 에서 derive)
+    const totPurAmt = holdingData?.totPurAmt ?? "0";
+    const balance = holdingData?.balance ?? "0";
+    const totEvltAmt = useMemo(() => String(holdings.reduce((sum, s) => sum + Number(s.evltAmt), 0)), [holdings]);
+    const totEvltPl = useMemo(() => String(Number(totEvltAmt) - Number(totPurAmt)), [totEvltAmt, totPurAmt]);
+    const totPrftRt = useMemo(() => {
+        const pur = Number(totPurAmt);
+        return pur !== 0 ? (Number(totEvltPl) / pur * 100).toFixed(2) : "0";
+    }, [totEvltPl, totPurAmt]);
+    const dailyPl = useMemo(() => String(calcDailyPl(holdings)), [holdings]);
+
+    // WebSocket 구독 종목 코드 — fetchedHoldings 기준 (overlay 와 무관)
+    const stkCds = useMemo(() => fetchedHoldings.map(s => s.stkCd), [fetchedHoldings]);
+    const stableStkCds = useMemo(() => stkCds, [stkCds.join(',')]);
 
     const handleStreamUpdate = useCallback((bufferMap: Map<string, HoldingBuffer>) => {
-        setHoldings(prev => {
-            const updated = prev.map(stock => {
-                const buffer = bufferMap.get(stock.stkCd);
-                if (!buffer) return stock;
-
-                const curPrc = buffer.curPrc ?? stock.curPrc;
-                const rmndQty = buffer.rmndQty ?? stock.rmndQty;
-                const evltAmt = String(Number(curPrc) * Number(rmndQty));
-                const evltvPrft = String(Number(evltAmt) - Number(stock.purAmt));
-                const prftRtVal = Number(stock.purAmt) !== 0
-                    ? Number(evltvPrft) / Number(stock.purAmt) * 100 : 0;
-                const prftRt = prftRtVal > 0 ? `+${prftRtVal.toFixed(2)}` : prftRtVal.toFixed(2);
-
-                return {...stock, curPrc, rmndQty, evltAmt, evltvPrft, prftRt};
-            });
-
-            const totalEvlt = updated.reduce((sum, s) => sum + Number(s.evltAmt), 0);
-            const totalPur = updated.reduce((sum, s) => sum + Number(s.purAmt), 0);
-            const totalPl = totalEvlt - totalPur;
-            const totalPlRt = totalPur !== 0 ? (totalPl / totalPur * 100).toFixed(2) : "0";
-
-            setTotEvltAmt(String(totalEvlt));
-            setTotEvltPl(String(totalPl));
-            setTotPrftRt(totalPlRt);
-            setDailyPl(String(calcDailyPl(updated)));
-
-            return updated;
+        // overlay 만 갱신. holdings/totals 는 useMemo 가 자동 재계산.
+        setLiveOverlay(prev => {
+            const next = new Map(prev);
+            bufferMap.forEach((v, k) => next.set(k, {...next.get(k), ...v}));
+            return next;
         });
     }, []);
 
-    const stableStkCds = useMemo(() => stkCds, [stkCds.join(',')]);
-    useHoldingStream(stableStkCds, handleStreamUpdate);
+    useHoldingStream(stableStkCds, handleStreamUpdate, fetchHoldingStream);
 
     const handleDragEnd = (event: DragEndEvent) => {
         const {active, over} = event;
         if (!over || active.id === over.id) return;
         const oldIndex = holdings.findIndex(h => h.id === active.id);
         const newIndex = holdings.findIndex(h => h.id === over.id);
-        setHoldings(prev => arrayMove(prev, oldIndex, newIndex));
+        const newOrder = arrayMove(holdings.map(h => h.id), oldIndex, newIndex);
+        setOrderOverride(newOrder);
         setOrderDirty(true);
     };
 
     const handleSaveOrder = async () => {
         setSavingOrder(true);
         try {
-            await reorderApiHoldings({orderedIds: holdings.map(h => h.id)});
+            const res = await reorderApiHoldings({orderedIds: holdings.map(h => h.id)});
+            if (res.code !== "0000") throw new Error(res.message || `보유주식 순서 변경 실패 (${res.code})`);
             setOrderDirty(false);
         } finally {
             setSavingOrder(false);
@@ -199,12 +224,12 @@ const HoldingList = () => {
         },
         {field: 'stkNm', headerName: '종목명', flex: 1.5, minWidth: 150},
         {field: 'prftRt', headerName: '수익률', flex: 0.8, minWidth: 100, renderCell: (params: {value: number}) => renderChip(params.value as number)},
-        {field: 'curPrc', headerName: '현재가', flex: 1, minWidth: 100, valueFormatter: (value: string) => Number(value).toLocaleString()},
-        {field: 'rmndQty', headerName: '보유수량', flex: 0.8, minWidth: 80, valueFormatter: (value: string) => Number(value).toLocaleString()},
+        {field: 'curPrc', headerName: '현재가', flex: 1, minWidth: 100, renderCell: (params) => <BlindText>{Number(params.value).toLocaleString()}</BlindText>},
+        {field: 'rmndQty', headerName: '보유수량', flex: 0.8, minWidth: 80, renderCell: (params) => <BlindText>{Number(params.value).toLocaleString()}</BlindText>},
         {field: 'purPric', headerName: '매입가', flex: 1, minWidth: 100, valueFormatter: (value: string) => Number(value).toLocaleString()},
-        {field: 'evltAmt', headerName: '평가금액', flex: 1, minWidth: 120, valueFormatter: (value: string) => Number(value).toLocaleString()},
-        {field: 'evltvPrft', headerName: '평가손익', flex: 1, minWidth: 120, renderCell: (params: {value: string}) => renderTradeColor(Number(params.value))},
-        {field: 'purAmt', headerName: '매입금액', flex: 1, minWidth: 120, valueFormatter: (value: string) => Number(value).toLocaleString()},
+        {field: 'evltAmt', headerName: '평가금액', flex: 1, minWidth: 120, renderCell: (params) => <BlindText>{Number(params.value).toLocaleString()}</BlindText>},
+        {field: 'evltvPrft', headerName: '평가손익', flex: 1, minWidth: 120, renderCell: (params) => <BlindText>{renderTradeColor(Number(params.value))}</BlindText>},
+        {field: 'purAmt', headerName: '매입금액', flex: 1, minWidth: 120, renderCell: (params) => <BlindText>{Number(params.value).toLocaleString()}</BlindText>},
         {field: 'possRt', headerName: '비중', flex: 0.6, minWidth: 80, valueFormatter: (value: string) => `${value}%`},
     ];
 

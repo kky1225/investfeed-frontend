@@ -66,6 +66,7 @@ const colors = ['hsl(220, 80%, 65%)', 'hsl(35, 90%, 60%)', 'hsl(0, 0%, 70%)'];
 export default function AssetAllocationChart({stockTotal, cryptoTotal, cashTotal, totalAsset, selectedGroup, onGroupSelect}: AssetAllocationChartProps) {
     const theme = useTheme();
     const isSmallScreen = useMediaQuery(theme.breakpoints.down('sm'));
+    const {isBlind} = useBlindMode();
 
     const chartSize = isSmallScreen ? 200 : 280;
     const innerRadius = isSmallScreen ? 50 : 75;
@@ -133,7 +134,11 @@ export default function AssetAllocationChart({stockTotal, cryptoTotal, cashTotal
                             outerRadius,
                             paddingAngle: 2,
                             highlightScope: {fade: 'global', highlight: 'item'},
+                            valueFormatter: (item) => item.value.toLocaleString(),
                         }]}
+                        slotProps={{
+                            tooltip: {sx: isBlind ? {'.MuiChartsTooltip-valueCell': {filter: 'blur(6px)'}} : {}},
+                        }}
                         height={chartSize}
                         width={chartSize}
                         onItemClick={handleItemClick}

@@ -5,7 +5,6 @@ import type {
     CreateMenuReq,
     UpdateMenuReq,
     UpdateMenuStructureReq,
-    UpdateMenuPermissionReq,
     UpdateMenuBrokersReq
 } from '../../type/MenuType';
 
@@ -36,11 +35,6 @@ export const deleteMenu = async (id: number): Promise<ApiResponse<null>> => {
 
 export const updateMenuStructure = async (req: UpdateMenuStructureReq): Promise<ApiResponse<null>> => {
     const res = await api.patch<ApiResponse<null>>('/admin/menus/structure', req);
-    return res.data;
-};
-
-export const updateMenuPermissions = async (id: number, req: UpdateMenuPermissionReq): Promise<ApiResponse<null>> => {
-    const res = await api.patch<ApiResponse<null>>(`/admin/menus/${id}/permissions`, req);
     return res.data;
 };
 

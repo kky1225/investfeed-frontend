@@ -7,17 +7,12 @@ export const fetchIndexList = async (config?: AxiosRequestConfig) => {
     return res.data
 }
 
-export const fetchIndexListStream = async () => {
-    const res = await api.get(`/stock/indexes/stream`);
+export const fetchIndexStream = async (items: string[]) => {
+    const res = await api.post(`/stock/indexes/stream`, {items});
     return res.data
 }
 
 export const fetchIndexDetail = async (indsCd: string, req: IndexDetailReq, config?: AxiosRequestConfig) => {
     const res = await api.get(`/stock/indexes/${indsCd}`, {...config, params: req});
-    return res.data
-}
-
-export const fetchIndexDetailStream = async (indsCd: string) => {
-    const res = await api.get(`/stock/indexes/${indsCd}/stream`);
     return res.data
 }

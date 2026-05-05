@@ -1,4 +1,3 @@
-import {useEffect, useRef, useState} from "react";
 import Box from "@mui/material/Box";
 import Typography from "@mui/material/Typography";
 import Card from "@mui/material/Card";
@@ -18,8 +17,8 @@ import RemoveIcon from "@mui/icons-material/Remove";
 import {MarketIndexRes, CryptoSummary} from "../../type/MarketIndexType.ts";
 import {fetchMarketIndexAll} from "../../api/marketindex/MarketIndexApi.ts";
 import FearGreedGauge from "../../components/FearGreedGauge.tsx";
-import type {FearGreedItem} from "../../type/CryptoType.ts";
 import FreshnessIndicator from "../../components/FreshnessIndicator.tsx";
+import {usePollingQuery} from "../../lib/pollingQuery.ts";
 
 // 상단 티커 바에 표시할 핵심 지수
 const TICKER_TYPES = ['KOSPI', 'KOSDAQ', 'NASDAQ', 'USD_KRW'];
@@ -102,60 +101,16 @@ function FearGreedSkeleton() {
 }
 
 export default function MarketIndexList() {
-    const [data, setData] = useState<MarketIndexRes[]>([]);
-    const [fearGreedCurrent, setFearGreedCurrent] = useState<FearGreedItem | null>(null);
-    const [fearGreedHistory, setFearGreedHistory] = useState<FearGreedItem[]>([]);
-    const [bitcoin, setBitcoin] = useState<CryptoSummary | null>(null);
-    const [ethereum, setEthereum] = useState<CryptoSummary | null>(null);
-    const [loading, setLoading] = useState(true);
-    const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
-    const [pollError, setPollError] = useState(false);
+    const {data: result, isLoading: loading, lastUpdated, pollError} = usePollingQuery(
+        ['marketIndexAll'],
+        (config) => fetchMarketIndexAll(config),
+    );
 
-    const chartTimer = useRef<number>(0);
-
-    const loadData = async (silent: boolean = false) => {
-        try {
-            const result = await fetchMarketIndexAll(silent ? { skipGlobalError: true } : undefined);
-            setData(result.indices);
-            if (result.fearGreed) {
-                setFearGreedCurrent(result.fearGreed.current);
-                setFearGreedHistory(result.fearGreed.history);
-            }
-            setBitcoin(result.bitcoin ?? null);
-            setEthereum(result.ethereum ?? null);
-            setLastUpdated(new Date());
-            setPollError(false);
-        } catch (error) {
-            console.error(error);
-            if (silent) setPollError(true);
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    useEffect(() => {
-        let chartTimeout: ReturnType<typeof setTimeout>;
-        let interval: ReturnType<typeof setInterval>;
-
-        (async () => {
-            await loadData();
-
-            const now = Date.now() + chartTimer.current;
-            const waitTime = 60_000 - (now % 60_000);
-
-            chartTimeout = setTimeout(() => {
-                loadData(true);
-                interval = setInterval(() => {
-                    loadData(true);
-                }, 60 * 1000);
-            }, waitTime + 2000);
-        })();
-
-        return () => {
-            clearTimeout(chartTimeout);
-            clearInterval(interval);
-        };
-    }, []);
+    const data: MarketIndexRes[] = result?.indices ?? [];
+    const fearGreedCurrent = result?.fearGreed?.current ?? null;
+    const fearGreedHistory = result?.fearGreed?.history ?? [];
+    const bitcoin: CryptoSummary | null = result?.bitcoin ?? null;
+    const ethereum: CryptoSummary | null = result?.ethereum ?? null;
 
     const indexMap = Object.fromEntries(data.map(item => [item.type, item]));
 

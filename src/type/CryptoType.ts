@@ -39,27 +39,6 @@ export enum CryptoChartType {
     YEAR = "YEAR",
 }
 
-export interface CryptoDetailInfo {
-    market: string,
-    koreanName: string,
-    englishName: string,
-    tradePrice: number,
-    openingPrice: number,
-    highPrice: number,
-    lowPrice: number,
-    prevClosingPrice: number,
-    change: string,
-    signedChangeRate: number,
-    signedChangePrice: number,
-    accTradePrice24h: number,
-    accTradeVolume24h: number,
-    highest52WeekPrice: number,
-    highest52WeekDate: string,
-    lowest52WeekPrice: number,
-    lowest52WeekDate: string,
-    tradeDateTimeKst: string,
-}
-
 export interface CryptoChart {
     dt: string,
     tradePrice: number,
@@ -86,13 +65,13 @@ export interface CryptoRankItem {
     warning: boolean,
 }
 
-export interface FearGreedRes {
-    current: FearGreedItem,
-    history: FearGreedItem[],
-}
-
 export interface FearGreedItem {
     value: number,
     classification: string,
     date: string,
+}
+
+/** useCryptoHoldingStream 훅의 buffer entry — stream 으로 들어오는 부분 갱신값. */
+export interface CryptoHoldingBuffer {
+    curPrc?: string;
 }

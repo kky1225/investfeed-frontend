@@ -5,178 +5,133 @@ import Card from "@mui/material/Card";
 import CardContent from "@mui/material/CardContent";
 import Stack from "@mui/material/Stack";
 import Skeleton from "@mui/material/Skeleton";
-import {useEffect, useRef, useState} from "react";
+import {useEffect, useMemo, useRef, useState} from "react";
 import {fetchTimeNow} from "../../api/time/TimeApi.ts";
 import {MarketType} from "../../type/timeType.ts";
 import CommodityLineChart, {CommodityLineChartProps} from "../../components/CommodityLineChart.tsx";
-import {fetchCommodityList, fetchCommodityListStream} from "../../api/commodity/CommodityApi.ts";
+import {fetchCommodityList, fetchCommodityStream} from "../../api/commodity/CommodityApi.ts";
 import FreshnessIndicator from "../../components/FreshnessIndicator.tsx";
 import {ChartMinute, CommodityListItem, CommodityStream, CommodityStreamRes} from "../../type/CommodityType.ts";
+import {usePollingQuery} from "../../lib/pollingQuery.ts";
+
+interface LiveCommodityUpdate {
+    value: string;
+    fluRt: string;
+    predPre: string;
+    trend: 'up' | 'down' | 'neutral';
+}
+
+const trendColor = (value: string): 'up' | 'down' | 'neutral' =>
+    ["1", "2"].includes(value) ? 'up' : ["4", "5"].includes(value) ? 'down' : 'neutral';
+
+const chartColor = (value: string): 'red' | 'blue' | 'grey' =>
+    ["1", "2"].includes(value) ? 'red' : ["4", "5"].includes(value) ? 'blue' : 'grey';
+
+const commodityDateFormat = (cntrTm: string) =>
+    `${cntrTm.slice(0, 4)}.${cntrTm.slice(4, 6)}.${cntrTm.slice(6, 8)} ${cntrTm.slice(8, 10)}:${cntrTm.slice(10, 12)}`;
+
+const parsePrice = (raw: string) => {
+    if (!raw) return null;
+    return parseInt(raw);
+};
 
 const CommodityList = () => {
     const chartTimer = useRef<number>(0);
     const marketTimer = useRef<number>(0);
+    const [liveOverlay, setLiveOverlay] = useState<Map<string, LiveCommodityUpdate>>(new Map());
 
-    const [commodityDataList, setCommodityDataList] = useState<CommodityLineChartProps[]>([]);
-    const [loading, setLoading] = useState(true);
-    const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
-    const [pollError, setPollError] = useState(false);
+    const {data: res, isLoading, lastUpdated, pollError} = usePollingQuery(
+        ['commodityList'],
+        (config) => fetchCommodityList(config),
+    );
 
-    useEffect(() => {
-        commodityList();
+    const commodityDataList: CommodityLineChartProps[] = useMemo(() => {
+        if (res?.code !== "0000" || !res.result) return [];
+        const list: CommodityListItem[] = res.result.commodityList ?? [];
+        if (list.length === 0) return [];
 
-        let chartTimeout: ReturnType<typeof setTimeout>;
-        let socketTimeout: ReturnType<typeof setTimeout>;
-        let interval: ReturnType<typeof setInterval>;
-        let socket: WebSocket;
+        const year = list[0].chartMinuteList[0]?.cntrTm?.substring(0, 4) ?? '';
+        const month = list[0].chartMinuteList[0]?.cntrTm?.substring(4, 6) ?? '';
+        const day = list[0].chartMinuteList[0]?.cntrTm?.substring(6, 8) ?? '';
+        const hour = list[0].tm.substring(0, 2);
+        const minute = list[0].tm.substring(2, 4);
 
-        (async () => {
-            const marketInfo = await timeNow();
+        const today = (Number(hour) >= 20 || Number(hour) < 8)
+            ? `${year}.${month}.${day} 장마감`
+            : `${year}.${month}.${day} ${hour}:${minute}`;
 
-            const now = Date.now() + chartTimer.current;
-            const waitTime = 60_000 - (now % 60_000);
+        return list.map((commodityItem: CommodityListItem) => {
+            const newDateList = commodityItem.chartMinuteList.map((chart: ChartMinute) => commodityDateFormat(chart.cntrTm)).reverse();
+            const live = liveOverlay.get(commodityItem.stkCd);
 
-            if(marketInfo.isMarketOpen) {
-                await commodityListStream();
-                socket = openSocket();
-            } else {
-                socketTimeout = setTimeout(async () => {
-                    socket?.close();
-
-                    const again = await timeNow();
-                    if (again.isMarketOpen) {
-                        await commodityListStream();
-                        socket = openSocket();
+            return {
+                id: commodityItem.stkCd,
+                title: commodityItem.stkNm,
+                value: live?.value ?? Number(commodityItem.curPrc.replace(/^[+-]/, '')).toLocaleString(),
+                fluRt: live?.fluRt ?? commodityItem.fluRt,
+                predPre: live?.predPre ?? (commodityItem.predPre || '0'),
+                openPric: parseFloat(commodityItem.openPric.replace(/^[+-]/, '')),
+                interval: today,
+                trend: live?.trend ?? trendColor(commodityItem.predPreSig),
+                seriesData: [
+                    {
+                        id: commodityItem.stkCd,
+                        showMark: false,
+                        curve: 'linear',
+                        area: true,
+                        stackOrder: 'ascending',
+                        color: chartColor(commodityItem.predPreSig),
+                        data: commodityItem.chartMinuteList.map(item => parsePrice(item.curPrc.replace(/^[+-]/, ''))).reverse(),
                     }
-                }, marketTimer.current + 200);
-            }
+                ],
+                dateList: newDateList
+            };
+        });
+    }, [res, liveOverlay]);
 
-            chartTimeout = setTimeout(() => {
-                commodityList();
-                interval = setInterval(() => {
-                    commodityList(true);
-                }, (60 * 1000));
-            }, waitTime + 200);
-        })();
-
-        return () => {
-            socket?.close();
-            clearInterval(socketTimeout);
-            clearTimeout(chartTimeout);
-            clearInterval(interval);
-        }
-    }, []);
+    const loading = isLoading;
 
     const timeNow = async () => {
         try {
             const startTime = Date.now();
-            const data = await fetchTimeNow({
-                marketType: MarketType.COMMODITY
-            });
+            const data = await fetchTimeNow({marketType: MarketType.COMMODITY});
 
-            if(data.code !== "0000") {
-                throw new Error(data.msg);
+            if (data.code !== "0000") {
+                throw new Error(data.message);
             }
 
-            const { time, isMarketOpen, startMarketTime, marketType } = data.result
+            const {time, isMarketOpen, startMarketTime, marketType} = data.result;
 
-            if(marketType !== MarketType.COMMODITY) {
-                throw new Error(data.msg);
+            if (marketType !== MarketType.COMMODITY) {
+                throw new Error(data.message);
             }
 
             const endTime = Date.now();
             const delayTime = endTime - startTime;
-
-            const revisionServerTime = time + delayTime / 2; // startTime과 endTime 사이에 API 응답을 받기 때문에 2를 나눠서 보정
+            const revisionServerTime = time + delayTime / 2;
 
             chartTimer.current = revisionServerTime - endTime;
 
-            if(!isMarketOpen) {
+            if (!isMarketOpen) {
                 marketTimer.current = startMarketTime - revisionServerTime;
             }
 
-            return {
-                ...data.result
-            }
-        }catch (error) {
+            return {...data.result};
+        } catch (error) {
             console.error(error);
         }
-    }
+    };
 
     const commodityListStream = async () => {
         try {
-            const data = await fetchCommodityListStream();
-
+            const data = await fetchCommodityStream(["M04020000", "M04020100"]);
             if (data.code !== "0000") {
-                throw new Error(data.msg);
+                throw new Error(data.message);
             }
-        }catch (error) {
+        } catch (error) {
             console.error(error);
         }
-    }
-
-    const commodityList = async (silent: boolean = false) => {
-        try {
-            const data = await fetchCommodityList(silent ? { skipGlobalError: true } : undefined);
-
-            if(data.code !== "0000") {
-                throw new Error(data.msg);
-            }
-
-            const {
-                commodityList
-            } = data.result;
-
-            const year = commodityList[0].chartMinuteList[0].cntrTm.substring(0, 4);
-            const month = commodityList[0].chartMinuteList[0].cntrTm.substring(4, 6);
-            const day = commodityList[0].chartMinuteList[0].cntrTm.substring(6, 8);
-            const hour = commodityList[0].tm.substring(0, 2);
-            const minute = commodityList[0].tm.substring(2, 4);
-
-            let today;
-            if(Number(hour) >= 20 || Number(hour) < 8) {
-                today = `${year}.${month}.${day} 장마감`;
-            } else {
-                today = `${year}.${month}.${day} ${hour}:${minute}`;
-            }
-
-            const newCommodityDataList: CommodityLineChartProps[] = commodityList.map((commodityItem: CommodityListItem) => {
-                const newDateList = commodityItem.chartMinuteList.map((chart: ChartMinute) => commodityDateFormat(chart.cntrTm)).reverse();
-
-                return {
-                    id: commodityItem.stkCd,
-                    title: commodityItem.stkNm,
-                    value: Number(commodityItem.curPrc.replace(/^[+-]/, '')).toLocaleString(),
-                    fluRt: commodityItem.fluRt,
-                    predPre: commodityItem.predPre || '0',
-                    openPric: parseFloat(commodityItem.openPric.replace(/^[+-]/, '')),
-                    interval: today,
-                    trend: trendColor(commodityItem.predPreSig),
-                    seriesData: [
-                        {
-                            id: commodityItem.stkCd,
-                            showMark: false,
-                            curve: 'linear',
-                            area: true,
-                            stackOrder: 'ascending',
-                            color: chartColor(commodityItem.predPreSig),
-                            data: commodityItem.chartMinuteList.map(item => parsePrice(item.curPrc.replace(/^[+-]/, ''))).reverse(),
-                        }
-                    ],
-                    dateList: newDateList
-                };
-            });
-
-            setCommodityDataList(newCommodityDataList);
-            setLastUpdated(new Date());
-            setPollError(false);
-        }catch (error) {
-            console.error(error);
-            if (silent) setPollError(true);
-        } finally {
-            setLoading(false);
-        }
-    }
+    };
 
     const openSocket = () => {
         const socket = new WebSocket("ws://localhost:8080/ws");
@@ -185,75 +140,81 @@ const CommodityList = () => {
             const data = JSON.parse(event.data);
 
             if (data.trnm === "REAL" && Array.isArray(data.data)) {
-                const commodityList = data.data.map((entry: CommodityStreamRes) => {
+                const updates = data.data.map((entry: CommodityStreamRes): CommodityStream => {
                     const values = entry.values;
                     return {
-                        code: entry.item, // ex: "001"
-                        value: values["10"], // 현재가
-                        change: values["11"], // 전일 대비
-                        fluRt: values["12"],   // 등락률
-                        trend: values["25"],   // 등락기호
+                        code: entry.item,
+                        value: values["10"],
+                        change: values["11"],
+                        fluRt: values["12"],
+                        trend: values["25"],
                     };
                 });
 
-                setCommodityDataList((prevList) => {
-                    return prevList.map((item) => {
-                        const newData = commodityList.find((data: CommodityStream) => data.code === item.id);
-
-                        if (newData) {
-                            return {
-                                ...item,
-                                value: Number(newData.value.replace(/^[+-]/, '')).toLocaleString(),
-                                predPre: newData.change || '0',
-                                fluRt: newData.fluRt,
-                                trend: trendColor(newData.trend)
-                            };
-                        }
-
-                        return item;
+                setLiveOverlay((prev) => {
+                    const next = new Map(prev);
+                    updates.forEach((u: CommodityStream) => {
+                        next.set(u.code, {
+                            value: Number(u.value.replace(/^[+-]/, '')).toLocaleString(),
+                            fluRt: u.fluRt,
+                            predPre: u.change || '0',
+                            trend: trendColor(u.trend),
+                        });
                     });
+                    return next;
                 });
             }
         };
 
         return socket;
-    }
+    };
 
-    const trendColor = (value: string) => {
-        return ["1", "2"].includes(value) ? 'up' : ["4", "5"].includes(value) ? 'down' : 'neutral';
-    }
+    useEffect(() => {
+        let socketTimeout: ReturnType<typeof setTimeout>;
+        let socket: WebSocket | undefined;
 
-    const chartColor = (value: string) => {
-        return ["1", "2"].includes(value) ? 'red' : ["4", "5"].includes(value) ? 'blue' : 'grey';
-    }
+        (async () => {
+            const marketInfo = await timeNow();
 
-    const commodityDateFormat = (cntrTm: string) => {
-        return `${cntrTm.slice(0, 4)}.${cntrTm.slice(4, 6)}.${cntrTm.slice(6, 8)} ${cntrTm.slice(8, 10)}:${cntrTm.slice(10, 12)}`;
-    }
+            if (marketInfo?.isMarketOpen) {
+                await commodityListStream();
+                socket = openSocket();
+            } else {
+                socketTimeout = setTimeout(async () => {
+                    socket?.close();
+                    const again = await timeNow();
+                    if (again?.isMarketOpen) {
+                        await commodityListStream();
+                        socket = openSocket();
+                    }
+                }, marketTimer.current + 200);
+            }
+        })();
 
-    const parsePrice = (raw: string)  => {
-        if (!raw) return null;
-        return parseInt(raw);
-    }
+        return () => {
+            socket?.close();
+            clearTimeout(socketTimeout);
+        };
+    }, []);
 
     return (
-        <Box sx={{ width: '100%', maxWidth: { sm: '100%', md: '1700px' } }}>
-            <Box sx={{ display: 'flex', alignItems: 'center', mb: 2, gap: 2 }}>
+        <Box sx={{width: '100%', maxWidth: {sm: '100%', md: '1700px'}}}>
+            <Box sx={{display: 'flex', alignItems: 'center', mb: 2, gap: 2}}>
                 <Typography component="h2" variant="h6">
                     원자재 목록
                 </Typography>
-                <Box sx={{ flex: 1 }}/>
+                <Box sx={{flex: 1}}/>
                 <FreshnessIndicator lastUpdated={lastUpdated} error={pollError}/>
             </Box>
             <Grid
                 container
                 spacing={2}
                 columns={12}
-                sx={{ mb: (theme) => theme.spacing(2) }}
+                sx={{mb: (theme) => theme.spacing(2)}}
             >
                 {loading ? (
                     Array.from({length: 2}).map((_, index) => (
-                        <Grid key={index} size={{ xs: 12, md: 6 }}>
+                        <Grid key={index} size={{xs: 12, md: 6}}>
                             <Card variant="outlined" sx={{width: '100%'}}>
                                 <CardContent>
                                     <Skeleton width={120} height={28}/>
@@ -272,14 +233,14 @@ const CommodityList = () => {
                     ))
                 ) : (
                     commodityDataList.map((value, index) => (
-                        <Grid key={index} size={{ xs: 12, md: 6 }}>
+                        <Grid key={index} size={{xs: 12, md: 6}}>
                             <CommodityLineChart {...value} />
                         </Grid>
                     ))
                 )}
             </Grid>
         </Box>
-    )
-}
+    );
+};
 
-export default CommodityList
+export default CommodityList;

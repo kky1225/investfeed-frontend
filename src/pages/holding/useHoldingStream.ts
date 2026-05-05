@@ -1,20 +1,14 @@
 import {useEffect, useRef} from "react";
-import {fetchHoldingStream} from "../../api/holding/HoldingApi.ts";
-import {HoldingStreamRes} from "../../type/HoldingType.ts";
+import {HoldingBuffer, HoldingStreamReq, HoldingStreamRes} from "../../type/HoldingType.ts";
+import {MarketType} from "../../type/timeType.ts";
 import {useMarketTime} from "./useMarketTime.ts";
-
-export interface HoldingBuffer {
-    curPrc?: string;
-    predPre?: string;
-    rmndQty?: string;
-    purPric?: string;
-}
 
 export function useHoldingStream(
     stkCds: string[],
     onUpdate: (bufferMap: Map<string, HoldingBuffer>) => void,
+    fetcher: (req: HoldingStreamReq) => Promise<unknown>,
 ) {
-    const {checkMarketTime, marketTimer} = useMarketTime();
+    const {checkMarketTime, marketTimer} = useMarketTime(MarketType.STOCK);
     const bufferMapRef = useRef<Map<string, HoldingBuffer>>(new Map());
 
     useEffect(() => {
@@ -71,7 +65,7 @@ export function useHoldingStream(
         };
 
         const connectSocket = async () => {
-            await fetchHoldingStream({items: stkCds});
+            await fetcher({items: stkCds});
             socket = openSocket();
             startDisplay();
         };
@@ -99,5 +93,5 @@ export function useHoldingStream(
             clearTimeout(socketTimeout);
             clearInterval(displayInterval);
         };
-    }, [stkCds, onUpdate, checkMarketTime, marketTimer]);
+    }, [stkCds, onUpdate, fetcher, checkMarketTime, marketTimer]);
 }

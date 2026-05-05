@@ -1,13 +1,11 @@
 import {useEffect, useRef} from "react";
-import {fetchCryptoHoldingStream} from "../../api/cryptoHolding/CryptoHoldingApi.ts";
-
-export interface CryptoHoldingBuffer {
-    curPrc?: string;
-}
+import {HoldingStreamReq} from "../../type/HoldingType.ts";
+import {CryptoHoldingBuffer} from "../../type/CryptoType.ts";
 
 export function useCryptoHoldingStream(
     markets: string[],
     onUpdate: (bufferMap: Map<string, CryptoHoldingBuffer>) => void,
+    fetcher: (req: HoldingStreamReq) => Promise<unknown>,
 ) {
     const bufferMapRef = useRef<Map<string, CryptoHoldingBuffer>>(new Map());
 
@@ -47,7 +45,7 @@ export function useCryptoHoldingStream(
 
         const connectSocket = async () => {
             if (cancelled) return;
-            await fetchCryptoHoldingStream({items: markets});
+            await fetcher({items: markets});
             socket = openSocket();
             startDisplay();
         };
@@ -60,5 +58,5 @@ export function useCryptoHoldingStream(
             socket?.close();
             clearInterval(displayInterval);
         };
-    }, [markets, onUpdate]);
+    }, [markets, onUpdate, fetcher]);
 }

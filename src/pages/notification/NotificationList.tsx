@@ -1,4 +1,6 @@
-import {useEffect, useRef, useState} from 'react';
+import {useState} from 'react';
+import {useQuery, useQueryClient} from '@tanstack/react-query';
+import {unwrapResponse} from '../../lib/apiResponse';
 import {useNavigate} from 'react-router-dom';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
@@ -32,8 +34,6 @@ import NotificationsNoneIcon from '@mui/icons-material/NotificationsNone';
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
 import {useNotification} from '../../context/NotificationContext';
 import {fetchPriceTargets, deletePriceTarget} from '../../api/notification/NotificationApi';
-import {fetchTimeNow} from '../../api/time/TimeApi';
-import {MarketType} from '../../type/timeType';
 import type {Notification, AssetType, PriceTarget} from '../../type/NotificationType';
 import FreshnessIndicator from '../../components/FreshnessIndicator';
 
@@ -120,90 +120,30 @@ function getNavigationPath(notification: Notification): string {
 
 export default function NotificationList() {
     const navigate = useNavigate();
-    const {notifications, loading, loadNotifications, handleMarkAsRead, handleMarkAllAsRead} = useNotification();
+    const {notifications, loading, lastUpdated, pollError, handleMarkAsRead, handleMarkAllAsRead} = useNotification();
     const [tabFilter, setTabFilter] = useState<TabFilter>('ALL');
     const [unreadOnly, setUnreadOnly] = useState(false);
     const [typeFilter, setTypeFilter] = useState<TypeFilter>('ALL');
     const [periodFilter, setPeriodFilter] = useState<PeriodFilter>('ALL');
     const [searchQuery, setSearchQuery] = useState('');
-    const [priceTargets, setPriceTargets] = useState<PriceTarget[]>([]);
     const [priceTargetDialogOpen, setPriceTargetDialogOpen] = useState(false);
-    const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
-    const [pollError, setPollError] = useState(false);
     const [moreMenuAnchor, setMoreMenuAnchor] = useState<HTMLElement | null>(null);
-    const chartTimer = useRef<number>(0);
 
-    useEffect(() => {
-        (async () => {
-            try {
-                const res = await fetchPriceTargets();
-                setPriceTargets(res.result ?? []);
-            } catch (e) {
-                console.error(e);
-            }
-        })();
-    }, []);
-
-    // 서버 시간과 클라이언트 시간 오차 보정 (다른 폴링 페이지와 동일 패턴)
-    const syncServerTime = async () => {
-        try {
-            const startTime = Date.now();
-            const data = await fetchTimeNow({marketType: MarketType.STOCK});
-            if (data.code !== '0000') return;
-            const endTime = Date.now();
-            const delayTime = endTime - startTime;
-            const revisionServerTime = data.result.time + delayTime / 2;
-            chartTimer.current = revisionServerTime - endTime;
-        } catch (error) {
-            console.error(error);
-        }
-    };
-
-    // 알림 1분 주기 폴링 — 서버 시간 기준 매분 정각에 발화
-    useEffect(() => {
-        setLastUpdated(new Date());
-
-        let interval: ReturnType<typeof setInterval>;
-        let timeout: ReturnType<typeof setTimeout>;
-
-        (async () => {
-            await syncServerTime();
-
-            const now = Date.now() + chartTimer.current;
-            const waitTime = 60_000 - (now % 60_000);
-
-            timeout = setTimeout(() => {
-                (async () => {
-                    const ok = await loadNotifications(true);
-                    if (ok) {
-                        setLastUpdated(new Date());
-                        setPollError(false);
-                    } else {
-                        setPollError(true);
-                    }
-                })();
-                interval = setInterval(async () => {
-                    const ok = await loadNotifications(true);
-                    if (ok) {
-                        setLastUpdated(new Date());
-                        setPollError(false);
-                    } else {
-                        setPollError(true);
-                    }
-                }, 60_000);
-            }, waitTime + 200);
-        })();
-
-        return () => {
-            clearTimeout(timeout);
-            clearInterval(interval);
-        };
-    }, [loadNotifications]);
+    const queryClient = useQueryClient();
+    const {data: priceTargetsData} = useQuery<PriceTarget[]>({
+        queryKey: ['priceTargets'],
+        queryFn: async () => unwrapResponse(await fetchPriceTargets(), [] as PriceTarget[]),
+        // optimistic delete 와의 race condition 방지
+        refetchOnWindowFocus: false,
+    });
+    const priceTargets = priceTargetsData ?? [];
 
     const handleDeletePriceTarget = async (id: number) => {
         try {
-            await deletePriceTarget(id);
-            setPriceTargets(prev => prev.filter(p => p.id !== id));
+            const res = await deletePriceTarget(id);
+            if (res.code !== "0000") throw new Error(res.message || `목표가 알림 삭제 실패 (${res.code})`);
+            // optimistic 제거
+            queryClient.setQueryData<PriceTarget[]>(['priceTargets'], prev => (prev ?? []).filter(p => p.id !== id));
         } catch (e) {
             console.error(e);
         }
@@ -232,9 +172,6 @@ export default function NotificationList() {
             <Box sx={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2}}>
                 <Typography variant="h5" fontWeight="bold">알림</Typography>
                 <Box sx={{display: 'flex', alignItems: 'center', gap: 1}}>
-                    {hasUnread && (
-                        <Button size="small" onClick={handleMarkAllAsRead}>모두 읽음</Button>
-                    )}
                     {!loading && <FreshnessIndicator lastUpdated={lastUpdated} error={pollError}/>}
                     <IconButton
                         size="small"
@@ -319,11 +256,16 @@ export default function NotificationList() {
                     <Tab label="주식" value="STOCK" sx={{minHeight: 36, py: 0}}/>
                     <Tab label="코인" value="CRYPTO" sx={{minHeight: 36, py: 0}}/>
                 </Tabs>
-                <FormControlLabel
-                    control={<Switch size="small" checked={unreadOnly} onChange={(_, v) => setUnreadOnly(v)}/>}
-                    label={<Typography variant="caption">안읽음만</Typography>}
-                    sx={{mr: 0}}
-                />
+                <Box sx={{display: 'flex', alignItems: 'center', gap: 0.5}}>
+                    <FormControlLabel
+                        control={<Switch size="small" checked={unreadOnly} onChange={(_, v) => setUnreadOnly(v)}/>}
+                        label={<Typography variant="caption">안읽음만</Typography>}
+                        sx={{mr: 0}}
+                    />
+                    {hasUnread && (
+                        <Button size="small" onClick={handleMarkAllAsRead}>모두 읽음</Button>
+                    )}
+                </Box>
             </Box>
 
             <Box sx={{display: 'flex', gap: 1, mb: 1, alignItems: 'center', flexWrap: 'wrap'}}>

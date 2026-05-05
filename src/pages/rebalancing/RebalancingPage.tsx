@@ -1,4 +1,6 @@
-import {useEffect, useState} from "react";
+import {useState} from "react";
+import {useQueryClient} from "@tanstack/react-query";
+import {usePollingQuery} from "../../lib/pollingQuery.ts";
 import Box from "@mui/material/Box";
 import Typography from "@mui/material/Typography";
 import Card from "@mui/material/Card";
@@ -38,7 +40,7 @@ const assetTypeLabel: Record<string, string> = {STOCK: '주식', CRYPTO: '코인
 
 export default function RebalancingPage() {
     const {apiBrokers, myApiBrokerIds, validBrokerIds, isLoaded: apiKeyLoaded} = useApiKeyStatus();
-    const [status, setStatus] = useState<RebalancingStatusRes | null>(null);
+    const queryClient = useQueryClient();
     const [stockRatio, setStockRatio] = useState("");
     const [stockDirection, setStockDirection] = useState<RatioDirection>("MAX");
     const [cryptoRatio, setCryptoRatio] = useState("");
@@ -49,69 +51,49 @@ export default function RebalancingPage() {
     const [error, setError] = useState("");
     const [fieldErrors, setFieldErrors] = useState<{stockRatio?: boolean; cryptoRatio?: boolean; cashRatio?: boolean; maxStockRatio?: boolean}>({});
     const [deleteOpen, setDeleteOpen] = useState(false);
-    const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
-    const [pollError, setPollError] = useState(false);
     const [editMode, setEditMode] = useState(false);
-    const [loaded, setLoaded] = useState(false);
+    const [statusOverride, setStatusOverride] = useState<RebalancingStatusRes | null | 'cleared'>(null);
     const {isBlind} = useBlindMode();
     const [showTable, setShowTable] = useState(!isBlind);
+    // "reset state when prop changes" — useEffect 대신 render 중 비교
+    const [prevIsBlind, setPrevIsBlind] = useState(isBlind);
+    if (isBlind !== prevIsBlind) {
+        setPrevIsBlind(isBlind);
+        setShowTable(!isBlind);
+    }
 
-    const loadStatus = async (silent: boolean = false) => {
-        try {
-            const res = await fetchRebalancingStatus(silent ? { skipGlobalError: true } : undefined);
-            if (res.result) {
-                setStatus(res.result);
-                setStockRatio(String(res.result.setting.stockRatio));
-                setStockDirection(res.result.setting.stockDirection);
-                setCryptoRatio(String(res.result.setting.cryptoRatio));
-                setCryptoDirection(res.result.setting.cryptoDirection);
-                setCashRatio(String(res.result.setting.cashRatio));
-                setCashDirection(res.result.setting.cashDirection);
-                setMaxStockRatio(String(res.result.setting.maxStockRatio));
-                setLastUpdated(new Date());
-                setPollError(false);
-            }
-        } catch (error) {
-            console.error(error);
-            if (silent) setPollError(true);
-            // 설정 없음
-        } finally {
-            setLoaded(true);
-        }
+    const hasMissing = apiKeyLoaded && [...myApiBrokerIds].some(id => !validBrokerIds.has(id));
+
+    const {data: res, isFetched, lastUpdated, pollError} = usePollingQuery(
+        ['rebalancingStatus'],
+        (config) => fetchRebalancingStatus(config),
+        {enabled: apiKeyLoaded && !hasMissing},
+    );
+
+    const status: RebalancingStatusRes | null =
+        statusOverride === 'cleared' ? null : (statusOverride ?? res?.result ?? null);
+    const loaded = !apiKeyLoaded ? false : hasMissing ? true : isFetched;
+
+    const reloadStatus = async () => {
+        setStatusOverride(null);
+        await queryClient.invalidateQueries({queryKey: ['rebalancingStatus']});
     };
 
-    useEffect(() => {
-        setShowTable(!isBlind);
-    }, [isBlind]);
-
-    useEffect(() => {
-        if (!apiKeyLoaded) return;
-
-        const hasMissing = [...myApiBrokerIds].some(id => !validBrokerIds.has(id));
-        if (hasMissing) return;
-
-        let timeout: ReturnType<typeof setTimeout>;
-        let interval: ReturnType<typeof setInterval>;
-
-        (async () => {
-            await loadStatus();
-
-            const now = Date.now();
-            const waitTime = 60_000 - (now % 60_000);
-
-            timeout = setTimeout(() => {
-                loadStatus(true);
-                interval = setInterval(() => {
-                    loadStatus(true);
-                }, 60_000);
-            }, waitTime + 200);
-        })();
-
-        return () => {
-            clearTimeout(timeout);
-            clearInterval(interval);
-        };
-    }, [apiKeyLoaded, myApiBrokerIds, validBrokerIds]);
+    // 응답이 새로 도착할 때만 폼 입력값을 동기화 (편집 중인 사용자 입력을 매 폴링마다 덮어쓰지 않도록)
+    // "reset state when prop changes" — status reference 변화로 trigger
+    const [prevStatus, setPrevStatus] = useState<RebalancingStatusRes | null>(null);
+    if (status !== prevStatus) {
+        setPrevStatus(status);
+        if (status) {
+            setStockRatio(String(status.setting.stockRatio));
+            setStockDirection(status.setting.stockDirection);
+            setCryptoRatio(String(status.setting.cryptoRatio));
+            setCryptoDirection(status.setting.cryptoDirection);
+            setCashRatio(String(status.setting.cashRatio));
+            setCashDirection(status.setting.cashDirection);
+            setMaxStockRatio(String(status.setting.maxStockRatio));
+        }
+    }
 
     const handleSave = async () => {
         const fieldErrs: {stockRatio?: boolean; cryptoRatio?: boolean; cashRatio?: boolean; maxStockRatio?: boolean} = {};
@@ -132,14 +114,15 @@ export default function RebalancingPage() {
         setFieldErrors({});
         setError("");
         try {
-            await saveRebalancingSetting({
+            const res = await saveRebalancingSetting({
                 stockRatio: Number(stockRatio), stockDirection,
                 cryptoRatio: Number(cryptoRatio), cryptoDirection,
                 cashRatio: Number(cashRatio), cashDirection,
                 maxStockRatio: Number(maxStockRatio)
             });
+            if (res.code !== "0000") throw new Error(res.message || `리밸런싱 설정 저장 실패 (${res.code})`);
             setEditMode(false);
-            await loadStatus();
+            await reloadStatus();
         } catch (err) {
             console.error(err);
             const axiosErr = err as {response?: {status?: number; data?: {code?: string; result?: Record<string, string>}}};
@@ -161,7 +144,8 @@ export default function RebalancingPage() {
     const handleDelete = async () => {
         try {
             await deleteRebalancingSetting();
-            setStatus(null);
+            setStatusOverride('cleared');
+            queryClient.removeQueries({queryKey: ['rebalancingStatus']});
             setStockRatio(""); setCryptoRatio(""); setCashRatio(""); setMaxStockRatio("");
         } catch (error) {
             console.error(error);

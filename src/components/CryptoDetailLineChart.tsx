@@ -19,15 +19,16 @@ export interface CryptoDetailLineChartProps {
     trend: 'up' | 'down' | 'neutral',
     seriesData: MakeOptional<LineSeriesType, 'type'>[],
     barDataList: number[],
-    dateList: string[]
+    dateList: string[],
+    height?: number,
 }
 
 const CryptoDetailLineChart = (
-    { trend, seriesData, barDataList, dateList }: CryptoDetailLineChartProps,
+    { trend, seriesData = [], barDataList = [], dateList = [], height = 310 }: CryptoDetailLineChartProps,
 ) => {
     const theme = useTheme();
 
-    const numericDates = seriesData[0].data ? seriesData[0].data.map(Number) : [];
+    const numericDates = seriesData[0]?.data ? seriesData[0].data.map(Number) : [];
 
     const lineMinY = numericDates.length > 0 ? Math.min(...numericDates) : 0;
     const lineMaxY = numericDates.length > 0 ? Math.max(...numericDates) : 0;
@@ -105,7 +106,7 @@ const CryptoDetailLineChart = (
                 }
             ]}
             sx={{
-                height: 310
+                height
             }}
         >
             <ChartsXAxis axisId="x-line" />

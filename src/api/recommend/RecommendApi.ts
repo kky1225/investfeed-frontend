@@ -8,6 +8,6 @@ export const fetchRecommendList = async (config?: AxiosRequestConfig) => {
 }
 
 export const fetchRecommendListStream = async (req: StockStreamReq) => {
-    const res = await api.post(`/stock/stream`, req);
+    const res = await api.post(`/stock/recommendations/stream`, req);
     return res.data;
 }

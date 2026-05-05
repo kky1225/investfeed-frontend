@@ -16,12 +16,19 @@ export interface TotpVerifyReq {
     code: string;
 }
 
+export interface UserPermission {
+    code: string;
+    actions: string[];
+}
+
 export interface TokenRes {
     passwordChangeRequired: boolean;
     role: string;
     nickname: string;
     email: string;
     secondaryPasswordEnabled: boolean;
+    defaultPath?: string;
+    permissions: UserPermission[];
 }
 
 export interface ApiResponse<T> {
@@ -41,6 +48,7 @@ export interface AuthUser {
     email: string;
     role: string;
     secondaryPasswordEnabled: boolean;
+    permissions: UserPermission[];
 }
 
 export interface SecondaryPasswordSetupReq {
@@ -104,4 +112,5 @@ export interface MemberRes {
     secondaryPasswordEnabled: boolean;
     apiKeyLocked: boolean;
     createdAt: string;
+    permissions: UserPermission[];
 }

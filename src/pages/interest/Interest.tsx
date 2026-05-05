@@ -241,6 +241,7 @@ const Interest = () => {
         setGroupOrderDirty(false);
         try {
             const data = await fetchInterestGroups();
+            if (data.code !== "0000") throw new Error(data.message || `관심 그룹 조회 실패 (${data.code})`);
             const groupList: InterestGroup[] = data.result ?? [];
             setGroups(groupList);
             if (groupList.length > 0) {
@@ -250,6 +251,8 @@ const Interest = () => {
                 setSelectedGroup(target);
                 loadItems(target.id);
             }
+        } catch (err) {
+            console.error(err);
         } finally {
             setGroupsLoading(false);
         }
@@ -262,14 +265,19 @@ const Interest = () => {
         setItemOrderDirty(false);
         try {
             const data = await fetchInterestItems(groupId);
+            if (data.code !== "0000") throw new Error(data.message || `관심 종목 조회 실패 (${data.code})`);
             setItems(data.result ?? []);
 
             socketRef.current?.close();
             const marketInfo = await fetchTimeNow({marketType: MarketType.STOCK});
+            if (marketInfo.code !== "0000") throw new Error(marketInfo.message || `시장 시간 조회 실패 (${marketInfo.code})`);
             if (marketInfo.result.isMarketOpen) {
-                await fetchInterestItemsStream(groupId);
+                const streamRes = await fetchInterestItemsStream(groupId);
+                if (streamRes.code !== "0000") throw new Error(streamRes.message || `관심 종목 스트림 실패 (${streamRes.code})`);
                 socketRef.current = openSocket();
             }
+        } catch (err) {
+            console.error(err);
         } finally {
             setItemsLoading(false);
             loadingGroupRef.current = null;
@@ -310,6 +318,7 @@ const Interest = () => {
         setNewGroupError("");
         try {
             const res = await createInterestGroup({groupNm: newGroupName.trim()});
+            if (res.code !== "0000" || !res.result) throw new Error(res.message || `관심 그룹 생성 실패 (${res.code})`);
             const created: InterestGroup = res.result;
             setGroups(prev => [...prev, created]);
             setAddGroupOpen(false);
@@ -333,7 +342,8 @@ const Interest = () => {
         if (!editGroupId) return;
         setEditGroupError("");
         try {
-            await updateInterestGroup(editGroupId, {groupNm: editGroupName.trim()});
+            const res = await updateInterestGroup(editGroupId, {groupNm: editGroupName.trim()});
+            if (res.code !== "0000") throw new Error(res.message || `관심 그룹 수정 실패 (${res.code})`);
             setGroups(prev =>
                 prev.map(g => g.id === editGroupId ? {...g, groupNm: editGroupName.trim()} : g)
             );
@@ -353,7 +363,8 @@ const Interest = () => {
 
     const handleDeleteGroup = async () => {
         if (!deleteGroupTarget) return;
-        await deleteInterestGroup(deleteGroupTarget.id);
+        const res = await deleteInterestGroup(deleteGroupTarget.id);
+        if (res.code !== "0000") throw new Error(res.message || `관심 그룹 삭제 실패 (${res.code})`);
         const newGroups = groups.filter(g => g.id !== deleteGroupTarget.id);
         setGroups(newGroups);
         if (selectedGroup?.id === deleteGroupTarget.id) {
@@ -390,7 +401,8 @@ const Interest = () => {
     const handleSaveGroupOrder = async () => {
         setSavingGroupOrder(true);
         try {
-            await reorderInterestGroups({orderedIds: groups.map(g => g.id)});
+            const res = await reorderInterestGroups({orderedIds: groups.map(g => g.id)});
+            if (res.code !== "0000") throw new Error(res.message || `관심 그룹 순서 변경 실패 (${res.code})`);
             setGroupOrderDirty(false);
         } finally {
             setSavingGroupOrder(false);
@@ -401,7 +413,8 @@ const Interest = () => {
         if (!selectedGroup) return;
         setSavingItemOrder(true);
         try {
-            await reorderInterestItems(selectedGroup.id, {orderedIds: items.map(i => i.id)});
+            const res = await reorderInterestItems(selectedGroup.id, {orderedIds: items.map(i => i.id)});
+            if (res.code !== "0000") throw new Error(res.message || `관심 종목 순서 변경 실패 (${res.code})`);
             setItemOrderDirty(false);
         } finally {
             setSavingItemOrder(false);
@@ -420,6 +433,7 @@ const Interest = () => {
             setSearchLoading(true);
             try {
                 const data = await fetchStockSearch(keyword.trim());
+                if (data.code !== "0000") throw new Error(data.message || `주식 검색 실패 (${data.code})`);
                 setSearchResults(data.result ?? []);
             } catch (error) {
                 console.error(error);
@@ -437,10 +451,11 @@ const Interest = () => {
             return;
         }
         try {
-            await addInterestItem(selectedGroup.id, {
+            const res = await addInterestItem(selectedGroup.id, {
                 stkCd: selectedStock.stkCd,
                 stkNm: selectedStock.stkNm,
             });
+            if (res.code !== "0000") throw new Error(res.message || `관심 종목 추가 실패 (${res.code})`);
             await loadItems(selectedGroup.id);
             setAddItemOpen(false);
             setSearchKeyword("");
@@ -455,7 +470,8 @@ const Interest = () => {
 
     const handleDeleteItem = async (itemId: number) => {
         if (!selectedGroup) return;
-        await deleteInterestItem(selectedGroup.id, itemId);
+        const res = await deleteInterestItem(selectedGroup.id, itemId);
+        if (res.code !== "0000") throw new Error(res.message || `관심 종목 삭제 실패 (${res.code})`);
         setItems(prev => prev.filter(i => i.id !== itemId));
     };
 

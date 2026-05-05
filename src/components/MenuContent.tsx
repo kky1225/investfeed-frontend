@@ -10,12 +10,12 @@ import Popper from '@mui/material/Popper';
 import ClickAwayListener from '@mui/material/ClickAwayListener';
 import Typography from '@mui/material/Typography';
 import {useLocation, useNavigate} from "react-router-dom";
-import {Fragment, useCallback, useEffect, useMemo, useRef, useState} from "react";
+import {Fragment, useMemo, useRef, useState} from "react";
 import {Collapse} from "@mui/material";
 import {ExpandLess, ExpandMore} from "@mui/icons-material";
 import {useAuth} from "../context/AuthContext";
 import {useApiKeyStatus} from "../context/ApiKeyStatusContext";
-import {fetchMyMenus} from "../api/menu/MenuApi";
+import {useMenuTree} from "../context/MenuContext";
 import {getMenuIcon} from "./MenuIconMap";
 import type {MenuRes} from "../type/MenuType";
 
@@ -79,31 +79,11 @@ export default function MenuContent({collapsed = false}: MenuContentProps) {
     const navigate = useNavigate();
     const {user} = useAuth();
     const {isSatisfied, getBrokerNames} = useApiKeyStatus();
-    const [apiMenus, setApiMenus] = useState<MenuRes[]>([]);
-
-    const loadMenus = useCallback(async () => {
-        try {
-            const res = await fetchMyMenus();
-            if (res.result) setApiMenus(res.result);
-        } catch (error) {
-            console.error(error);
-        }
-    }, []);
-
-    useEffect(() => {
-        if (user) loadMenus();
-    }, [user, loadMenus]);
-
-    // 메뉴 변경 이벤트 수신 시 재조회
-    useEffect(() => {
-        const handler = () => { loadMenus(); };
-        window.addEventListener('menu-updated', handler);
-        return () => window.removeEventListener('menu-updated', handler);
-    }, [loadMenus]);
+    const {menuTree} = useMenuTree();
 
     const menuItems = useMemo(
-        () => apiMenus.map((m) => toMenuItemData(m, {isSatisfied, getBrokerNames})),
-        [apiMenus, isSatisfied, getBrokerNames]
+        () => (user ? menuTree.map((m) => toMenuItemData(m, {isSatisfied, getBrokerNames})) : []),
+        [menuTree, user, isSatisfied, getBrokerNames]
     );
 
     const [openMenus, setOpenMenus] = useState<Set<string>>(new Set());
@@ -111,9 +91,12 @@ export default function MenuContent({collapsed = false}: MenuContentProps) {
     const anchorRefs = useRef<Record<string, HTMLElement | null>>({});
     const popoverTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-    useEffect(() => {
+    // collapsed 변경 시 openMenus 리셋 — render 중 비교 패턴
+    const [prevCollapsed, setPrevCollapsed] = useState(collapsed);
+    if (collapsed !== prevCollapsed) {
+        setPrevCollapsed(collapsed);
         if (collapsed) setOpenMenus(new Set());
-    }, [collapsed]);
+    }
 
     const handleMainMenuClick = (item: MenuItemData) => {
         if (item.disabled) {

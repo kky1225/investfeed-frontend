@@ -1,4 +1,6 @@
-import {useEffect, useState} from "react";
+import {useState} from "react";
+import {useQuery, useQueryClient} from "@tanstack/react-query";
+import {unwrapResponse} from "../../lib/apiResponse.ts";
 import Box from "@mui/material/Box";
 import Typography from "@mui/material/Typography";
 import Card from "@mui/material/Card";
@@ -54,35 +56,29 @@ const settingGroups: SettingGroup[] = [
 ];
 
 export default function NotificationSettingPage() {
-    const [setting, setSetting] = useState<NotificationSettingRes | null>(null);
+    const queryClient = useQueryClient();
     const [saved, setSaved] = useState(false);
-    const [loading, setLoading] = useState(true);
 
-    useEffect(() => {
-        (async () => {
-            try {
-                const res = await fetchNotificationSetting();
-                if (res.result) setSetting(res.result);
-            } catch (error) {
-                console.error(error);
-                // 기본값 사용
-            } finally {
-                setLoading(false);
-            }
-        })();
-    }, []);
+    const {data: setting, isLoading: loading} = useQuery<NotificationSettingRes | null>({
+        queryKey: ['notificationSetting'],
+        queryFn: async () => unwrapResponse<NotificationSettingRes | null>(await fetchNotificationSetting(), null),
+        // optimistic toggle 과의 race condition 방지
+        refetchOnWindowFocus: false,
+    });
 
     const handleToggle = async (key: keyof NotificationSettingRes) => {
         if (!setting) return;
         const updated = {...setting, [key]: !setting[key]};
-        setSetting(updated);
+        // optimistic update
+        queryClient.setQueryData<NotificationSettingRes | null>(['notificationSetting'], updated);
         try {
-            await saveNotificationSetting(updated);
+            const res = await saveNotificationSetting(updated);
+            if (res.code !== "0000") throw new Error(res.message || `알림 설정 저장 실패 (${res.code})`);
             setSaved(true);
             setTimeout(() => setSaved(false), 2000);
         } catch (error) {
             console.error(error);
-            setSetting(setting);
+            queryClient.setQueryData<NotificationSettingRes | null>(['notificationSetting'], setting);
         }
     };
 

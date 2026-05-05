@@ -1,4 +1,6 @@
-import {type MouseEvent, useEffect, useRef, useState} from "react";
+import {type MouseEvent, useMemo, useState} from "react";
+import {useQuery} from "@tanstack/react-query";
+import {unwrapResponse} from "../../lib/apiResponse.ts";
 import Box from "@mui/material/Box";
 import Typography from "@mui/material/Typography";
 import Card from "@mui/material/Card";
@@ -22,14 +24,16 @@ import StackedLineChartIcon from "@mui/icons-material/StackedLineChart";
 import StockDetailLineChart, {type CustomStockDetailLineChartProps} from "../../components/StockDetailLineChart.tsx";
 import CryptoDetailLineChart, {type CryptoDetailLineChartProps} from "../../components/CryptoDetailLineChart.tsx";
 import CommodityDetailLineChart, {type CommodityDetailLineChartProps} from "../../components/CommodityDetailLineChart.tsx";
-import {fetchStockChart} from "../../api/stock/StockApi.ts";
-import {fetchCryptoDetail} from "../../api/crypto/CryptoApi.ts";
-import {fetchCommodityDetail} from "../../api/commodity/CommodityApi.ts";
+import {
+    fetchMultiViewStockChart,
+    fetchMultiViewCryptoDetail,
+    fetchMultiViewCommodityDetail,
+} from "../../api/multiView/MultiViewApi.ts";
 import {StockChartType} from "../../type/StockType.ts";
 import {CryptoChartType} from "../../type/CryptoType.ts";
 import {CommodityChartType} from "../../type/CommodityType.ts";
 import {renderChangeAmount} from "../../components/CustomRender.tsx";
-import type {AssetType, SelectedAsset} from "./MultiViewSearchDialog.tsx";
+import type {MultiViewAssetType, SelectedAsset, StreamUpdate} from "../../type/MultiViewType.ts";
 import {useNavigate} from "react-router-dom";
 
 const StyledToggleButtonGroup = styled(ToggleButtonGroup)(({theme}) => ({
@@ -46,13 +50,6 @@ const StyledToggleButtonGroup = styled(ToggleButtonGroup)(({theme}) => ({
     },
 }));
 
-export interface StreamUpdate {
-    value: string;
-    fluRt: string;
-    predPre: string;
-    trend: 'up' | 'down' | 'neutral';
-}
-
 interface MultiViewPanelProps {
     asset: SelectedAsset | null;
     onSearch: () => void;
@@ -68,70 +65,105 @@ const labelColors = {
     neutral: 'default' as const,
 };
 
+const trendColor = (preSig: string): 'up' | 'down' | 'neutral' => {
+    const sig = Number(preSig);
+    if (sig === 2 || sig === 1) return 'up';
+    if (sig === 4 || sig === 5) return 'down';
+    return 'neutral';
+};
+
+// CryptoDetail 와 동일: dt 가 ISO(`2026-03-17T14:30:00`) 또는 compact(`20260318143000`) 둘 다 가능
+const cryptoDateFormat = (dateTime: string, showTime: boolean): string => {
+    if (!dateTime) return '';
+    if (dateTime.includes('T')) {
+        const f = dateTime.replace(/-/g, '.').replace('T', ' ');
+        return showTime ? f.substring(0, 16) : f.substring(0, 10);
+    }
+    const cleaned = dateTime.replace(/\s+/g, '');
+    if (cleaned.length >= 8) {
+        const date = `${cleaned.substring(0, 4)}.${cleaned.substring(4, 6)}.${cleaned.substring(6, 8)}`;
+        if (showTime && cleaned.length >= 12) return `${date} ${cleaned.substring(8, 10)}:${cleaned.substring(10, 12)}`;
+        return date;
+    }
+    return dateTime;
+};
+
 export default function MultiViewPanel({asset, onSearch, onChartExpand, onRemove, streamUpdate, reloadKey}: MultiViewPanelProps) {
     const navigate = useNavigate();
-    const [chartData, setChartData] = useState<CustomStockDetailLineChartProps | CryptoDetailLineChartProps | CommodityDetailLineChartProps | null>(null);
     const [toggle, setToggle] = useState('DAY');
     const [formats, setFormats] = useState('line');
-    const minute = useRef('1');
+    const [minuteUnit, setMinuteUnit] = useState('1');
+    const chartType = toggle.startsWith('MINUTE') ? `MINUTE_${minuteUnit}` : toggle;
 
-    useEffect(() => {
-        if (!asset) {
-            setChartData(null);
-            return;
+    // WebSocket overlay (streamUpdate prop 으로부터 들어오는 실시간 가격 갱신)
+    const [liveOverlay, setLiveOverlay] = useState<Partial<{
+        value: string;
+        fluRt: string;
+        predPre: string;
+        changeRate: string;
+        changePrice: number;
+        trend: 'up' | 'down' | 'neutral';
+    }>>({});
+
+    // streamUpdate prop 이 바뀔 때마다 overlay 업데이트 — "reset state during render" 패턴
+    const [prevStream, setPrevStream] = useState<StreamUpdate | null | undefined>(undefined);
+    if (streamUpdate !== prevStream) {
+        setPrevStream(streamUpdate);
+        if (streamUpdate && asset) {
+            if (asset.type === 'STOCK' || asset.type === 'COMMODITY') {
+                setLiveOverlay({
+                    value: Number(streamUpdate.value).toLocaleString(),
+                    fluRt: streamUpdate.fluRt,
+                    predPre: streamUpdate.predPre,
+                    trend: streamUpdate.trend,
+                });
+            } else if (asset.type === 'CRYPTO') {
+                setLiveOverlay({
+                    value: Number(streamUpdate.value).toLocaleString(),
+                    changeRate: streamUpdate.fluRt,
+                    changePrice: Number(streamUpdate.predPre),
+                    trend: streamUpdate.trend,
+                });
+            }
         }
-        const chartType = toggle.startsWith('MINUTE') ? `MINUTE_${minute.current}` : toggle;
-        loadData(asset, chartType, 0, false);
-    }, [asset?.code, asset?.type]);
+    }
 
-    const firstReloadRef = useRef(true);
-    useEffect(() => {
-        if (firstReloadRef.current) { firstReloadRef.current = false; return; }
-        if (!asset) return;
-        const chartType = toggle.startsWith('MINUTE') ? `MINUTE_${minute.current}` : toggle;
-        loadData(asset, chartType, 0, true);
-    }, [reloadKey]);
+    // asset / chartType / reloadKey 변경 시 자동 fetch (queryKey 에 모두 포함)
+    const {data: queryData} = useQuery({
+        queryKey: ['multiViewPanel', asset?.type, asset?.code, chartType, reloadKey ?? 0],
+        queryFn: async () => {
+            if (!asset) return null;
+            if (asset.type === 'STOCK') {
+                const stockChartType = chartType as StockChartType;
+                return unwrapResponse(await fetchMultiViewStockChart(asset.code, {chartType: stockChartType}), null);
+            }
+            if (asset.type === 'CRYPTO') {
+                const cryptoChartType = chartType as CryptoChartType;
+                return unwrapResponse(await fetchMultiViewCryptoDetail(asset.code, {chartType: cryptoChartType}), null);
+            }
+            if (asset.type === 'COMMODITY') {
+                const commodityChartType = chartType as CommodityChartType;
+                return unwrapResponse(await fetchMultiViewCommodityDetail(asset.code, {chartType: commodityChartType}), null);
+            }
+            return null;
+        },
+        enabled: !!asset,
+        retry: 2,
+        retryDelay: (count) => 1000 * (count + 1),
+    });
 
-    useEffect(() => {
-        if (!streamUpdate || !chartData) return;
-        if (asset?.type === 'STOCK' || asset?.type === 'COMMODITY') {
-            setChartData(old => old ? {
-                ...old,
-                value: Number(streamUpdate.value).toLocaleString(),
-                fluRt: streamUpdate.fluRt,
-                predPre: streamUpdate.predPre,
-                trend: streamUpdate.trend,
-            } as typeof old : null);
-        } else if (asset?.type === 'CRYPTO') {
-            setChartData(old => old ? {
-                ...old,
-                value: Number(streamUpdate.value).toLocaleString(),
-                changeRate: streamUpdate.fluRt,
-                changePrice: Number(streamUpdate.predPre),
-                trend: streamUpdate.trend,
-            } as typeof old : null);
-        }
-    }, [streamUpdate]);
-
-    const trendColor = (preSig: string): 'up' | 'down' | 'neutral' => {
-        const sig = Number(preSig);
-        if (sig === 2 || sig === 1) return 'up';
-        if (sig === 4 || sig === 5) return 'down';
-        return 'neutral';
-    };
-
-    const loadData = async (a: SelectedAsset, chartType: string, retryCount = 0, silent: boolean = false) => {
-        const cfg = silent ? { skipGlobalError: true } : undefined;
+    // queryData → 화면 prop 변환 (자산 타입별 분기)
+    const baseChartData = useMemo<CustomStockDetailLineChartProps | CryptoDetailLineChartProps | CommodityDetailLineChartProps | null>(() => {
+        if (!queryData || !asset) return null;
+        const isMinute = chartType.startsWith('MINUTE');
         try {
-            if (a.type === 'STOCK') {
-                const stockChartType = chartType.startsWith('MINUTE') ? chartType as StockChartType : `${chartType}` as StockChartType;
-                const res = await fetchStockChart(a.code, {chartType: stockChartType}, cfg);
-                const {stockInfo, stockChartList} = res.result ?? {};
-                if (!stockInfo || !stockChartList) return;
+            if (asset.type === 'STOCK') {
+                const {stockInfo, stockChartList} = (queryData as any) ?? {};
+                if (!stockInfo || !stockChartList) return null;
 
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                let dateList: string[], lineData: any[], barDataList: number[];
-                if (chartType.startsWith('MINUTE')) {
+                let dateList: string[];
+                let lineData: any[];
+                if (isMinute) {
                     dateList = stockChartList.map((item: {dt: string}) =>
                         `${item.dt.slice(0, 4)}.${item.dt.slice(4, 6)}.${item.dt.slice(6, 8)} ${item.dt.slice(8, 10)}:${item.dt.slice(10, 12)}`
                     ).reverse();
@@ -142,7 +174,7 @@ export default function MultiViewPanel({asset, onSearch, onChartExpand, onRemove
                     ).reverse();
                     lineData = stockChartList.map((item: {curPrc: string}) => item.curPrc).reverse();
                 }
-                barDataList = stockChartList.map((item: {trdeQty: string}) => Number(item.trdeQty)).reverse();
+                const barDataList: number[] = stockChartList.map((item: {trdeQty: string}) => Number(item.trdeQty)).reverse();
 
                 const tm = stockInfo.tm;
                 const year = tm.substring(0, 4), month = tm.substring(4, 6), day = tm.substring(6, 8);
@@ -150,49 +182,43 @@ export default function MultiViewPanel({asset, onSearch, onChartExpand, onRemove
                 const interval = (Number(hour) >= 20 || Number(hour) < 8)
                     ? `${year}.${month}.${day} 장마감` : `${year}.${month}.${day} ${hour}:${min}`;
 
-                setChartData({
+                return {
                     id: stockInfo.stkCd, title: stockInfo.stkNm,
                     orderWarning: stockInfo.orderWarning ?? '',
                     value: Number(stockInfo.curPrc.replace(/^[+-]/, '')).toLocaleString(),
                     fluRt: stockInfo.fluRt, predPre: stockInfo.predPre || '0',
                     openPric: parseFloat(stockInfo.openPric), interval,
                     trend: trendColor(stockInfo.preSig), nxtEnable: stockInfo.nxtEnable ?? 'N',
-                    seriesData: [{id: a.code, showMark: false, curve: 'linear', area: true, stackOrder: 'ascending', color: 'grey', data: lineData}],
+                    seriesData: [{id: asset.code, showMark: false, curve: 'linear', area: true, stackOrder: 'ascending', color: 'grey', data: lineData}],
                     barDataList, dateList,
-                });
-            } else if (a.type === 'CRYPTO') {
-                const cryptoChartType = chartType.startsWith('MINUTE') ? chartType as CryptoChartType : `${chartType}` as CryptoChartType;
-                const res = await fetchCryptoDetail(a.code, {chartType: cryptoChartType}, cfg);
-                const r = res.result;
-                if (!r?.chartList) return;
+                } as CustomStockDetailLineChartProps;
+            }
+            if (asset.type === 'CRYPTO') {
+                const r = queryData as any;
+                if (!r?.chartList || !r?.cryptoInfo) return null;
 
-                const isMinute = chartType.startsWith('MINUTE');
-                const dateList = r.chartList.map((item: {candle_date_time_kst: string}) =>
-                    isMinute ? item.candle_date_time_kst?.substring(0, 16)?.replace('T', ' ') ?? ''
-                        : item.candle_date_time_kst?.substring(0, 10) ?? ''
-                ).reverse();
-                const lineData = r.chartList.map((item: {trade_price: number}) => item.trade_price).reverse();
-                const barDataList = r.chartList.map((item: {candle_acc_trade_volume: number}) => item.candle_acc_trade_volume).reverse();
+                const dateList = r.chartList.map((item: {dt: string}) => cryptoDateFormat(item.dt, isMinute));
+                const lineData = r.chartList.map((item: {tradePrice: number}) => item.tradePrice);
+                const barDataList = r.chartList.map((item: {candleAccTradeVolume: number}) => item.candleAccTradeVolume);
 
-                const changeRate = Number(r.signedChangeRate ?? 0) * 100;
-                const now = new Date();
-                const interval = `${now.getFullYear()}.${String(now.getMonth() + 1).padStart(2, '0')}.${String(now.getDate()).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+                const info = r.cryptoInfo;
+                const trend: 'up' | 'down' | 'neutral' = info.change === 'RISE' ? 'up' : info.change === 'FALL' ? 'down' : 'neutral';
+                const interval = cryptoDateFormat(info.tradeDateTimeKst ?? '', true);
 
-                setChartData({
-                    id: a.code, title: r.koreanName ?? a.name,
-                    value: Number(r.tradePrice ?? 0).toLocaleString(),
-                    changeRate: changeRate.toFixed(2), changePrice: Number(r.signedChangePrice ?? 0),
-                    interval, trend: changeRate > 0 ? 'up' : changeRate < 0 ? 'down' : 'neutral',
-                    seriesData: [{id: a.code, showMark: false, curve: 'linear', area: true, stackOrder: 'ascending', color: 'grey', data: lineData}],
+                return {
+                    id: asset.code, title: info.koreanName ?? asset.name,
+                    value: Number(info.tradePrice ?? 0).toLocaleString(),
+                    changeRate: ((info.signedChangeRate ?? 0) * 100).toFixed(2),
+                    changePrice: Number(info.signedChangePrice ?? 0),
+                    interval, trend,
+                    seriesData: [{id: asset.code, showMark: false, curve: 'linear', area: true, stackOrder: 'ascending', color: trend === 'up' ? 'red' : trend === 'down' ? 'blue' : 'grey', data: lineData}],
                     barDataList, dateList,
-                } as CryptoDetailLineChartProps);
-            } else if (a.type === 'COMMODITY') {
-                const commodityChartType = chartType.startsWith('MINUTE') ? chartType as CommodityChartType : `${chartType}` as CommodityChartType;
-                const res = await fetchCommodityDetail(a.code, {chartType: commodityChartType}, cfg);
-                const {commodityInfo, commodityChartList} = res.result ?? {};
-                if (!commodityInfo || !commodityChartList) return;
+                } as CryptoDetailLineChartProps;
+            }
+            if (asset.type === 'COMMODITY') {
+                const {commodityInfo, commodityChartList} = (queryData as any) ?? {};
+                if (!commodityInfo || !commodityChartList) return null;
 
-                const isMinute = chartType.startsWith('MINUTE');
                 const dateList = commodityChartList.map((item: {dt: string}) =>
                     isMinute ? `${item.dt.slice(0, 4)}.${item.dt.slice(4, 6)}.${item.dt.slice(6, 8)} ${item.dt.slice(8, 10)}:${item.dt.slice(10, 12)}`
                         : `${item.dt.slice(0, 4)}.${item.dt.slice(4, 6)}.${item.dt.slice(6, 8)}`
@@ -206,36 +232,39 @@ export default function MultiViewPanel({asset, onSearch, onChartExpand, onRemove
                 const interval = tm ? ((Number(hour) >= 20 || Number(hour) < 8)
                     ? `${year}.${month}.${day} 장마감` : `${year}.${month}.${day} ${hour}:${min}`) : '';
 
-                setChartData({
-                    id: a.code, title: commodityInfo.stkNm, orderWarning: '',
+                return {
+                    id: asset.code, title: commodityInfo.stkNm, orderWarning: '',
                     value: Number(String(commodityInfo.curPrc).replace(/^[+-]/, '')).toLocaleString(),
                     fluRt: commodityInfo.fluRt ?? '0', predPre: commodityInfo.predPre ?? '0',
                     openPric: parseFloat(commodityInfo.openPric ?? '0'), interval,
                     trend: trendColor(commodityInfo.preSig ?? '3'), nxtEnable: 'N',
-                    seriesData: [{id: a.code, showMark: false, curve: 'linear', area: true, stackOrder: 'ascending', color: 'grey', data: lineData}],
+                    seriesData: [{id: asset.code, showMark: false, curve: 'linear', area: true, stackOrder: 'ascending', color: 'grey', data: lineData}],
                     barDataList, dateList,
-                } as CommodityDetailLineChartProps);
+                } as CommodityDetailLineChartProps;
             }
         } catch (err) {
-            if (retryCount < 2) {
-                setTimeout(() => loadData(a, chartType, retryCount + 1, silent), 1000 * (retryCount + 1));
-            } else {
-                console.error(err);
-            }
+            console.error(err);
         }
-    };
+        return null;
+    }, [queryData, asset, chartType]);
+
+    // 최종 chartData = base + WS overlay 머지
+    const chartData = useMemo<CustomStockDetailLineChartProps | CryptoDetailLineChartProps | CommodityDetailLineChartProps | null>(() => {
+        if (!baseChartData) return null;
+        return {...baseChartData, ...liveOverlay} as typeof baseChartData;
+    }, [baseChartData, liveOverlay]);
 
     const handleAlignment = (_event: MouseEvent<HTMLElement>, newAlignment: string) => {
         if (newAlignment !== null && asset) {
             setToggle(newAlignment);
-            const chartType = newAlignment === 'MINUTE' ? `MINUTE_${minute.current}` : newAlignment;
-            loadData(asset, chartType);
+            // queryKey 가 chartType 포함 → 자동 재요청
         }
     };
 
     const handleOptionChange = (event: SelectChangeEvent) => {
-        minute.current = event.target.value as string;
-        if (asset) loadData(asset, `MINUTE_${event.target.value}`);
+        const newMinute = event.target.value as string;
+        setMinuteUnit(newMinute);
+        setToggle('MINUTE');
     };
 
     const handleFormat = (_event: MouseEvent<HTMLElement>, newFormats: string) => {
@@ -244,7 +273,7 @@ export default function MultiViewPanel({asset, onSearch, onChartExpand, onRemove
 
     const handleNavigate = () => {
         if (!asset) return;
-        const pathMap: Record<AssetType, string> = {
+        const pathMap: Record<MultiViewAssetType, string> = {
             STOCK: `/stock/detail/${asset.code}`,
             CRYPTO: `/crypto/detail/${asset.code}`,
             COMMODITY: `/commodity/detail/${asset.code}`,
@@ -337,7 +366,7 @@ export default function MultiViewPanel({asset, onSearch, onChartExpand, onRemove
             <Box display="flex" justifyContent="space-between" alignItems="center" flexWrap="wrap">
                 <StyledToggleButtonGroup size="small" value={toggle} exclusive onChange={handleAlignment}>
                     <ToggleButton value="MINUTE" sx={{padding: 1}}>
-                        <Select size="small" value={minute.current} onChange={handleOptionChange}
+                        <Select size="small" value={minuteUnit} onChange={handleOptionChange}
                             variant="standard" disableUnderline
                             sx={{boxShadow: 'none', width: 55, backgroundColor: 'transparent', border: 'none', padding: '0 8px', justifyContent: 'center'}}>
                             <MenuItem value="1">1분</MenuItem>

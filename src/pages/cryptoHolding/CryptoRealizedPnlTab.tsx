@@ -1,4 +1,5 @@
-import {useEffect, useState} from "react";
+import {useMemo, useState} from "react";
+import {useQuery, useQueryClient} from "@tanstack/react-query";
 import Box from "@mui/material/Box";
 import Typography from "@mui/material/Typography";
 import Button from "@mui/material/Button";
@@ -48,60 +49,58 @@ interface CryptoRealizedPnlTabProps {
 
 export default function CryptoRealizedPnlTab({myBrokers}: CryptoRealizedPnlTabProps) {
     const currentDate = new Date();
+    const queryClient = useQueryClient();
     const [selectedBrokerTab, setSelectedBrokerTab] = useState(0);
     const [viewMode, setViewMode] = useState<ViewMode>('monthly');
     const [year, setYear] = useState(currentDate.getFullYear());
     const [month, setMonth] = useState(currentDate.getMonth() + 1);
-    const [items, setItems] = useState<RealizedPnlItem[]>([]);
-    const [totalPnl, setTotalPnl] = useState(0);
     const [addOpen, setAddOpen] = useState(false);
     const [editItem, setEditItem] = useState<RealizedPnlItem | null>(null);
     const [deleteTarget, setDeleteTarget] = useState<RealizedPnlItem | null>(null);
     const [anchorEl, setAnchorEl] = useState<HTMLElement | null>(null);
     const [menuTarget, setMenuTarget] = useState<RealizedPnlItem | null>(null);
-
-    const [reloadKey, setReloadKey] = useState(0);
-    const [loading, setLoading] = useState(true);
-    const reload = () => setReloadKey(prev => prev + 1);
     const {isBlind} = useBlindMode();
+
     const [showList, setShowList] = useState(!isBlind);
+    const [prevIsBlind, setPrevIsBlind] = useState(isBlind);
+    if (isBlind !== prevIsBlind) {
+        setPrevIsBlind(isBlind);
+        setShowList(!isBlind);
+    }
 
     const selectedBroker = myBrokers[selectedBrokerTab];
 
-    useEffect(() => {
-        setShowList(!isBlind);
-    }, [isBlind]);
+    const {data: allItems, isLoading: loading} = useQuery<RealizedPnlItem[]>({
+        queryKey: ['cryptoRealizedPnl', selectedBroker?.brokerId, viewMode, year, month],
+        queryFn: async () => {
+            const yearParam = viewMode !== 'all' ? year : undefined;
+            const monthParam = viewMode === 'monthly' ? month : undefined;
+            const data = await fetchCryptoRealizedPnlList(yearParam, monthParam);
+            if (data.code !== "0000") throw new Error(data.message || `실현손익 조회 실패 (${data.code})`);
+            return data.result?.items ?? [];
+        },
+        enabled: myBrokers.length > 0 && !!selectedBroker,
+        refetchOnWindowFocus: false,
+    });
 
-    useEffect(() => {
-        if (myBrokers.length === 0 || !selectedBroker) return;
-        let cancelled = false;
+    const items = useMemo<RealizedPnlItem[]>(() => {
+        if (!allItems || !selectedBroker) return [];
+        return allItems.filter(item => item.brokerId === selectedBroker.brokerId);
+    }, [allItems, selectedBroker]);
 
-        setLoading(true);
+    const totalPnl = useMemo<number>(() => {
+        return items.reduce((sum, item) => sum + item.realizedPnl, 0);
+    }, [items]);
 
-        (async () => {
-            try {
-                const yearParam = viewMode !== 'all' ? year : undefined;
-                const monthParam = viewMode === 'monthly' ? month : undefined;
-                const data = await fetchCryptoRealizedPnlList(yearParam, monthParam);
-                if (cancelled) return;
-                const allItems: RealizedPnlItem[] = data.result?.items ?? [];
-                const filtered = allItems.filter(item => item.brokerId === selectedBroker.brokerId);
-                setItems(filtered);
-                setTotalPnl(filtered.reduce((sum, item) => sum + item.realizedPnl, 0));
-            } catch (err) {
-                console.error(err);
-            } finally {
-                if (!cancelled) setLoading(false);
-            }
-        })();
-
-        return () => { cancelled = true; };
-    }, [viewMode, year, month, selectedBrokerTab, reloadKey]);
+    const reload = () => {
+        queryClient.invalidateQueries({queryKey: ['cryptoRealizedPnl']});
+    };
 
     const handleDelete = async () => {
         if (!deleteTarget) return;
         try {
-            await deleteCryptoManualPnl(deleteTarget.id);
+            const res = await deleteCryptoManualPnl(deleteTarget.id);
+            if (res.code !== "0000") throw new Error(res.message || `실현손익 삭제 실패 (${res.code})`);
             reload();
         } catch (err) {
             console.error(err);

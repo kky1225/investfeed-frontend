@@ -9,8 +9,11 @@ import Grid from "@mui/material/Grid";
 import LinkIcon from "@mui/icons-material/Link";
 import type {BrokerSummaryItem, BrokerHoldingItem} from "../../type/AssetDashboardType.ts";
 import type {BrokerRealizedPnlItem} from "../../type/RealizedPnlType.ts";
-import {useHoldingStream, HoldingBuffer} from "../holding/useHoldingStream.ts";
-import {useCryptoHoldingStream, CryptoHoldingBuffer} from "../cryptoHolding/useCryptoHoldingStream.ts";
+import {useHoldingStream} from "../holding/useHoldingStream.ts";
+import {useCryptoHoldingStream} from "../cryptoHolding/useCryptoHoldingStream.ts";
+import type {HoldingBuffer} from "../../type/HoldingType.ts";
+import type {CryptoHoldingBuffer} from "../../type/CryptoType.ts";
+import {fetchAssetStockStream, fetchAssetCryptoStream} from "../../api/asset/AssetDashboardApi.ts";
 import BlindText from "../../components/BlindText.tsx";
 
 interface BrokerSummaryCardsProps {
@@ -112,8 +115,8 @@ export default function BrokerSummaryCards({brokerSummaries, brokerPnlList}: Bro
     }, [updateBrokerStates]);
 
     // 주식/코인 각각 한 번만 스트림 호출
-    useHoldingStream(allStockCodes, handleStockUpdate);
-    useCryptoHoldingStream(allCryptoCodes, handleCryptoUpdate);
+    useHoldingStream(allStockCodes, handleStockUpdate, fetchAssetStockStream);
+    useCryptoHoldingStream(allCryptoCodes, handleCryptoUpdate, fetchAssetCryptoStream);
 
     if (brokerSummaries.length === 0) return null;
 

@@ -49,6 +49,8 @@ export default function Header() {
                     fetchStockSearch(keyword.trim()),
                     fetchCryptoSearch(keyword.trim()),
                 ]);
+                if (stockData.code !== "0000") throw new Error(stockData.message || `주식 검색 실패 (${stockData.code})`);
+                if (cryptoData.code !== "0000") throw new Error(cryptoData.message || `코인 검색 실패 (${cryptoData.code})`);
 
                 const stockResults: SearchItem[] = (stockData.result ?? []).map((s: { stkCd: string; stkNm: string; marketName: string }) => ({
                     code: s.stkCd,

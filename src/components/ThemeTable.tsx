@@ -1,20 +1,12 @@
 import {DataGrid, GridColDef} from "@mui/x-data-grid";
 import {useNavigate} from "react-router-dom";
+import type {ThemeGridRow} from "../type/ThemeType.ts";
 
 interface ThemeTableProps {
     rows: ThemeGridRow[],
     columns: GridColDef[],
     pageSize: number,
     loading?: boolean,
-}
-
-export interface ThemeGridRow {
-    id: string;
-    rank: string;
-    themaNm: string,
-    fluSig: string,
-    fluRt: string;
-    dtPrftRt: string,
 }
 
 const ThemeTable = (

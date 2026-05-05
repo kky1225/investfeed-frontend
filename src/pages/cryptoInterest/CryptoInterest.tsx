@@ -236,6 +236,7 @@ const CryptoInterest = () => {
         setGroupOrderDirty(false);
         try {
             const data = await fetchCryptoInterestGroups();
+            if (data.code !== "0000") throw new Error(data.message || `관심 그룹 조회 실패 (${data.code})`);
             const groupList: CryptoInterestGroup[] = data.result ?? [];
             setGroups(groupList);
             if (groupList.length > 0) {
@@ -245,6 +246,8 @@ const CryptoInterest = () => {
                 setSelectedGroup(target);
                 loadItems(target.id);
             }
+        } catch (err) {
+            console.error(err);
         } finally {
             setGroupsLoading(false);
         }
@@ -257,12 +260,16 @@ const CryptoInterest = () => {
         setItemOrderDirty(false);
         try {
             const data = await fetchCryptoInterestItems(groupId);
+            if (data.code !== "0000") throw new Error(data.message || `관심 코인 조회 실패 (${data.code})`);
             setItems(data.result ?? []);
 
             // 암호화폐는 24시간 운영이므로 시장 오픈 체크 불필요
             socketRef.current?.close();
-            await fetchCryptoInterestItemsStream(groupId);
+            const streamRes = await fetchCryptoInterestItemsStream(groupId);
+            if (streamRes.code !== "0000") throw new Error(streamRes.message || `관심 코인 스트림 실패 (${streamRes.code})`);
             socketRef.current = openSocket();
+        } catch (err) {
+            console.error(err);
         } finally {
             setItemsLoading(false);
             loadingGroupRef.current = null;
@@ -308,6 +315,7 @@ const CryptoInterest = () => {
         setNewGroupError("");
         try {
             const res = await createCryptoInterestGroup({groupNm: newGroupName.trim()});
+            if (res.code !== "0000" || !res.result) throw new Error(res.message || `관심 그룹 생성 실패 (${res.code})`);
             const created: CryptoInterestGroup = res.result;
             setGroups(prev => [...prev, created]);
             setAddGroupOpen(false);
@@ -331,7 +339,8 @@ const CryptoInterest = () => {
         if (!editGroupId) return;
         setEditGroupError("");
         try {
-            await updateCryptoInterestGroup(editGroupId, {groupNm: editGroupName.trim()});
+            const res = await updateCryptoInterestGroup(editGroupId, {groupNm: editGroupName.trim()});
+            if (res.code !== "0000") throw new Error(res.message || `관심 그룹 수정 실패 (${res.code})`);
             setGroups(prev =>
                 prev.map(g => g.id === editGroupId ? {...g, groupNm: editGroupName.trim()} : g)
             );
@@ -351,7 +360,8 @@ const CryptoInterest = () => {
 
     const handleDeleteGroup = async () => {
         if (!groupMenu) return;
-        await deleteCryptoInterestGroup(groupMenu.group.id);
+        const res = await deleteCryptoInterestGroup(groupMenu.group.id);
+        if (res.code !== "0000") throw new Error(res.message || `관심 그룹 삭제 실패 (${res.code})`);
         const newGroups = groups.filter(g => g.id !== groupMenu.group.id);
         setGroups(newGroups);
         if (selectedGroup?.id === groupMenu.group.id) {
@@ -389,7 +399,8 @@ const CryptoInterest = () => {
     const handleSaveGroupOrder = async () => {
         setSavingGroupOrder(true);
         try {
-            await reorderCryptoInterestGroups({orderedIds: groups.map(g => g.id)});
+            const res = await reorderCryptoInterestGroups({orderedIds: groups.map(g => g.id)});
+            if (res.code !== "0000") throw new Error(res.message || `관심 그룹 순서 변경 실패 (${res.code})`);
             setGroupOrderDirty(false);
         } finally {
             setSavingGroupOrder(false);
@@ -400,7 +411,8 @@ const CryptoInterest = () => {
         if (!selectedGroup) return;
         setSavingItemOrder(true);
         try {
-            await reorderCryptoInterestItems(selectedGroup.id, {orderedIds: items.map(i => i.id)});
+            const res = await reorderCryptoInterestItems(selectedGroup.id, {orderedIds: items.map(i => i.id)});
+            if (res.code !== "0000") throw new Error(res.message || `관심 종목 순서 변경 실패 (${res.code})`);
             setItemOrderDirty(false);
         } finally {
             setSavingItemOrder(false);
@@ -419,6 +431,7 @@ const CryptoInterest = () => {
             setSearchLoading(true);
             try {
                 const data = await fetchCryptoSearch(keyword.trim());
+                if (data.code !== "0000") throw new Error(data.message || `코인 검색 실패 (${data.code})`);
                 setSearchResults(data.result ?? []);
             } catch (error) {
                 console.error(error);
@@ -436,10 +449,11 @@ const CryptoInterest = () => {
             return;
         }
         try {
-            await addCryptoInterestItem(selectedGroup.id, {
+            const res = await addCryptoInterestItem(selectedGroup.id, {
                 market: selectedCrypto.market,
                 koreanName: selectedCrypto.koreanName,
             });
+            if (res.code !== "0000") throw new Error(res.message || `관심 종목 추가 실패 (${res.code})`);
             await loadItems(selectedGroup.id);
             setAddItemOpen(false);
             setSearchKeyword("");
@@ -454,7 +468,8 @@ const CryptoInterest = () => {
 
     const handleDeleteItem = async (itemId: number) => {
         if (!selectedGroup) return;
-        await deleteCryptoInterestItem(selectedGroup.id, itemId);
+        const res = await deleteCryptoInterestItem(selectedGroup.id, itemId);
+        if (res.code !== "0000") throw new Error(res.message || `관심 종목 삭제 실패 (${res.code})`);
         setItems(prev => prev.filter(i => i.id !== itemId));
     };
 

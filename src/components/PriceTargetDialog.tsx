@@ -1,4 +1,6 @@
-import {useEffect, useState} from "react";
+import {useMemo, useState} from "react";
+import {useQuery, useQueryClient} from "@tanstack/react-query";
+import {unwrapResponse} from "../lib/apiResponse.ts";
 import Dialog from "@mui/material/Dialog";
 import DialogTitle from "@mui/material/DialogTitle";
 import DialogContent from "@mui/material/DialogContent";
@@ -26,23 +28,22 @@ interface PriceTargetDialogProps {
 }
 
 export default function PriceTargetDialog({open, onClose, assetType, assetCode, assetName, currentPrice}: PriceTargetDialogProps) {
+    const queryClient = useQueryClient();
     const [targetPrice, setTargetPrice] = useState("");
     const [targetPriceError, setTargetPriceError] = useState("");
     const [loading, setLoading] = useState(false);
-    const [targets, setTargets] = useState<PriceTarget[]>([]);
 
-    useEffect(() => {
-        if (!open) return;
-        (async () => {
-            try {
-                const res = await fetchPriceTargets();
-                const all: PriceTarget[] = res.result ?? [];
-                setTargets(all.filter(t => t.assetCode === assetCode));
-            } catch (e) {
-                console.error(e);
-            }
-        })();
-    }, [open, assetCode]);
+    const {data: allTargetsData} = useQuery<PriceTarget[]>({
+        queryKey: ['priceTargets'],
+        queryFn: async () => unwrapResponse(await fetchPriceTargets(), [] as PriceTarget[]),
+        enabled: open,
+        // optimistic create/delete 와의 race condition 방지
+        refetchOnWindowFocus: false,
+    });
+    const targets = useMemo(
+        () => (allTargetsData ?? []).filter(t => t.assetCode === assetCode),
+        [allTargetsData, assetCode],
+    );
 
     const handleClose = () => {
         setTargetPrice("");
@@ -71,7 +72,8 @@ export default function PriceTargetDialog({open, onClose, assetType, assetCode, 
                 targetPrice: target,
                 direction,
             });
-            setTargets(prev => [res.result, ...prev]);
+            if (res.code !== "0000" || !res.result) throw new Error(res.message || `목표가 등록 실패 (${res.code})`);
+            queryClient.setQueryData<PriceTarget[]>(['priceTargets'], prev => [res.result, ...(prev ?? [])]);
             setTargetPrice("");
             setTargetPriceError("");
         } catch (err) {
@@ -91,7 +93,7 @@ export default function PriceTargetDialog({open, onClose, assetType, assetCode, 
     const handleDelete = async (id: number) => {
         try {
             await deletePriceTarget(id);
-            setTargets(prev => prev.filter(t => t.id !== id));
+            queryClient.setQueryData<PriceTarget[]>(['priceTargets'], prev => (prev ?? []).filter(t => t.id !== id));
         } catch (e) {
             console.error(e);
         }

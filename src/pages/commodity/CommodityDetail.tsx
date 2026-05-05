@@ -1,4 +1,4 @@
-import {JSX, MouseEvent, ReactElement, useEffect, useRef, useState} from "react";
+import {JSX, MouseEvent, ReactElement, useMemo, useRef, useState} from "react";
 import {useParams} from "react-router-dom";
 import {Accordion, AccordionDetails, AccordionSummary, Box, Select, SelectChangeEvent, Slider, Tooltip} from "@mui/material";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
@@ -27,14 +27,15 @@ import {
     CommodityStream,
     CommodityStreamRes
 } from "../../type/CommodityType.ts";
-import {fetchCommodityDetail, fetchCommodityDetailStream} from "../../api/commodity/CommodityApi.ts";
+import {fetchCommodityDetail, fetchCommodityStream} from "../../api/commodity/CommodityApi.ts";
+import {useMarketWebSocket} from "../detail/useMarketWebSocket.ts";
 import ErrorIcon from "@mui/icons-material/Error";
 import HelpIcon from "@mui/icons-material/Help";
 import CommodityDetailLineChart, {CommodityDetailLineChartProps} from "../../components/CommodityDetailLineChart.tsx";
-import {fetchTimeNow} from "../../api/time/TimeApi.ts";
 import {MarketType} from "../../type/timeType.ts";
 import {renderChangeAmount} from "../../components/CustomRender.tsx";
 import FreshnessIndicator from "../../components/FreshnessIndicator.tsx";
+import {usePollingQuery} from "../../lib/pollingQuery.ts";
 
 const StyledToggleButtonGroup = styled(ToggleButtonGroup)(({ theme }) => ({
     border: 'none',
@@ -58,164 +59,150 @@ interface CommodityRangeProps {
     label: ReactElement;
 }
 
+interface CommodityInfoProps {
+    trdeQty: number;
+    trdePrica: number;
+    openPric: number;
+    curPrc: number;
+    _250lwst: number;
+    _250hgst: number;
+}
+
+interface MessageProps {
+    icon: JSX.Element,
+    title: string,
+    message: string
+}
+
+// 순수 헬퍼들 — 모듈 레벨로 끌어올려 useMemo 의 TDZ 회피.
+const trendColor = (value: string) => {
+    return ["1", "2"].includes(value) ? 'up' : ["4", "5"].includes(value) ? 'down' : 'neutral';
+};
+
+const chartColor = (value: string) => {
+    return ["1", "2"].includes(value) ? 'red' : ["4", "5"].includes(value) ? 'blue' : 'grey';
+};
+
+function checkInvestor(name: string, orgn: number, frgnr: number): MessageProps {
+    let message: string;
+    let title: string;
+    let icon: JSX.Element;
+
+    if (orgn == 0) {
+        message = '외국인 관망, '
+    } else if (orgn > 0) {
+        message = '외국인 매수, '
+    } else {
+        message = '외국인 매도, '
+    }
+
+    if (frgnr == 0) {
+        message = message + '기관 관망 중입니다.'
+    } else if (frgnr > 0) {
+        message = message + '기관 매수 중입니다.'
+    } else {
+        message = message + '기관 매도 중입니다.'
+    }
+
+    if (orgn == 0 && frgnr == 0) {
+        title = `${name} 투자 중립`
+        icon = <RemoveIcon />
+    } else if (orgn > 0 && frgnr > 0) {
+        title = `${name} 투자 양호`
+        icon = <CheckIcon color="success" />;
+    } else if(orgn > 0 || frgnr > 0) {
+        title = `${name} 투자 주의`
+        icon = <PriorityHighIcon color="warning" />
+    } else {
+        title = `${name} 투자 위험`
+        icon = <DoNotDisturbIcon color="error" />
+    }
+
+    return { message, title, icon };
+}
+
+const INITIAL_CHART_DATA: CommodityDetailLineChartProps = {
+    id: '-',
+    title: '-',
+    orderWarning: "0",
+    value: '-',
+    fluRt: '0',
+    predPre: '0',
+    openPric: 0,
+    interval: '-',
+    trend: 'neutral',
+    nxtEnable: 'Y',
+    seriesData: [
+        {
+            id: '',
+            showMark: false,
+            curve: 'linear',
+            area: true,
+            stackOrder: 'ascending',
+            color: 'grey',
+            data: []
+        }
+    ],
+    barDataList: [],
+    dateList: []
+};
+
+const INITIAL_INFO: CommodityInfoProps = {
+    trdeQty: 0,
+    trdePrica: 0,
+    openPric: 0,
+    curPrc: 0,
+    _250hgst: 0,
+    _250lwst: 0,
+};
+
+const INITIAL_DAY_RANGE: CommodityRangeProps[] = [
+    {value: 0, label: <p>1일 최저가 <br />0</p>},
+    {value: 0, label: <p>1일 최고가 <br />0</p>},
+];
+
+const INITIAL_YEAR_RANGE: CommodityRangeProps[] = [
+    {value: 0, label: <p>52주 최저가 <br />0</p>},
+    {value: 0, label: <p>52주 최고가 <br />0</p>},
+];
+
+const INITIAL_BAR_DATA: number[] = [0, 0, 0];
+
+const INITIAL_MESSAGE: MessageProps = {
+    icon: <RemoveIcon />,
+    title: '-',
+    message: '-'
+};
+
 const CommodityDetail = () => {
     const { id } = useParams();
     const stkCd = id ?? "";
 
-    const chartTimer = useRef<number>(0);
-    const marketTimer = useRef<number>(0);
     const [req, setReq] = useState<CommodityDetailReq>({
         chartType: CommodityChartType.DAY
     });
 
-    const [commodityChartData, setCommodityChartData] = useState<CommodityDetailLineChartProps>({
-        id: '-',
-        title: '-',
-        orderWarning: "0",
-        value: '-',
-        fluRt: '0',
-        predPre: '0',
-        openPric: 0,
-        interval: '-',
-        trend: 'neutral',
-        nxtEnable: 'Y',
-        seriesData: [
-            {
-                id: '',
-                showMark: false,
-                curve: 'linear',
-                area: true,
-                stackOrder: 'ascending',
-                color: 'grey',
-                data: []
-            }
-        ],
-        barDataList: [],
-        dateList: []
-    });
+    const {data: res, isLoading, lastUpdated, pollError} = usePollingQuery(
+        ['commodityDetail', stkCd, req.chartType],
+        (config) => fetchCommodityDetail(stkCd, req, config),
+    );
+    const loading = isLoading;
 
-    const [loading, setLoading] = useState(true);
-    const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
-    const [pollError, setPollError] = useState(false);
+    // WebSocket 으로 들어오는 실시간 부분 갱신을 보관하는 overlay state.
+    const [liveChartOverlay, setLiveChartOverlay] = useState<Partial<CommodityDetailLineChartProps>>({});
 
-    const [dayRange, setDayRange] = useState<CommodityRangeProps[]>([
-        {
-            value: 0,
-            label: <p>1일 최저가 <br />0</p>
-        },
-        {
-            value: 0,
-            label: <p>1일 최고가 <br />0</p>,
-        }
-    ]);
-
-    const [yearRange, setYearRange] = useState<CommodityRangeProps[]>([
-        {
-            value: 0,
-            label: <p>52주 최저가 <br />0</p>,
-        },
-        {
-            value: 0,
-            label: <p>52주 최고가 <br />0</p>,
-        }
-    ]);
-
-    interface CommodityInfoProps {
-        trdeQty: number;
-        trdePrica: number;
-        openPric: number;
-        curPrc: number;
-        _250lwst: number;
-        _250hgst: number;
+    // stkCd 변경 시 overlay reset
+    const [prevStkCd, setPrevStkCd] = useState(stkCd);
+    if (stkCd !== prevStkCd) {
+        setPrevStkCd(stkCd);
+        setLiveChartOverlay({});
     }
 
-    const [info, setInfo] = useState<CommodityInfoProps>({
-        trdeQty: 0,
-        trdePrica: 0,
-        openPric: 0,
-        curPrc: 0,
-        _250hgst: 0,
-        _250lwst: 0,
-    });
-
-    const [barData, setBarData] = useState<Array<number>>([0, 0, 0]);
-
-    const [message, setMessage] = useState<MessageProps>({
-        icon: <RemoveIcon />,
-        title: '-',
-        message: '-'
-    });
-
-    const [toggle, setToggle] = useState('DAY');
-    const [formats, setFormats] = useState('line');
-    const minute = useRef('1');
-
-    const labelColors = {
-        up: 'error' as const,
-        down: 'info' as const,
-        neutral: 'default' as const,
-    };
-
-    const color = labelColors[commodityChartData.trend];
-    const trendValues = { up: `${commodityChartData.fluRt}%`, down: `${commodityChartData.fluRt}%`, neutral: `${commodityChartData.fluRt}%` };
-
-    useEffect(() => {
-        setLoading(true);
-        commodityDetail(req);
-
-        let chartTimeout: ReturnType<typeof setTimeout>;
-        let socketTimeout: ReturnType<typeof setTimeout>;
-        let interval: ReturnType<typeof setInterval>;
-        let socket: WebSocket;
-
-        (async () => {
-            const marketInfo = await timeNow();
-
-            const now = Date.now() + chartTimer.current;
-            const waitTime = 60_000 - (now % 60_000);
-
-            if (marketInfo.isMarketOpen) {
-                await commodityDetailStream();
-                socket = openSocket();
-            } else {
-                socketTimeout = setTimeout(async () => {
-                    socket?.close();
-
-                    const again = await timeNow();
-                    if (again.isMarketOpen) {
-                        await commodityDetailStream();
-                        socket = openSocket();
-                    }
-                }, marketTimer.current + 200);
-            }
-
-            chartTimeout = setTimeout(() => {
-                commodityDetail(req);
-                interval = setInterval(() => {
-                    commodityDetail(req, true);
-                }, (60 * 1000));
-            }, waitTime + 200);
-        })();
-
-        return () => {
-            socket?.close();
-            clearInterval(socketTimeout);
-            clearTimeout(chartTimeout);
-            clearInterval(interval);
-        }
-    }, [req]);
-
-    const commodityDetail = async (req: CommodityDetailReq, silent: boolean = false) => {
+    // 폴링 결과 → base chartData
+    const baseCommodityChartData = useMemo<CommodityDetailLineChartProps>(() => {
+        if (res?.code !== "0000" || !res.result) return INITIAL_CHART_DATA;
         try {
-            const data = await fetchCommodityDetail(stkCd, req, silent ? { skipGlobalError: true } : undefined);
-
-            if (data.code !== "0000") {
-                throw new Error(data.msg);
-            }
-
-            const {
-                commodityInfo, commodityChartList
-            } = data.result;
+            const {commodityInfo, commodityChartList} = res.result;
 
             let dateList;
             let lineData, barDataList;
@@ -229,10 +216,8 @@ const CommodityDetail = () => {
                     dateList = commodityChartList.map((item: CommodityChart) => {
                         return `${item.dt.slice(0, 4)}.${item.dt.slice(4, 6)}.${item.dt.slice(6, 8)} ${item.dt.slice(8, 10)}:${item.dt.slice(10, 12)}`
                     }).reverse();
-
                     lineData = commodityChartList.map((item: CommodityChart) => item.curPrc.replace(/^[+-]/, '')).reverse();
                     barDataList = commodityChartList.map((item: CommodityChart) => Number(item.trdeQty)).reverse();
-
                     break;
                 }
                 case CommodityChartType.DAY:
@@ -241,28 +226,25 @@ const CommodityDetail = () => {
                     dateList = commodityChartList.map((item: CommodityChart) => {
                         return `${item.dt.slice(0, 4)}.${item.dt.slice(4, 6)}.${item.dt.slice(6, 8)}`
                     }).reverse();
-
                     lineData = commodityChartList.map((item: CommodityChart) => item.curPrc).reverse();
                     barDataList = commodityChartList.map((item: CommodityChart) => Number(item.trdeQty)).reverse();
-
                     break;
                 }
+                default:
+                    return INITIAL_CHART_DATA;
             }
 
             const year = commodityInfo.tm.substring(0, 4);
             const month = commodityInfo.tm.substring(4, 6);
             const day = commodityInfo.tm.substring(6, 8);
             const hour = commodityInfo.tm.substring(8, 10);
-            const minute = commodityInfo.tm.substring(10, 12);
+            const mm = commodityInfo.tm.substring(10, 12);
 
-            let today;
-            if(Number(hour) >= 20 || Number(hour) < 8) {
-                today = `${year}.${month}.${day} 장마감`;
-            } else {
-                today = `${year}.${month}.${day} ${hour}:${minute}`;
-            }
+            const today = (Number(hour) >= 20 || Number(hour) < 8)
+                ? `${year}.${month}.${day} 장마감`
+                : `${year}.${month}.${day} ${hour}:${mm}`;
 
-            setCommodityChartData({
+            return {
                 id: commodityInfo.stkCd,
                 title: commodityInfo.stkNm,
                 orderWarning: commodityInfo.orderWarning,
@@ -286,204 +268,116 @@ const CommodityDetail = () => {
                 ],
                 barDataList: barDataList,
                 dateList: dateList
-            });
-
-            const dayMin = commodityInfo['lowPric'].replace(/^[+-]/, '');
-            const dayMax = commodityInfo['highPric'].replace(/^[+-]/, '')
-
-            setDayRange([
-                {
-                    value: Number(dayMin),
-                    label: <p>1일 최저가 <br />{Number(dayMin).toLocaleString()}</p>
-                },
-                {
-                    value: Number(dayMax),
-                    label: <p>1일 최고가 <br />{Number(dayMax).toLocaleString()}</p>
-                }
-            ]);
-
-            const yearMin = Number(commodityInfo._250lwst.replace(/^[+-]/, ''));
-            const yearMax = Number(commodityInfo._250hgst.replace(/^[+-]/, ''));
-
-            setYearRange([
-                {
-                    value: yearMin,
-                    label: <p>52주 최저가 <br />{yearMin.toLocaleString()}</p>
-                },
-                {
-                    value: yearMax,
-                    label: <p>52주 최고가 <br />{yearMax.toLocaleString()}</p>
-                }
-            ]);
-
-            setInfo({
-                trdeQty: Number(commodityInfo.trdeQty),
-                trdePrica: Number(commodityInfo.trdePrica),
-                openPric: Number(commodityInfo.openPric.replace(/^[+-]/, '')),
-                curPrc: Number(commodityInfo.curPrc.replace(/^[+-]/, '')),
-                _250hgst: Number(commodityInfo._250hgst.replace(/^[+-]/, '')),
-                _250lwst: Number(commodityInfo._250lwst.replace(/^[+-]/, '')),
-            });
-
-            setBarData([commodityInfo.indNetprps, commodityInfo.frgnrNetprps, commodityInfo.orgnNetprps])
-
-            const message = {
-                ...checkInvestor(
-                    commodityInfo.stkNm,
-                    commodityInfo.frgnrNetprps,
-                    commodityInfo.orgnNetprps
-                )
             };
-
-            setMessage(message);
-            setLastUpdated(new Date());
-            setPollError(false);
         } catch (err) {
             console.error(err);
-            if (silent) setPollError(true);
-        } finally {
-            setLoading(false);
+            return INITIAL_CHART_DATA;
         }
-    }
+    }, [res, req.chartType, id]);
 
-    const timeNow = async () => {
-        try {
-            const startTime = Date.now();
-            const data = await fetchTimeNow({
-                marketType: MarketType.COMMODITY
+    // dayRange — WS 갱신 없음
+    const dayRange = useMemo<CommodityRangeProps[]>(() => {
+        if (res?.code !== "0000" || !res.result) return INITIAL_DAY_RANGE;
+        const {commodityInfo} = res.result;
+        const dayMin = commodityInfo['lowPric'].replace(/^[+-]/, '');
+        const dayMax = commodityInfo['highPric'].replace(/^[+-]/, '');
+        return [
+            {value: Number(dayMin), label: <p>1일 최저가 <br />{Number(dayMin).toLocaleString()}</p>},
+            {value: Number(dayMax), label: <p>1일 최고가 <br />{Number(dayMax).toLocaleString()}</p>},
+        ];
+    }, [res]);
+
+    // yearRange — WS 갱신 없음
+    const yearRange = useMemo<CommodityRangeProps[]>(() => {
+        if (res?.code !== "0000" || !res.result) return INITIAL_YEAR_RANGE;
+        const {commodityInfo} = res.result;
+        const yearMin = Number(commodityInfo._250lwst.replace(/^[+-]/, ''));
+        const yearMax = Number(commodityInfo._250hgst.replace(/^[+-]/, ''));
+        return [
+            {value: yearMin, label: <p>52주 최저가 <br />{yearMin.toLocaleString()}</p>},
+            {value: yearMax, label: <p>52주 최고가 <br />{yearMax.toLocaleString()}</p>},
+        ];
+    }, [res]);
+
+    // info — WS 갱신 없음
+    const info = useMemo<CommodityInfoProps>(() => {
+        if (res?.code !== "0000" || !res.result) return INITIAL_INFO;
+        const {commodityInfo} = res.result;
+        return {
+            trdeQty: Number(commodityInfo.trdeQty),
+            trdePrica: Number(commodityInfo.trdePrica),
+            openPric: Number(commodityInfo.openPric.replace(/^[+-]/, '')),
+            curPrc: Number(commodityInfo.curPrc.replace(/^[+-]/, '')),
+            _250hgst: Number(commodityInfo._250hgst.replace(/^[+-]/, '')),
+            _250lwst: Number(commodityInfo._250lwst.replace(/^[+-]/, '')),
+        };
+    }, [res]);
+
+    // barData — WS 갱신 없음
+    const barData = useMemo<number[]>(() => {
+        if (res?.code !== "0000" || !res.result) return INITIAL_BAR_DATA;
+        const {commodityInfo} = res.result;
+        return [commodityInfo.indNetprps, commodityInfo.frgnrNetprps, commodityInfo.orgnNetprps];
+    }, [res]);
+
+    // message — WS 갱신 없음
+    const message = useMemo<MessageProps>(() => {
+        if (res?.code !== "0000" || !res.result) return INITIAL_MESSAGE;
+        const {commodityInfo} = res.result;
+        return checkInvestor(commodityInfo.stkNm, commodityInfo.frgnrNetprps, commodityInfo.orgnNetprps);
+    }, [res]);
+
+    // 최종 commodityChartData = base + WS overlay 머지
+    const commodityChartData = useMemo<CommodityDetailLineChartProps>(() => ({
+        ...baseCommodityChartData,
+        ...liveChartOverlay,
+    }), [baseCommodityChartData, liveChartOverlay]);
+
+    const [toggle, setToggle] = useState('DAY');
+    const [formats, setFormats] = useState('line');
+    const minute = useRef('1');
+
+    const labelColors = {
+        up: 'error' as const,
+        down: 'info' as const,
+        neutral: 'default' as const,
+    };
+
+    const color = labelColors[commodityChartData.trend];
+    const trendValues = { up: `${commodityChartData.fluRt}%`, down: `${commodityChartData.fluRt}%`, neutral: `${commodityChartData.fluRt}%` };
+
+    // WebSocket 라이프사이클 — useMarketWebSocket 훅이 시장 시각/연결/정리 모두 처리.
+    useMarketWebSocket({
+        marketType: MarketType.COMMODITY,
+        subscriptionKey: stkCd,
+        streamFn: () => fetchCommodityStream([stkCd]),
+        onMessage: (event) => {
+            const data = JSON.parse(event.data);
+            if (data.trnm !== "REAL" || !Array.isArray(data.data)) return;
+
+            const commodityList = data.data.map((res: CommodityStreamRes) => {
+                const values = res.values;
+                return {
+                    code: res.item,
+                    value: values["10"],
+                    change: values["11"],
+                    fluRt: values["12"],
+                    trend: values["25"]
+                };
             });
 
-            if(data.code !== "0000") {
-                throw new Error(data.msg);
-            }
-
-            const { time, isMarketOpen, startMarketTime, marketType } = data.result
-
-            if (marketType !== MarketType.COMMODITY) {
-                throw new Error(data.msg);
-            }
-
-            const endTime = Date.now();
-            const delayTime = endTime - startTime;
-
-            const revisionServerTime = time + delayTime / 2; // startTime과 endTime 사이에 API 응답을 받기 때문에 2를 나눠서 보정
-
-            chartTimer.current = revisionServerTime - endTime;
-
-            if(!isMarketOpen) {
-                marketTimer.current = startMarketTime - revisionServerTime;
-            }
-
-            return {
-                ...data.result
-            }
-        } catch (error) {
-            console.error(error);
-        }
-    }
-
-    const commodityDetailStream = async () => {
-        try {
-            const data = await fetchCommodityDetailStream(stkCd);
-
-            if (data.code !== "0000") {
-                throw new Error(data.msg);
-            }
-        } catch (error) {
-            console.error(error);
-        }
-    }
-
-    const openSocket = () => {
-        const socket = new WebSocket("ws://localhost:8080/ws");
-
-        socket.onmessage = (event) => {
-            const data = JSON.parse(event.data);
-
-            if (data.trnm === "REAL" && Array.isArray(data.data)) {
-                const commodityList = data.data.map((res: CommodityStreamRes) => {
-                    const values = res.values;
-                    return {
-                        code: res.item,
-                        value: values["10"],
-                        change: values["11"],
-                        fluRt: values["12"],
-                        trend: values["25"]
-                    };
-                });
-
-                commodityList.forEach((commodity: CommodityStream) => {
-                    if(commodity.code === stkCd) {
-                        setCommodityChartData((prev) => ({
-                            ...prev,
-                            value: commodity.value.replace(/^[+-]/, '').toLocaleString(),
-                            predPre: commodity.change || '0',
-                            fluRt: commodity.fluRt,
-                            trend: trendColor(commodity.trend)
-                        }));
-                    }
-                });
-            }
-        }
-
-        return socket;
-    }
-
-    const trendColor = (value: string) => {
-        return ["1", "2"].includes(value) ? 'up' : ["4", "5"].includes(value) ? 'down' : 'neutral';
-    }
-
-    const chartColor = (value: string) => {
-        return ["1", "2"].includes(value) ? 'red' : ["4", "5"].includes(value) ? 'blue' : 'grey';
-    }
-
-    interface MessageProps {
-        icon: JSX.Element,
-        title: string,
-        message: string
-    }
-
-    function checkInvestor(name: string, orgn: number, frgnr: number): MessageProps {
-        let message: string;
-        let title: string;
-        let icon: JSX.Element;
-
-        if (orgn == 0) {
-            message = '외국인 관망, '
-        } else if (orgn > 0) {
-            message = '외국인 매수, '
-        } else {
-            message = '외국인 매도, '
-        }
-
-        if (frgnr == 0) {
-            message = message + '기관 관망 중입니다.'
-        } else if (frgnr > 0) {
-            message = message + '기관 매수 중입니다.'
-        } else {
-            message = message + '기관 매도 중입니다.'
-        }
-
-        if (orgn == 0 && frgnr == 0) {
-            title = `${name} 투자 중립`
-            icon = <RemoveIcon />
-        } else if (orgn > 0 && frgnr > 0) {
-            title = `${name} 투자 양호`
-            icon = <CheckIcon color="success" />;
-        } else if(orgn > 0 || frgnr > 0) {
-            title = `${name} 투자 주의`
-            icon = <PriorityHighIcon color="warning" />
-        } else {
-            title = `${name} 투자 위험`
-            icon = <DoNotDisturbIcon color="error" />
-        }
-
-        return {
-            message,
-            title,
-            icon,
-        }
-    }
+            commodityList.forEach((commodity: CommodityStream) => {
+                if (commodity.code === stkCd) {
+                    setLiveChartOverlay({
+                        value: commodity.value.replace(/^[+-]/, '').toLocaleString(),
+                        predPre: commodity.change || '0',
+                        fluRt: commodity.fluRt,
+                        trend: trendColor(commodity.trend)
+                    });
+                }
+            });
+        },
+    });
 
     const handleAlignment = (
         _event: MouseEvent<HTMLElement>,

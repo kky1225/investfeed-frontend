@@ -111,11 +111,13 @@ export default function SecondaryAuthDialog({open, mode, onSuccess, onClose}: Se
 
         setLoading(true);
         try {
-            await setupSecondaryPassword({password: code});
+            const setupRes = await setupSecondaryPassword({password: code});
+            if (setupRes.code !== "0000") throw new Error(setupRes.message || `2차 비밀번호 설정 실패 (${setupRes.code})`);
             if (user) {
                 updateUser({...user, secondaryPasswordEnabled: true});
             }
-            await verifySecondaryPassword({password: code});
+            const verifyRes = await verifySecondaryPassword({password: code});
+            if (verifyRes.code !== "0000") throw new Error(verifyRes.message || `2차 비밀번호 인증 실패 (${verifyRes.code})`);
             resetState();
             onSuccess();
         } catch (err: unknown) {
@@ -135,7 +137,8 @@ export default function SecondaryAuthDialog({open, mode, onSuccess, onClose}: Se
         setLoading(true);
         setError('');
         try {
-            await verifySecondaryPassword({password: code});
+            const res = await verifySecondaryPassword({password: code});
+            if (res.code !== "0000") throw new Error(res.message || `2차 비밀번호 인증 실패 (${res.code})`);
             resetState();
             onSuccess();
         } catch (err: unknown) {

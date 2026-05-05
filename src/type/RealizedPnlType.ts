@@ -31,11 +31,6 @@ export interface RealizedPnlItem {
     source: string;
 }
 
-export interface RealizedPnlListRes {
-    items: RealizedPnlItem[];
-    totalRealizedPnl: number;
-}
-
 export interface RealizedPnlDashboardItem {
     currentMonthPnl: number;
     ytdPnl: number;

@@ -17,11 +17,6 @@ export const deleteGoal = async (id: number) => {
     return res.data;
 };
 
-export const fetchGoals = async () => {
-    const res = await api.get('/goals');
-    return res.data;
-};
-
 export const fetchGoalDashboard = async (config?: AxiosRequestConfig) => {
     const res = await api.get('/goals/dashboard', config);
     return res.data;

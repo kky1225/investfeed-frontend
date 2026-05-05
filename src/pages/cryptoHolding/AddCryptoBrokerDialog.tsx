@@ -1,4 +1,5 @@
-import {useEffect, useState} from "react";
+import {useState} from "react";
+import {useQuery} from "@tanstack/react-query";
 import Dialog from "@mui/material/Dialog";
 import DialogTitle from "@mui/material/DialogTitle";
 import DialogContent from "@mui/material/DialogContent";
@@ -22,29 +23,26 @@ interface AddCryptoBrokerDialogProps {
 export default function AddCryptoBrokerDialog({open, onClose}: AddCryptoBrokerDialogProps) {
     // 본인이 이미 추가한 broker 는 Context 에서 직접 가져옴 (parent 가 prop 으로 전달 불필요)
     const {myCryptoBrokers, invalidateMyCryptoBrokers} = useApiKeyStatus();
-    const [brokers, setBrokers] = useState<Broker[]>([]);
     const [error, setError] = useState("");
 
     const myBrokerIds = new Set(myCryptoBrokers.map(b => b.brokerId));
 
-    useEffect(() => {
-        if (!open) return;
-        (async () => {
-            try {
-                const data = await fetchCryptoBrokerList();
-                const all: Broker[] = data.result?.brokers ?? [];
-                setBrokers(all);
-            } catch (error) {
-                console.error(error);
-                setBrokers([]);
-            }
-        })();
-    }, [open]);
+    const {data: brokersData} = useQuery<Broker[]>({
+        queryKey: ['cryptoBrokerList'],
+        queryFn: async () => {
+            const data = await fetchCryptoBrokerList();
+            if (data.code !== "0000") throw new Error(data.message || `거래소 조회 실패 (${data.code})`);
+            return data.result?.brokers ?? [];
+        },
+        enabled: open,
+    });
+    const brokers = brokersData ?? [];
 
     const handleSelect = async (broker: Broker) => {
         try {
             setError("");
-            await addMyCryptoBroker({brokerId: broker.id});
+            const res = await addMyCryptoBroker({brokerId: broker.id});
+            if (res.code !== "0000") throw new Error(res.message || `거래소 추가 실패 (${res.code})`);
             await invalidateMyCryptoBrokers();   // Context 갱신 = parent 페이지 자동 재렌더
             onClose();
         } catch (error) {

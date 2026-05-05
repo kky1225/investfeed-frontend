@@ -1,10 +1,10 @@
-import {useEffect, useState} from 'react';
+import {useState} from 'react';
+import {useQuery, useQueryClient} from '@tanstack/react-query';
+import {unwrapResponse} from '../../lib/apiResponse';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
 import Button from '@mui/material/Button';
 import Chip from '@mui/material/Chip';
-import Alert from '@mui/material/Alert';
-import Snackbar from '@mui/material/Snackbar';
 import Dialog from '@mui/material/Dialog';
 import DialogTitle from '@mui/material/DialogTitle';
 import DialogContent from '@mui/material/DialogContent';
@@ -24,13 +24,30 @@ import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
 import MoreVertIcon from '@mui/icons-material/MoreVert';
 import {fetchAdminBrokerList, createBroker, updateBroker, deleteBroker} from '../../api/broker/BrokerApi';
 import type {Broker, BrokerType, BrokerMarket} from '../../type/BrokerType';
+import {useAlert} from '../../context/AlertContext';
 
 export default function BrokerManagement() {
-    const [brokers, setBrokers] = useState<Broker[]>([]);
-    const [loading, setLoading] = useState(true);
-    const [snackbar, setSnackbar] = useState<{open: boolean; message: string; severity: 'success' | 'error'}>({
-        open: false, message: '', severity: 'success'
+    const showAlert = useAlert();
+    const queryClient = useQueryClient();
+
+    const {data: brokersData, isLoading: loading, isError: brokersError} = useQuery<Broker[]>({
+        queryKey: ['admin', 'brokers'],
+        queryFn: async () => {
+            const data = unwrapResponse<{brokers?: Broker[]} | null>(await fetchAdminBrokerList(), null);
+            return data?.brokers ?? [];
+        },
     });
+    const brokers = brokersData ?? [];
+
+    const [prevError, setPrevError] = useState(false);
+    if (brokersError !== prevError) {
+        setPrevError(brokersError);
+        if (brokersError) showAlert('증권사 목록을 불러오는데 실패했습니다.', 'error');
+    }
+
+    const loadBrokers = async () => {
+        await queryClient.invalidateQueries({queryKey: ['admin', 'brokers']});
+    };
 
     // 등록/수정 공통 state
     const [formOpen, setFormOpen] = useState(false);
@@ -45,23 +62,6 @@ export default function BrokerManagement() {
     const [deleteTarget, setDeleteTarget] = useState<Broker | null>(null);
     const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
     const [menuTarget, setMenuTarget] = useState<Broker | null>(null);
-
-    const loadBrokers = async () => {
-        setLoading(true);
-        try {
-            const res = await fetchAdminBrokerList();
-            setBrokers(res.result?.brokers ?? []);
-        } catch (error) {
-            console.error(error);
-            setSnackbar({open: true, message: '증권사 목록을 불러오는데 실패했습니다.', severity: 'error'});
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    useEffect(() => {
-        loadBrokers();
-    }, []);
 
     const resetForm = () => {
         setFormOpen(false);
@@ -98,11 +98,13 @@ export default function BrokerManagement() {
         setFormLoading(true);
         try {
             if (formMode === 'create') {
-                await createBroker({name: name.trim(), type, market});
-                setSnackbar({open: true, message: `${name.trim()} 증권사가 등록되었습니다.`, severity: 'success'});
+                const res = await createBroker({name: name.trim(), type, market});
+                if (res.code !== "0000") throw new Error(res.message || `증권사 등록 실패 (${res.code})`);
+                showAlert(`${name.trim()} 증권사가 등록되었습니다.`, 'success');
             } else {
-                await updateBroker(formTargetId!, {name: name.trim(), type, market});
-                setSnackbar({open: true, message: `${name.trim()} 증권사가 수정되었습니다.`, severity: 'success'});
+                const res = await updateBroker(formTargetId!, {name: name.trim(), type, market});
+                if (res.code !== "0000") throw new Error(res.message || `증권사 수정 실패 (${res.code})`);
+                showAlert(`${name.trim()} 증권사가 수정되었습니다.`, 'success');
             }
             resetForm();
             await loadBrokers();
@@ -113,7 +115,7 @@ export default function BrokerManagement() {
                 setFormErrors(axiosErr.response.data.result ?? {});
                 return;
             }
-            setSnackbar({open: true, message: formMode === 'create' ? '증권사 등록에 실패했습니다.' : '증권사 수정에 실패했습니다.', severity: 'error'});
+            showAlert(formMode === 'create' ? '증권사 등록에 실패했습니다.' : '증권사 수정에 실패했습니다.', 'error');
         } finally {
             setFormLoading(false);
         }
@@ -122,12 +124,13 @@ export default function BrokerManagement() {
     const handleDelete = async () => {
         if (!deleteTarget) return;
         try {
-            await deleteBroker(deleteTarget.id);
-            setSnackbar({open: true, message: `${deleteTarget.name} 증권사가 삭제되었습니다.`, severity: 'success'});
+            const res = await deleteBroker(deleteTarget.id);
+            if (res.code !== "0000") throw new Error(res.message || `증권사 삭제 실패 (${res.code})`);
+            showAlert(`${deleteTarget.name} 증권사가 삭제되었습니다.`, 'success');
             await loadBrokers();
         } catch (error) {
             console.error(error);
-            setSnackbar({open: true, message: '증권사 삭제에 실패했습니다.', severity: 'error'});
+            showAlert('증권사 삭제에 실패했습니다.', 'error');
         }
         setDeleteTarget(null);
     };
@@ -302,17 +305,6 @@ export default function BrokerManagement() {
                     <Button color="error" onClick={handleDelete} variant="contained">삭제</Button>
                 </DialogActions>
             </Dialog>
-
-            <Snackbar
-                open={snackbar.open}
-                autoHideDuration={3000}
-                onClose={() => setSnackbar(prev => ({...prev, open: false}))}
-                anchorOrigin={{vertical: 'bottom', horizontal: 'center'}}
-            >
-                <Alert severity={snackbar.severity} onClose={() => setSnackbar(prev => ({...prev, open: false}))}>
-                    {snackbar.message}
-                </Alert>
-            </Snackbar>
         </Box>
     );
 }

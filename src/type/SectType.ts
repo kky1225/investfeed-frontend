@@ -28,10 +28,6 @@ export interface SectStockListReq {
     mrktTp: string
 }
 
-export interface SectStockListRes {
-    sectStockList: Array<SectStockListItem>
-}
-
 export interface SectStockListItem {
     stkCd: string,
     stkNm: string,
@@ -53,13 +49,6 @@ export interface SectListStream {
     value: string,
     fluRt: string,
     trend: string,
-}
-
-export interface SectStockListStreamRes {
-    type: string,
-    name: string,
-    item: string,
-    values: Array<SectStockListStream>
 }
 
 export interface SectStockListStream {

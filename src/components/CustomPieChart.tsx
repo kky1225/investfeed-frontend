@@ -10,6 +10,7 @@ import LinearProgress, { linearProgressClasses } from '@mui/material/LinearProgr
 import {Fragment} from "react";
 import {useMediaQuery, useTheme} from "@mui/material";
 import {HoldingStock} from "../type/HoldingType.ts";
+import {useBlindMode} from "../context/BlindModeContext.tsx";
 
 interface CustomPieChartProps {
     holdings: Array<HoldingStock>;
@@ -66,13 +67,20 @@ interface PieCenterLabelProps {
 
 function PieCenterLabel({ primaryText, secondaryText, small }: PieCenterLabelProps) {
     const { width, height, left, top } = useDrawingArea();
+    const { isBlind } = useBlindMode();
     const gap = small ? 18 : 24;
     const primaryY = top + height / 2 - (small ? 8 : 10);
     const secondaryY = primaryY + gap;
 
+    // primary(총 평가금액) 는 블라인드 대상. SVG text 도 CSS filter 를 지원.
+    const primaryStyle = {
+        ...(small ? { fontSize: '0.85rem' } : {}),
+        ...(isBlind ? { filter: 'blur(8px)' } : {}),
+    };
+
     return (
         <Fragment>
-            <StyledText variant="primary" x={left + width / 2} y={primaryY} style={small ? { fontSize: '0.85rem' } : undefined}>
+            <StyledText variant="primary" x={left + width / 2} y={primaryY} style={primaryStyle}>
                 {primaryText}
             </StyledText>
             <StyledText variant="secondary" x={left + width / 2} y={secondaryY} style={small ? { fontSize: '0.7rem' } : undefined}>
@@ -94,6 +102,7 @@ const colors = [
 export default function CustomPieChart({ holdings, totalEvltAmt }: CustomPieChartProps) {
     const theme = useTheme();
     const isSmallScreen = useMediaQuery(theme.breakpoints.down('sm'));
+    const { isBlind } = useBlindMode();
 
     const chartSize = isSmallScreen ? 200 : 280;
     const innerRadius = isSmallScreen ? 50 : 75;
@@ -155,8 +164,12 @@ export default function CustomPieChart({ holdings, totalEvltAmt }: CustomPieChar
                                 outerRadius,
                                 paddingAngle: 0,
                                 highlightScope: { fade: 'global', highlight: 'item' },
+                                valueFormatter: (item) => item.value.toLocaleString(),
                             },
                         ]}
+                        slotProps={{
+                            tooltip: { sx: isBlind ? { '.MuiChartsTooltip-valueCell': { filter: 'blur(6px)' } } : {} },
+                        }}
                         height={chartSize}
                         width={chartSize}
                     >

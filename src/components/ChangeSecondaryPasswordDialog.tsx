@@ -101,7 +101,8 @@ export default function ChangeSecondaryPasswordDialog({open, onSuccess, onClose}
         setLoading(true);
         setError('');
         try {
-            await verifySecondaryPassword({password: code});
+            const res = await verifySecondaryPassword({password: code});
+            if (res.code !== "0000") throw new Error(res.message || `2차 비밀번호 인증 실패 (${res.code})`);
             setCurrentPassword(code);
             setStep('new');
             setKey(prev => prev + 1);
@@ -136,7 +137,8 @@ export default function ChangeSecondaryPasswordDialog({open, onSuccess, onClose}
 
         setLoading(true);
         try {
-            await changeSecondaryPassword({currentPassword, newPassword});
+            const res = await changeSecondaryPassword({currentPassword, newPassword});
+            if (res.code !== "0000") throw new Error(res.message || `2차 비밀번호 변경 실패 (${res.code})`);
             resetState();
             onSuccess();
         } catch (err: unknown) {

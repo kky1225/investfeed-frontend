@@ -11,7 +11,6 @@ export enum CommodityChartType {
     DAY = "DAY",
     WEEK = "WEEK",
     MONTH = "MONTH",
-    YEAR = "YEAR"
 }
 
 export interface CommodityListItem {

@@ -1,4 +1,4 @@
-import {useEffect, useRef, useState} from "react";
+import {useMemo, useRef, useState} from "react";
 import Dialog from "@mui/material/Dialog";
 import DialogTitle from "@mui/material/DialogTitle";
 import DialogContent from "@mui/material/DialogContent";
@@ -33,16 +33,17 @@ export default function AddCryptoManualHoldingDialog({open, onClose, brokerId, o
     const [searchLoading, setSearchLoading] = useState(false);
     const [purPrice, setPurPrice] = useState("");
     const [quantity, setQuantity] = useState("");
-    const [purAmt, setPurAmt] = useState("");
-    const [purAmtManual, setPurAmtManual] = useState(false);
+    // purAmtOverride: null = 자동 계산, string = 사용자가 직접 입력한 값 (override)
+    const [purAmtOverride, setPurAmtOverride] = useState<string | null>(null);
     const [formErrors, setFormErrors] = useState<{stkCd?: string; purPrice?: string; quantity?: string; purAmt?: string}>({});
     const searchTimerRef = useRef<ReturnType<typeof setTimeout>>();
 
-    useEffect(() => {
-        if (!purAmtManual && purPrice && quantity) {
-            setPurAmt(String(Number(purPrice) * Number(quantity)));
-        }
-    }, [purPrice, quantity, purAmtManual]);
+    // purAmt = override 가 있으면 그 값, 없으면 purPrice * quantity 자동 계산
+    const purAmt = useMemo<string>(() => {
+        if (purAmtOverride !== null) return purAmtOverride;
+        if (purPrice && quantity) return String(Number(purPrice) * Number(quantity));
+        return "";
+    }, [purAmtOverride, purPrice, quantity]);
 
     const handleClose = () => {
         setSelectedCrypto(null);
@@ -50,8 +51,7 @@ export default function AddCryptoManualHoldingDialog({open, onClose, brokerId, o
         setSearchResults([]);
         setPurPrice("");
         setQuantity("");
-        setPurAmt("");
-        setPurAmtManual(false);
+        setPurAmtOverride(null);
         setFormErrors({});
         onClose();
     };
@@ -68,6 +68,7 @@ export default function AddCryptoManualHoldingDialog({open, onClose, brokerId, o
             setSearchLoading(true);
             try {
                 const data = await fetchCryptoSearch(keyword.trim());
+                if (data.code !== "0000") throw new Error(data.message || `코인 검색 실패 (${data.code})`);
                 setSearchResults(data.result ?? []);
             } catch (error) {
                 console.error(error);
@@ -90,7 +91,7 @@ export default function AddCryptoManualHoldingDialog({open, onClose, brokerId, o
         }
         setFormErrors({});
         try {
-            await createCryptoManualHolding({
+            const res = await createCryptoManualHolding({
                 brokerId,
                 stkCd: selectedCrypto!.market,
                 stkNm: selectedCrypto!.koreanName,
@@ -98,6 +99,7 @@ export default function AddCryptoManualHoldingDialog({open, onClose, brokerId, o
                 quantity: Number(quantity),
                 purAmt: Number(purAmt),
             });
+            if (res.code !== "0000") throw new Error(res.message || `수동 보유코인 등록 실패 (${res.code})`);
             onCreated();
             handleClose();
         } catch (err) {
@@ -190,8 +192,7 @@ export default function AddCryptoManualHoldingDialog({open, onClose, brokerId, o
                         size="small"
                         value={purAmt ? Number(purAmt).toLocaleString() : ''}
                         onChange={e => {
-                            setPurAmt(e.target.value.replace(/,/g, '').replace(/[^0-9]/g, ''));
-                            setPurAmtManual(true);
+                            setPurAmtOverride(e.target.value.replace(/,/g, '').replace(/[^0-9]/g, ''));
                             if (formErrors.purAmt) setFormErrors(prev => ({...prev, purAmt: undefined}));
                         }}
                         error={!!formErrors.purAmt}

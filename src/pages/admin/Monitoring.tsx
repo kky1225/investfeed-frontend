@@ -1,4 +1,5 @@
-import {useEffect, useState} from 'react';
+import {useState} from 'react';
+import {useQuery, useQueryClient} from '@tanstack/react-query';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
 import Tabs from '@mui/material/Tabs';
@@ -99,32 +100,22 @@ const STATE_META: Record<SchedulerState, {color: string; label: string}> = {
 };
 
 export default function Monitoring() {
+    const queryClient = useQueryClient();
     const [tab, setTab] = useState<TabKey>('scheduler');
-    const [catalog, setCatalog] = useState<SchedulerCatalogRes[]>([]);
-    const [statuses, setStatuses] = useState<SchedulerStatusRes[]>([]);
-    const [logs, setLogs] = useState<SchedulerLogRes[]>([]);
-    const [logsTotal, setLogsTotal] = useState(0);
+    // 페이지/사이즈 (UI controls)
     const [logsPage, setLogsPage] = useState(0);
     const [logsSize, setLogsSize] = useState(20);
-    const [configLogs, setConfigLogs] = useState<SchedulerConfigLogRes[]>([]);
-    const [configLogsTotal, setConfigLogsTotal] = useState(0);
     const [configLogsPage, setConfigLogsPage] = useState(0);
     const [configLogsSize, setConfigLogsSize] = useState(20);
-    const [redisPrefixes, setRedisPrefixes] = useState<RedisPrefixRes[]>([]);
-    const [errorLogs, setErrorLogs] = useState<ErrorLogRes[]>([]);
-    const [errorLogsTotal, setErrorLogsTotal] = useState(0);
     const [errorLogsPage, setErrorLogsPage] = useState(0);
     const [errorLogsSize, setErrorLogsSize] = useState(50);
-    const [systemStatus, setSystemStatus] = useState<SystemStatusRes | null>(null);
-    const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
-    const [pollError, setPollError] = useState(false);
+    // Dialog 상태
     const [errorAckTarget, setErrorAckTarget] = useState<ErrorLogRes | null>(null);
     const [errorAckNote, setErrorAckNote] = useState('');
     const [errorAckSaving, setErrorAckSaving] = useState(false);
     const [errorAckHistory, setErrorAckHistory] = useState<LogAckHistoryRes[]>([]);
     const [errorAckHistoryOpen, setErrorAckHistoryOpen] = useState(false);
     const [errorAckEditing, setErrorAckEditing] = useState(false);
-    const [loading, setLoading] = useState(true);
     const [editTarget, setEditTarget] = useState<SchedulerStatusRes | null>(null);
     const [editTimeoutSec, setEditTimeoutSec] = useState<string>('');
     const [editReason, setEditReason] = useState<string>('');
@@ -155,114 +146,153 @@ export default function Monitoring() {
     const [errorToDate, setErrorToDate] = useState<Dayjs | null>(null);
     const [errorMessageInput, setErrorMessageInput] = useState<string>('');
     const [errorMessageKeyword, setErrorMessageKeyword] = useState<string>('');
-    // 미확인 카운트
-    const [unackCount, setUnackCount] = useState<UnacknowledgedCountRes>({schedulerLogs: 0, errorLogs: 0});
     // 일괄 확인 처리 다이얼로그
     const [bulkAckTarget, setBulkAckTarget] = useState<'scheduler' | 'error' | null>(null);
     const [bulkAckNote, setBulkAckNote] = useState('');
     const [bulkAckSaving, setBulkAckSaving] = useState(false);
-    // 외부 API 호출 통계
-    const [apiCallStats, setApiCallStats] = useState<ApiCallStatsItemRes[]>([]);
 
-    /**
-     * 현재 탭에 필요한 데이터만 fetch.
-     * 각 탭 응답에 unackCount 가 포함돼 헤더 배지도 같이 갱신됨.
-     */
-    const loadCurrentTab = async (silent: boolean = false) => {
-        const cfg = silent ? { skipGlobalError: true } : undefined;
-        try {
-            if (tab === 'scheduler') {
-                const res = await fetchSchedulerOverview({
-                    page: logsPage,
-                    size: logsSize,
-                    schedulerName: logsSchedulerFilter || null,
-                    status: logsStatusFilter || null,
-                    acknowledged: logsUnackOnly ? false : null,
-                    fromDate: logsFromDate ? logsFromDate.format('YYYY-MM-DD') : null,
-                    toDate: logsToDate ? logsToDate.format('YYYY-MM-DD') : null,
-                    messageKeyword: logsMessageKeyword || null,
-                }, cfg);
-                if (res.result) {
-                    setCatalog(res.result.catalog);
-                    setStatuses(res.result.statuses);
-                    setLogs(res.result.logs.content ?? []);
-                    setLogsTotal(res.result.logs.totalElements ?? 0);
-                    setUnackCount(res.result.unackCount);
-                }
-            } else if (tab === 'config') {
-                const res = await fetchConfigLogsOverview({page: configLogsPage, size: configLogsSize}, cfg);
-                if (res.result) {
-                    setConfigLogs(res.result.logs.content ?? []);
-                    setConfigLogsTotal(res.result.logs.totalElements ?? 0);
-                    setUnackCount(res.result.unackCount);
-                }
-            } else if (tab === 'redis') {
-                const res = await fetchRedisOverview(cfg);
-                if (res.result) {
-                    setRedisPrefixes(res.result.redis.prefixes ?? []);
-                    setUnackCount(res.result.unackCount);
-                }
-            } else if (tab === 'error') {
-                const res = await fetchErrorLogsOverview({
-                    page: errorLogsPage,
-                    size: errorLogsSize,
-                    acknowledged: errorUnackOnly ? false : null,
-                    fromDate: errorFromDate ? errorFromDate.format('YYYY-MM-DD') : null,
-                    toDate: errorToDate ? errorToDate.format('YYYY-MM-DD') : null,
-                    messageKeyword: errorMessageKeyword || null,
-                }, cfg);
-                if (res.result) {
-                    setErrorLogs(res.result.logs.content ?? []);
-                    setErrorLogsTotal(res.result.logs.totalElements ?? 0);
-                    setUnackCount(res.result.unackCount);
-                }
-            } else if (tab === 'apicall') {
-                const res = await fetchApiCallsOverview(cfg);
-                if (res.result) {
-                    setApiCallStats(res.result.stats.items ?? []);
-                    setUnackCount(res.result.unackCount);
-                }
-            } else if (tab === 'system') {
-                const res = await fetchSystemOverview(cfg);
-                if (res.result) {
-                    setSystemStatus(res.result.system);
-                    setUnackCount(res.result.unackCount);
-                }
-            }
-            setLastUpdated(new Date());
-            setPollError(false);
-        } catch (e) {
-            console.error(e);
-            if (silent) setPollError(true);
-        } finally {
-            setLoading(false);
-        }
+    // ============================================================================
+    // 탭별 useQuery — enabled 조건으로 비활성 탭은 폴링 정지 (네비게이션 시 자동 cleanup)
+    // 모든 탭의 응답에 unackCount 포함됨 — 활성 탭의 data에서 직접 파생.
+    // ============================================================================
+    const schedulerQuery = useQuery({
+        queryKey: ['monitoring', 'scheduler', logsPage, logsSize,
+            logsSchedulerFilter, logsStatusFilter, logsUnackOnly,
+            logsFromDate ? logsFromDate.format('YYYY-MM-DD') : null,
+            logsToDate ? logsToDate.format('YYYY-MM-DD') : null,
+            logsMessageKeyword],
+        queryFn: async ({signal}) => {
+            const data = await fetchSchedulerOverview({
+                page: logsPage,
+                size: logsSize,
+                schedulerName: logsSchedulerFilter || null,
+                status: logsStatusFilter || null,
+                acknowledged: logsUnackOnly ? false : null,
+                fromDate: logsFromDate ? logsFromDate.format('YYYY-MM-DD') : null,
+                toDate: logsToDate ? logsToDate.format('YYYY-MM-DD') : null,
+                messageKeyword: logsMessageKeyword || null,
+            }, {signal, skipGlobalError: true});
+            if (data.code !== "0000") throw new Error(data.message || `스케줄러 조회 실패 (${data.code})`);
+            return data;
+        },
+        enabled: tab === 'scheduler',
+        refetchInterval: 60_000,
+        refetchIntervalInBackground: false,
+    });
+
+    const configQuery = useQuery({
+        queryKey: ['monitoring', 'config', configLogsPage, configLogsSize],
+        queryFn: async ({signal}) => {
+            const data = await fetchConfigLogsOverview(
+                {page: configLogsPage, size: configLogsSize},
+                {signal, skipGlobalError: true},
+            );
+            if (data.code !== "0000") throw new Error(data.message || `설정 로그 조회 실패 (${data.code})`);
+            return data;
+        },
+        enabled: tab === 'config',
+        refetchInterval: 60_000,
+        refetchIntervalInBackground: false,
+    });
+
+    const redisQuery = useQuery({
+        queryKey: ['monitoring', 'redis'],
+        queryFn: async ({signal}) => {
+            const data = await fetchRedisOverview({signal, skipGlobalError: true});
+            if (data.code !== "0000") throw new Error(data.message || `Redis 조회 실패 (${data.code})`);
+            return data;
+        },
+        enabled: tab === 'redis',
+        refetchInterval: 60_000,
+        refetchIntervalInBackground: false,
+    });
+
+    const errorQuery = useQuery({
+        queryKey: ['monitoring', 'error', errorLogsPage, errorLogsSize, errorUnackOnly,
+            errorFromDate ? errorFromDate.format('YYYY-MM-DD') : null,
+            errorToDate ? errorToDate.format('YYYY-MM-DD') : null,
+            errorMessageKeyword],
+        queryFn: async ({signal}) => {
+            const data = await fetchErrorLogsOverview({
+                page: errorLogsPage,
+                size: errorLogsSize,
+                acknowledged: errorUnackOnly ? false : null,
+                fromDate: errorFromDate ? errorFromDate.format('YYYY-MM-DD') : null,
+                toDate: errorToDate ? errorToDate.format('YYYY-MM-DD') : null,
+                messageKeyword: errorMessageKeyword || null,
+            }, {signal, skipGlobalError: true});
+            if (data.code !== "0000") throw new Error(data.message || `에러 로그 조회 실패 (${data.code})`);
+            return data;
+        },
+        enabled: tab === 'error',
+        refetchInterval: 60_000,
+        refetchIntervalInBackground: false,
+    });
+
+    const apiCallQuery = useQuery({
+        queryKey: ['monitoring', 'apicall'],
+        queryFn: async ({signal}) => {
+            const data = await fetchApiCallsOverview({signal, skipGlobalError: true});
+            if (data.code !== "0000") throw new Error(data.message || `API 호출 조회 실패 (${data.code})`);
+            return data;
+        },
+        enabled: tab === 'apicall',
+        refetchInterval: 60_000,
+        refetchIntervalInBackground: false,
+    });
+
+    const systemQuery = useQuery({
+        queryKey: ['monitoring', 'system'],
+        queryFn: async ({signal}) => {
+            const data = await fetchSystemOverview({signal, skipGlobalError: true});
+            if (data.code !== "0000") throw new Error(data.message || `시스템 조회 실패 (${data.code})`);
+            return data;
+        },
+        enabled: tab === 'system',
+        refetchInterval: 60_000,
+        refetchIntervalInBackground: false,
+    });
+
+    // 활성 탭 query (loading/lastUpdated/error 파생용)
+    const activeQuery = tab === 'scheduler' ? schedulerQuery
+        : tab === 'config' ? configQuery
+        : tab === 'redis' ? redisQuery
+        : tab === 'error' ? errorQuery
+        : tab === 'apicall' ? apiCallQuery
+        : systemQuery;
+
+    // 탭별 데이터 파생
+    const catalog: SchedulerCatalogRes[] = schedulerQuery.data?.result?.catalog ?? [];
+    const statuses: SchedulerStatusRes[] = schedulerQuery.data?.result?.statuses ?? [];
+    const logs: SchedulerLogRes[] = schedulerQuery.data?.result?.logs?.content ?? [];
+    const logsTotal = schedulerQuery.data?.result?.logs?.totalElements ?? 0;
+    const configLogs: SchedulerConfigLogRes[] = configQuery.data?.result?.logs?.content ?? [];
+    const configLogsTotal = configQuery.data?.result?.logs?.totalElements ?? 0;
+    const redisPrefixes: RedisPrefixRes[] = redisQuery.data?.result?.redis?.prefixes ?? [];
+    const errorLogs: ErrorLogRes[] = errorQuery.data?.result?.logs?.content ?? [];
+    const errorLogsTotal = errorQuery.data?.result?.logs?.totalElements ?? 0;
+    const apiCallStats: ApiCallStatsItemRes[] = apiCallQuery.data?.result?.stats?.items ?? [];
+    const systemStatus: SystemStatusRes | null = systemQuery.data?.result?.system ?? null;
+
+    // unackCount — 가장 최근 응답한 query 결과에서 (모든 탭 응답에 포함)
+    const unackCount: UnacknowledgedCountRes =
+        activeQuery.data?.result?.unackCount
+        ?? schedulerQuery.data?.result?.unackCount
+        ?? configQuery.data?.result?.unackCount
+        ?? redisQuery.data?.result?.unackCount
+        ?? errorQuery.data?.result?.unackCount
+        ?? apiCallQuery.data?.result?.unackCount
+        ?? systemQuery.data?.result?.unackCount
+        ?? {schedulerLogs: 0, errorLogs: 0};
+
+    const loading = activeQuery.isLoading;
+    const lastUpdated = activeQuery.dataUpdatedAt ? new Date(activeQuery.dataUpdatedAt) : null;
+    const pollError = !!activeQuery.error;
+
+    /** 활성 탭의 query 무효화 → 즉시 refetch 트리거. mutation 후 호출. */
+    const reloadCurrentTab = () => {
+        queryClient.invalidateQueries({queryKey: ['monitoring', tab]});
     };
-
-    useEffect(() => {
-        let timeout: ReturnType<typeof setTimeout>;
-        let interval: ReturnType<typeof setInterval>;
-
-        (async () => {
-            // 초기 로드는 non-silent — 서버 다운 시 사용자에게 1회 알림
-            await loadCurrentTab();
-
-            const now = Date.now();
-            const waitTime = 60_000 - (now % 60_000);
-
-            timeout = setTimeout(() => {
-                loadCurrentTab(true);
-                interval = setInterval(() => {
-                    loadCurrentTab(true);
-                }, 60_000);
-            }, waitTime + 200);
-        })();
-
-        return () => {
-            clearTimeout(timeout);
-            clearInterval(interval);
-        };
-    }, [tab, logsPage, logsSize, configLogsPage, configLogsSize, errorLogsPage, errorLogsSize, logsUnackOnly, errorUnackOnly, logsStatusFilter, logsSchedulerFilter, logsFromDate, logsToDate, logsMessageKeyword, errorFromDate, errorToDate, errorMessageKeyword]);
 
     const openEdit = (s: SchedulerStatusRes) => {
         setEditTarget(s);
@@ -287,7 +317,7 @@ export default function Monitoring() {
             await triggerScheduler(triggerTarget.schedulerName);
             setTriggerTarget(null);
             // 약간 지연 후 refresh (백그라운드 실행 반영 위해)
-            setTimeout(loadCurrentTab, 1500);
+            setTimeout(reloadCurrentTab, 1500);
         } catch (e) {
             console.error('수동 실행 실패', e);
         } finally {
@@ -303,6 +333,7 @@ export default function Monitoring() {
         setErrorAckHistory([]);
         try {
             const res = await fetchErrorLogAckHistory(log.id);
+            if (res.code !== "0000") throw new Error(res.message || `에러 로그 확인 이력 조회 실패 (${res.code})`);
             setErrorAckHistory(res.result ?? []);
         } catch (error) {
             console.error(error);
@@ -317,14 +348,16 @@ export default function Monitoring() {
         setErrorAckSaving(true);
         try {
             const res = await acknowledgeErrorLog(errorAckTarget.id, {note: errorAckNote || null});
+            if (res.code !== "0000") throw new Error(res.message || `에러 로그 확인 저장 실패 (${res.code})`);
             if (res.result) {
                 setErrorAckTarget(res.result);
                 setErrorAckEditing(false);
                 // 이력 재조회
                 const h = await fetchErrorLogAckHistory(res.result.id);
+                if (h.code !== "0000") throw new Error(h.message || `에러 로그 확인 이력 조회 실패 (${h.code})`);
                 setErrorAckHistory(h.result ?? []);
             }
-            await loadCurrentTab();
+            reloadCurrentTab();
         } catch (e) {
             console.error('에러 로그 확인 저장 실패', e);
         } finally {
@@ -336,14 +369,16 @@ export default function Monitoring() {
         setErrorAckSaving(true);
         try {
             const res = await cancelAcknowledgeErrorLog(errorAckTarget.id);
+            if (res.code !== "0000") throw new Error(res.message || `에러 로그 확인 취소 실패 (${res.code})`);
             if (res.result) {
                 setErrorAckTarget(res.result);
                 setErrorAckNote('');
                 setErrorAckEditing(false);
                 const h = await fetchErrorLogAckHistory(res.result.id);
+                if (h.code !== "0000") throw new Error(h.message || `에러 로그 확인 이력 조회 실패 (${h.code})`);
                 setErrorAckHistory(h.result ?? []);
             }
-            await loadCurrentTab();
+            reloadCurrentTab();
         } catch (e) {
             console.error('에러 로그 확인 취소 실패', e);
         } finally {
@@ -359,6 +394,7 @@ export default function Monitoring() {
         setAckHistory([]);
         try {
             const res = await fetchSchedulerLogAckHistory(log.id);
+            if (res.code !== "0000") throw new Error(res.message || `스케줄러 로그 확인 이력 조회 실패 (${res.code})`);
             setAckHistory(res.result ?? []);
         } catch (error) {
             console.error(error);
@@ -374,13 +410,15 @@ export default function Monitoring() {
         setAckSaving(true);
         try {
             const res = await acknowledgeSchedulerLog(ackTarget.id, {note: ackNote || null});
+            if (res.code !== "0000") throw new Error(res.message || `스케줄러 로그 확인 저장 실패 (${res.code})`);
             if (res.result) {
                 setAckTarget(res.result);
                 setAckEditing(false);
                 const h = await fetchSchedulerLogAckHistory(res.result.id);
+                if (h.code !== "0000") throw new Error(h.message || `스케줄러 로그 확인 이력 조회 실패 (${h.code})`);
                 setAckHistory(h.result ?? []);
             }
-            await loadCurrentTab();
+            reloadCurrentTab();
         } catch (e) {
             console.error('스케줄러 로그 확인 저장 실패', e);
         } finally {
@@ -392,14 +430,16 @@ export default function Monitoring() {
         setAckSaving(true);
         try {
             const res = await cancelAcknowledgeSchedulerLog(ackTarget.id);
+            if (res.code !== "0000") throw new Error(res.message || `스케줄러 로그 확인 취소 실패 (${res.code})`);
             if (res.result) {
                 setAckTarget(res.result);
                 setAckNote('');
                 setAckEditing(false);
                 const h = await fetchSchedulerLogAckHistory(res.result.id);
+                if (h.code !== "0000") throw new Error(h.message || `스케줄러 로그 확인 이력 조회 실패 (${h.code})`);
                 setAckHistory(h.result ?? []);
             }
-            await loadCurrentTab();
+            reloadCurrentTab();
         } catch (e) {
             console.error('스케줄러 로그 확인 취소 실패', e);
         } finally {
@@ -409,7 +449,7 @@ export default function Monitoring() {
 
     const openBulkAck = async (target: 'scheduler' | 'error') => {
         try {
-            await loadCurrentTab(true);
+            reloadCurrentTab();
         } catch (e) {
             console.error(e);
         }
@@ -431,7 +471,7 @@ export default function Monitoring() {
                 await bulkAcknowledgeErrorLogs({note});
             }
             setBulkAckTarget(null);
-            await loadCurrentTab();
+            reloadCurrentTab();
         } catch (e) {
             console.error('일괄 확인 처리 실패', e);
         } finally {
@@ -447,7 +487,7 @@ export default function Monitoring() {
         try {
             await updateSchedulerTimeout(editTarget.schedulerName, {timeoutSec: n, reason: editReason || null});
             setEditTarget(null);
-            await loadCurrentTab();
+            reloadCurrentTab();
         } catch (e) {
             console.error('timeout 수정 실패', e);
         } finally {
@@ -458,7 +498,7 @@ export default function Monitoring() {
     const handleInvalidate = async (prefix: string) => {
         try {
             await invalidateRedisPrefix(prefix);
-            await loadCurrentTab(true);
+            reloadCurrentTab();
         } catch (e) {
             console.error('Redis 무효화 실패', e);
         }
@@ -1219,7 +1259,7 @@ export default function Monitoring() {
                                 {errorAckTarget.message && (
                                     <>
                                         <Typography variant="caption" color="text.secondary" display="block">메시지</Typography>
-                                        <Box sx={{p: 1, bgcolor: 'grey.100', borderRadius: 1, mb: 1}}>
+                                        <Box sx={{p: 1, bgcolor: (theme) => theme.palette.mode === 'dark' ? 'grey.900' : 'grey.100', borderRadius: 1, mb: 1}}>
                                             <Typography variant="caption" component="pre" color="error.main" sx={{fontFamily: 'monospace', fontSize: '0.75rem', whiteSpace: 'pre-wrap', wordBreak: 'break-all', m: 0}}>
                                                 {errorAckTarget.message}
                                             </Typography>
@@ -1230,7 +1270,7 @@ export default function Monitoring() {
                                 {errorAckTarget.stackTrace && (
                                     <>
                                         <Typography variant="caption" color="text.secondary" display="block">Stack Trace</Typography>
-                                        <Box sx={{p: 1, bgcolor: 'grey.100', borderRadius: 1, maxHeight: 200, overflow: 'auto'}}>
+                                        <Box sx={{p: 1, bgcolor: (theme) => theme.palette.mode === 'dark' ? 'grey.900' : 'grey.100', borderRadius: 1, maxHeight: 200, overflow: 'auto'}}>
                                             <Typography variant="caption" component="pre" sx={{fontFamily: 'monospace', fontSize: '0.7rem', whiteSpace: 'pre-wrap', m: 0}}>
                                                 {errorAckTarget.stackTrace}
                                             </Typography>
@@ -1406,7 +1446,7 @@ export default function Monitoring() {
                                 {ackTarget.errorMessage && (
                                     <>
                                         <Typography variant="caption" color="text.secondary" display="block">에러 메시지</Typography>
-                                        <Box sx={{p: 1, bgcolor: 'grey.100', borderRadius: 1, mb: 1}}>
+                                        <Box sx={{p: 1, bgcolor: (theme) => theme.palette.mode === 'dark' ? 'grey.900' : 'grey.100', borderRadius: 1, mb: 1}}>
                                             <Typography variant="caption" component="pre" color="error.main" sx={{fontFamily: 'monospace', fontSize: '0.75rem', whiteSpace: 'pre-wrap', wordBreak: 'break-all', m: 0}}>
                                                 {ackTarget.errorMessage}
                                             </Typography>

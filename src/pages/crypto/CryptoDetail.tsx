@@ -6,7 +6,7 @@ import Stack from "@mui/material/Stack";
 import Chip from "@mui/material/Chip";
 import Card from "@mui/material/Card";
 import Skeleton from "@mui/material/Skeleton";
-import {MouseEvent, ReactElement, useEffect, useRef, useState} from "react";
+import {MouseEvent, ReactElement, useMemo, useRef, useState} from "react";
 import CandlestickChartIcon from '@mui/icons-material/CandlestickChart';
 import StackedLineChartIcon from '@mui/icons-material/StackedLineChart';
 import ToggleButton from '@mui/material/ToggleButton';
@@ -15,7 +15,8 @@ import {styled} from "@mui/material/styles";
 import {Select, SelectChangeEvent, Slider, Tooltip} from "@mui/material";
 import MenuItem from "@mui/material/MenuItem";
 import CryptoDetailLineChart, {CryptoDetailLineChartProps} from "../../components/CryptoDetailLineChart.tsx";
-import {fetchCryptoDetail, fetchCryptoDetailStream} from "../../api/crypto/CryptoApi.ts";
+import {fetchCryptoDetail, fetchCryptoStream} from "../../api/crypto/CryptoApi.ts";
+import {useCryptoWebSocket} from "../detail/useCryptoWebSocket.ts";
 import {CryptoChart, CryptoChartType, CryptoDetailReq} from "../../type/CryptoType.ts";
 import {useParams} from "react-router-dom";
 import {renderChangeAmount} from "../../components/CustomRender.tsx";
@@ -23,6 +24,7 @@ import IconButton from "@mui/material/IconButton";
 import NotificationsActiveIcon from "@mui/icons-material/NotificationsActive";
 import PriceTargetDialog from "../../components/PriceTargetDialog.tsx";
 import FreshnessIndicator from "../../components/FreshnessIndicator.tsx";
+import {usePollingQuery} from "../../lib/pollingQuery.ts";
 
 interface CryptoTickerData {
     market: string;
@@ -59,6 +61,92 @@ interface CryptoRangeProps {
     label: ReactElement;
 }
 
+interface CryptoInfoProps {
+    openingPrice: number;
+    highPrice: number;
+    lowPrice: number;
+    tradePrice: number;
+    prevClosingPrice: number;
+    accTradeVolume24h: number;
+    accTradePrice24h: number;
+}
+
+// 순수 헬퍼들 — 모듈 레벨로 끌어올려 useMemo 의 TDZ 회피.
+const trendColor = (change: string): 'up' | 'down' | 'neutral' => {
+    if (change === 'RISE') return 'up';
+    if (change === 'FALL') return 'down';
+    return 'neutral';
+};
+
+const chartColor = (change: string) => {
+    if (change === 'RISE') return 'red';
+    if (change === 'FALL') return 'blue';
+    return 'grey';
+};
+
+const cryptoDateFormat = (dateTime: string, showTime: boolean) => {
+    if (!dateTime) return '';
+    // "2026-03-17T14:30:00" 포맷
+    if (dateTime.includes('T')) {
+        const formatted = dateTime.replace(/-/g, '.').replace('T', ' ');
+        return showTime ? formatted.substring(0, 16) : formatted.substring(0, 10);
+    }
+    // WebSocket "20260318 143000" 포맷
+    const cleaned = dateTime.replace(/\s+/g, '');
+    if (cleaned.length >= 8) {
+        const date = `${cleaned.substring(0, 4)}.${cleaned.substring(4, 6)}.${cleaned.substring(6, 8)}`;
+        if (showTime && cleaned.length >= 12) {
+            return `${date} ${cleaned.substring(8, 10)}:${cleaned.substring(10, 12)}`;
+        }
+        return date;
+    }
+    return dateTime;
+};
+
+const formatTradePrice = (price: number) => {
+    if (price >= 1_000_000_000_000) {
+        return (price / 1_000_000_000_000).toFixed(1) + '조';
+    } else if (price >= 100_000_000) {
+        return (price / 100_000_000).toFixed(0) + '억';
+    } else if (price >= 10_000) {
+        return (price / 10_000).toFixed(0) + '만';
+    }
+    return price.toLocaleString();
+};
+
+const INITIAL_CHART_DATA: CryptoDetailLineChartProps = {
+    id: '-',
+    title: '-',
+    value: '-',
+    changeRate: '0',
+    changePrice: 0,
+    interval: '-',
+    trend: 'neutral',
+    seriesData: [
+        {
+            id: 'crypto',
+            showMark: false,
+            curve: 'linear',
+            area: true,
+            stackOrder: 'ascending',
+            color: 'grey',
+            data: []
+        }
+    ],
+    barDataList: [],
+    dateList: []
+};
+
+const INITIAL_INFO: CryptoInfoProps = {
+    openingPrice: 0,
+    highPrice: 0,
+    lowPrice: 0,
+    tradePrice: 0,
+    prevClosingPrice: 0,
+    accTradeVolume24h: 0,
+    accTradePrice24h: 0,
+};
+
 const CryptoDetail = () => {
     const { id } = useParams();
     const market = id || "";
@@ -68,109 +156,31 @@ const CryptoDetail = () => {
     });
 
     const [priceTargetOpen, setPriceTargetOpen] = useState(false);
-    const [chartData, setChartData] = useState<CryptoDetailLineChartProps>({
-        id: '-',
-        title: '-',
-        value: '-',
-        changeRate: '0',
-        changePrice: 0,
-        interval: '-',
-        trend: 'neutral',
-        seriesData: [
-            {
-                id: 'crypto',
-                showMark: false,
-                curve: 'linear',
-                area: true,
-                stackOrder: 'ascending',
-                color: 'grey',
-                data: []
-            }
-        ],
-        barDataList: [],
-        dateList: []
-    });
 
-    interface CryptoInfoProps {
-        openingPrice: number;
-        highPrice: number;
-        lowPrice: number;
-        tradePrice: number;
-        prevClosingPrice: number;
-        accTradeVolume24h: number;
-        accTradePrice24h: number;
+    const {data: res, isLoading, lastUpdated, pollError} = usePollingQuery(
+        ['cryptoDetail', market, req.chartType],
+        (config) => fetchCryptoDetail(market, req, config),
+    );
+    const loading = isLoading;
+
+    // WebSocket 으로 들어오는 실시간 부분 갱신을 보관하는 overlay state.
+    // 폴링 결과 (base*) 와 머지해서 최종 값을 만든다.
+    const [liveChartOverlay, setLiveChartOverlay] = useState<Partial<CryptoDetailLineChartProps>>({});
+    const [liveInfoOverlay, setLiveInfoOverlay] = useState<Partial<CryptoInfoProps>>({});
+
+    // market 변경 시 overlay reset
+    const [prevMarket, setPrevMarket] = useState(market);
+    if (market !== prevMarket) {
+        setPrevMarket(market);
+        setLiveChartOverlay({});
+        setLiveInfoOverlay({});
     }
 
-    const [loading, setLoading] = useState(true);
-    const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
-    const [pollError, setPollError] = useState(false);
-
-    const [info, setInfo] = useState<CryptoInfoProps>({
-        openingPrice: 0,
-        highPrice: 0,
-        lowPrice: 0,
-        tradePrice: 0,
-        prevClosingPrice: 0,
-        accTradeVolume24h: 0,
-        accTradePrice24h: 0,
-    });
-
-    const [dayRange, setDayRange] = useState<CryptoRangeProps[]>([
-        {
-            value: 0,
-            label: <p>당일 최저가 <br />0</p>
-        },
-        {
-            value: 0,
-            label: <p>당일 최고가 <br />0</p>,
-        }
-    ]);
-
-    const [yearRange, setYearRange] = useState<CryptoRangeProps[]>([
-        {
-            value: 0,
-            label: <p>52주 최저가 <br />0</p>,
-        },
-        {
-            value: 0,
-            label: <p>52주 최고가 <br />0</p>,
-        }
-    ]);
-
-    useEffect(() => {
-        let interval: ReturnType<typeof setInterval>;
-        let socket: WebSocket;
-
-        setLoading(true);
-
-        (async () => {
-            await cryptoDetail(req);
-
-            // 해당 코인만 실시간 스트림 시작 + WebSocket 연결
-            await cryptoDetailStream();
-            socket = openSocket();
-
-            // 차트 데이터는 60초마다 갱신
-            interval = setInterval(() => {
-                cryptoDetail(req, true);
-            }, 60 * 1000);
-        })();
-
-        return () => {
-            socket?.close();
-            clearInterval(interval);
-        }
-    }, [req]);
-
-    const cryptoDetail = async (req: CryptoDetailReq, silent: boolean = false) => {
+    // 폴링 결과 → base chartData (useMemo)
+    const baseChartData = useMemo<CryptoDetailLineChartProps>(() => {
+        if (res?.code !== "0000" || !res.result) return INITIAL_CHART_DATA;
         try {
-            const data = await fetchCryptoDetail(market, req, silent ? { skipGlobalError: true } : undefined);
-
-            if (data.code !== "0000") {
-                throw new Error(data.msg);
-            }
-
-            const { cryptoInfo, chartList } = data.result;
+            const {cryptoInfo, chartList} = res.result;
 
             let dateList: string[];
             let lineData: number[];
@@ -182,9 +192,7 @@ const CryptoDetail = () => {
                 case CryptoChartType.MINUTE_5:
                 case CryptoChartType.MINUTE_10:
                 case CryptoChartType.MINUTE_30: {
-                    dateList = chartList.map((item: CryptoChart) =>
-                        cryptoDateFormat(item.dt, true)
-                    );
+                    dateList = chartList.map((item: CryptoChart) => cryptoDateFormat(item.dt, true));
                     lineData = chartList.map((item: CryptoChart) => item.tradePrice);
                     barDataList = chartList.map((item: CryptoChart) => item.candleAccTradeVolume);
                     break;
@@ -193,18 +201,18 @@ const CryptoDetail = () => {
                 case CryptoChartType.WEEK:
                 case CryptoChartType.MONTH:
                 case CryptoChartType.YEAR: {
-                    dateList = chartList.map((item: CryptoChart) =>
-                        cryptoDateFormat(item.dt, false)
-                    );
+                    dateList = chartList.map((item: CryptoChart) => cryptoDateFormat(item.dt, false));
                     lineData = chartList.map((item: CryptoChart) => item.tradePrice);
                     barDataList = chartList.map((item: CryptoChart) => item.candleAccTradeVolume);
                     break;
                 }
+                default:
+                    return INITIAL_CHART_DATA;
             }
 
             const today = cryptoDateFormat(cryptoInfo.tradeDateTimeKst, true);
 
-            setChartData({
+            return {
                 id: cryptoInfo.market,
                 title: cryptoInfo.koreanName,
                 value: cryptoInfo.tradePrice.toLocaleString(),
@@ -225,138 +233,110 @@ const CryptoDetail = () => {
                 ],
                 barDataList: barDataList,
                 dateList: dateList
-            });
-
-            setInfo({
-                openingPrice: cryptoInfo.openingPrice,
-                highPrice: cryptoInfo.highPrice,
-                lowPrice: cryptoInfo.lowPrice,
-                tradePrice: cryptoInfo.tradePrice,
-                prevClosingPrice: cryptoInfo.prevClosingPrice,
-                accTradeVolume24h: cryptoInfo.accTradeVolume24h,
-                accTradePrice24h: cryptoInfo.accTradePrice24h,
-            });
-
-            setDayRange([
-                {
-                    value: cryptoInfo.lowPrice,
-                    label: <p>당일 최저가 <br />{cryptoInfo.lowPrice.toLocaleString()}</p>
-                },
-                {
-                    value: cryptoInfo.highPrice,
-                    label: <p>당일 최고가 <br />{cryptoInfo.highPrice.toLocaleString()}</p>
-                }
-            ]);
-
-            setYearRange([
-                {
-                    value: cryptoInfo.lowest52WeekPrice,
-                    label: <p>52주 최저가 <br />{cryptoInfo.lowest52WeekPrice.toLocaleString()}</p>
-                },
-                {
-                    value: cryptoInfo.highest52WeekPrice,
-                    label: <p>52주 최고가 <br />{cryptoInfo.highest52WeekPrice.toLocaleString()}</p>
-                }
-            ]);
-            setLastUpdated(new Date());
-            setPollError(false);
-
+            };
         } catch (error) {
             console.error(error);
-            if (silent) setPollError(true);
-        } finally {
-            setLoading(false);
+            return INITIAL_CHART_DATA;
         }
-    }
+    }, [res, req.chartType]);
 
-    const cryptoDetailStream = async () => {
-        try {
-            if (!id) return;
-            const data = await fetchCryptoDetailStream(id);
-            if (data.code !== "0000") {
-                throw new Error(data.msg);
-            }
-        } catch (error) {
-            console.error(error);
-        }
-    }
-
-    const openSocket = () => {
-        const socket = new WebSocket("ws://localhost:8080/ws");
-
-        socket.onmessage = (event) => {
-            const data = JSON.parse(event.data);
-
-            if (data.type === "CRYPTO_TICKER" && data.data) {
-                const ticker: CryptoTickerData = data.data;
-
-                // 현재 상세 페이지의 코인만 업데이트
-                if (ticker.market !== id) return;
-
-                const tradeDateTimeKst = cryptoDateFormat(ticker.tradeDateTimeKst, true);
-
-                setChartData((prev) => ({
-                    ...prev,
-                    value: ticker.tradePrice.toLocaleString(),
-                    changeRate: (ticker.signedChangeRate * 100).toFixed(2),
-                    changePrice: ticker.signedChangePrice,
-                    trend: trendColor(ticker.change),
-                    interval: tradeDateTimeKst,
-                }));
-
-                setInfo((prev) => ({
-                    ...prev,
-                    tradePrice: ticker.tradePrice,
-                    accTradeVolume24h: ticker.accTradeVolume24h,
-                    accTradePrice24h: ticker.accTradePrice24h,
-                }));
-            }
+    // 폴링 결과 → base info
+    const baseInfo = useMemo<CryptoInfoProps>(() => {
+        if (res?.code !== "0000" || !res.result) return INITIAL_INFO;
+        const {cryptoInfo} = res.result;
+        return {
+            openingPrice: cryptoInfo.openingPrice,
+            highPrice: cryptoInfo.highPrice,
+            lowPrice: cryptoInfo.lowPrice,
+            tradePrice: cryptoInfo.tradePrice,
+            prevClosingPrice: cryptoInfo.prevClosingPrice,
+            accTradeVolume24h: cryptoInfo.accTradeVolume24h,
+            accTradePrice24h: cryptoInfo.accTradePrice24h,
         };
+    }, [res]);
 
-        return socket;
-    }
-
-    const trendColor = (change: string): 'up' | 'down' | 'neutral' => {
-        if (change === 'RISE') return 'up';
-        if (change === 'FALL') return 'down';
-        return 'neutral';
-    }
-
-    const chartColor = (change: string) => {
-        if (change === 'RISE') return 'red';
-        if (change === 'FALL') return 'blue';
-        return 'grey';
-    }
-
-    const cryptoDateFormat = (dateTime: string, showTime: boolean) => {
-        if (!dateTime) return '';
-        // "2026-03-17T14:30:00" 포맷
-        if (dateTime.includes('T')) {
-            const formatted = dateTime.replace(/-/g, '.').replace('T', ' ');
-            return showTime ? formatted.substring(0, 16) : formatted.substring(0, 10);
+    // dayRange — WS 갱신 없음, 단순 useMemo
+    const dayRange = useMemo<CryptoRangeProps[]>(() => {
+        if (res?.code !== "0000" || !res.result) {
+            return [
+                {value: 0, label: <p>당일 최저가 <br />0</p>},
+                {value: 0, label: <p>당일 최고가 <br />0</p>},
+            ];
         }
-        // WebSocket "20260318 143000" 포맷
-        const cleaned = dateTime.replace(/\s+/g, '');
-        if (cleaned.length >= 8) {
-            const date = `${cleaned.substring(0, 4)}.${cleaned.substring(4, 6)}.${cleaned.substring(6, 8)}`;
-            if (showTime && cleaned.length >= 12) {
-                return `${date} ${cleaned.substring(8, 10)}:${cleaned.substring(10, 12)}`;
+        const {cryptoInfo} = res.result;
+        return [
+            {
+                value: cryptoInfo.lowPrice,
+                label: <p>당일 최저가 <br />{cryptoInfo.lowPrice.toLocaleString()}</p>
+            },
+            {
+                value: cryptoInfo.highPrice,
+                label: <p>당일 최고가 <br />{cryptoInfo.highPrice.toLocaleString()}</p>
             }
-            return date;
-        }
-        return dateTime;
-    }
+        ];
+    }, [res]);
 
-    const formatTradePrice = (price: number) => {
-        if (price >= 1_000_000_000_000) {
-            return (price / 1_000_000_000_000).toFixed(1) + '조';
-        } else if (price >= 100_000_000) {
-            return (price / 100_000_000).toFixed(0) + '억';
-        } else if (price >= 10_000) {
-            return (price / 10_000).toFixed(0) + '만';
+    // yearRange — WS 갱신 없음, 단순 useMemo
+    const yearRange = useMemo<CryptoRangeProps[]>(() => {
+        if (res?.code !== "0000" || !res.result) {
+            return [
+                {value: 0, label: <p>52주 최저가 <br />0</p>},
+                {value: 0, label: <p>52주 최고가 <br />0</p>},
+            ];
         }
-        return price.toLocaleString();
-    }
+        const {cryptoInfo} = res.result;
+        return [
+            {
+                value: cryptoInfo.lowest52WeekPrice,
+                label: <p>52주 최저가 <br />{cryptoInfo.lowest52WeekPrice.toLocaleString()}</p>
+            },
+            {
+                value: cryptoInfo.highest52WeekPrice,
+                label: <p>52주 최고가 <br />{cryptoInfo.highest52WeekPrice.toLocaleString()}</p>
+            }
+        ];
+    }, [res]);
+
+    // 최종 chartData / info = base + WS overlay 머지
+    const chartData = useMemo<CryptoDetailLineChartProps>(() => ({
+        ...baseChartData,
+        ...liveChartOverlay,
+    }), [baseChartData, liveChartOverlay]);
+
+    const info = useMemo<CryptoInfoProps>(() => ({
+        ...baseInfo,
+        ...liveInfoOverlay,
+    }), [baseInfo, liveInfoOverlay]);
+
+    // WebSocket 라이프사이클 — 24시간 거래라 시장 시간 체크 불필요. useCryptoWebSocket 훅이 연결/정리 처리.
+    useCryptoWebSocket({
+        subscriptionKey: market,
+        streamFn: () => fetchCryptoStream([market]),
+        onMessage: (event) => {
+            const data = JSON.parse(event.data);
+            if (data.type !== "CRYPTO_TICKER" || !data.data) return;
+
+            const ticker: CryptoTickerData = data.data;
+            // 현재 상세 페이지의 코인만 업데이트
+            if (ticker.market !== id) return;
+
+            const tradeDateTimeKst = cryptoDateFormat(ticker.tradeDateTimeKst, true);
+
+            setLiveChartOverlay({
+                value: ticker.tradePrice.toLocaleString(),
+                changeRate: (ticker.signedChangeRate * 100).toFixed(2),
+                changePrice: ticker.signedChangePrice,
+                trend: trendColor(ticker.change),
+                interval: tradeDateTimeKst,
+            });
+
+            setLiveInfoOverlay({
+                tradePrice: ticker.tradePrice,
+                accTradeVolume24h: ticker.accTradeVolume24h,
+                accTradePrice24h: ticker.accTradePrice24h,
+            });
+        },
+    });
 
     const [toggle, setToggle] = useState('DAY');
     const [formats, setFormats] = useState('line');

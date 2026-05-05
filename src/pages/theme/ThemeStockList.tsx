@@ -3,11 +3,7 @@ import Box from "@mui/material/Box";
 import Grid from "@mui/material/Grid";
 import {GridColDef} from "@mui/x-data-grid";
 import Chip from "@mui/material/Chip";
-import Card from "@mui/material/Card";
-import CardContent from "@mui/material/CardContent";
-import Stack from "@mui/material/Stack";
-import Skeleton from "@mui/material/Skeleton";
-import {useEffect, useRef, useState} from "react";
+import {useEffect, useMemo, useRef, useState} from "react";
 import {fetchTimeNow} from "../../api/time/TimeApi.ts";
 import {MarketType} from "../../type/timeType.ts";
 import {useParams} from "react-router-dom";
@@ -22,19 +18,53 @@ import {
 import {fetchThemeStockList, fetchThemeStockListStream} from "../../api/theme/ThemeApi.ts";
 import ThemeStockTableProps from "../../components/ThemeStockTable.tsx";
 import FreshnessIndicator from "../../components/FreshnessIndicator.tsx";
+import {usePollingQuery} from "../../lib/pollingQuery.ts";
+
+interface LiveThemeStockUpdate {
+    curPrc: string;
+    fluRt: string;
+    trend: 'up' | 'down' | 'neutral';
+}
+
+const trendColor = (value: string): 'up' | 'down' | 'neutral' =>
+    ["1", "2"].includes(value) ? 'up' : ["4", "5"].includes(value) ? 'down' : 'neutral';
+
+const DEFAULT_REQ: ThemeStockListReq = {dateTp: "1"};
 
 const ThemeStockList = () => {
-    const { themaGrpCd } = useParams();
+    const {themaGrpCd} = useParams();
     const themeGrpCdParam = themaGrpCd || "100";
 
-    const [req] = useState<ThemeStockListReq>({
-        dateTp: "1"
-    });
+    const [liveOverlay, setLiveOverlay] = useState<Map<string, LiveThemeStockUpdate>>(new Map());
+    const stockBufferMap = useRef<Map<string, ThemeStockListStream>>(new Map());
+    const subscribedKeyRef = useRef<string>('');
 
-    const [row, setRow] = useState<ThemeStockGridRow[]>([]);
-    const [loading, setLoading] = useState(true);
-    const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
-    const [pollError, setPollError] = useState(false);
+    const chartTimer = useRef<number>(0);
+    const marketTimer = useRef<number>(0);
+
+    const {data: res, isLoading, lastUpdated, pollError} = usePollingQuery(
+        ['themeStockList', themeGrpCdParam, DEFAULT_REQ.dateTp],
+        (config) => fetchThemeStockList(themeGrpCdParam, DEFAULT_REQ, config),
+    );
+
+    const row: ThemeStockGridRow[] = useMemo(() => {
+        if (res?.code !== "0000" || !res.result) return [];
+        const list: ThemeStockListItem[] = res.result.themeStockList ?? [];
+        return list.map((themeStock) => {
+            const live = liveOverlay.get(themeStock.stkCd);
+            return {
+                id: themeStock.stkCd,
+                stkNm: themeStock.stkNm,
+                curPrc: live?.curPrc ?? themeStock.curPrc.replace(/^[+-]/, ''),
+                fluRt: live?.fluRt ?? themeStock.fluRt,
+                accTrdeQty: themeStock.accTrdeQty,
+                dtPrftRtN: themeStock.dtPrftRtN,
+            };
+        });
+    }, [res, liveOverlay]);
+
+    const loading = isLoading;
+
     const columns: GridColDef[] = [
         {
             field: 'index',
@@ -75,226 +105,141 @@ const ThemeStockList = () => {
             minWidth: 120,
             renderCell: (params) => renderStatus(params.value as number),
         }
-    ]
-
-    const chartTimer = useRef<number>(0);
-    const marketTimer = useRef<number>(0);
-
-    const stockBufferMap = useRef<Map<string, ThemeStockListStream>>(new Map());
-
-    useEffect(() => {
-        let chartTimeout: ReturnType<typeof setTimeout>;
-        let socketTimeout: ReturnType<typeof setTimeout>;
-        let interval: ReturnType<typeof setInterval>;
-        let displayInterval: ReturnType<typeof setInterval>;
-        let socket: WebSocket;
-
-        (async () => {
-            const items = await themeStockList(req);
-            const themeStockListStreamReq: ThemeStockListStreamReq = {
-                items: items,
-            }
-
-            const updateDisplay = () => {
-                if (displayInterval) {
-                    return;
-                }
-
-                displayInterval = setInterval(() => {
-                    if (stockBufferMap.current.size === 0) {
-                        return;
-                    }
-
-                    setRow((oldRow) => {
-                        const isUpdated = oldRow.some(item => stockBufferMap.current.has(item.id));
-                        if (!isUpdated) {
-                            return oldRow;
-                        }
-
-                        return oldRow.map((item) => {
-                            const newRow = stockBufferMap.current.get(item.id);
-                            if (newRow) {
-                                return {
-                                    ...item,
-                                    curPrc: newRow.value,
-                                    fluRt: newRow.fluRt,
-                                    trend: trendColor(newRow.trend),
-                                };
-                            }
-                            return item;
-                        });
-                    });
-
-                    stockBufferMap.current.clear();
-                }, 500);
-            }
-
-            const connectSocket = async (req: ThemeStockListStreamReq) => {
-                await fetchThemeStockListStream(req);
-                socket = openSocket();
-                updateDisplay();
-            };
-
-            const marketInfo = await timeNow();
-
-            const now = Date.now() + chartTimer.current;
-            const waitTime = 60_000 - (now % 60_000);
-
-            if (marketInfo.isMarketOpen) {
-                await connectSocket(themeStockListStreamReq);
-            } else {
-                socketTimeout = setTimeout(async () => {
-                    socket?.close();
-
-                    const again = await timeNow();
-                    if (again.isMarketOpen) {
-                        await connectSocket(themeStockListStreamReq);
-                    }
-                }, marketTimer.current + 200);
-            }
-
-            chartTimeout = setTimeout(() => {
-                themeStockList(req);
-                interval = setInterval(() => {
-                    themeStockList(req, true);
-                }, (60 * 1000));
-            }, waitTime + 200);
-        })();
-
-        return () => {
-            socket?.close();
-            clearInterval(socketTimeout);
-            clearTimeout(chartTimeout);
-            clearInterval(interval);
-            clearInterval(displayInterval);
-        }
-    }, [req]);
+    ];
 
     const timeNow = async () => {
         try {
             const startTime = Date.now();
-            const data = await fetchTimeNow({
-                marketType: MarketType.STOCK
-            });
+            const data = await fetchTimeNow({marketType: MarketType.STOCK});
 
-            if(data.code !== "0000") {
-                throw new Error(data.msg);
-            }
+            if (data.code !== "0000") throw new Error(data.message);
 
-            const { time, isMarketOpen, startMarketTime, marketType } = data.result
-
-            if(marketType !== MarketType.STOCK) {
-                throw new Error(data.msg);
-            }
+            const {time, isMarketOpen, startMarketTime, marketType} = data.result;
+            if (marketType !== MarketType.STOCK) throw new Error(data.message);
 
             const endTime = Date.now();
             const delayTime = endTime - startTime;
-
-            const revisionServerTime = time + delayTime / 2; // startTime과 endTime 사이에 API 응답을 받기 때문에 2를 나눠서 보정
+            const revisionServerTime = time + delayTime / 2;
 
             chartTimer.current = revisionServerTime - endTime;
+            if (!isMarketOpen) marketTimer.current = startMarketTime - revisionServerTime;
 
-            if(!isMarketOpen) {
-                marketTimer.current = startMarketTime - revisionServerTime;
-            }
-
-            return {
-                ...data.result
-            }
-        }catch (error) {
-            console.error(error);
-        }
-    }
-
-    const themeStockList = async (req: ThemeStockListReq, silent: boolean = false) => {
-        try {
-            const data = await fetchThemeStockList(themeGrpCdParam, req, silent ? { skipGlobalError: true } : undefined);
-
-            if (data.code !== "0000") {
-                throw new Error(data.msg);
-            }
-
-            const { themeStockList } = data.result;
-
-            const newThemeStockList: ThemeStockGridRow[] = themeStockList.map((themeStock: ThemeStockListItem) => {
-                return {
-                    id: themeStock.stkCd,
-                    stkNm: themeStock.stkNm,
-                    curPrc: themeStock.curPrc.replace(/^[+-]/, ''),
-                    fluRt: themeStock.fluRt,
-                    accTrdeQty: themeStock.accTrdeQty,
-                    dtPrftRtN: themeStock.dtPrftRtN,
-                }
-            })
-
-            setRow(newThemeStockList);
-            setLastUpdated(new Date());
-            setPollError(false);
-
-            return themeStockList.map((row: ThemeStockListItem) => {
-                return row.stkCd
-            });
+            return {...data.result};
         } catch (error) {
             console.error(error);
-            if (silent) setPollError(true);
-        } finally {
-            setLoading(false);
         }
-    }
+    };
 
     const openSocket = () => {
         const socket = new WebSocket("ws://localhost:8080/ws");
         socket.onmessage = (event) => {
             const data = JSON.parse(event.data);
-
             if (data.trnm === "REAL" && Array.isArray(data.data)) {
-                data.data.forEach((res: ThemeStockListStreamRes) => {
-                    const values = res.values;
-
-                    stockBufferMap.current.set(res.item, {
-                        code: res.item,
+                data.data.forEach((entry: ThemeStockListStreamRes) => {
+                    const values = entry.values as unknown as Record<string, string>;
+                    stockBufferMap.current.set(entry.item, {
+                        code: entry.item,
                         value: String(values["10"]).replace(/^[+-]/, ''),
                         fluRt: String(values["12"]),
-                        trend: String(values["25"])
+                        trend: String(values["25"]),
                     });
                 });
             }
         };
-
         return socket;
-    }
+    };
 
-    const trendColor = (value: string) => {
-        return ["1", "2"].includes(value) ? 'up' : ["4", "5"].includes(value) ? 'down' : 'neutral';
-    }
+    // WebSocket 라이프사이클 — query 결과 stkCd 들로 stream 등록.
+    useEffect(() => {
+        if (res?.code !== "0000" || !res.result) return;
+        const items = (res.result.themeStockList ?? []).map((s: ThemeStockListItem) => s.stkCd);
+        if (items.length === 0) return;
+
+        const key = `${themeGrpCdParam}|${items.join(',')}`;
+        if (subscribedKeyRef.current === key) return;
+        subscribedKeyRef.current = key;
+
+        // themaGrpCd 가 변하면 overlay reset
+        setLiveOverlay(new Map());
+
+        let socketTimeout: ReturnType<typeof setTimeout>;
+        let displayInterval: ReturnType<typeof setInterval>;
+        let socket: WebSocket | undefined;
+
+        const startDisplayLoop = () => {
+            // 500ms 단위로 buffer flush → liveOverlay 갱신 (렌더 빈도 조절)
+            displayInterval = setInterval(() => {
+                if (stockBufferMap.current.size === 0) return;
+                setLiveOverlay((prev) => {
+                    const next = new Map(prev);
+                    stockBufferMap.current.forEach((v, k) => {
+                        next.set(k, {
+                            curPrc: v.value,
+                            fluRt: v.fluRt,
+                            trend: trendColor(v.trend),
+                        });
+                    });
+                    return next;
+                });
+                stockBufferMap.current.clear();
+            }, 500);
+        };
+
+        const connectSocket = async (req: ThemeStockListStreamReq) => {
+            const data = await fetchThemeStockListStream(req);
+            if (data.code !== "0000") throw new Error(data.message || `테마 종목 스트림 실패 (${data.code})`);
+            socket = openSocket();
+            startDisplayLoop();
+        };
+
+        (async () => {
+            const marketInfo = await timeNow();
+            if (marketInfo?.isMarketOpen) {
+                await connectSocket({items});
+            } else {
+                socketTimeout = setTimeout(async () => {
+                    socket?.close();
+                    const again = await timeNow();
+                    if (again?.isMarketOpen) {
+                        await connectSocket({items});
+                    }
+                }, marketTimer.current + 200);
+            }
+        })();
+
+        return () => {
+            socket?.close();
+            clearTimeout(socketTimeout);
+            clearInterval(displayInterval);
+        };
+    }, [res, themeGrpCdParam]);
 
     function renderStatus(status: number) {
-        const colors = status == 0 ? 'default' : status > 0 ? 'error': 'info';
-
-        return <Chip label={status > 0 ? `${status}%` : `${status}%`} color={colors} />;
+        const colors = status == 0 ? 'default' : status > 0 ? 'error' : 'info';
+        return <Chip label={status > 0 ? `${status}%` : `${status}%`} color={colors}/>;
     }
 
     return (
-        <Box sx={{ width: '100%', maxWidth: { sm: '100%', md: '1700px' } }}>
-            <Box sx={{ display: 'flex', alignItems: 'center', mb: 2, gap: 2 }}>
+        <Box sx={{width: '100%', maxWidth: {sm: '100%', md: '1700px'}}}>
+            <Box sx={{display: 'flex', alignItems: 'center', mb: 2, gap: 2}}>
                 <Typography component="h2" variant="h6">
                     테마 주식 목록
                 </Typography>
-                <Box sx={{ flex: 1 }}/>
+                <Box sx={{flex: 1}}/>
                 <FreshnessIndicator lastUpdated={lastUpdated} error={pollError}/>
             </Box>
             <Grid
                 container
                 spacing={2}
                 columns={12}
-                sx={{ mb: (theme) => theme.spacing(2) }}
+                sx={{mb: (theme) => theme.spacing(2)}}
             >
-                <Box sx={{ width: '100%' }}>
-                    <ThemeStockTableProps rows={row} columns={columns} pageSize={100} loading={loading} />
+                <Box sx={{width: '100%'}}>
+                    <ThemeStockTableProps rows={row} columns={columns} pageSize={100} loading={loading}/>
                 </Box>
             </Grid>
         </Box>
-    )
-}
+    );
+};
 
-export default ThemeStockList
+export default ThemeStockList;

@@ -2,15 +2,6 @@ export interface HoldingStreamReq {
     items: Array<string>
 }
 
-export interface HoldingListRes {
-    totPurAmt: string,
-    totEvltAmt: string,
-    totEvltPl: string,
-    totPrftRt: string,
-    balance: string,
-    holdingList: Array<HoldingStock>
-}
-
 export interface HoldingStock {
     id: number,
     stkCd: string,
@@ -31,4 +22,12 @@ export interface HoldingStreamRes {
     name: string,
     item: string,
     values: Record<string, string>
+}
+
+/** useHoldingStream 훅의 buffer entry — stream 으로 들어오는 부분 갱신값. */
+export interface HoldingBuffer {
+    curPrc?: string;
+    predPre?: string;
+    rmndQty?: string;
+    purPric?: string;
 }

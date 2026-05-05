@@ -2,19 +2,47 @@ import {useEffect, useMemo, useRef, useState} from "react";
 import Box from "@mui/material/Box";
 import Typography from "@mui/material/Typography";
 import Grid from "@mui/material/Grid";
-import MultiViewPanel, {type StreamUpdate} from "./MultiViewPanel.tsx";
-import MultiViewSearchDialog, {type SelectedAsset} from "./MultiViewSearchDialog.tsx";
+import MultiViewPanel from "./MultiViewPanel.tsx";
+import MultiViewSearchDialog from "./MultiViewSearchDialog.tsx";
+import type {SelectedAsset, StreamUpdate} from "../../type/MultiViewType.ts";
 import ChartDetailDialog from "./ChartDetailDialog.tsx";
-import {fetchStockStream} from "../../api/stock/StockApi.ts";
-import {fetchCryptoHoldingStream} from "../../api/cryptoHolding/CryptoHoldingApi.ts";
+import {fetchMultiViewStockStream, fetchMultiViewCryptoStream} from "../../api/multiView/MultiViewApi.ts";
 import {fetchTimeNow} from "../../api/time/TimeApi.ts";
 import {MarketType} from "../../type/timeType.ts";
 
 const STORAGE_KEY = 'multiView_panels';
 const MAX_PANELS = 4;
 
+// localStorage 에서 패널 복원 — 컴포넌트 외부 함수 (lazy initializer 용)
+function loadPanelsFromStorage(): SelectedAsset[] {
+    try {
+        const saved = localStorage.getItem(STORAGE_KEY);
+        if (!saved) return [];
+        const parsed = JSON.parse(saved);
+        if (!Array.isArray(parsed)) {
+            localStorage.removeItem(STORAGE_KEY);
+            return [];
+        }
+        const validTypes: ReadonlyArray<string> = ['STOCK', 'CRYPTO', 'COMMODITY'];
+        return parsed.filter((p: unknown): p is SelectedAsset =>
+            p !== null
+            && typeof p === 'object'
+            && typeof (p as SelectedAsset).type === 'string'
+            && validTypes.includes((p as SelectedAsset).type)
+            && typeof (p as SelectedAsset).code === 'string'
+            && (p as SelectedAsset).code.length > 0
+            && typeof (p as SelectedAsset).name === 'string'
+        ).slice(0, MAX_PANELS);
+    } catch (error) {
+        console.error(error);
+        localStorage.removeItem(STORAGE_KEY);
+        return [];
+    }
+}
+
 export default function MultiViewPage() {
-    const [panels, setPanels] = useState<SelectedAsset[]>([]);
+    // lazy useState initializer — 첫 렌더 전에 localStorage 에서 동기적으로 로드 (useEffect 불필요)
+    const [panels, setPanels] = useState<SelectedAsset[]>(loadPanelsFromStorage);
     const [searchPanelIndex, setSearchPanelIndex] = useState<number | null>(null);
     const [chartTarget, setChartTarget] = useState<{type: SelectedAsset['type']; code: string; name: string} | null>(null);
     const [streamUpdates, setStreamUpdates] = useState<Map<string, StreamUpdate>>(new Map());
@@ -22,38 +50,27 @@ export default function MultiViewPage() {
     const cryptoBufferRef = useRef<Map<string, StreamUpdate>>(new Map());
     const [reloadKey, setReloadKey] = useState(0);
 
-    // 1분마다 데이터 갱신 (정각 기준)
+    // 1분마다 reloadKey 증가 → 자식 패널 데이터 재조회 트리거 (정각 기준)
     useEffect(() => {
         const now = Date.now();
         const waitTime = 60_000 - (now % 60_000);
 
+        let interval: ReturnType<typeof setInterval> | undefined;
+
         const timeout = setTimeout(() => {
             setReloadKey(k => k + 1);
-            const interval = setInterval(() => {
+            interval = setInterval(() => {
                 setReloadKey(k => k + 1);
             }, 60_000);
-            return () => clearInterval(interval);
         }, waitTime + 200);
 
-        return () => clearTimeout(timeout);
+        return () => {
+            clearTimeout(timeout);
+            if (interval) clearInterval(interval);
+        };
     }, []);
 
-    // localStorage에서 복원
-    useEffect(() => {
-        try {
-            const saved = localStorage.getItem(STORAGE_KEY);
-            if (saved) {
-                const parsed = JSON.parse(saved);
-                if (Array.isArray(parsed)) {
-                    setPanels(parsed.filter((p: SelectedAsset | null) => p !== null));
-                }
-            }
-        } catch (error) {
-            console.error(error);
-        }
-    }, []);
-
-    // localStorage에 저장
+    // localStorage 에 저장 — panels 변화에 따른 외부 시스템 동기화 (정당한 useEffect 케이스)
     useEffect(() => {
         localStorage.setItem(STORAGE_KEY, JSON.stringify(panels));
     }, [panels]);
@@ -117,7 +134,8 @@ export default function MultiViewPage() {
         };
 
         const connectSocket = async () => {
-            await fetchStockStream({items: stockCodes});
+            const data = await fetchMultiViewStockStream({items: stockCodes});
+            if (data.code !== "0000") throw new Error(data.message || `멀티뷰 주식 스트림 실패 (${data.code})`);
             socket = openSocket();
             startDisplay();
         };
@@ -194,7 +212,8 @@ export default function MultiViewPage() {
 
         (async () => {
             try {
-                await fetchCryptoHoldingStream({items: cryptoCodes});
+                const data = await fetchMultiViewCryptoStream({items: cryptoCodes});
+                if (data.code !== "0000") throw new Error(data.message || `멀티뷰 코인 스트림 실패 (${data.code})`);
                 socket = openSocket();
                 startDisplay();
             } catch (err) {

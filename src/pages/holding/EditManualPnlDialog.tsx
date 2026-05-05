@@ -1,4 +1,4 @@
-import {useEffect, useState} from "react";
+import {useState} from "react";
 import Dialog from "@mui/material/Dialog";
 import DialogTitle from "@mui/material/DialogTitle";
 import DialogContent from "@mui/material/DialogContent";
@@ -7,13 +7,14 @@ import Button from "@mui/material/Button";
 import TextField from "@mui/material/TextField";
 import Box from "@mui/material/Box";
 import type {RealizedPnlItem} from "../../type/RealizedPnlType.ts";
+import type {ApiResponse} from "../../type/AuthType.ts";
 
 interface EditManualPnlDialogProps {
     open: boolean;
     onClose: () => void;
     item: RealizedPnlItem | null;
     onUpdated: () => void;
-    updateFn: (id: number, req: { realizedPnl: number }) => Promise<unknown>;
+    updateFn: (id: number, req: { realizedPnl: number }) => Promise<ApiResponse<unknown>>;
 }
 
 export default function EditManualPnlDialog({open, onClose, item, onUpdated, updateFn}: EditManualPnlDialogProps) {
@@ -21,13 +22,17 @@ export default function EditManualPnlDialog({open, onClose, item, onUpdated, upd
     const [isNegative, setIsNegative] = useState(false);
     const [formErrors, setFormErrors] = useState<{realizedPnl?: string}>({});
 
-    useEffect(() => {
-        if (item) {
+    // open + item 변경 시 form 초기화 — open 을 키에 포함해 같은 item 으로 다시 열 때도 리셋
+    const resetKey = `${open}|${item?.id ?? 'none'}`;
+    const [prevResetKey, setPrevResetKey] = useState('');
+    if (resetKey !== prevResetKey) {
+        setPrevResetKey(resetKey);
+        if (open && item) {
             const val = item.realizedPnl;
             setIsNegative(val < 0);
             setRealizedPnl(String(Math.abs(val)));
         }
-    }, [item]);
+    }
 
     const handleClose = () => {
         setRealizedPnl("");
@@ -47,7 +52,8 @@ export default function EditManualPnlDialog({open, onClose, item, onUpdated, upd
         setFormErrors({});
         try {
             const pnlValue = Number(realizedPnl) * (isNegative ? -1 : 1);
-            await updateFn(item.id, {realizedPnl: pnlValue});
+            const res = await updateFn(item.id, {realizedPnl: pnlValue});
+            if (res.code !== "0000") throw new Error(res.message || `실현손익 수정 실패 (${res.code})`);
             onUpdated();
             handleClose();
         } catch (err) {

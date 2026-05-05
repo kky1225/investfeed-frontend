@@ -42,7 +42,7 @@ const collectApiBrokerIds = (brokers: MemberBroker[]): number[] =>
     brokers.filter((b) => b.type === 'API').map((b) => b.brokerId);
 
 export function ApiKeyStatusProvider({ children }: { children: ReactNode }) {
-    const { isAuthenticated, isInitialized } = useAuth();
+    const { isAuthenticated, isInitialized, hasPermission } = useAuth();
     const [apiBrokers, setApiBrokers] = useState<Broker[]>([]);
     const [apiKeys, setApiKeys] = useState<ApiKeyRes[]>([]);
     const [myStockBrokers, setMyStockBrokers] = useState<MemberBroker[]>([]);
@@ -69,17 +69,27 @@ export function ApiKeyStatusProvider({ children }: { children: ReactNode }) {
     );
 
     /**
-     * 인증 직후 1회 초기 로드. broker 마스터 + 등록 API Key + 본인 주식/코인 broker 를 한 번에 가져온다.
-     * 외부 노출은 안 하고, 호출처는 변경 사건에 맞는 invalidate 함수를 사용한다.
+     * 인증 직후 1회 초기 로드. 권한 보유 여부에 따라 조건부 fetch.
+     * - fetchApiKeys: /api/auth/** (permission 검사 제외) — 항상 호출
+     * - fetchBrokerList / fetchMyBrokerList: STOCK_BROKER READ 보유 시만
+     * - fetchMyCryptoBrokerList: CRYPTO_BROKER READ 보유 시만
      */
     const initialLoad = useCallback(async () => {
+        const canReadStockBroker = hasPermission('STOCK_BROKER', 'READ');
+        const canReadCryptoBroker = hasPermission('CRYPTO_BROKER', 'READ');
+
         try {
             const [keysRes, brokersRes, myStockRes, myCryptoRes] = await Promise.all([
                 fetchApiKeys(),
-                fetchBrokerList(),
-                fetchMyBrokerList(),
-                fetchMyCryptoBrokerList(),
+                canReadStockBroker ? fetchBrokerList() : null,
+                canReadStockBroker ? fetchMyBrokerList() : null,
+                canReadCryptoBroker ? fetchMyCryptoBrokerList() : null,
             ]);
+
+            if (keysRes.code !== "0000") throw new Error(keysRes.message || `API Key 조회 실패 (${keysRes.code})`);
+            if (brokersRes && brokersRes.code !== "0000") throw new Error(brokersRes.message || `증권사 목록 조회 실패 (${brokersRes.code})`);
+            if (myStockRes && myStockRes.code !== "0000") throw new Error(myStockRes.message || `본인 증권사 조회 실패 (${myStockRes.code})`);
+            if (myCryptoRes && myCryptoRes.code !== "0000") throw new Error(myCryptoRes.message || `본인 거래소 조회 실패 (${myCryptoRes.code})`);
 
             setApiKeys(keysRes.result ?? []);
 
@@ -97,37 +107,45 @@ export function ApiKeyStatusProvider({ children }: { children: ReactNode }) {
         } finally {
             setIsLoaded(true);
         }
-    }, []);
+    }, [hasPermission]);
 
     /** API Key 등록/삭제 후 호출. apiKeys 갱신 (validBrokerIds 는 자동 derive). */
     const invalidateApiKeys = useCallback(async () => {
         try {
             const res = await fetchApiKeys();
+            if (res.code !== "0000") throw new Error(res.message || `API Key 조회 실패 (${res.code})`);
             setApiKeys(res.result ?? []);
-        } catch {
+        } catch (err) {
+            console.error(err);
             setApiKeys([]);
         }
     }, []);
 
-    /** 본인 주식 broker 추가/삭제 후 호출. myStockBrokers 갱신. */
+    /** 본인 주식 broker 추가/삭제 후 호출. myStockBrokers 갱신. STOCK_BROKER READ 미보유 시 skip. */
     const invalidateMyStockBrokers = useCallback(async () => {
+        if (!hasPermission('STOCK_BROKER', 'READ')) return;
         try {
             const res = await fetchMyBrokerList();
+            if (res.code !== "0000") throw new Error(res.message || `증권사 조회 실패 (${res.code})`);
             setMyStockBrokers(res?.result?.brokers ?? []);
-        } catch {
+        } catch (err) {
+            console.error(err);
             setMyStockBrokers([]);
         }
-    }, []);
+    }, [hasPermission]);
 
-    /** 본인 코인 broker 추가/삭제 후 호출. myCryptoBrokers 갱신. */
+    /** 본인 코인 broker 추가/삭제 후 호출. myCryptoBrokers 갱신. CRYPTO_BROKER READ 미보유 시 skip. */
     const invalidateMyCryptoBrokers = useCallback(async () => {
+        if (!hasPermission('CRYPTO_BROKER', 'READ')) return;
         try {
             const res = await fetchMyCryptoBrokerList();
+            if (res.code !== "0000") throw new Error(res.message || `거래소 조회 실패 (${res.code})`);
             setMyCryptoBrokers(res?.result?.brokers ?? []);
-        } catch {
+        } catch (err) {
+            console.error(err);
             setMyCryptoBrokers([]);
         }
-    }, []);
+    }, [hasPermission]);
 
     useEffect(() => {
         if (!isInitialized) return;
@@ -139,6 +157,8 @@ export function ApiKeyStatusProvider({ children }: { children: ReactNode }) {
             setIsLoaded(true);
             return;
         }
+        // 권한이 부여되지 않은 endpoint 는 initialLoad 내부 catch 로 빈 배열 fallback.
+        // 권한 부여 시 정상 로드.
         void initialLoad();
     }, [isInitialized, isAuthenticated, initialLoad]);
 

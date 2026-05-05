@@ -1,10 +1,10 @@
-import {useEffect, useRef, useState} from 'react';
+import {useState} from 'react';
+import {useQuery, useQueryClient} from '@tanstack/react-query';
+import {usePollingQuery} from '../../lib/pollingQuery';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
 import Button from '@mui/material/Button';
 import Chip from '@mui/material/Chip';
-import Alert from '@mui/material/Alert';
-import Snackbar from '@mui/material/Snackbar';
 import Dialog from '@mui/material/Dialog';
 import DialogTitle from '@mui/material/DialogTitle';
 import DialogContent from '@mui/material/DialogContent';
@@ -28,25 +28,22 @@ import {
     startBulkRefresh, fetchBulkRefreshStatus,
 } from '../../api/calendar/EconomicCalendarApi';
 import type {CalendarEvent, BulkRefreshStatus} from '../../type/EconomicCalendarType';
+import {useAlert} from '../../context/AlertContext';
 
 type TabKey = 'manual' | 'bulk';
 
 export default function CalendarManagement() {
     const now = new Date();
+    const queryClient = useQueryClient();
+    const showAlert = useAlert();
     const [tab, setTab] = useState<TabKey>('manual');
     const [year, setYear] = useState(now.getFullYear());
-    const [events, setEvents] = useState<CalendarEvent[]>([]);
-    const [loading, setLoading] = useState(true);
-    const [snackbar, setSnackbar] = useState<{open: boolean; message: string; severity: 'success' | 'error'}>({
-        open: false, message: '', severity: 'success'
-    });
 
     // Bulk refresh state
     const [bulkFrom, setBulkFrom] = useState<number>(2021);
     const [bulkTo, setBulkTo] = useState<number>(now.getFullYear());
-    const [bulkStatus, setBulkStatus] = useState<BulkRefreshStatus | null>(null);
+    const [localBulkStatus, setLocalBulkStatus] = useState<BulkRefreshStatus | null>(null);
     const [bulkStarting, setBulkStarting] = useState(false);
-    const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
     // 등록/수정 공통 state
     const [formOpen, setFormOpen] = useState(false);
@@ -64,61 +61,45 @@ export default function CalendarManagement() {
     const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
     const [menuTarget, setMenuTarget] = useState<CalendarEvent | null>(null);
 
-    const loadEvents = async () => {
-        setLoading(true);
-        try {
-            const res = await fetchManualCalendarEvents({year, month: 0});
-            setEvents(res.result ?? []);
-        } catch (error) {
-            console.error(error);
-            setSnackbar({open: true, message: '일정 목록을 불러오는데 실패했습니다.', severity: 'error'});
-        } finally {
-            setLoading(false);
-        }
+    const {data: eventsRes, isLoading: loading} = useQuery({
+        queryKey: ['calendarEvents', year],
+        queryFn: async ({signal}) => {
+            const data = await fetchManualCalendarEvents({year, month: 0}, {signal, skipGlobalError: true});
+            if (data.code !== "0000") throw new Error(data.message || `캘린더 조회 실패 (${data.code})`);
+            return data;
+        },
+    });
+    const events: CalendarEvent[] = eventsRes?.result ?? [];
+
+    const reloadEvents = () => {
+        queryClient.invalidateQueries({queryKey: ['calendarEvents', year]});
     };
 
-    useEffect(() => {
-        loadEvents();
-    }, [year]);
+    // Bulk refresh 상태 폴링 — 탭이 'bulk'일 때만 1초마다
+    const {data: bulkRes} = usePollingQuery(
+        ['calendarBulkStatus'],
+        (config) => fetchBulkRefreshStatus(config),
+        {enabled: tab === 'bulk', intervalMs: 1000},
+    );
 
-    // Bulk refresh 상태 폴링 — 탭 전환 시 초기 1회, 실행 중이면 1초마다
-    const loadBulkStatus = async (silent: boolean = false) => {
-        try {
-            const res = await fetchBulkRefreshStatus(silent ? { skipGlobalError: true } : undefined);
-            if (res.result) setBulkStatus(res.result);
-        } catch (error) {
-            console.error(error);
-            /* 무시 — 폴링 중 실패해도 다음 주기에 재시도 */
-        }
-    };
-
-    useEffect(() => {
-        if (tab !== 'bulk') {
-            if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
-            return;
-        }
-        // 초기 1회는 non-silent (사용자가 탭 열었으니 에러가 있으면 알림), 이후 폴링은 silent
-        loadBulkStatus();
-        pollRef.current = setInterval(() => loadBulkStatus(true), 1000);
-        return () => {
-            if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
-        };
-    }, [tab]);
+    // 시작 직후 즉시 UI 반영 위해 localBulkStatus를 fallback으로. 폴링 결과가 도착하면 그것을 우선시.
+    const effectiveBulkStatus: BulkRefreshStatus | null = bulkRes?.result ?? localBulkStatus;
 
     const handleBulkRefresh = async () => {
         if (bulkFrom > bulkTo) {
-            setSnackbar({open: true, message: '시작 연도가 종료 연도보다 클 수 없습니다.', severity: 'error'});
+            showAlert('시작 연도가 종료 연도보다 클 수 없습니다.', 'error');
             return;
         }
         setBulkStarting(true);
         try {
             const res = await startBulkRefresh({yearFrom: bulkFrom, yearTo: bulkTo});
-            if (res.result) setBulkStatus(res.result);
-            setSnackbar({open: true, message: '일괄 재생성을 시작했습니다.', severity: 'success'});
+            if (res.code !== "0000") throw new Error(res.message || `일괄 재생성 시작 실패 (${res.code})`);
+            if (res.result) setLocalBulkStatus(res.result);
+            showAlert('일괄 재생성을 시작했습니다.', 'success');
         } catch (e: unknown) {
             console.error(e);
             const msg = (e as {response?: {data?: {message?: string}}})?.response?.data?.message ?? '재생성 시작 실패';
-            setSnackbar({open: true, message: msg, severity: 'error'});
+            showAlert(msg, 'error');
         } finally {
             setBulkStarting(false);
         }
@@ -168,17 +149,19 @@ export default function CalendarManagement() {
         try {
             const req = {date: formDate, name: formName, country: formCountry, type: formType, value: formValue || null};
             if (formMode === 'create') {
-                await createCalendarEvent(req);
-                setSnackbar({open: true, message: '일정이 등록되었습니다.', severity: 'success'});
+                const res = await createCalendarEvent(req);
+                if (res.code !== "0000") throw new Error(res.message || `일정 등록 실패 (${res.code})`);
+                showAlert('일정이 등록되었습니다.', 'success');
             } else if (formTargetId) {
-                await updateCalendarEvent(formTargetId, req);
-                setSnackbar({open: true, message: '일정이 수정되었습니다.', severity: 'success'});
+                const res = await updateCalendarEvent(formTargetId, req);
+                if (res.code !== "0000") throw new Error(res.message || `일정 수정 실패 (${res.code})`);
+                showAlert('일정이 수정되었습니다.', 'success');
             }
             resetForm();
-            loadEvents();
+            reloadEvents();
         } catch (error) {
             console.error(error);
-            setSnackbar({open: true, message: '일정 처리에 실패했습니다.', severity: 'error'});
+            showAlert('일정 처리에 실패했습니다.', 'error');
         } finally {
             setFormLoading(false);
         }
@@ -187,13 +170,14 @@ export default function CalendarManagement() {
     const handleDelete = async () => {
         if (!deleteTarget?.id) return;
         try {
-            await deleteCalendarEvent(deleteTarget.id);
-            setSnackbar({open: true, message: '일정이 삭제되었습니다.', severity: 'success'});
+            const res = await deleteCalendarEvent(deleteTarget.id);
+            if (res.code !== "0000") throw new Error(res.message || `일정 삭제 실패 (${res.code})`);
+            showAlert('일정이 삭제되었습니다.', 'success');
             setDeleteTarget(null);
-            loadEvents();
+            reloadEvents();
         } catch (error) {
             console.error(error);
-            setSnackbar({open: true, message: '일정 삭제에 실패했습니다.', severity: 'error'});
+            showAlert('일정 삭제에 실패했습니다.', 'error');
         }
     };
 
@@ -300,7 +284,7 @@ export default function CalendarManagement() {
                             slotProps={{htmlInput: {min: 2000, max: 2100}}}
                         />
                         <Box sx={{flex: 1}}/>
-                        {!(bulkStatus?.running ?? false) && (
+                        {!(effectiveBulkStatus?.running ?? false) && (
                             <Button
                                 variant="contained" size="small"
                                 onClick={handleBulkRefresh}
@@ -311,29 +295,29 @@ export default function CalendarManagement() {
                         )}
                     </Box>
 
-                    {bulkStatus && (bulkStatus.running || bulkStatus.finishedAt) && (
+                    {effectiveBulkStatus && (effectiveBulkStatus.running || effectiveBulkStatus.finishedAt) && (
                         <Box sx={{mb: 2, p: 2, border: 1, borderColor: 'divider', borderRadius: 1}}>
                             <Typography variant="subtitle2" sx={{mb: 1, fontWeight: 600}}>
-                                {bulkStatus.running ? '진행 중' : '완료'}
-                                {bulkStatus.yearFrom != null && ` — ${bulkStatus.yearFrom} ~ ${bulkStatus.yearTo}`}
+                                {effectiveBulkStatus.running ? '진행 중' : '완료'}
+                                {effectiveBulkStatus.yearFrom != null && ` — ${effectiveBulkStatus.yearFrom} ~ ${effectiveBulkStatus.yearTo}`}
                             </Typography>
-                            {bulkStatus.totalMonths > 0 && (
+                            {effectiveBulkStatus.totalMonths > 0 && (
                                 <Box sx={{mb: 1}}>
                                     <LinearProgress
                                         variant="determinate"
-                                        value={(bulkStatus.processedMonths / bulkStatus.totalMonths) * 100}
+                                        value={(effectiveBulkStatus.processedMonths / effectiveBulkStatus.totalMonths) * 100}
                                         sx={{height: 8, borderRadius: 1}}
                                     />
                                     <Typography variant="caption" color="text.secondary" sx={{mt: 0.5, display: 'block'}}>
-                                        {bulkStatus.processedMonths} / {bulkStatus.totalMonths} 개월 처리
-                                        {bulkStatus.failedMonths > 0 && ` (실패 ${bulkStatus.failedMonths})`}
-                                        {bulkStatus.currentMonth && ` · 현재: ${bulkStatus.currentMonth}`}
+                                        {effectiveBulkStatus.processedMonths} / {effectiveBulkStatus.totalMonths} 개월 처리
+                                        {effectiveBulkStatus.failedMonths > 0 && ` (실패 ${effectiveBulkStatus.failedMonths})`}
+                                        {effectiveBulkStatus.currentMonth && ` · 현재: ${effectiveBulkStatus.currentMonth}`}
                                     </Typography>
                                 </Box>
                             )}
-                            {bulkStatus.errorMessage && (
+                            {effectiveBulkStatus.errorMessage && (
                                 <Typography variant="caption" color="error.main">
-                                    오류: {bulkStatus.errorMessage}
+                                    오류: {effectiveBulkStatus.errorMessage}
                                 </Typography>
                             )}
                         </Box>
@@ -410,12 +394,6 @@ export default function CalendarManagement() {
                     <ListItemText sx={{color: 'error.main'}}>삭제</ListItemText>
                 </MenuItem>
             </Menu>
-
-            <Snackbar open={snackbar.open} autoHideDuration={3000} onClose={() => setSnackbar({...snackbar, open: false})}>
-                <Alert severity={snackbar.severity} onClose={() => setSnackbar({...snackbar, open: false})}>
-                    {snackbar.message}
-                </Alert>
-            </Snackbar>
         </Box>
     );
 }

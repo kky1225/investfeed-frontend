@@ -3,10 +3,6 @@ export interface InvestorListReq {
     orgnTp: string,
 }
 
-export interface InvestorListRes {
-    stockInvestorList: Array<InvestorListItem>
-}
-
 export interface InvestorListItem {
     stkCd: string, // 종목코드
     stkNm: string, // 종목명
@@ -21,13 +17,6 @@ export interface InvestorListItem {
 
 export interface InvestorStreamReq {
     items: Array<string>
-}
-
-export interface InvestorStreamRes {
-    type: string,
-    name: string,
-    item: string,
-    values: Array<InvestorStream>
 }
 
 export interface InvestorStream {

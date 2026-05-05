@@ -7,17 +7,12 @@ export const fetchCommodityList = async (config?: AxiosRequestConfig) => {
     return res.data
 }
 
-export const fetchCommodityListStream = async () => {
-    const res = await api.get(`/commodities/stream`);
+export const fetchCommodityStream = async (items: string[]) => {
+    const res = await api.post(`/commodities/stream`, {items});
     return res.data
 }
 
 export const fetchCommodityDetail = async (stkCd: string, req: CommodityDetailReq, config?: AxiosRequestConfig) => {
     const res = await api.get(`/commodities/${stkCd}`, {...config, params: req});
-    return res.data
-}
-
-export const fetchCommodityDetailStream = async (stkCd: string) => {
-    const res = await api.get(`/commodities/${stkCd}/stream`);
     return res.data
 }

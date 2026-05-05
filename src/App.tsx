@@ -38,6 +38,9 @@ import CryptoInterest from "./pages/cryptoInterest/CryptoInterest.tsx";
 import NotificationList from "./pages/notification/NotificationList.tsx";
 import MemberManagement from "./pages/admin/MemberManagement.tsx";
 import MenuManagement from "./pages/admin/MenuManagement.tsx";
+import RoleManagement from "./pages/admin/RoleManagement.tsx";
+import PermissionCatalogManagement from "./pages/admin/PermissionCatalogManagement.tsx";
+import PermissionGrantManagement from "./pages/admin/PermissionGrantManagement.tsx";
 import BrokerManagement from "./pages/admin/BrokerManagement.tsx";
 import CalendarManagement from "./pages/admin/CalendarManagement.tsx";
 import Monitoring from "./pages/admin/Monitoring.tsx";
@@ -267,6 +270,9 @@ function App() {
                         <Route path="/notification/list" Component={NotificationList} />
                         <Route path="/notification/settings" Component={NotificationSettingPage} />
 
+                        <Route path="/admin/roles" Component={RoleManagement} />
+                        <Route path="/admin/permissions/catalog" Component={PermissionCatalogManagement} />
+                        <Route path="/admin/permissions/grants" Component={PermissionGrantManagement} />
                         <Route path="/admin/members" Component={MemberManagement} />
                         <Route path="/admin/menus" Component={MenuManagement} />
                         <Route path="/admin/brokers" Component={BrokerManagement} />

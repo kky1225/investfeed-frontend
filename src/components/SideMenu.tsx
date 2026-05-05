@@ -23,7 +23,7 @@ import Divider, { dividerClasses } from "@mui/material/Divider";
 import { ListItemText } from '@mui/material';
 import { listClasses } from "@mui/material/List";
 import { paperClasses } from "@mui/material/Paper";
-import Snackbar from '@mui/material/Snackbar';
+import {useAlert} from '../context/AlertContext';
 import { useAuth } from '../context/AuthContext';
 import { logout } from '../api/auth/AuthApi';
 import { useNavigate } from 'react-router-dom';
@@ -57,7 +57,7 @@ export default function SideMenu() {
     const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
     const [collapsed, setCollapsed] = useState(false);
     const [changeSecondaryOpen, setChangeSecondaryOpen] = useState(false);
-    const [snackbar, setSnackbar] = useState('');
+    const showAlert = useAlert();
     const open = Boolean(anchorEl);
     const { user, clearAuth } = useAuth();
     const navigate = useNavigate();
@@ -283,17 +283,11 @@ export default function SideMenu() {
                     open={changeSecondaryOpen}
                     onSuccess={() => {
                         setChangeSecondaryOpen(false);
-                        setSnackbar('2차 비밀번호가 변경되었습니다.');
+                        showAlert('2차 비밀번호가 변경되었습니다.', 'success');
                     }}
                     onClose={() => setChangeSecondaryOpen(false)}
                 />
             </Suspense>
-            <Snackbar
-                open={!!snackbar}
-                autoHideDuration={3000}
-                onClose={() => setSnackbar('')}
-                message={snackbar}
-            />
         </Drawer>
     );
 }

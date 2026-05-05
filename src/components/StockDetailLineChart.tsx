@@ -22,15 +22,16 @@ export interface CustomStockDetailLineChartProps {
     nxtEnable: string,
     seriesData: MakeOptional<LineSeriesType, 'type'>[],
     barDataList: number[],
-    dateList: string[]
+    dateList: string[],
+    height?: number,
 }
 
 const StockDetailLineChart = (
-    { trend, seriesData, barDataList, dateList }: CustomStockDetailLineChartProps,
+    { trend, seriesData = [], barDataList = [], dateList = [], height = 310 }: CustomStockDetailLineChartProps,
 ) => {
     const theme = useTheme();
 
-    const numericDates = seriesData[0].data ? seriesData[0].data.map(Number) : [];
+    const numericDates = seriesData[0]?.data ? seriesData[0].data.map(Number) : [];
 
     const lineMinY = numericDates.length > 0 ?  Math.min(...numericDates) - 5 : 0;
     const lineMaxY = numericDates.length > 0 ? Math.max(...numericDates) + 5 : 0;
@@ -49,7 +50,7 @@ const StockDetailLineChart = (
 
     const color = labelColors[trend];
 
-    const barMaxY = Math.max(...barDataList) * 5;
+    const barMaxY = barDataList.length > 0 ? Math.max(...barDataList) * 5 : 0;
 
     return (
         <ChartContainer
@@ -106,7 +107,7 @@ const StockDetailLineChart = (
                 }
             ]}
             sx={{
-                height: 310
+                height
             }}
         >
             <ChartsXAxis axisId="x-line" />

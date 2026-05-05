@@ -1,4 +1,6 @@
-import React, {createContext, useCallback, useContext, useEffect, useMemo, useState} from "react";
+import React, {createContext, useCallback, useContext, useMemo, useState} from "react";
+import {useQuery, useQueryClient} from "@tanstack/react-query";
+import {unwrapResponse} from "../../lib/apiResponse.ts";
 import {useNavigate} from "react-router-dom";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
@@ -29,13 +31,16 @@ import {arrayMove, SortableContext, useSortable, verticalListSortingStrategy} fr
 import {CSS} from "@dnd-kit/utilities";
 import CustomPieChart from "../../components/CustomPieChart.tsx";
 import {renderChip, renderTradeColor} from "../../components/CustomRender.tsx";
+import BlindText from "../../components/BlindText.tsx";
 import {fetchCryptoManualHoldingList, deleteCryptoManualHolding, reorderCryptoHoldings, updateCryptoBrokerBalance} from "../../api/cryptoBroker/CryptoBrokerApi.ts";
 import type {MemberBroker, ManualHolding} from "../../type/BrokerType.ts";
 import type {HoldingStock} from "../../type/HoldingType.ts";
 import HoldingSummaryCard from "../holding/HoldingSummaryCard.tsx";
 import AddCryptoManualHoldingDialog from "./AddCryptoManualHoldingDialog.tsx";
 import EditCryptoManualHoldingDialog from "./EditCryptoManualHoldingDialog.tsx";
-import {useCryptoHoldingStream, CryptoHoldingBuffer} from "./useCryptoHoldingStream.ts";
+import {useCryptoHoldingStream} from "./useCryptoHoldingStream.ts";
+import type {CryptoHoldingBuffer} from "../../type/CryptoType.ts";
+import {fetchCryptoHoldingStream} from "../../api/cryptoHolding/CryptoHoldingApi.ts";
 import {useBlindMode} from "../../context/BlindModeContext.tsx";
 
 // ─── DataGrid 행 드래그 (Context 패턴) ───────────────────────────────────────
@@ -104,155 +109,169 @@ interface CryptoManualHoldingTabProps {
     broker: MemberBroker;
 }
 
+const stripSign = (v: string) => v.replace(/^[+-]/, '');
+
+const calcDailyPl = (stocks: HoldingStock[]) =>
+    stocks.reduce((sum, s) => {
+        if (Number(s.predClosePric) <= 0) return sum;
+        return sum + (Number(s.curPrc) - Number(s.predClosePric)) * Number(s.rmndQty);
+    }, 0);
+
+const toHoldingStocks = (items: ManualHolding[], priceMap?: Map<string, string>): HoldingStock[] => {
+    const stocks: HoldingStock[] = items.map(item => {
+        const rawCurPrc = priceMap?.get(item.stkCd) ?? item.curPrc ?? "0";
+        const curPrc = stripSign(rawCurPrc);
+        const predClosePric = stripSign(item.basePric || "0");
+        const purAmt = String(item.purAmt);
+        const evltAmt = String(Number(curPrc) * item.quantity);
+        const evltvPrft = String(Number(evltAmt) - item.purAmt);
+        const prftRtVal = item.purAmt !== 0
+            ? (Number(evltAmt) - item.purAmt) / item.purAmt * 100 : 0;
+        const prftRt = prftRtVal > 0 ? `+${prftRtVal.toFixed(2)}` : prftRtVal.toFixed(2);
+
+        return {
+            id: item.id,
+            stkCd: item.stkCd,
+            stkNm: item.stkNm,
+            curPrc,
+            purPric: String(item.purPrice),
+            purAmt,
+            evltAmt,
+            evltvPrft,
+            prftRt,
+            rmndQty: String(item.quantity),
+            possRt: "0",
+            predClosePric,
+        };
+    });
+
+    const totalEvlt = stocks.reduce((sum, s) => sum + Number(s.evltAmt), 0);
+    return stocks.map(s => ({
+        ...s,
+        possRt: totalEvlt !== 0 ? (Number(s.evltAmt) / totalEvlt * 100).toFixed(2) : "0",
+    }));
+};
+
 export default function CryptoManualHoldingTab({broker}: CryptoManualHoldingTabProps) {
     const navigate = useNavigate();
-    const [manualHoldings, setManualHoldings] = useState<ManualHolding[]>([]);
-    const [holdings, setHoldings] = useState<HoldingStock[]>([]);
-    const [totPurAmt, setTotPurAmt] = useState("0");
-    const [totEvltAmt, setTotEvltAmt] = useState("0");
-    const [totEvltPl, setTotEvltPl] = useState("0");
-    const [totPrftRt, setTotPrftRt] = useState("0");
-    const [balance, setBalance] = useState("0");
-    const [dailyPl, setDailyPl] = useState("0");
+    const queryClient = useQueryClient();
     const [showChart, setShowChart] = useState(false);
     const {isBlind} = useBlindMode();
+
     const [showList, setShowList] = useState(!isBlind);
+    const [prevIsBlind, setPrevIsBlind] = useState(isBlind);
+    if (isBlind !== prevIsBlind) {
+        setPrevIsBlind(isBlind);
+        setShowList(!isBlind);
+    }
+
     const [addOpen, setAddOpen] = useState(false);
     const [editTarget, setEditTarget] = useState<ManualHolding | null>(null);
     const [deleteTarget, setDeleteTarget] = useState<ManualHolding | null>(null);
-    const [markets, setMarkets] = useState<string[]>([]);
     const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
     const [menuTarget, setMenuTarget] = useState<ManualHolding | null>(null);
+    const [orderOverride, setOrderOverride] = useState<number[] | null>(null);
     const [orderDirty, setOrderDirty] = useState(false);
     const [savingOrder, setSavingOrder] = useState(false);
-    const [loading, setLoading] = useState(true);
+    const [balanceOverride, setBalanceOverride] = useState<string | null>(null);
+
+    const [liveOverlay, setLiveOverlay] = useState<Map<string, CryptoHoldingBuffer>>(new Map());
+
+    // broker 변경 시 로컬 override 들 초기화 (다른 broker 데이터로 잔존 방지)
+    const [prevBrokerId, setPrevBrokerId] = useState(broker.id);
+    if (broker.id !== prevBrokerId) {
+        setPrevBrokerId(broker.id);
+        setOrderOverride(null);
+        setOrderDirty(false);
+        setBalanceOverride(null);
+        setLiveOverlay(new Map());
+    }
 
     const sensors = useSensors(
         useSensor(PointerSensor, {activationConstraint: {distance: 5}}),
         useSensor(TouchSensor, {activationConstraint: {delay: 200, tolerance: 5}})
     );
 
-    const stripSign = (v: string) => v.replace(/^[+-]/, '');
+    type ManualHoldingData = {
+        holdings?: ManualHolding[];
+        balance?: number | string;
+    } | null;
+    const {data: holdingData, isLoading: loading} = useQuery<ManualHoldingData>({
+        queryKey: ['cryptoManualHoldingList', broker.id],
+        queryFn: async () => unwrapResponse<ManualHoldingData>(await fetchCryptoManualHoldingList(broker.id), null),
+        refetchOnWindowFocus: false,
+    });
 
-    const toHoldingStocks = useCallback((items: ManualHolding[], priceMap?: Map<string, string>): HoldingStock[] => {
-        const stocks: HoldingStock[] = items.map(item => {
-            const rawCurPrc = priceMap?.get(item.stkCd) ?? item.curPrc ?? "0";
-            const curPrc = stripSign(rawCurPrc);
-            const predClosePric = stripSign(item.basePric || "0");
-            const purAmt = String(item.purAmt);
-            const evltAmt = String(Number(curPrc) * item.quantity);
-            const evltvPrft = String(Number(evltAmt) - item.purAmt);
-            const prftRtVal = item.purAmt !== 0
-                ? (Number(evltAmt) - item.purAmt) / item.purAmt * 100 : 0;
+    const manualHoldings: ManualHolding[] = holdingData?.holdings ?? [];
+    const baseHoldings = useMemo<HoldingStock[]>(() => toHoldingStocks(manualHoldings), [manualHoldings]);
+
+    const holdings = useMemo<HoldingStock[]>(() => {
+        let ordered = baseHoldings;
+        if (orderOverride) {
+            const byId = new Map(baseHoldings.map(h => [h.id, h]));
+            const sorted: HoldingStock[] = [];
+            const seen = new Set<number>();
+            for (const id of orderOverride) {
+                const h = byId.get(id);
+                if (h) { sorted.push(h); seen.add(id); }
+            }
+            baseHoldings.forEach(h => { if (!seen.has(h.id)) sorted.push(h); });
+            ordered = sorted;
+        }
+
+        const updated = ordered.map(stock => {
+            const buffer = liveOverlay.get(stock.stkCd);
+            if (!buffer || !buffer.curPrc) return stock;
+            const curPrc = buffer.curPrc;
+            const evltAmt = String(Number(curPrc) * Number(stock.rmndQty));
+            const evltvPrft = String(Number(evltAmt) - Number(stock.purAmt));
+            const prftRtVal = Number(stock.purAmt) !== 0
+                ? Number(evltvPrft) / Number(stock.purAmt) * 100 : 0;
             const prftRt = prftRtVal > 0 ? `+${prftRtVal.toFixed(2)}` : prftRtVal.toFixed(2);
-
-            return {
-                id: item.id,
-                stkCd: item.stkCd,
-                stkNm: item.stkNm,
-                curPrc,
-                purPric: String(item.purPrice),
-                purAmt,
-                evltAmt,
-                evltvPrft,
-                prftRt,
-                rmndQty: String(item.quantity),
-                possRt: "0",
-                predClosePric,
-            };
+            return {...stock, curPrc, evltAmt, evltvPrft, prftRt};
         });
 
-        const totalEvlt = stocks.reduce((sum, s) => sum + Number(s.evltAmt), 0);
-        return stocks.map(s => ({
+        const totalEvlt = updated.reduce((sum, s) => sum + Number(s.evltAmt), 0);
+        return updated.map(s => ({
             ...s,
             possRt: totalEvlt !== 0 ? (Number(s.evltAmt) / totalEvlt * 100).toFixed(2) : "0",
         }));
-    }, []);
+    }, [baseHoldings, orderOverride, liveOverlay]);
 
-    const calcDailyPl = (stocks: HoldingStock[]) =>
-        stocks.reduce((sum, s) => {
-            if (Number(s.predClosePric) <= 0) return sum;
-            return sum + (Number(s.curPrc) - Number(s.predClosePric)) * Number(s.rmndQty);
-        }, 0);
+    const balance: string = balanceOverride ?? String(holdingData?.balance ?? 0);
+    const totPurAmt = useMemo(() => String(holdings.reduce((sum, s) => sum + Number(s.purAmt), 0)), [holdings]);
+    const totEvltAmt = useMemo(() => String(holdings.reduce((sum, s) => sum + Number(s.evltAmt), 0)), [holdings]);
+    const totEvltPl = useMemo(() => String(Number(totEvltAmt) - Number(totPurAmt)), [totEvltAmt, totPurAmt]);
+    const totPrftRt = useMemo(() => {
+        const pur = Number(totPurAmt);
+        return pur !== 0 ? (Number(totEvltPl) / pur * 100).toFixed(2) : "0";
+    }, [totEvltPl, totPurAmt]);
+    const dailyPl = useMemo(() => String(calcDailyPl(holdings)), [holdings]);
 
-    const updateSummary = useCallback((stocks: HoldingStock[]) => {
-        const totalPur = stocks.reduce((sum, s) => sum + Number(s.purAmt), 0);
-        const totalEvlt = stocks.reduce((sum, s) => sum + Number(s.evltAmt), 0);
-        const totalPl = totalEvlt - totalPur;
-        const totalPlRt = totalPur !== 0 ? (totalPl / totalPur * 100).toFixed(2) : "0";
-
-        setTotPurAmt(String(totalPur));
-        setTotEvltAmt(String(totalEvlt));
-        setTotEvltPl(String(totalPl));
-        setTotPrftRt(totalPlRt);
-    }, []);
-
-    const loadData = useCallback(async () => {
-        try {
-            const data = await fetchCryptoManualHoldingList(broker.id);
-            const items: ManualHolding[] = data.result?.holdings ?? [];
-            setBalance(String(data.result?.balance ?? 0));
-            setManualHoldings(items);
-
-            const stocks = toHoldingStocks(items);
-            setHoldings(stocks);
-            updateSummary(stocks);
-            setDailyPl(String(calcDailyPl(stocks)));
-            setMarkets(items.map(i => i.stkCd));
-            setOrderDirty(false);
-        } catch (err) {
-            console.error(err);
-        } finally {
-            setLoading(false);
-        }
-    }, [broker.id, toHoldingStocks, updateSummary]);
-
-    useEffect(() => {
-        setShowList(!isBlind);
-    }, [isBlind]);
-
-    useEffect(() => {
-        setLoading(true);
-        loadData();
-    }, [loadData]);
+    const markets = useMemo(() => manualHoldings.map(i => i.stkCd), [manualHoldings]);
+    const stableMarkets = useMemo(() => markets, [markets.join(',')]);
 
     const handleStreamUpdate = useCallback((bufferMap: Map<string, CryptoHoldingBuffer>) => {
-        setHoldings(prev => {
-            const priceMap = new Map<string, string>();
-            prev.forEach(s => priceMap.set(s.stkCd, s.curPrc));
-            bufferMap.forEach((buffer, market) => {
-                if (buffer.curPrc) priceMap.set(market, buffer.curPrc);
-            });
-
-            const updated = prev.map(stock => {
-                const curPrc = priceMap.get(stock.stkCd) ?? stock.curPrc;
-                const evltAmt = String(Number(curPrc) * Number(stock.rmndQty));
-                const evltvPrft = String(Number(evltAmt) - Number(stock.purAmt));
-                const prftRtVal = Number(stock.purAmt) !== 0
-                    ? Number(evltvPrft) / Number(stock.purAmt) * 100 : 0;
-                const prftRt = prftRtVal > 0 ? `+${prftRtVal.toFixed(2)}` : prftRtVal.toFixed(2);
-                return {...stock, curPrc, evltAmt, evltvPrft, prftRt};
-            });
-
-            const totalEvlt = updated.reduce((sum, s) => sum + Number(s.evltAmt), 0);
-            const withPossRt = updated.map(s => ({
-                ...s,
-                possRt: totalEvlt !== 0 ? (Number(s.evltAmt) / totalEvlt * 100).toFixed(2) : "0",
-            }));
-
-            updateSummary(withPossRt);
-            setDailyPl(String(calcDailyPl(withPossRt)));
-            return withPossRt;
+        setLiveOverlay(prev => {
+            const next = new Map(prev);
+            bufferMap.forEach((v, k) => next.set(k, {...next.get(k), ...v}));
+            return next;
         });
-    }, [updateSummary]);
+    }, []);
 
-    const stableMarkets = useMemo(() => markets, [markets.join(',')]);
-    useCryptoHoldingStream(stableMarkets, handleStreamUpdate);
+    useCryptoHoldingStream(stableMarkets, handleStreamUpdate, fetchCryptoHoldingStream);
+
+    const loadData = useCallback(async () => {
+        setOrderOverride(null);
+        setOrderDirty(false);
+        await queryClient.invalidateQueries({queryKey: ['cryptoManualHoldingList', broker.id]});
+    }, [queryClient, broker.id]);
 
     const handleDelete = async () => {
         if (!deleteTarget) return;
         try {
-            await deleteCryptoManualHolding(deleteTarget.id);
+            const res = await deleteCryptoManualHolding(deleteTarget.id);
+            if (res.code !== "0000") throw new Error(res.message || `수동 보유코인 삭제 실패 (${res.code})`);
             await loadData();
         } catch (err) {
             console.error(err);
@@ -265,15 +284,16 @@ export default function CryptoManualHoldingTab({broker}: CryptoManualHoldingTabP
         if (!over || active.id === over.id) return;
         const oldIndex = holdings.findIndex(h => h.id === active.id);
         const newIndex = holdings.findIndex(h => h.id === over.id);
-        setHoldings(prev => arrayMove(prev, oldIndex, newIndex));
-        setManualHoldings(prev => arrayMove(prev, oldIndex, newIndex));
+        const newOrder = arrayMove(holdings.map(h => h.id), oldIndex, newIndex);
+        setOrderOverride(newOrder);
         setOrderDirty(true);
     };
 
     const handleSaveOrder = async () => {
         setSavingOrder(true);
         try {
-            await reorderCryptoHoldings({orderedIds: holdings.map(h => h.id)});
+            const res = await reorderCryptoHoldings({orderedIds: holdings.map(h => h.id)});
+            if (res.code !== "0000") throw new Error(res.message || `보유코인 순서 변경 실패 (${res.code})`);
             setOrderDirty(false);
         } finally {
             setSavingOrder(false);
@@ -282,8 +302,9 @@ export default function CryptoManualHoldingTab({broker}: CryptoManualHoldingTabP
 
     const handleBalanceUpdate = async (newBalance: number) => {
         try {
-            await updateCryptoBrokerBalance(broker.id, {balance: newBalance});
-            setBalance(String(newBalance));
+            const res = await updateCryptoBrokerBalance(broker.id, {balance: newBalance});
+            if (res.code !== "0000") throw new Error(res.message || `거래소 잔액 수정 실패 (${res.code})`);
+            setBalanceOverride(String(newBalance));
         } catch (err) {
             console.error(err);
         }
@@ -298,12 +319,12 @@ export default function CryptoManualHoldingTab({broker}: CryptoManualHoldingTabP
         },
         {field: 'stkNm', headerName: '코인명', flex: 1.5, minWidth: 150},
         {field: 'prftRt', headerName: '수익률', flex: 0.8, minWidth: 100, renderCell: (params: {value: number}) => renderChip(params.value as number)},
-        {field: 'curPrc', headerName: '현재가', flex: 1, minWidth: 100, valueFormatter: (value: string) => Number(value).toLocaleString()},
-        {field: 'rmndQty', headerName: '보유수량', flex: 0.8, minWidth: 80},
+        {field: 'curPrc', headerName: '현재가', flex: 1, minWidth: 100, renderCell: (params) => <BlindText>{Number(params.value).toLocaleString()}</BlindText>},
+        {field: 'rmndQty', headerName: '보유수량', flex: 0.8, minWidth: 80, renderCell: (params) => <BlindText>{params.value}</BlindText>},
         {field: 'purPric', headerName: '매입가', flex: 1, minWidth: 100, valueFormatter: (value: string) => Number(value).toLocaleString()},
-        {field: 'evltAmt', headerName: '평가금액', flex: 1, minWidth: 120, valueFormatter: (value: string) => Number(value).toLocaleString()},
-        {field: 'evltvPrft', headerName: '평가손익', flex: 1, minWidth: 120, renderCell: (params: {value: string}) => renderTradeColor(Number(params.value))},
-        {field: 'purAmt', headerName: '매입금액', flex: 1, minWidth: 120, valueFormatter: (value: string) => Number(value).toLocaleString()},
+        {field: 'evltAmt', headerName: '평가금액', flex: 1, minWidth: 120, renderCell: (params) => <BlindText>{Number(params.value).toLocaleString()}</BlindText>},
+        {field: 'evltvPrft', headerName: '평가손익', flex: 1, minWidth: 120, renderCell: (params) => <BlindText>{renderTradeColor(Number(params.value))}</BlindText>},
+        {field: 'purAmt', headerName: '매입금액', flex: 1, minWidth: 120, renderCell: (params) => <BlindText>{Number(params.value).toLocaleString()}</BlindText>},
         {field: 'possRt', headerName: '비중', flex: 0.6, minWidth: 80, valueFormatter: (value: string) => `${value}%`},
         {
             field: 'actions', headerName: '', width: 70, sortable: false, filterable: false, disableColumnMenu: true, align: 'center', headerAlign: 'center',

@@ -1,4 +1,5 @@
-import {useEffect, useRef, useState} from "react";
+import {useState} from "react";
+import {usePollingQuery} from "../../lib/pollingQuery.ts";
 import Box from "@mui/material/Box";
 import Typography from "@mui/material/Typography";
 import Card from "@mui/material/Card";
@@ -24,61 +25,18 @@ import {useApiKeyStatus} from "../../context/ApiKeyStatusContext.tsx";
 
 export default function AssetDashboard() {
     const {apiBrokers, myApiBrokerIds, validBrokerIds, isLoaded: apiKeyLoaded} = useApiKeyStatus();
-    const [data, setData] = useState<AssetDashboardRes | null>(null);
     const [selectedGroup, setSelectedGroup] = useState<'stock' | 'crypto' | null>(null);
-    const [loading, setLoading] = useState(true);
-    const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
-    const [pollError, setPollError] = useState(false);
-    const lastUpdatedRef = useRef<Date | null>(null);
 
-    const loadDashboard = async (silent: boolean = false) => {
-        try {
-            const res = await fetchAssetDashboard(silent ? { skipGlobalError: true } : undefined);
-            if (res.code === "0000") {
-                setData(res.result);
-                const now = new Date();
-                lastUpdatedRef.current = now;
-                setLastUpdated(now);
-                setPollError(false);
-            }
-        } catch (err) {
-            console.error(err);
-            if (silent) setPollError(true);
-        }
-    };
+    const hasMissing = apiKeyLoaded && [...myApiBrokerIds].some(id => !validBrokerIds.has(id));
 
-    useEffect(() => {
-        if (!apiKeyLoaded) return;
+    const {data: res, isLoading, lastUpdated, pollError} = usePollingQuery(
+        ['assetDashboard'],
+        (config) => fetchAssetDashboard(config),
+        {enabled: apiKeyLoaded && !hasMissing},
+    );
 
-        const hasMissing = [...myApiBrokerIds].some(id => !validBrokerIds.has(id));
-        if (hasMissing) {
-            setLoading(false);
-            return;
-        }
-
-        let timeout: ReturnType<typeof setTimeout>;
-        let interval: ReturnType<typeof setInterval>;
-
-        (async () => {
-            await loadDashboard();
-            setLoading(false);
-
-            const now = Date.now();
-            const waitTime = 60_000 - (now % 60_000);
-
-            timeout = setTimeout(() => {
-                loadDashboard(true);
-                interval = setInterval(() => {
-                    loadDashboard(true);
-                }, 60_000);
-            }, waitTime + 200);
-        })();
-
-        return () => {
-            clearTimeout(timeout);
-            clearInterval(interval);
-        };
-    }, [apiKeyLoaded, myApiBrokerIds, validBrokerIds]);
+    const data: AssetDashboardRes | null = res ? (res.result ?? null) : null;
+    const loading = !apiKeyLoaded ? true : hasMissing ? false : (isLoading && !data);
 
     if (!loading && !data) {
         return (

@@ -19,8 +19,9 @@ import { styled } from '@mui/material/styles';
 
 import ColorModeSelect from '../../components/ColorModeSelect.tsx';
 import AppTheme from '../../components/AppTheme.tsx';
-import { useEffect, useState } from 'react';
-import { useNavigate, Link as RouterLink } from 'react-router-dom';
+import { useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { useNavigate } from 'react-router-dom';
 import { fetchProfile, updateProfile } from '../../api/auth/AuthApi';
 import { useAuth } from '../../context/AuthContext';
 
@@ -85,32 +86,39 @@ export default function Profile(props: { disableCustomTheme?: boolean }) {
     const [phoneError, setPhoneError] = useState('');
     const [errorMessage, setErrorMessage] = useState('');
     const [loading, setLoading] = useState(false);
-    const [initialLoading, setInitialLoading] = useState(true);
     const [dialog, setDialog] = useState<{ title: string; message: string; onConfirm: () => void } | null>(null);
 
     const navigate = useNavigate();
     const { user, updateUser } = useAuth();
 
-    useEffect(() => {
-        const loadProfile = async () => {
-            try {
-                const res = await fetchProfile();
-                if (res.result) {
-                    setLoginId(res.result.loginId);
-                    setNickname(res.result.nickname);
-                    setEmail(res.result.email);
-                    setName(res.result.name);
-                    setPhone(res.result.phone);
-                }
-            } catch (error) {
-                console.error(error);
-                setErrorMessage('프로필 정보를 불러오는데 실패했습니다.');
-            } finally {
-                setInitialLoading(false);
-            }
-        };
-        loadProfile();
-    }, []);
+    const {data: profileRes, isLoading: initialLoading, isError: profileError} = useQuery({
+        queryKey: ['profile'],
+        queryFn: async () => {
+            const res = await fetchProfile();
+            if (res.code !== "0000") throw new Error(res.message || `프로필 조회 실패 (${res.code})`);
+            return res;
+        },
+    });
+
+    // 서버 응답 도착 시 form 입력 필드를 한 번만 초기화 (이후 사용자 편집 보존).
+    // React 공식 "Resetting state when a prop changes" 패턴 — useEffect 대신 render 중 비교.
+    const fetchedLoginId = profileRes?.result?.loginId ?? null;
+    const [syncedLoginId, setSyncedLoginId] = useState<string | null>(null);
+    if (fetchedLoginId && fetchedLoginId !== syncedLoginId) {
+        setSyncedLoginId(fetchedLoginId);
+        const r = profileRes!.result!;
+        setLoginId(r.loginId);
+        setNickname(r.nickname);
+        setEmail(r.email);
+        setName(r.name);
+        setPhone(r.phone);
+    }
+    // profileError 변화에 따른 에러 메시지 — render 중 비교 (errorMessage 사용자 편집 가능성 고려)
+    const [prevProfileError, setPrevProfileError] = useState(false);
+    if (profileError !== prevProfileError) {
+        setPrevProfileError(profileError);
+        if (profileError) setErrorMessage('프로필 정보를 불러오는데 실패했습니다.');
+    }
 
     const validate = () => {
         let valid = true;
@@ -156,7 +164,8 @@ export default function Profile(props: { disableCustomTheme?: boolean }) {
         setLoading(true);
         setErrorMessage('');
         try {
-            await updateProfile({ nickname, email, name, phone });
+            const res = await updateProfile({ nickname, email, name, phone });
+            if (res.code !== "0000") throw new Error(res.message || `프로필 수정 실패 (${res.code})`);
 
             if (user) {
                 updateUser({ ...user, nickname, email });
@@ -320,7 +329,7 @@ export default function Profile(props: { disableCustomTheme?: boolean }) {
                     </Box>
                     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
                         <Typography sx={{ textAlign: 'center' }}>
-                            <Link component={RouterLink} to="/" variant="body2">
+                            <Link component="button" type="button" onClick={() => navigate(-1)} variant="body2">
                                 돌아가기
                             </Link>
                         </Typography>

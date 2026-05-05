@@ -1,4 +1,4 @@
-import {useEffect, useState} from "react";
+import {useState} from "react";
 import Dialog from "@mui/material/Dialog";
 import DialogTitle from "@mui/material/DialogTitle";
 import DialogContent from "@mui/material/DialogContent";
@@ -29,7 +29,11 @@ export default function GoalSettingDialog({open, onClose, onSaved, editGoal, exi
     const [targetAmount, setTargetAmount] = useState("");
     const [targetAmountError, setTargetAmountError] = useState("");
 
-    useEffect(() => {
+    // open / editGoal 변경 시 form 초기화 — render 중 비교 패턴
+    const resetKey = `${open}|${editGoal?.id ?? 'new'}`;
+    const [prevResetKey, setPrevResetKey] = useState('');
+    if (resetKey !== prevResetKey) {
+        setPrevResetKey(resetKey);
         if (editGoal) {
             setType(editGoal.type);
             setTargetAmount(String(editGoal.targetAmount));
@@ -39,7 +43,7 @@ export default function GoalSettingDialog({open, onClose, onSaved, editGoal, exi
             setTargetAmount("");
         }
         setTargetAmountError("");
-    }, [open, editGoal]);
+    }
 
     const handleClose = () => {
         setTargetAmountError("");
@@ -54,9 +58,11 @@ export default function GoalSettingDialog({open, onClose, onSaved, editGoal, exi
         setTargetAmountError("");
         try {
             if (editGoal) {
-                await updateGoal(editGoal.id, {targetAmount: Number(targetAmount)});
+                const res = await updateGoal(editGoal.id, {targetAmount: Number(targetAmount)});
+                if (res.code !== "0000") throw new Error(res.message || `투자 목표 수정 실패 (${res.code})`);
             } else {
-                await createGoal({type, targetAmount: Number(targetAmount)});
+                const res = await createGoal({type, targetAmount: Number(targetAmount)});
+                if (res.code !== "0000") throw new Error(res.message || `투자 목표 등록 실패 (${res.code})`);
             }
             onSaved();
             handleClose();

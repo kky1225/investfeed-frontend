@@ -3,10 +3,6 @@ export interface ThemeListReq {
     fluPlAmtTp: "1" | "3"
 }
 
-export interface ThemeListRes {
-    themeList: Array<ThemeListItem>
-}
-
 export interface ThemeListItem {
     themaGrpCd: string,
     themaNm: string,
@@ -18,12 +14,17 @@ export interface ThemeListItem {
     mainStk: string
 }
 
-export interface ThemeStockListReq {
-    dateTp: string,
+export interface ThemeGridRow {
+    id: string;
+    rank: string;
+    themaNm: string,
+    fluSig: string,
+    fluRt: string;
+    dtPrftRt: string,
 }
 
-export interface ThemeStockListRes {
-    themeStockList: Array<ThemeStockListItem>
+export interface ThemeStockListReq {
+    dateTp: string,
 }
 
 export interface ThemeStockListItem {

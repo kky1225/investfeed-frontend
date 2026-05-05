@@ -1,11 +1,12 @@
 import {useCallback, useEffect, useRef, useState} from 'react';
+import {useQuery} from '@tanstack/react-query';
+import {unwrapResponse} from '../../lib/apiResponse';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
 import Button from '@mui/material/Button';
 import IconButton from '@mui/material/IconButton';
 import Chip from '@mui/material/Chip';
 import Alert from '@mui/material/Alert';
-import Snackbar from '@mui/material/Snackbar';
 import Skeleton from '@mui/material/Skeleton';
 import Dialog from '@mui/material/Dialog';
 import DialogTitle from '@mui/material/DialogTitle';
@@ -28,7 +29,6 @@ import Tooltip from '@mui/material/Tooltip';
 import AddIcon from '@mui/icons-material/Add';
 import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
-import SecurityIcon from '@mui/icons-material/Security';
 import VpnKeyIcon from '@mui/icons-material/VpnKey';
 import SaveIcon from '@mui/icons-material/Save';
 import DragIndicatorIcon from '@mui/icons-material/DragIndicator';
@@ -57,12 +57,15 @@ import {
     fetchAllMenus,
     updateMenu,
     updateMenuBrokers,
-    updateMenuPermissions,
     updateMenuStructure
 } from '../../api/menu/MenuApi';
+import {fetchPermissionGrants as fetchPermissions} from '../../api/admin/PermissionGrantApi';
+import {fetchAdminBrokerList} from '../../api/broker/BrokerApi';
 import type {FlatMenuItem, MenuRes} from '../../type/MenuType';
+import type {PermissionRes} from '../../type/PermissionType';
+import type {Broker} from '../../type/BrokerType';
 import {getMenuIcon, iconOptions} from '../../components/MenuIconMap';
-import {useApiKeyStatus} from '../../context/ApiKeyStatusContext';
+import {useAlert} from '../../context/AlertContext';
 
 type DropPosition = 'before' | 'inside' | 'after';
 
@@ -70,8 +73,12 @@ const flattenTree = (menus: MenuRes[], depth = 0): FlatMenuItem[] =>
     menus.flatMap(menu => [
         {
             id: menu.id, name: menu.name, url: menu.url, icon: menu.icon,
-            parentId: menu.parentId, orderIndex: menu.orderIndex,
-            visible: menu.visible, depth, permissions: menu.permissions,
+            parentId: menu.parentId,
+            requiredPermissionId: menu.requiredPermissionId,
+            requiredPermissionCode: menu.requiredPermissionCode,
+            requiredPermissionName: menu.requiredPermissionName,
+            orderIndex: menu.orderIndex,
+            visible: menu.visible, depth,
             requiredBrokerIds: menu.requiredBrokerIds,
         },
         ...flattenTree(menu.children, depth + 1),
@@ -201,59 +208,57 @@ function DragPreview({item}: {item: FlatMenuItem}) {
 }
 
 export default function MenuManagement() {
-    const [menus, setMenus] = useState<MenuRes[]>([]);
+    const showAlert = useAlert();
     const [flatItems, setFlatItems] = useState<FlatMenuItem[]>([]);
     const [loading, setLoading] = useState(true);
     const [structureChanged, setStructureChanged] = useState(false);
     const [collapsedIds, setCollapsedIds] = useState<Set<number>>(new Set());
-    const [snackbar, setSnackbar] = useState<{open: boolean; message: string; severity: 'success' | 'error'}>({
-        open: false, message: '', severity: 'success'
-    });
 
     const [activeItem, setActiveItem] = useState<FlatMenuItem | null>(null);
     const [dropTarget, setDropTarget] = useState<{id: number; position: DropPosition} | null>(null);
     const pointerY = useRef(0);
 
-    const {apiBrokers} = useApiKeyStatus();
     const [editDialog, setEditDialog] = useState<{open: boolean; mode: 'create' | 'edit'; menuId?: number}>({open: false, mode: 'create'});
     const [editForm, setEditForm] = useState<{
         name: string;
         url: string;
+        requiredPermissionId: string;
         icon: string;
         parentId: string;
         visible: boolean;
     }>({
-        name: '', url: '', icon: '', parentId: '', visible: true
+        name: '', url: '', requiredPermissionId: '', icon: '', parentId: '', visible: true
     });
     const [editErrors, setEditErrors] = useState<{name?: string}>({});
     const [deleteDialog, setDeleteDialog] = useState<{open: boolean; item: FlatMenuItem | null}>({open: false, item: null});
     const [menuAnchorEl, setMenuAnchorEl] = useState<HTMLElement | null>(null);
     const [menuTargetItem, setMenuTargetItem] = useState<FlatMenuItem | null>(null);
-    const [permDialog, setPermDialog] = useState<{open: boolean; item: FlatMenuItem | null}>({open: false, item: null});
-    const [permForm, setPermForm] = useState<{USER: boolean; ADMIN: boolean; GUEST: boolean}>({USER: true, ADMIN: true, GUEST: true});
     const [brokerDialog, setBrokerDialog] = useState<{open: boolean; item: FlatMenuItem | null}>({open: false, item: null});
     const [brokerForm, setBrokerForm] = useState<{brokerIds: number[]}>({brokerIds: []});
 
     const sensors = useSensors(useSensor(PointerSensor, {activationConstraint: {distance: 8}}));
+    const collapseInitialized = useRef(false);
 
     const loadMenus = useCallback(async () => {
         setLoading(true);
         try {
-            const res = await fetchAllMenus();
-            if (res.result) {
-                setMenus(res.result);
-                const flat = flattenTree(res.result);
+            const result = unwrapResponse<MenuRes[] | null>(await fetchAllMenus(), null);
+            if (result) {
+                const flat = flattenTree(result);
                 setFlatItems(flat);
-                setCollapsedIds(getParentIds(flat));
+                if (!collapseInitialized.current) {
+                    setCollapsedIds(getParentIds(flat));
+                    collapseInitialized.current = true;
+                }
             }
         } catch (error) {
             console.error(error);
-            setSnackbar({open: true, message: '메뉴 목록을 불러오는데 실패했습니다.', severity: 'error'});
+            showAlert('메뉴 목록을 불러오는데 실패했습니다.', 'error');
         } finally {
             setLoading(false);
             setStructureChanged(false);
         }
-    }, []);
+    }, [showAlert]);
 
     // 메뉴 저장 후 좌측 메뉴도 갱신
     const reloadMenus = useCallback(async () => {
@@ -262,6 +267,23 @@ export default function MenuManagement() {
     }, [loadMenus]);
 
     useEffect(() => { loadMenus(); }, [loadMenus]);
+
+    // 권한 목록 / 어드민 broker 목록은 정적 — useQuery 결과 직접 사용 (별도 useState 불필요)
+    const {data: permissionsData} = useQuery<PermissionRes[]>({
+        queryKey: ['admin', 'permissions'],
+        queryFn: async () => unwrapResponse(await fetchPermissions(), [] as PermissionRes[]),
+    });
+    const permissions = permissionsData ?? [];
+
+    const {data: apiBrokersData} = useQuery<Broker[]>({
+        queryKey: ['admin', 'apiBrokers'],
+        queryFn: async () => {
+            const data = unwrapResponse<{brokers?: Broker[]} | null>(await fetchAdminBrokerList(), null);
+            const all: Broker[] = data?.brokers ?? [];
+            return all.filter(b => b.type === 'API');
+        },
+    });
+    const apiBrokers = apiBrokersData ?? [];
 
     // 포인터 실시간 추적 + 드래그 중 drop position 계산
     useEffect(() => {
@@ -428,23 +450,26 @@ export default function MenuManagement() {
                 orderByParent.set(key, order + 1);
                 return {id: item.id, parentId: item.parentId, orderIndex: order};
             });
-            await updateMenuStructure({structures});
-            setSnackbar({open: true, message: '메뉴 구조가 저장되었습니다.', severity: 'success'});
+            const res = await updateMenuStructure({structures});
+            if (res.code !== "0000") throw new Error(res.message || `메뉴 구조 변경 실패 (${res.code})`);
+            showAlert('메뉴 구조가 저장되었습니다.', 'success');
             await reloadMenus();
         } catch (error) {
             console.error(error);
-            setSnackbar({open: true, message: '메뉴 구조 저장에 실패했습니다.', severity: 'error'});
+            showAlert('메뉴 구조 저장에 실패했습니다.', 'error');
         }
     };
 
     const handleOpenCreate = () => {
-        setEditForm({name: '', url: '', icon: '', parentId: '', visible: true});
+        setEditForm({name: '', url: '', requiredPermissionId: '', icon: '', parentId: '', visible: true});
         setEditDialog({open: true, mode: 'create'});
     };
 
     const handleOpenEdit = (item: FlatMenuItem) => {
         setEditForm({
-            name: item.name, url: item.url || '', icon: item.icon || '',
+            name: item.name, url: item.url || '',
+            requiredPermissionId: item.requiredPermissionId?.toString() || '',
+            icon: item.icon || '',
             parentId: item.parentId?.toString() || '', visible: item.visible,
         });
         setEditDialog({open: true, mode: 'edit', menuId: item.id});
@@ -470,21 +495,29 @@ export default function MenuManagement() {
         }
         setEditErrors({});
         try {
+            const permId = editForm.requiredPermissionId ? parseInt(editForm.requiredPermissionId) : null;
             if (editDialog.mode === 'create') {
-                await createMenu({
-                    name: editForm.name, url: editForm.url || null, icon: editForm.icon || null,
+                const res = await createMenu({
+                    name: editForm.name, url: editForm.url || null,
+                    icon: editForm.icon || null,
                     parentId: editForm.parentId ? parseInt(editForm.parentId) : null,
+                    requiredPermissionId: permId,
                     orderIndex: flatItems.length, visible: editForm.visible,
-                    // API Key 의존성은 생성 후 "권한 설정" 다이얼로그에서 별도로 지정한다.
+                    // API Key 의존성은 생성 후 "API Key 권한 설정" 다이얼로그에서 별도로 지정한다.
                     requiredBrokerIds: [],
                 });
-                setSnackbar({open: true, message: '메뉴가 생성되었습니다.', severity: 'success'});
+                if (res.code !== "0000") throw new Error(res.message || `메뉴 생성 실패 (${res.code})`);
+                showAlert('메뉴가 생성되었습니다.', 'success');
             } else {
-                await updateMenu(editDialog.menuId!, {
-                    name: editForm.name, url: editForm.url || null, icon: editForm.icon || null,
-                    parentId: editForm.parentId ? parseInt(editForm.parentId) : null, visible: editForm.visible,
+                const res = await updateMenu(editDialog.menuId!, {
+                    name: editForm.name, url: editForm.url || null,
+                    icon: editForm.icon || null,
+                    parentId: editForm.parentId ? parseInt(editForm.parentId) : null,
+                    requiredPermissionId: permId,
+                    visible: editForm.visible,
                 });
-                setSnackbar({open: true, message: '메뉴가 수정되었습니다.', severity: 'success'});
+                if (res.code !== "0000") throw new Error(res.message || `메뉴 수정 실패 (${res.code})`);
+                showAlert('메뉴가 수정되었습니다.', 'success');
             }
             setEditDialog({open: false, mode: 'create'});
             await reloadMenus();
@@ -495,44 +528,21 @@ export default function MenuManagement() {
                 setEditErrors((axiosErr.response.data.result ?? {}) as {name?: string});
                 return;
             }
-            setSnackbar({open: true, message: axiosErr.response?.data?.message || '메뉴 저장에 실패했습니다.', severity: 'error'});
+            showAlert(axiosErr.response?.data?.message || '메뉴 저장에 실패했습니다.', 'error');
         }
     };
 
     const handleDeleteMenu = async () => {
         if (!deleteDialog.item) return;
         try {
-            await deleteMenu(deleteDialog.item.id);
-            setSnackbar({open: true, message: '메뉴가 삭제되었습니다.', severity: 'success'});
+            const res = await deleteMenu(deleteDialog.item.id);
+            if (res.code !== "0000") throw new Error(res.message || `메뉴 삭제 실패 (${res.code})`);
+            showAlert('메뉴가 삭제되었습니다.', 'success');
             setDeleteDialog({open: false, item: null});
             await reloadMenus();
         } catch (error: any) {
             console.error(error);
-            setSnackbar({open: true, message: error?.response?.data?.message || '메뉴 삭제에 실패했습니다.', severity: 'error'});
-        }
-    };
-
-    const handleOpenPermission = (item: FlatMenuItem) => {
-        const roleMap = {USER: true, ADMIN: true, GUEST: true};
-        item.permissions.forEach(p => {
-            if (p.role in roleMap) roleMap[p.role as keyof typeof roleMap] = p.readable;
-        });
-        setPermForm(roleMap);
-        setPermDialog({open: true, item});
-    };
-
-    const handleSavePermission = async () => {
-        if (!permDialog.item) return;
-        try {
-            await updateMenuPermissions(permDialog.item.id, {
-                permissions: Object.entries(permForm).map(([role, readable]) => ({role, readable})),
-            });
-            setSnackbar({open: true, message: '권한이 변경되었습니다.', severity: 'success'});
-            setPermDialog({open: false, item: null});
-            await reloadMenus();
-        } catch (error) {
-            console.error(error);
-            setSnackbar({open: true, message: '권한 변경에 실패했습니다.', severity: 'error'});
+            showAlert(error?.response?.data?.message || '메뉴 삭제에 실패했습니다.', 'error');
         }
     };
 
@@ -544,18 +554,15 @@ export default function MenuManagement() {
     const handleSaveBroker = async () => {
         if (!brokerDialog.item) return;
         try {
-            await updateMenuBrokers(brokerDialog.item.id, {brokerIds: brokerForm.brokerIds});
-            setSnackbar({open: true, message: 'API Key 권한이 변경되었습니다.', severity: 'success'});
+            const res = await updateMenuBrokers(brokerDialog.item.id, {brokerIds: brokerForm.brokerIds});
+            if (res.code !== "0000") throw new Error(res.message || `메뉴 API Key 의존성 변경 실패 (${res.code})`);
+            showAlert('API Key 권한이 변경되었습니다.', 'success');
             setBrokerDialog({open: false, item: null});
             await reloadMenus();
         } catch (err) {
             console.error(err);
             const axiosErr = err as {response?: {data?: {message?: string}}};
-            setSnackbar({
-                open: true,
-                message: axiosErr.response?.data?.message || 'API Key 권한 변경에 실패했습니다.',
-                severity: 'error',
-            });
+            showAlert(axiosErr.response?.data?.message || 'API Key 권한 변경에 실패했습니다.', 'error');
         }
     };
 
@@ -636,6 +643,21 @@ export default function MenuManagement() {
                             onChange={e => setEditForm({...editForm, url: e.target.value})}
                             helperText="하위 메뉴가 있는 대메뉴는 비워두세요" />
                         <FormControl fullWidth size="small">
+                            <InputLabel>가시성 권한</InputLabel>
+                            <Select
+                                value={editForm.requiredPermissionId}
+                                label="가시성 권한"
+                                onChange={e => setEditForm({...editForm, requiredPermissionId: e.target.value})}
+                            >
+                                <MenuItem value="">없음 (항상 표시)</MenuItem>
+                                {permissions.map(p => (
+                                    <MenuItem key={p.id} value={p.id.toString()}>
+                                        {p.name} ({p.code})
+                                    </MenuItem>
+                                ))}
+                            </Select>
+                        </FormControl>
+                        <FormControl fullWidth size="small">
                             <InputLabel>아이콘</InputLabel>
                             <Select value={editForm.icon} label="아이콘" onChange={e => setEditForm({...editForm, icon: e.target.value})}>
                                 <MenuItem value="">없음</MenuItem>
@@ -668,10 +690,6 @@ export default function MenuManagement() {
 
             {/* 메뉴 아이템 관리 팝오버 */}
             <Menu anchorEl={menuAnchorEl} open={Boolean(menuAnchorEl)} onClose={() => setMenuAnchorEl(null)}>
-                <MenuItem onClick={() => { if (menuTargetItem) handleOpenPermission(menuTargetItem); setMenuAnchorEl(null); }}>
-                    <ListItemIcon><SecurityIcon fontSize="small"/></ListItemIcon>
-                    <ListItemText>권한 설정</ListItemText>
-                </MenuItem>
                 <MenuItem onClick={() => { if (menuTargetItem) handleOpenBroker(menuTargetItem); setMenuAnchorEl(null); }}>
                     <ListItemIcon><VpnKeyIcon fontSize="small"/></ListItemIcon>
                     <ListItemText>API Key 권한 설정</ListItemText>
@@ -696,26 +714,6 @@ export default function MenuManagement() {
                 <DialogActions>
                     <Button onClick={() => setDeleteDialog({open: false, item: null})}>취소</Button>
                     <Button onClick={handleDeleteMenu} variant="contained" color="error">삭제</Button>
-                </DialogActions>
-            </Dialog>
-
-            {/* 권한 설정 다이얼로그 (역할 권한 전용) */}
-            <Dialog open={permDialog.open} onClose={() => setPermDialog({open: false, item: null})} maxWidth="xs" fullWidth>
-                <DialogTitle>권한 설정 - {permDialog.item?.name}</DialogTitle>
-                <DialogContent>
-                    <Alert severity="info" sx={{mb: 2}}>대메뉴의 권한을 해제하면 하위 메뉴도 함께 미노출됩니다.</Alert>
-                    <Stack spacing={1}>
-                        {(['ADMIN', 'USER', 'GUEST'] as const).map(role => (
-                            <FormControlLabel key={role}
-                                control={<Switch checked={permForm[role]} onChange={e => setPermForm({...permForm, [role]: e.target.checked})} />}
-                                label={<Chip label={role === 'ADMIN' ? '관리자' : role === 'USER' ? '사용자' : '게스트'} size="small" color={role === 'ADMIN' ? 'warning' : 'default'} />}
-                            />
-                        ))}
-                    </Stack>
-                </DialogContent>
-                <DialogActions>
-                    <Button onClick={() => setPermDialog({open: false, item: null})}>취소</Button>
-                    <Button onClick={handleSavePermission} variant="contained">저장</Button>
                 </DialogActions>
             </Dialog>
 
@@ -751,10 +749,6 @@ export default function MenuManagement() {
                     <Button onClick={handleSaveBroker} variant="contained">저장</Button>
                 </DialogActions>
             </Dialog>
-
-            <Snackbar open={snackbar.open} autoHideDuration={3000} onClose={() => setSnackbar(prev => ({...prev, open: false}))} anchorOrigin={{vertical: 'bottom', horizontal: 'center'}}>
-                <Alert severity={snackbar.severity} onClose={() => setSnackbar(prev => ({...prev, open: false}))}>{snackbar.message}</Alert>
-            </Snackbar>
         </Box>
     );
 }

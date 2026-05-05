@@ -7,7 +7,7 @@ import Chip from "@mui/material/Chip";
 import Divider from "@mui/material/Divider";
 import Card from "@mui/material/Card";
 import Skeleton from "@mui/material/Skeleton";
-import {useState, MouseEvent, useRef, useEffect, ReactElement, JSX} from "react";
+import {useState, MouseEvent, useRef, useEffect, useMemo, ReactElement, JSX} from "react";
 import CandlestickChartIcon from '@mui/icons-material/CandlestickChart';
 import StackedLineChartIcon from '@mui/icons-material/StackedLineChart';
 import HelpIcon from '@mui/icons-material/Help';
@@ -30,6 +30,7 @@ import {
 } from "../../type/StockType.ts";
 import StockDetailLineChart, {CustomStockDetailLineChartProps} from "../../components/StockDetailLineChart.tsx";
 import {fetchStockDetail, fetchStockStream, fetchStockProgramChart} from "../../api/stock/StockApi.ts";
+import {useMarketWebSocket} from "../detail/useMarketWebSocket.ts";
 import {fetchNews} from "../../api/news/NewsApi.ts";
 import InvestorBarChart from "../../components/InvestorBarChart.tsx";
 import RemoveIcon from "@mui/icons-material/Remove";
@@ -39,7 +40,6 @@ import DoNotDisturbIcon from "@mui/icons-material/DoNotDisturb";
 import CustomDataTable from "../../components/CustomDataTable.tsx";
 import FreshnessIndicator from "../../components/FreshnessIndicator.tsx";
 import {GridColDef} from "@mui/x-data-grid";
-import {fetchTimeNow} from "../../api/time/TimeApi.ts";
 import {MarketType} from "../../type/timeType.ts";
 import {LineSeriesType} from "@mui/x-charts";
 import { MakeOptional } from '@mui/x-internals/types';
@@ -48,6 +48,7 @@ import ProgramLineChart from "../../components/ProgramLineChart.tsx";
 import * as React from "react";
 import {renderTradeColor, renderChangeAmount} from "../../components/CustomRender.tsx";
 import FavoriteBorderIcon from "@mui/icons-material/FavoriteBorder";
+import {usePollingQuery} from "../../lib/pollingQuery.ts";
 import FavoriteIcon from "@mui/icons-material/Favorite";
 import IconButton from "@mui/material/IconButton";
 import Button from "@mui/material/Button";
@@ -59,9 +60,8 @@ import CircularProgress from "@mui/material/CircularProgress";
 import List from "@mui/material/List";
 import ListItemButton from "@mui/material/ListItemButton";
 import ListItemText from "@mui/material/ListItemText";
-import Snackbar from "@mui/material/Snackbar";
-import Alert from "@mui/material/Alert";
 import {addInterestItem, fetchInterestGroups} from "../../api/interest/InterestApi.ts";
+import {useAlert} from "../../context/AlertContext";
 import NotificationsActiveIcon from "@mui/icons-material/NotificationsActive";
 import PriceTargetDialog from "../../components/PriceTargetDialog.tsx";
 import {InterestGroup} from "../../type/InterestType.ts";
@@ -88,6 +88,186 @@ interface StockRangeProps {
     label: ReactElement;
 }
 
+interface StockInfoProps {
+    marketName: string;
+    upName: string;
+    trdeQty: number;
+    trdePrica: number;
+    openPric: number;
+    curPrc: number;
+    mac: number;
+    macWght: number;
+    forExhRt: number;
+    _250lwst: number;
+    _250hgst: number;
+    per: number;
+    eps: number;
+    roe: number;
+    pbr: number;
+}
+
+interface MessageProps {
+    icon: JSX.Element,
+    title: string,
+    message: string
+}
+
+interface TabDataShape {
+    investor: { col: GridColDef[]; row: any[] };
+    program: { col: GridColDef[]; row: any[] };
+    shortSelling: { col: GridColDef[]; row: any[] };
+}
+
+interface ExpectedPriceShape {
+    value: string;
+    fluRt?: string;
+    trend?: 'up' | 'down' | 'neutral';
+}
+
+// 순수 헬퍼 — 모듈 레벨로 끌어올려 useMemo 의 TDZ 회피.
+const trendColor = (value: string): 'up' | 'down' | 'neutral' => {
+    return ["1", "2"].includes(value) ? 'up' : ["4", "5"].includes(value) ? 'down' : 'neutral';
+};
+
+function checkInvestor(name: string, frgnr: number, orgn: number): MessageProps {
+    let message: string;
+    let title: string;
+    let icon: JSX.Element;
+
+    if (frgnr == 0) message = '외국인 관망, ';
+    else if (frgnr > 0) message = '외국인 매수, ';
+    else message = '외국인 매도, ';
+
+    if (orgn == 0) message += '기관 관망 중입니다.';
+    else if (orgn > 0) message += '기관 매수 중입니다.';
+    else message += '기관 매도 중입니다.';
+
+    if (frgnr == 0 && orgn == 0) {
+        title = `${name} 투자 중립`;
+        icon = <RemoveIcon />;
+    } else if (frgnr > 0 && orgn > 0) {
+        title = `${name} 투자 양호`;
+        icon = <CheckIcon color="success" />;
+    } else if (frgnr > 0 || orgn > 0) {
+        title = `${name} 투자 주의`;
+        icon = <PriorityHighIcon color="warning" />;
+    } else {
+        title = `${name} 투자 위험`;
+        icon = <DoNotDisturbIcon color="error" />;
+    }
+    return { message, title, icon };
+}
+
+function orderWarningMsg(type: string): string {
+    let message = "";
+    switch (type) {
+        case "1": message = "ETF 투자주의 요망"; break;
+        case "2": message = "정리매매 종목 지정"; break;
+        case "3": message = "단기과열 종목 지정"; break;
+        case "4": message = "투자위험 종목 지정"; break;
+        case "5": message = "투자경고 종목 지정"; break;
+    }
+    return message;
+}
+
+const INITIAL_CHART_DATA: CustomStockDetailLineChartProps = {
+    id: '-',
+    title: '-',
+    orderWarning: "0",
+    value: '-',
+    fluRt: '0',
+    predPre: '0',
+    openPric: 0,
+    interval: '-',
+    trend: 'neutral',
+    nxtEnable: 'Y',
+    seriesData: [
+        {
+            id: '',
+            showMark: false,
+            curve: 'linear',
+            area: true,
+            stackOrder: 'ascending',
+            color: 'grey',
+            data: []
+        }
+    ],
+    barDataList: [],
+    dateList: []
+};
+
+const INITIAL_INFO: StockInfoProps = {
+    marketName: "", upName: "",
+    trdeQty: 0, trdePrica: 0, openPric: 0, curPrc: 0,
+    mac: 0, macWght: 0, forExhRt: 0,
+    _250hgst: 0, _250lwst: 0,
+    per: 0, eps: 0, roe: 0, pbr: 0,
+};
+
+const INITIAL_DAY_RANGE: StockRangeProps[] = [
+    {value: 0.0, label: <p>1일 최저가 <br />0</p>},
+    {value: 0.0, label: <p>1일 최고가 <br />0</p>},
+];
+
+const INITIAL_YEAR_RANGE: StockRangeProps[] = [
+    {value: 0, label: <p>52주 최저가 <br />0</p>},
+    {value: 0, label: <p>52주 최고가 <br />0</p>},
+];
+
+const INITIAL_BAR_DATA: number[] = [0, 0, 0];
+
+const INITIAL_MESSAGE: MessageProps = {
+    icon: <RemoveIcon />,
+    title: '-',
+    message: '-'
+};
+
+const INITIAL_INVESTOR_CHART_DATA: MakeOptional<LineSeriesType, 'type'>[] = [
+    {id: 'direct', label: '외국인', showMark: false, curve: 'linear', area: true, stackOrder: 'ascending', color: 'green', data: []},
+    {id: 'referral', label: '기관', showMark: false, curve: 'linear', area: true, stackOrder: 'ascending', color: 'blue', data: []},
+    {id: 'organic', label: '연기금', showMark: false, curve: 'linear', area: true, stackOrder: 'ascending', color: 'red', data: []},
+];
+
+const INVESTOR_COLUMNS: GridColDef[] = [
+    {field: 'dt', headerName: '날짜', flex: 1, minWidth: 100, maxWidth: 120},
+    {field: 'indInvsr', headerName: '개인', flex: 1, minWidth: 100, renderCell: (params) => renderTradeColor(params.value as number)},
+    {field: 'frgnrInvsr', headerName: '외국인', flex: 1, minWidth: 100, renderCell: (params) => renderTradeColor(params.value as number)},
+    {field: 'orgn', headerName: '기관계', flex: 1, minWidth: 100, renderCell: (params) => renderTradeColor(params.value as number)},
+    {field: 'fnncInvt', headerName: '금융투자', flex: 1, minWidth: 100, renderCell: (params) => renderTradeColor(params.value as number)},
+    {field: 'insrnc', headerName: '보험', flex: 1, minWidth: 100, renderCell: (params) => renderTradeColor(params.value as number)},
+    {field: 'etcFnnc', headerName: '기타금융', flex: 1, minWidth: 100, renderCell: (params) => renderTradeColor(params.value as number)},
+    {field: 'invtrt', headerName: '투신', flex: 1, minWidth: 100, renderCell: (params) => renderTradeColor(params.value as number)},
+    {field: 'samoFund', headerName: '사모펀드', flex: 1, minWidth: 100, renderCell: (params) => renderTradeColor(params.value as number)},
+    {field: 'penfndEtc', headerName: '연기금등', flex: 1, minWidth: 100, renderCell: (params) => renderTradeColor(params.value as number)},
+    {field: 'bank', headerName: '은행', flex: 1, minWidth: 100, renderCell: (params) => renderTradeColor(params.value as number)},
+    {field: 'natn', headerName: '국가', flex: 1, minWidth: 100, renderCell: (params) => renderTradeColor(params.value as number)},
+    {field: 'etcCorp', headerName: '기타법인', flex: 1, minWidth: 100, renderCell: (params) => renderTradeColor(params.value as number)},
+    {field: 'natfor', headerName: '내외국인', flex: 1, minWidth: 100, renderCell: (params) => renderTradeColor(params.value as number)},
+];
+
+const PROGRAM_COLUMNS: GridColDef[] = [
+    {field: 'dt', headerName: '날짜', flex: 1, minWidth: 110, maxWidth: 120},
+    {field: 'prmNetprpsQty', headerName: '프로그램 순매수 수량', flex: 1, minWidth: 170, renderCell: (params) => renderTradeColor(params.value as number)},
+    {field: 'prmBuyQty', headerName: '프로그램 매수 수량', flex: 1, minWidth: 160, renderCell: (params) => renderTradeColor(params.value as number)},
+    {field: 'prmSellQty', headerName: '프로그램 매도 수량', flex: 1, minWidth: 160, renderCell: (params) => renderTradeColor(params.value as number)},
+    {field: 'prmNetprpsQtyIrds', headerName: '프로그램 순매수 수량 증감', flex: 1, minWidth: 200, renderCell: (params) => renderTradeColor(params.value as number)},
+];
+
+const SHORT_SELLING_COLUMNS: GridColDef[] = [
+    {field: 'dt', headerName: '날짜', flex: 1, minWidth: 110, maxWidth: 120},
+    {field: 'shrtsTrdePrica', headerName: '공매도 거래 대금', flex: 1, minWidth: 150, valueFormatter: (value: string) => Number(value).toLocaleString()},
+    {field: 'shrtsQty', headerName: '공매도 수량', flex: 1, minWidth: 120, valueFormatter: (value: string) => Number(value).toLocaleString()},
+    {field: 'trdeQty', headerName: '거래량', flex: 1, minWidth: 100, valueFormatter: (value: string) => Number(value).toLocaleString()},
+    {field: 'trdeWght', headerName: '매매비중', flex: 1, minWidth: 100, valueFormatter: (value: string) => `${value}%`},
+    {field: 'shrtsAvgPric', headerName: '공매도 평균가', flex: 1, minWidth: 140, valueFormatter: (value: string) => Number(value).toLocaleString()},
+];
+
+const INITIAL_TAB_DATA: TabDataShape = {
+    investor: { col: [], row: [] },
+    program: { col: [], row: [] },
+    shortSelling: { col: [], row: [] },
+};
+
 const StockDetail = () => {
     const { id } = useParams();
     const stkCd = id || "";
@@ -95,144 +275,74 @@ const StockDetail = () => {
         chartType: StockChartType.DAY
     });
 
-    const chartTimer = useRef<number>(0);
-    const marketTimer = useRef<number>(0);
-
     const [toggle, setToggle] = useState('DAY');
     const [formats, setFormats] = useState('line');
     const minute = useRef('1');
 
-    const [stockChartData, setStockChartData] = useState<CustomStockDetailLineChartProps>({
-        id: '-',
-        title: '-',
-        orderWarning: "0",
-        value: '-',
-        fluRt: '0',
-        predPre: '0',
-        openPric: 0,
-        interval: '-',
-        trend: 'neutral',
-        nxtEnable: 'Y',
-        seriesData: [
-            {
-                id: '',
-                showMark: false,
-                curve: 'linear',
-                area: true,
-                stackOrder: 'ascending',
-                color: 'grey',
-                data: []
-            }
-        ],
-        barDataList: [],
-        dateList: []
-    });
-
-    const [expectedPrice, setExpectedPrice] = useState<{
-        value: string;
-        fluRt?: string;
-        trend?: 'up' | 'down' | 'neutral';
-    } | null>(null);
-
-    const [investorChartData, setInvestorChartData] = useState<MakeOptional<LineSeriesType, 'type'>[]>([
-        {
-            id: 'direct',
-            label: '외국인',
-            showMark: false,
-            curve: 'linear',
-            area: true,
-            stackOrder: 'ascending',
-            color: 'green',
-            data: [],
-        },
-        {
-            id: 'referral',
-            label: '기관',
-            showMark: false,
-            curve: 'linear',
-            area: true,
-            stackOrder: 'ascending',
-            color: 'blue',
-            data: [],
-        },
-        {
-            id: 'organic',
-            label: '연기금',
-            showMark: false,
-            curve: 'linear',
-            stackOrder: 'ascending',
-            color: 'red',
-            data: [],
-            area: true,
-        }
-    ]);
-    const [investorDateData, setInvestorDateData] = useState<string[]>([]);
+    // 별도 fetcher (loadProgramChart) + 폴링 누적 패턴이라 useMemo 불가 — useState 유지
     const [programChartData, setProgramChartData] = useState<number[]>([]);
     const [programDateData, setProgramDateData] = useState<string[]>([]);
     const [programChartLoading, setProgramChartLoading] = useState(false);
     const [programChartLoaded, setProgramChartLoaded] = useState(false);
-    const [dividendData, setDividendData] = useState<StockDividendItem[]>([]);
-    const [dividendYield, setDividendYield] = useState<number | null>(null);
     const [priceTargetOpen, setPriceTargetOpen] = useState(false);
-    const [loading, setLoading] = useState(true);
-    const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
-    const [pollError, setPollError] = useState(false);
 
-    useEffect(() => {
-        let chartTimeout: ReturnType<typeof setTimeout>;
-        let socketTimeout: ReturnType<typeof setTimeout>;
-        let interval: ReturnType<typeof setInterval>;
-        let socket: WebSocket;
+    // WebSocket 으로 들어오는 실시간 부분 갱신 overlay.
+    // expectedPrice 는 WS 가 set/clear 둘 다 하므로 sentinel 삼중 상태:
+    //   undefined = 폴링 base 사용, null = WS 가 명시적으로 지움, object = WS 가 채움
+    const [liveStockChartOverlay, setLiveStockChartOverlay] = useState<Partial<CustomStockDetailLineChartProps>>({});
+    const [liveExpectedPriceOverlay, setLiveExpectedPriceOverlay] = useState<ExpectedPriceShape | null | undefined>(undefined);
 
-        setLoading(true);
+    // stkCd 변경 시 overlay reset (이전 종목 데이터 잔존 방지)
+    const [prevStkCd, setPrevStkCd] = useState(stkCd);
+    if (stkCd !== prevStkCd) {
+        setPrevStkCd(stkCd);
+        setLiveStockChartOverlay({});
+        setLiveExpectedPriceOverlay(undefined);
+    }
 
-        (async() => {
-            const items = await stockDetail(req);
-            const stockStreamReq: StockStreamReq = {
-                items: items,
-            }
+    const {data: res, isLoading, lastUpdated, pollError} = usePollingQuery(
+        ['stockDetail', stkCd, req.chartType],
+        (config) => fetchStockDetail(stkCd, req, config),
+    );
+    const loading = isLoading;
 
-            const marketInfo = await timeNow();
+    // WebSocket 라이프사이클 — 폴링과 독립. useMarketWebSocket 훅이 시장 시각/연결/정리 모두 처리.
+    useMarketWebSocket({
+        marketType: MarketType.STOCK,
+        subscriptionKey: stkCd,
+        streamFn: () => fetchStockStream({items: [stkCd]} satisfies StockStreamReq),
+        onMessage: (event) => {
+            const data = JSON.parse(event.data);
+            if (data.trnm !== "REAL" || !Array.isArray(data.data)) return;
 
-            const now = Date.now() + chartTimer.current;
-            const waitTime = 60_000 - (now % 60_000);
+            data.data.forEach((res: StockStreamRes) => {
+                if (res.item !== stkCd) return;
+                const values = res.values;
 
-            if (marketInfo.isMarketOpen) {
-                await stockStream(stockStreamReq);
-                socket = openSocket();
-            } else {
-                socketTimeout = setTimeout(async () => {
-                    socket?.close();
+                if (res.type === "0H") {
+                    setLiveExpectedPriceOverlay({
+                        value: Number(values["10"]?.replace(/^[+-]/, '') ?? '0').toLocaleString(),
+                        fluRt: values["12"] ?? '0',
+                        trend: trendColor(values["25"] ?? '3'),
+                    });
+                } else {
+                    setLiveExpectedPriceOverlay(null);
+                    setLiveStockChartOverlay({
+                        value: Number(values["10"]?.replace(/^[+-]/, '') ?? '0').toLocaleString(),
+                        fluRt: values["12"] ?? '0',
+                        predPre: values["11"] || '0',
+                        trend: trendColor(values["25"] ?? '3'),
+                    });
+                }
+            });
+        },
+    });
 
-                    const again = await timeNow();
-                    if (again.isMarketOpen) {
-                        await stockStream(stockStreamReq);
-                        socket = openSocket();
-                    }
-                }, marketTimer.current + 200);
-            }
-
-            chartTimeout = setTimeout(() => {
-                stockDetail(req);
-                interval = setInterval(() => {
-                    stockDetail(req, true);
-                }, (60 * 1000));
-            }, waitTime + 200);
-        })();
-
-        return () => {
-            socket?.close();
-            clearInterval(socketTimeout);
-            clearTimeout(chartTimeout);
-            clearInterval(interval);
-        }
-    }, [req])
-
-    const stockDetail = async (req: StockDetailReq, silent: boolean = false): Promise<Array<string>> => {
+    // 폴링 결과 → 파생값들 (useMemo 들). 모두 같은 res 를 읽어 각자 가공만 함.
+    const baseStockChartData = useMemo<CustomStockDetailLineChartProps>(() => {
+        if (res?.code !== "0000" || !res.result) return INITIAL_CHART_DATA;
         try {
-            const data = await fetchStockDetail(stkCd, req, silent ? { skipGlobalError: true } : undefined);
-
-            const { stockInfo, stockChartList, stockInvestorChartList, stockInvestorList, stockProgramList, stockShortSellingList } = data.result;
+            const {stockInfo, stockChartList} = res.result;
 
             let dateList;
             let lineData, barDataList;
@@ -243,44 +353,35 @@ const StockDetail = () => {
                 case StockChartType.MINUTE_5:
                 case StockChartType.MINUTE_10:
                 case StockChartType.MINUTE_30: {
-                    dateList = stockChartList.map((item: { dt: string }) => {
-                        return `${item.dt.slice(0, 4)}.${item.dt.slice(4, 6)}.${item.dt.slice(6, 8)} ${item.dt.slice(8, 10)}:${item.dt.slice(10, 12)}`
-                    }).reverse();
-
+                    dateList = stockChartList.map((item: { dt: string }) => `${item.dt.slice(0, 4)}.${item.dt.slice(4, 6)}.${item.dt.slice(6, 8)} ${item.dt.slice(8, 10)}:${item.dt.slice(10, 12)}`).reverse();
                     lineData = stockChartList.map((item: { curPrc: string }) => item.curPrc.replace(/^[+-]/, '')).reverse();
                     barDataList = stockChartList.map((item: { trdeQty: string }) => Number(item.trdeQty)).reverse();
-
                     break;
                 }
                 case StockChartType.DAY:
                 case StockChartType.WEEK:
                 case StockChartType.MONTH:
                 case StockChartType.YEAR: {
-                    dateList = stockChartList.map((item: { dt: string }) => {
-                        return `${item.dt.slice(0, 4)}.${item.dt.slice(4, 6)}.${item.dt.slice(6, 8)}`
-                    }).reverse();
-
+                    dateList = stockChartList.map((item: { dt: string }) => `${item.dt.slice(0, 4)}.${item.dt.slice(4, 6)}.${item.dt.slice(6, 8)}`).reverse();
                     lineData = stockChartList.map((item: { curPrc: string }) => item.curPrc).reverse();
                     barDataList = stockChartList.map((item: { trdeQty: string }) => Number(item.trdeQty)).reverse();
-
                     break;
                 }
+                default:
+                    return INITIAL_CHART_DATA;
             }
 
             const year = stockInfo.tm.substring(0, 4);
             const month = stockInfo.tm.substring(4, 6);
             const day = stockInfo.tm.substring(6, 8);
             const hour = stockInfo.tm.substring(8, 10);
-            const minute = stockInfo.tm.substring(10, 12);
-            let today;
+            const mm = stockInfo.tm.substring(10, 12);
 
-            if(Number(hour) >= 20 || Number(hour) < 8) {
-                today = `${year}.${month}.${day} 장마감`;
-            } else {
-                today = `${year}.${month}.${day} ${hour}:${minute}`;
-            }
+            const today = (Number(hour) >= 20 || Number(hour) < 8)
+                ? `${year}.${month}.${day} 장마감`
+                : `${year}.${month}.${day} ${hour}:${mm}`;
 
-            setStockChartData({
+            return {
                 id: stockInfo.stkCd,
                 title: stockInfo.stkNm,
                 orderWarning: stockInfo.orderWarning,
@@ -304,440 +405,206 @@ const StockDetail = () => {
                 ],
                 barDataList: barDataList,
                 dateList: dateList
-            });
-
-            const expPric = stockInfo.expCntrPric;
-            if (expPric && Number(expPric) !== 0) {
-                setExpectedPrice({
-                    value: Number(expPric.replace(/^[+-]/, '')).toLocaleString(),
-                    fluRt: stockInfo.expCntrFluRt || undefined,
-                    trend: stockInfo.expCntrPreSig ? trendColor(stockInfo.expCntrPreSig) : undefined,
-                });
-            }
-
-            setInfo({
-                marketName: stockInfo.marketName || '-',
-                upName: stockInfo.upName || '-',
-                trdeQty: Number(stockInfo.trdeQty),
-                trdePrica: Number(stockInfo.trdePrica.substring(0, 7)),
-                openPric: Number(stockInfo.openPric.replace(/^[+-]/, '')),
-                curPrc: Number(stockInfo.curPrc.replace(/^[+-]/, '')),
-                mac: Number(stockInfo.mac.replace(/^[+-]/, '')),
-                macWght: Number(stockInfo.macWght.replace(/^[+-]/, '')),
-                forExhRt: Number(stockInfo.forExhRt.replace(/^[+-]/, '')),
-                _250hgst: Number(stockInfo._250hgst.replace(/^[+-]/, '')),
-                _250lwst: Number(stockInfo._250lwst.replace(/^[+-]/, '')),
-                per: Number(stockInfo.per),
-                eps: Number(stockInfo.eps),
-                roe: Number(stockInfo.roe),
-                pbr: Number(stockInfo.pbr)
-            });
-
-            const dvdList = data.result.dividendList || [];
-            if (dvdList.length > 0) {
-                setDividendData(dvdList);
-                const lastYear = (new Date().getFullYear() - 1).toString();
-                const lastYearAmt = dvdList
-                    .filter((d: StockDividendItem) => d.dvdnBasDt?.substring(0, 4) === lastYear)
-                    .reduce((sum: number, d: StockDividendItem) => sum + Number(d.stckGenrDvdnAmt || 0), 0);
-                const curPrc = Number(stockInfo.curPrc.replace(/^[+-]/, ''));
-                if (lastYearAmt > 0 && curPrc > 0) {
-                    setDividendYield(Math.round(lastYearAmt / curPrc * 10000) / 100);
-                }
-            }
-
-            setBarData([
-                Number(stockInvestorList[0].indInvsr.toLocaleString()),
-                Number(stockInvestorList[0].frgnrInvsr.toLocaleString()),
-                Number(stockInvestorList[0].orgn.toLocaleString())
-            ]);
-
-            const message = {
-                ...checkInvestor(
-                    stockInfo.stkNm,
-                    stockInvestorList[0].frgnrInvsr,
-                    stockInvestorList[0].orgn
-                )
             };
-
-            setMessage(message);
-
-            const dayMin = Number(stockInfo.lowPric.replace(/^[+-]/, ''));
-            const dayMax = Number(stockInfo.highPric.replace(/^[+-]/, ''));
-
-            setDayRange([
-                {
-                    value: dayMin,
-                    label: <p>1일 최저가 <br />{dayMin.toLocaleString()}</p>
-                },
-                {
-                    value: dayMax,
-                    label: <p>1일 최고가 <br />{dayMax.toLocaleString()}</p>
-                }
-            ]);
-
-            const yearMin = Number(stockInfo._250lwst.replace(/^[+-]/, ''));
-            const yearMax = Number(stockInfo._250hgst.replace(/^[+-]/, ''));
-
-            setYearRange([
-                {
-                    value: yearMin,
-                    label: <p>52주 최저가 <br />{yearMin.toLocaleString()}</p>
-                },
-                {
-                    value: yearMax,
-                    label: <p>52주 최고가 <br />{yearMax.toLocaleString()}</p>
-                }
-            ]);
-
-            const investorChartData: MakeOptional<LineSeriesType, 'type'>[] = [
-                {
-                    id: 'direct',
-                    label: '외국인',
-                    showMark: false,
-                    curve: 'linear',
-                    area: true,
-                    stackOrder: 'ascending',
-                    color: 'green',
-                    data: stockInvestorChartList.map(item => { return Number(item.frgnrInvsr)})
-                },
-                {
-                    id: 'referral',
-                    label: '기관',
-                    showMark: false,
-                    curve: 'linear',
-                    area: true,
-                    stackOrder: 'ascending',
-                    color: 'blue',
-                    data: stockInvestorChartList.map(item => { return Number(item.orgn)}),
-                },
-                {
-                    id: 'organic',
-                    label: '연기금',
-                    showMark: false,
-                    curve: 'linear',
-                    stackOrder: 'ascending',
-                    color: 'red',
-                    data: stockInvestorChartList.map(item => { return Number(item.penfnd_etc)}),
-                    area: true,
-                }
-            ];
-
-            setInvestorChartData(investorChartData);
-            setInvestorDateData(stockInvestorChartList.map(item => { return item.tm}));
-
-            const investorColumns: GridColDef[] = [
-                {
-                    field: 'dt',
-                    headerName: '날짜',
-                    flex: 1,
-                    minWidth: 100,
-                    maxWidth: 120
-                },
-                {
-                    field: 'indInvsr',
-                    headerName: '개인',
-                    flex: 1,
-                    minWidth: 100,
-                    renderCell: (params) => renderTradeColor(params.value as number),
-                },
-                {
-                    field: 'frgnrInvsr',
-                    headerName: '외국인',
-                    flex: 1,
-                    minWidth: 100,
-                    renderCell: (params) => renderTradeColor(params.value as number),
-                },
-                {
-                    field: 'orgn',
-                    headerName: '기관계',
-                    flex: 1,
-                    minWidth: 100,
-                    renderCell: (params) => renderTradeColor(params.value as number),
-                },
-                {
-                    field: 'fnncInvt',
-                    headerName: '금융투자',
-                    flex: 1,
-                    minWidth: 100,
-                    renderCell: (params) => renderTradeColor(params.value as number),
-                },
-                {
-                    field: 'insrnc',
-                    headerName: '보험',
-                    flex: 1,
-                    minWidth: 100,
-                    renderCell: (params) => renderTradeColor(params.value as number),
-                },
-                {
-                    field: 'etcFnnc',
-                    headerName: '기타금융',
-                    flex: 1,
-                    minWidth: 100,
-                    renderCell: (params) => renderTradeColor(params.value as number),
-                },
-                {
-                    field: 'invtrt',
-                    headerName: '투신',
-                    flex: 1,
-                    minWidth: 100,
-                    renderCell: (params) => renderTradeColor(params.value as number),
-                },
-                {
-                    field: 'samoFund',
-                    headerName: '사모펀드',
-                    flex: 1,
-                    minWidth: 100,
-                    renderCell: (params) => renderTradeColor(params.value as number),
-                },
-                {
-                    field: 'penfndEtc',
-                    headerName: '연기금등',
-                    flex: 1,
-                    minWidth: 100,
-                    renderCell: (params) => renderTradeColor(params.value as number),
-                },
-                {
-                    field: 'bank',
-                    headerName: '은행',
-                    flex: 1,
-                    minWidth: 100,
-                    renderCell: (params) => renderTradeColor(params.value as number),
-                },
-                {
-                    field: 'natn',
-                    headerName: '국가',
-                    flex: 1,
-                    minWidth: 100,
-                    renderCell: (params) => renderTradeColor(params.value as number),
-                },
-                {
-                    field: 'etcCorp',
-                    headerName: '기타법인',
-                    flex: 1,
-                    minWidth: 100,
-                    renderCell: (params) => renderTradeColor(params.value as number),
-                },
-                {
-                    field: 'natfor',
-                    headerName: '내외국인',
-                    flex: 1,
-                    minWidth: 100,
-                    renderCell: (params) => renderTradeColor(params.value as number),
-                }
-            ];
-
-            const investorRow = stockInvestorList.map((item: {
-                dt: string; indInvsr: string; frgnrInvsr: string; orgn: string; fnncInvt: string; insrnc: string; etcFnnc: string; invtrt: string; samoFund: string; penfndEtc: string; bank: string; natn: string; etcCorp: string; natfor: string;
-            }) => {
-                return {
-                    id: item.dt,
-                    dt: `${(item.dt).substring(0, 4)}-${(item.dt).substring(4, 6)}-${(item.dt).substring(6, 8)}`,
-                    indInvsr: Number(item.indInvsr),
-                    frgnrInvsr: Number(item.frgnrInvsr),
-                    orgn: Number(item.orgn),
-                    fnncInvt: Number(item.fnncInvt),
-                    insrnc: Number(item.insrnc),
-                    etcFnnc: Number(item.etcFnnc),
-                    invtrt: Number(item.invtrt),
-                    samoFund: Number(item.samoFund),
-                    penfndEtc: Number(item.penfndEtc),
-                    bank: Number(item.bank),
-                    natn: Number(item.natn),
-                    etcCorp: Number(item.etcCorp),
-                    natfor: Number(item.natfor),
-                }
-            });
-
-            const programColumns: GridColDef[] = [
-                {
-                    field: 'dt',
-                    headerName: '날짜',
-                    flex: 1,
-                    minWidth: 110,
-                    maxWidth: 120
-                },
-                {
-                    field: 'prmNetprpsQty',
-                    headerName: '프로그램 순매수 수량',
-                    flex: 1,
-                    minWidth: 170,
-                    renderCell: (params) => renderTradeColor(params.value as number),
-                },
-                {
-                    field: 'prmBuyQty',
-                    headerName: '프로그램 매수 수량',
-                    flex: 1,
-                    minWidth: 160,
-                    renderCell: (params) => renderTradeColor(params.value as number),
-                },
-                {
-                    field: 'prmSellQty',
-                    headerName: '프로그램 매도 수량',
-                    flex: 1,
-                    minWidth: 160,
-                    renderCell: (params) => renderTradeColor(params.value as number),
-                },
-                {
-                    field: 'prmNetprpsQtyIrds',
-                    headerName: '프로그램 순매수 수량 증감',
-                    flex: 1,
-                    minWidth: 200,
-                    renderCell: (params) => renderTradeColor(params.value as number),
-                },
-            ];
-
-            const programRow = stockProgramList.map((item: {
-                dt: string; prmSellQty: string; prmBuyQty: string; prmNetprpsQty: string; prmNetprpsQtyIrds: string;
-            }) => {
-                return {
-                    id: item.dt,
-                    dt: `${(item.dt).substring(0, 4)}-${(item.dt).substring(4, 6)}-${(item.dt).substring(6, 8)}`,
-                    prmSellQty: Number(item.prmSellQty),
-                    prmBuyQty: Number(item.prmBuyQty),
-                    prmNetprpsQty: Number(item.prmNetprpsQty),
-                    prmNetprpsQtyIrds: Number(item.prmNetprpsQtyIrds),
-                }
-            });
-
-            if (stockProgramList.length > 0) {
-                const todayProgram = stockProgramList[0];
-                const netQty = Number(todayProgram.prmNetprpsQty);
-                const now = new Date();
-                const hhmm = `${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}`;
-
-                setProgramChartData(prev => {
-                    if (prev.length === 0) return prev;
-                    return [...prev, netQty];
-                });
-                setProgramDateData(prev => {
-                    if (prev.length === 0) return prev;
-                    return [...prev, hhmm];
-                });
-            }
-
-            const shortSellingColumns: GridColDef[] = [
-                {
-                    field: 'dt',
-                    headerName: '날짜',
-                    flex: 1,
-                    minWidth: 110,
-                    maxWidth: 120
-                },
-                {
-                    field: 'shrtsTrdePrica',
-                    headerName: '공매도 거래 대금',
-                    flex: 1,
-                    minWidth: 150,
-                    valueFormatter: (value: string) => Number(value).toLocaleString(),
-                },
-                {
-                    field: 'shrtsQty',
-                    headerName: '공매도 수량',
-                    flex: 1,
-                    minWidth: 120,
-                    valueFormatter: (value: string) => Number(value).toLocaleString(),
-                },
-                {
-                    field: 'trdeQty',
-                    headerName: '거래량',
-                    flex: 1,
-                    minWidth: 100,
-                    valueFormatter: (value: string) => Number(value).toLocaleString(),
-                },
-                {
-                    field: 'trdeWght',
-                    headerName: '매매비중',
-                    flex: 1,
-                    minWidth: 100,
-                    valueFormatter: (value: string) => `${value}%`,
-                },
-                {
-                    field: 'shrtsAvgPric',
-                    headerName: '공매도 평균가',
-                    flex: 1,
-                    minWidth: 140,
-                    valueFormatter: (value: string) => Number(value).toLocaleString(),
-                },
-            ];
-
-            const shortSellingRow = stockShortSellingList.map((item: {
-                dt: string; shrtsTrdePrica: string; shrtsQty: string; trdeQty: string; trdeWght: string; shrtsAvgPric: string
-            }) => {
-                return {
-                    id: item.dt,
-                    dt: `${(item.dt).substring(0, 4)}-${(item.dt).substring(4, 6)}-${(item.dt).substring(6, 8)}`,
-                    shrtsTrdePrica: Number(item.shrtsTrdePrica),
-                    shrtsQty: Number(item.shrtsQty),
-                    trdeQty: Number(item.trdeQty),
-                    trdeWght: Number(item.trdeWght),
-                    shrtsAvgPric: Number(item.shrtsAvgPric),
-                }
-            });
-
-            setTabData({
-                investor: {
-                    col: investorColumns,
-                    row: investorRow
-                },
-                program: {
-                    col: programColumns,
-                    row: programRow
-                },
-                shortSelling: {
-                    col: shortSellingColumns,
-                    row: shortSellingRow
-                }
-            });
-            setLastUpdated(new Date());
-            setPollError(false);
-
-            return [stockInfo.stkCd];
-        } catch(error) {
-            console.error(error);
-            if (silent) setPollError(true);
-
-            return [];
-        } finally {
-            setLoading(false);
-        }
-    }
-
-    const timeNow = async () => {
-        try {
-            const startTime = Date.now();
-            const data = await fetchTimeNow({
-                marketType: MarketType.STOCK
-            });
-
-            if (data.code !== "0000") {
-                throw new Error(data.msg);
-            }
-
-            const { time, isMarketOpen, startMarketTime, marketType } = data.result;
-
-            if (marketType !== MarketType.STOCK) {
-                throw new Error(data.msg);
-            }
-
-            const endTime = Date.now();
-            const delayTime = endTime - startTime;
-
-            const revisionServerTime = time + delayTime / 2; // startTime과 endTime 사이에 API 응답을 받기 때문에 2를 나눠서 보정
-
-            chartTimer.current = revisionServerTime - endTime;
-
-            if(!isMarketOpen) {
-                marketTimer.current = startMarketTime - revisionServerTime;
-            }
-
-            return {
-                ...data.result
-            }
         } catch (error) {
             console.error(error);
+            return INITIAL_CHART_DATA;
         }
-    }
+    }, [res, req.chartType, id]);
+
+    // 폴링 base expectedPrice (expCntrPric 가 있을 때만 객체, 없으면 null)
+    const baseExpectedPrice = useMemo<ExpectedPriceShape | null>(() => {
+        if (res?.code !== "0000" || !res.result) return null;
+        const {stockInfo} = res.result;
+        const expPric = stockInfo.expCntrPric;
+        if (!expPric || Number(expPric) === 0) return null;
+        return {
+            value: Number(expPric.replace(/^[+-]/, '')).toLocaleString(),
+            fluRt: stockInfo.expCntrFluRt || undefined,
+            trend: stockInfo.expCntrPreSig ? trendColor(stockInfo.expCntrPreSig) : undefined,
+        };
+    }, [res]);
+
+    const info = useMemo<StockInfoProps>(() => {
+        if (res?.code !== "0000" || !res.result) return INITIAL_INFO;
+        const {stockInfo} = res.result;
+        return {
+            marketName: stockInfo.marketName || '-',
+            upName: stockInfo.upName || '-',
+            trdeQty: Number(stockInfo.trdeQty),
+            trdePrica: Number(stockInfo.trdePrica.substring(0, 7)),
+            openPric: Number(stockInfo.openPric.replace(/^[+-]/, '')),
+            curPrc: Number(stockInfo.curPrc.replace(/^[+-]/, '')),
+            mac: Number(stockInfo.mac.replace(/^[+-]/, '')),
+            macWght: Number(stockInfo.macWght.replace(/^[+-]/, '')),
+            forExhRt: Number(stockInfo.forExhRt.replace(/^[+-]/, '')),
+            _250hgst: Number(stockInfo._250hgst.replace(/^[+-]/, '')),
+            _250lwst: Number(stockInfo._250lwst.replace(/^[+-]/, '')),
+            per: Number(stockInfo.per),
+            eps: Number(stockInfo.eps),
+            roe: Number(stockInfo.roe),
+            pbr: Number(stockInfo.pbr)
+        };
+    }, [res]);
+
+    const dividendData = useMemo<StockDividendItem[]>(() => {
+        if (res?.code !== "0000" || !res.result) return [];
+        return (res.result as {dividendList?: StockDividendItem[]}).dividendList || [];
+    }, [res]);
+
+    const dividendYield = useMemo<number | null>(() => {
+        if (res?.code !== "0000" || !res.result) return null;
+        const {stockInfo} = res.result;
+        const dvdList = (res.result as {dividendList?: StockDividendItem[]}).dividendList || [];
+        if (dvdList.length === 0) return null;
+        const lastYear = (new Date().getFullYear() - 1).toString();
+        const lastYearAmt = dvdList
+            .filter((d: StockDividendItem) => d.dvdnBasDt?.substring(0, 4) === lastYear)
+            .reduce((sum: number, d: StockDividendItem) => sum + Number(d.stckGenrDvdnAmt || 0), 0);
+        const curPrc = Number(stockInfo.curPrc.replace(/^[+-]/, ''));
+        if (lastYearAmt > 0 && curPrc > 0) {
+            return Math.round(lastYearAmt / curPrc * 10000) / 100;
+        }
+        return null;
+    }, [res]);
+
+    const barData = useMemo<number[]>(() => {
+        if (res?.code !== "0000" || !res.result) return INITIAL_BAR_DATA;
+        const {stockInvestorList} = res.result;
+        if (!stockInvestorList?.[0]) return INITIAL_BAR_DATA;
+        return [
+            Number(stockInvestorList[0].indInvsr.toLocaleString()),
+            Number(stockInvestorList[0].frgnrInvsr.toLocaleString()),
+            Number(stockInvestorList[0].orgn.toLocaleString())
+        ];
+    }, [res]);
+
+    const message = useMemo<MessageProps>(() => {
+        if (res?.code !== "0000" || !res.result) return INITIAL_MESSAGE;
+        const {stockInfo, stockInvestorList} = res.result;
+        if (!stockInvestorList?.[0]) return INITIAL_MESSAGE;
+        return checkInvestor(stockInfo.stkNm, stockInvestorList[0].frgnrInvsr, stockInvestorList[0].orgn);
+    }, [res]);
+
+    const dayRange = useMemo<StockRangeProps[]>(() => {
+        if (res?.code !== "0000" || !res.result) return INITIAL_DAY_RANGE;
+        const {stockInfo} = res.result;
+        const dayMin = Number(stockInfo.lowPric.replace(/^[+-]/, ''));
+        const dayMax = Number(stockInfo.highPric.replace(/^[+-]/, ''));
+        return [
+            {value: dayMin, label: <p>1일 최저가 <br />{dayMin.toLocaleString()}</p>},
+            {value: dayMax, label: <p>1일 최고가 <br />{dayMax.toLocaleString()}</p>},
+        ];
+    }, [res]);
+
+    const yearRange = useMemo<StockRangeProps[]>(() => {
+        if (res?.code !== "0000" || !res.result) return INITIAL_YEAR_RANGE;
+        const {stockInfo} = res.result;
+        const yearMin = Number(stockInfo._250lwst.replace(/^[+-]/, ''));
+        const yearMax = Number(stockInfo._250hgst.replace(/^[+-]/, ''));
+        return [
+            {value: yearMin, label: <p>52주 최저가 <br />{yearMin.toLocaleString()}</p>},
+            {value: yearMax, label: <p>52주 최고가 <br />{yearMax.toLocaleString()}</p>},
+        ];
+    }, [res]);
+
+    const investorChartData = useMemo<MakeOptional<LineSeriesType, 'type'>[]>(() => {
+        if (res?.code !== "0000" || !res.result) return INITIAL_INVESTOR_CHART_DATA;
+        const {stockInvestorChartList} = res.result;
+        return [
+            {id: 'direct', label: '외국인', showMark: false, curve: 'linear', area: true, stackOrder: 'ascending', color: 'green',
+                data: stockInvestorChartList.map(item => Number(item.frgnrInvsr))},
+            {id: 'referral', label: '기관', showMark: false, curve: 'linear', area: true, stackOrder: 'ascending', color: 'blue',
+                data: stockInvestorChartList.map(item => Number(item.orgn))},
+            {id: 'organic', label: '연기금', showMark: false, curve: 'linear', area: true, stackOrder: 'ascending', color: 'red',
+                data: stockInvestorChartList.map(item => Number(item.penfnd_etc))},
+        ];
+    }, [res]);
+
+    const investorDateData = useMemo<string[]>(() => {
+        if (res?.code !== "0000" || !res.result) return [];
+        return res.result.stockInvestorChartList.map(item => item.tm);
+    }, [res]);
+
+    const tabData = useMemo<TabDataShape>(() => {
+        if (res?.code !== "0000" || !res.result) return INITIAL_TAB_DATA;
+        const {stockInvestorList, stockProgramList, stockShortSellingList} = res.result;
+        const investorRow = stockInvestorList.map((item: {
+            dt: string; indInvsr: string; frgnrInvsr: string; orgn: string; fnncInvt: string; insrnc: string; etcFnnc: string; invtrt: string; samoFund: string; penfndEtc: string; bank: string; natn: string; etcCorp: string; natfor: string;
+        }) => ({
+            id: item.dt,
+            dt: `${item.dt.substring(0, 4)}-${item.dt.substring(4, 6)}-${item.dt.substring(6, 8)}`,
+            indInvsr: Number(item.indInvsr),
+            frgnrInvsr: Number(item.frgnrInvsr),
+            orgn: Number(item.orgn),
+            fnncInvt: Number(item.fnncInvt),
+            insrnc: Number(item.insrnc),
+            etcFnnc: Number(item.etcFnnc),
+            invtrt: Number(item.invtrt),
+            samoFund: Number(item.samoFund),
+            penfndEtc: Number(item.penfndEtc),
+            bank: Number(item.bank),
+            natn: Number(item.natn),
+            etcCorp: Number(item.etcCorp),
+            natfor: Number(item.natfor),
+        }));
+        const programRow = stockProgramList.map((item: {
+            dt: string; prmSellQty: string; prmBuyQty: string; prmNetprpsQty: string; prmNetprpsQtyIrds: string;
+        }) => ({
+            id: item.dt,
+            dt: `${item.dt.substring(0, 4)}-${item.dt.substring(4, 6)}-${item.dt.substring(6, 8)}`,
+            prmSellQty: Number(item.prmSellQty),
+            prmBuyQty: Number(item.prmBuyQty),
+            prmNetprpsQty: Number(item.prmNetprpsQty),
+            prmNetprpsQtyIrds: Number(item.prmNetprpsQtyIrds),
+        }));
+        const shortSellingRow = stockShortSellingList.map((item: {
+            dt: string; shrtsTrdePrica: string; shrtsQty: string; trdeQty: string; trdeWght: string; shrtsAvgPric: string
+        }) => ({
+            id: item.dt,
+            dt: `${item.dt.substring(0, 4)}-${item.dt.substring(4, 6)}-${item.dt.substring(6, 8)}`,
+            shrtsTrdePrica: Number(item.shrtsTrdePrica),
+            shrtsQty: Number(item.shrtsQty),
+            trdeQty: Number(item.trdeQty),
+            trdeWght: Number(item.trdeWght),
+            shrtsAvgPric: Number(item.shrtsAvgPric),
+        }));
+        return {
+            investor: { col: INVESTOR_COLUMNS, row: investorRow },
+            program: { col: PROGRAM_COLUMNS, row: programRow },
+            shortSelling: { col: SHORT_SELLING_COLUMNS, row: shortSellingRow },
+        };
+    }, [res]);
+
+    // 최종 stockChartData / expectedPrice = base + WS overlay 머지
+    const stockChartData = useMemo<CustomStockDetailLineChartProps>(() => ({
+        ...baseStockChartData,
+        ...liveStockChartOverlay,
+    }), [baseStockChartData, liveStockChartOverlay]);
+
+    // expectedPrice: WS overlay 의 sentinel 처리
+    //   undefined = WS 메시지 없음 → base 사용
+    //   null      = WS 가 명시적으로 지움 → null
+    //   object    = WS 가 채움 → object
+    const expectedPrice = useMemo<ExpectedPriceShape | null>(() => {
+        return liveExpectedPriceOverlay !== undefined ? liveExpectedPriceOverlay : baseExpectedPrice;
+    }, [baseExpectedPrice, liveExpectedPriceOverlay]);
+
+    // loadProgramChart 가 초기 로드 후, 폴링이 들어올 때마다 오늘의 prmNetprpsQty 를 누적.
+    // (이건 useMemo 로 못 풂 — prev 에 append 하는 stateful accumulation 패턴.)
+    useEffect(() => {
+        if (res?.code !== "0000" || !res.result) return;
+        const {stockProgramList} = res.result;
+        if (!stockProgramList || stockProgramList.length === 0) return;
+
+        const todayProgram = stockProgramList[0];
+        const netQty = Number(todayProgram.prmNetprpsQty);
+        const now = new Date();
+        const hhmm = `${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}`;
+
+        setProgramChartData(prev => prev.length === 0 ? prev : [...prev, netQty]);
+        setProgramDateData(prev => prev.length === 0 ? prev : [...prev, hhmm]);
+    }, [res]);
 
     const loadProgramChart = async () => {
         if (!id || programChartLoaded) return;
@@ -758,146 +625,12 @@ const StockDetail = () => {
     }
 
 
-    const stockStream = async (req: StockStreamReq) => {
-        try {
-            const data = await fetchStockStream(req);
-
-            if (data.code !== "0000") {
-                throw new Error(data.msg);
-            }
-        } catch (error) {
-            console.error(error);
-        }
-    }
-
-    const openSocket = () => {
-        const socket = new WebSocket("ws://localhost:8080/ws");
-        socket.onmessage = (event) => {
-            const data = JSON.parse(event.data);
-
-            if (data.trnm === "REAL" && Array.isArray(data.data)) {
-                data.data.forEach((res: StockStreamRes) => {
-                    if (res.item !== stkCd) return;
-                    const values = res.values;
-
-                    if (res.type === "0H") {
-                        setExpectedPrice({
-                            value: Number(values["10"]?.replace(/^[+-]/, '') ?? '0').toLocaleString(),
-                            fluRt: values["12"] ?? '0',
-                            trend: trendColor(values["25"] ?? '3'),
-                        });
-                    } else {
-                        setExpectedPrice(null);
-                        setStockChartData((old) => ({
-                            ...old,
-                            value: Number(values["10"]?.replace(/^[+-]/, '') ?? '0').toLocaleString(),
-                            fluRt: values["12"] ?? '0',
-                            predPre: values["11"] || '0',
-                            trend: trendColor(values["25"] ?? '3'),
-                        }));
-                    }
-                });
-            }
-        };
-
-        return socket;
-    }
-
-    const trendColor = (value: string) => {
-        return ["1", "2"].includes(value) ? 'up' : ["4", "5"].includes(value) ? 'down' : 'neutral';
-    }
-
-    interface StockInfoProps {
-        marketName: string;
-        upName: string;
-        trdeQty: number;
-        trdePrica: number;
-        openPric: number;
-        curPrc: number;
-        mac: number;
-        macWght: number;
-        forExhRt: number;
-        _250lwst: number;
-        _250hgst: number;
-        per: number;
-        eps: number;
-        roe: number;
-        pbr: number;
-    }
-
-    const [info, setInfo] = useState<StockInfoProps>({
-        marketName: "",
-        upName: "",
-        trdeQty: 0,
-        trdePrica: 0,
-        openPric: 0,
-        curPrc: 0,
-        mac: 0,
-        macWght: 0,
-        forExhRt: 0,
-        _250hgst: 0,
-        _250lwst: 0,
-        per: 0,
-        eps: 0,
-        roe: 0,
-        pbr: 0
-    });
-
-    const [barData, setBarData] = useState<Array<number>>([0, 0, 0]);
-
-    interface MessageProps {
-        icon: JSX.Element,
-        title: string,
-        message: string
-    }
-
-    const [message, setMessage] = useState<MessageProps>({
-        icon: <RemoveIcon />,
-        title: '-',
-        message: '-'
-    });
-
-    const [dayRange, setDayRange] = useState<StockRangeProps[]>([
-        {
-            value: 0.0,
-            label: <p>1일 최저가 <br />0</p>
-        },
-        {
-            value: 0.0,
-            label: <p>1일 최고가 <br />0</p>,
-        }
-    ]);
-
-    const [yearRange, setYearRange] = useState<StockRangeProps[]>([
-        {
-            value: 0,
-            label: <p>52주 최저가 <br />0</p>,
-        },
-        {
-            value: 0,
-            label: <p>52주 최고가 <br />0</p>,
-        }
-    ]);
 
     const [tabValue, setTabValue] = useState<'investor' | 'program' | 'shortSelling' | 'news'>('investor');
     const [newsItems, setNewsItems] = useState<{title: string; link: string; description: string; pubDate: string}[]>([]);
     const [newsPage, setNewsPage] = useState(1);
     const [newsTotal, setNewsTotal] = useState(0);
     const [newsLoaded, setNewsLoaded] = useState(false);
-    const [tabData, setTabData] = useState({
-        investor: {
-            col: [],
-            row: []
-        },
-        program: {
-            col: [],
-            row: []
-        },
-        shortSelling: {
-            col: [],
-            row: []
-        }
-    });
 
     const labelColors = {
         up: 'error' as const,
@@ -948,70 +681,6 @@ const StockDetail = () => {
         }
     };
 
-    function checkInvestor(name: string, frgnr: number, orgn: number): MessageProps {
-        let message: string;
-        let title: string;
-        let icon: JSX.Element;
-
-        if (frgnr == 0) {
-            message = '외국인 관망, '
-        } else if (frgnr > 0) {
-            message = '외국인 매수, '
-        } else {
-            message = '외국인 매도, '
-        }
-
-        if (orgn == 0) {
-            message = message + '기관 관망 중입니다.'
-        } else if (orgn > 0) {
-            message = message + '기관 매수 중입니다.'
-        } else {
-            message = message + '기관 매도 중입니다.'
-        }
-
-        if (frgnr == 0 && orgn == 0) {
-            title = `${name} 투자 중립`
-            icon = <RemoveIcon />
-        } else if (frgnr > 0 && orgn > 0) {
-            title = `${name} 투자 양호`
-            icon = <CheckIcon color="success" />;
-        } else if(frgnr > 0 || orgn > 0) {
-            title = `${name} 투자 주의`
-            icon = <PriorityHighIcon color="warning" />
-        } else {
-            title = `${name} 투자 위험`
-            icon = <DoNotDisturbIcon color="error" />
-        }
-
-        return {
-            message,
-            title,
-            icon,
-        }
-    }
-
-    function orderWarningMsg(type: string): string {
-        let message = "";
-        switch (type) {
-            case "1":
-                message = "ETF 투자주의 요망";
-                break;
-            case "2":
-                message = "정리매매 종목 지정";
-                break;
-            case "3":
-                message = "단기과열 종목 지정";
-                break;
-            case "4":
-                message = "투자위험 종목 지정";
-                break;
-            case "5":
-                message = "투자경고 종목 지정";
-                break;
-        }
-
-        return message;
-    }
 
     const handleChange = (_event: React.SyntheticEvent, newValue: string) => {
         if (newValue === 'investor' || newValue === 'program' || newValue === 'shortSelling' || newValue === 'news') {
@@ -1025,13 +694,13 @@ const StockDetail = () => {
     const loadNews = async (stkNm: string, page: number) => {
         try {
             const res = await fetchNews({query: stkNm, page});
-            if (res.result) {
+            if (res) {
                 if (page === 1) {
-                    setNewsItems(res.result.items ?? []);
+                    setNewsItems(res.items ?? []);
                 } else {
-                    setNewsItems(prev => [...prev, ...(res.result.items ?? [])]);
+                    setNewsItems(prev => [...prev, ...(res.items ?? [])]);
                 }
-                setNewsTotal(res.result.total ?? 0);
+                setNewsTotal(res.total ?? 0);
                 setNewsPage(page);
                 setNewsLoaded(true);
             }
@@ -1044,9 +713,7 @@ const StockDetail = () => {
     const [interestGroups, setInterestGroups] = useState<InterestGroup[]>([]);
     const [interestLoading, setInterestLoading] = useState(false);
     const [addedGroupIds, setAddedGroupIds] = useState<Set<number>>(new Set());
-    const [snackbar, setSnackbar] = useState<{ open: boolean; message: string; severity: 'success' | 'error' }>({
-        open: false, message: '', severity: 'success'
-    });
+    const showAlert = useAlert();
 
     const handleHeartClick = async () => {
         setInterestDialogOpen(true);
@@ -1054,6 +721,7 @@ const StockDetail = () => {
         setAddedGroupIds(new Set());
         try {
             const res = await fetchInterestGroups();
+            if (res.code !== "0000") throw new Error(res.message || `관심 그룹 조회 실패 (${res.code})`);
             setInterestGroups(res.result ?? []);
         } finally {
             setInterestLoading(false);
@@ -1062,15 +730,16 @@ const StockDetail = () => {
 
     const handleAddToGroup = async (group: InterestGroup) => {
         try {
-            await addInterestItem(group.id, {
+            const res = await addInterestItem(group.id, {
                 stkCd: stockChartData.id,
                 stkNm: stockChartData.title,
             });
+            if (res.code !== "0000") throw new Error(res.message || `관심 종목 추가 실패 (${res.code})`);
             setAddedGroupIds(prev => new Set(prev).add(group.id));
-            setSnackbar({open: true, message: `${group.groupNm}에 추가되었습니다.`, severity: 'success'});
+            showAlert(`${group.groupNm}에 추가되었습니다.`, 'success');
         } catch (error) {
             console.error(error);
-            setSnackbar({open: true, message: '이미 추가된 종목이거나 오류가 발생했습니다.', severity: 'error'});
+            showAlert('이미 추가된 종목이거나 오류가 발생했습니다.', 'error');
         }
     };
 
@@ -1708,22 +1377,6 @@ const StockDetail = () => {
                     <Button onClick={() => setInterestDialogOpen(false)}>닫기</Button>
                 </DialogActions>
             </Dialog>
-
-            {/* 결과 Snackbar */}
-            <Snackbar
-                open={snackbar.open}
-                autoHideDuration={3000}
-                onClose={() => setSnackbar(prev => ({...prev, open: false}))}
-                anchorOrigin={{vertical: 'bottom', horizontal: 'center'}}
-            >
-                <Alert
-                    severity={snackbar.severity}
-                    onClose={() => setSnackbar(prev => ({...prev, open: false}))}
-                    variant="filled"
-                >
-                    {snackbar.message}
-                </Alert>
-            </Snackbar>
 
             <PriceTargetDialog
                 open={priceTargetOpen}

@@ -8,13 +8,14 @@ import TextField from "@mui/material/TextField";
 import Box from "@mui/material/Box";
 import MenuItem from "@mui/material/MenuItem";
 import type {MemberBroker} from "../../type/BrokerType.ts";
+import type {ApiResponse} from "../../type/AuthType.ts";
 
 interface AddManualPnlDialogProps {
     open: boolean;
     onClose: () => void;
     brokers: MemberBroker[];
     onCreated: () => void;
-    createFn: (req: { brokerId: number; year: number; month: number; realizedPnl: number }) => Promise<unknown>;
+    createFn: (req: { brokerId: number; year: number; month: number; realizedPnl: number }) => Promise<ApiResponse<unknown>>;
 }
 
 export default function AddManualPnlDialog({open, onClose, brokers, onCreated, createFn}: AddManualPnlDialogProps) {
@@ -47,7 +48,8 @@ export default function AddManualPnlDialog({open, onClose, brokers, onCreated, c
         setFormErrors({});
         try {
             const pnlValue = Number(realizedPnl) * (isNegative ? -1 : 1);
-            await createFn({brokerId, year, month, realizedPnl: pnlValue});
+            const res = await createFn({brokerId, year, month, realizedPnl: pnlValue});
+            if (res.code !== "0000") throw new Error(res.message || `실현손익 등록 실패 (${res.code})`);
             onCreated();
             handleClose();
         } catch (err) {

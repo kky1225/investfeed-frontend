@@ -1,8 +1,3 @@
-export interface RecommendListRes {
-    recommendList: Array<RecommendListItem>,
-    avoidList: Array<RecommendListItem>,
-}
-
 export interface RecommendListItem {
     stkCd: string, // 종목코드
     stkNm: string, // 종목명

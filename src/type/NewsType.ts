@@ -11,7 +11,3 @@ export interface NewsItem {
     sentiment: string | null; // 추후 AI 호재/악재 분석용
 }
 
-export interface NewsListRes {
-    items: NewsItem[];
-    total: number;
-}

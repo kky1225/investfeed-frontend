@@ -1,4 +1,5 @@
-import {useEffect, useState} from "react";
+import {useMemo, useState} from "react";
+import {useQuery, useQueryClient} from "@tanstack/react-query";
 import Box from "@mui/material/Box";
 import Typography from "@mui/material/Typography";
 import Button from "@mui/material/Button";
@@ -49,72 +50,69 @@ interface RealizedPnlTabProps {
 
 export default function RealizedPnlTab({myBrokers}: RealizedPnlTabProps) {
     const currentDate = new Date();
+    const queryClient = useQueryClient();
     const [selectedBrokerTab, setSelectedBrokerTab] = useState(0);
     const [viewMode, setViewMode] = useState<ViewMode>('monthly');
     const [year, setYear] = useState(currentDate.getFullYear());
     const [month, setMonth] = useState(currentDate.getMonth() + 1);
-    const [items, setItems] = useState<RealizedPnlItem[]>([]);
-    const [totalPnl, setTotalPnl] = useState(0);
     const [addOpen, setAddOpen] = useState(false);
     const [editItem, setEditItem] = useState<RealizedPnlItem | null>(null);
     const [deleteTarget, setDeleteTarget] = useState<RealizedPnlItem | null>(null);
     const [anchorEl, setAnchorEl] = useState<HTMLElement | null>(null);
     const [menuTarget, setMenuTarget] = useState<RealizedPnlItem | null>(null);
-    const [reloadKey, setReloadKey] = useState(0);
-    const [loading, setLoading] = useState(true);
-    const reload = () => setReloadKey(prev => prev + 1);
     const {isBlind} = useBlindMode();
+
     const [showList, setShowList] = useState(!isBlind);
+    const [prevIsBlind, setPrevIsBlind] = useState(isBlind);
+    if (isBlind !== prevIsBlind) {
+        setPrevIsBlind(isBlind);
+        setShowList(!isBlind);
+    }
 
     const selectedBroker = myBrokers[selectedBrokerTab];
     const isApiBroker = selectedBroker?.type === 'API';
 
-    useEffect(() => {
-        setShowList(!isBlind);
-    }, [isBlind]);
-
-    useEffect(() => {
-        if (myBrokers.length === 0 || !selectedBroker) return;
-        let cancelled = false;
-
-        setLoading(true);
-
-        (async () => {
-            try {
-                let allItems: RealizedPnlItem[];
-
-                if (isApiBroker) {
-                    const syncReq = viewMode === 'monthly' ? {year, month}
-                        : viewMode === 'yearly' ? {year}
-                        : {};
-                    const syncData = await syncStockRealizedPnl(syncReq);
-                    allItems = syncData.result?.items ?? [];
-                } else {
-                    const yearParam = viewMode !== 'all' ? year : undefined;
-                    const monthParam = viewMode === 'monthly' ? month : undefined;
-                    const data = await fetchStockRealizedPnlList(yearParam, monthParam);
-                    allItems = data.result?.items ?? [];
-                }
-
-                if (cancelled) return;
-
-                const filtered = allItems.filter(item => item.brokerId === selectedBroker.brokerId);
-                setItems(filtered);
-                setTotalPnl(filtered.reduce((sum, item) => sum + item.realizedPnl, 0));
-            } catch (err) {
-                console.error(err);
-            } finally {
-                if (!cancelled) setLoading(false);
+    // 조회 조건 / broker 변경 시 자동 재요청. invalidateQueries 로 수동 reload.
+    const {data: allItems, isLoading: loading} = useQuery<RealizedPnlItem[]>({
+        queryKey: ['stockRealizedPnl', selectedBroker?.brokerId, viewMode, year, month, isApiBroker],
+        queryFn: async () => {
+            if (isApiBroker) {
+                const syncReq = viewMode === 'monthly' ? {year, month}
+                    : viewMode === 'yearly' ? {year}
+                    : {};
+                const syncData = await syncStockRealizedPnl(syncReq);
+                if (syncData.code !== "0000") throw new Error(syncData.message || `실현손익 조회 실패 (${syncData.code})`);
+                return syncData.result?.items ?? [];
+            } else {
+                const yearParam = viewMode !== 'all' ? year : undefined;
+                const monthParam = viewMode === 'monthly' ? month : undefined;
+                const data = await fetchStockRealizedPnlList(yearParam, monthParam);
+                if (data.code !== "0000") throw new Error(data.message || `실현손익 조회 실패 (${data.code})`);
+                return data.result?.items ?? [];
             }
-        })();
+        },
+        enabled: myBrokers.length > 0 && !!selectedBroker,
+        refetchOnWindowFocus: false,
+    });
 
-        return () => { cancelled = true; };
-    }, [viewMode, year, month, selectedBrokerTab, isApiBroker, reloadKey]);
+    const items = useMemo<RealizedPnlItem[]>(() => {
+        if (!allItems || !selectedBroker) return [];
+        return allItems.filter(item => item.brokerId === selectedBroker.brokerId);
+    }, [allItems, selectedBroker]);
+
+    const totalPnl = useMemo<number>(() => {
+        return items.reduce((sum, item) => sum + item.realizedPnl, 0);
+    }, [items]);
+
+    const reload = () => {
+        queryClient.invalidateQueries({queryKey: ['stockRealizedPnl']});
+    };
 
     const handleDelete = async () => {
         if (!deleteTarget) return;
         try {
-            await deleteStockManualPnl(deleteTarget.id);
+            const res = await deleteStockManualPnl(deleteTarget.id);
+            if (res.code !== "0000") throw new Error(res.message || `실현손익 삭제 실패 (${res.code})`);
             reload();
         } catch (err) {
             console.error(err);

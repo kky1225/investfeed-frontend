@@ -1,10 +1,11 @@
-import {useEffect, useState} from 'react';
+import {useState} from 'react';
+import {useQuery, useQueryClient} from '@tanstack/react-query';
+import {unwrapResponse} from '../../lib/apiResponse';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
 import Button from '@mui/material/Button';
 import Chip from '@mui/material/Chip';
 import Alert from '@mui/material/Alert';
-import Snackbar from '@mui/material/Snackbar';
 import Dialog from '@mui/material/Dialog';
 import DialogTitle from '@mui/material/DialogTitle';
 import DialogContent from '@mui/material/DialogContent';
@@ -27,8 +28,11 @@ import ListItemIcon from '@mui/material/ListItemIcon';
 import ListItemText from '@mui/material/ListItemText';
 import KeyOffIcon from '@mui/icons-material/KeyOff';
 import VpnKeyIcon from '@mui/icons-material/VpnKey';
-import {createMember, fetchMembers, lockAccount, unlockAccount, changeRole, resetTotp, unlockApiKey} from '../../api/admin/AdminApi';
+import {createMember, fetchMembers, fetchRoles, lockAccount, unlockAccount, changeRole, resetTotp, unlockApiKey} from '../../api/admin/AdminApi';
 import type {CreateMemberReq, MemberRes} from '../../type/AuthType';
+import type {RoleRes} from '../../type/RoleType';
+import {getRoleChipColor, type RoleChipColor} from '../../utils/roleColor';
+import {useAlert} from '../../context/AlertContext';
 
 function formatDateTime(dateStr: string | null) {
     if (!dateStr) return '-';
@@ -49,13 +53,10 @@ function getLockStatus(member: MemberRes): { label: string; color: 'default' | '
     return {label: '잠금', color: 'warning'};
 }
 
-function getRoleLabel(role: string): { label: string; color: 'primary' | 'default' | 'warning' } {
-    switch (role) {
-        case 'ADMIN': return {label: '관리자', color: 'warning'};
-        case 'USER': return {label: '사용자', color: 'default'};
-        case 'GUEST': return {label: '게스트', color: 'default'};
-        default: return {label: role, color: 'default'};
-    }
+function getRoleLabel(role: string, roles: RoleRes[]): { label: string; color: RoleChipColor } {
+    const found = roles.find(r => r.code === role);
+    const label = found?.name ?? role;
+    return {label, color: getRoleChipColor(role)};
 }
 
 const initialCreateForm: CreateMemberReq = {
@@ -63,11 +64,8 @@ const initialCreateForm: CreateMemberReq = {
 };
 
 export default function MemberManagement() {
-    const [members, setMembers] = useState<MemberRes[]>([]);
-    const [loading, setLoading] = useState(true);
-    const [snackbar, setSnackbar] = useState<{ open: boolean; message: string; severity: 'success' | 'error' }>({
-        open: false, message: '', severity: 'success'
-    });
+    const showAlert = useAlert();
+    const queryClient = useQueryClient();
     const [confirmDialog, setConfirmDialog] = useState<{ open: boolean; loginId: string; action: 'lock' | 'unlock' | 'api-key-unlock' }>({
         open: false, loginId: '', action: 'unlock'
     });
@@ -84,38 +82,45 @@ export default function MemberManagement() {
     const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
     const [menuTarget, setMenuTarget] = useState<MemberRes | null>(null);
 
-    const loadMembers = async () => {
-        setLoading(true);
-        try {
-            const res = await fetchMembers();
-            if (res.result) {
-                setMembers(res.result);
-            }
-        } catch (error) {
-            console.error(error);
-            setSnackbar({open: true, message: '회원 목록을 불러오는데 실패했습니다.', severity: 'error'});
-        } finally {
-            setLoading(false);
-        }
-    };
+    const {data: membersData, isLoading: loading, isError: membersError} = useQuery<MemberRes[]>({
+        queryKey: ['admin', 'members'],
+        queryFn: async () => unwrapResponse(await fetchMembers(), [] as MemberRes[]),
+    });
+    const members = membersData ?? [];
 
-    useEffect(() => {
-        loadMembers();
-    }, []);
+    const {data: rolesData} = useQuery<RoleRes[]>({
+        queryKey: ['admin', 'roles'],
+        queryFn: async () => unwrapResponse(await fetchRoles(), [] as RoleRes[]),
+    });
+    const roles = rolesData ?? [];
+
+    // 에러 알림 — render 중 비교 패턴
+    const [prevMembersError, setPrevMembersError] = useState(false);
+    if (membersError !== prevMembersError) {
+        setPrevMembersError(membersError);
+        if (membersError) showAlert('회원 목록을 불러오는데 실패했습니다.', 'error');
+    }
+
+    const loadMembers = async () => {
+        await queryClient.invalidateQueries({queryKey: ['admin', 'members']});
+    };
 
     const handleConfirm = async () => {
         const {loginId, action} = confirmDialog;
         setConfirmDialog({open: false, loginId: '', action: 'unlock'});
         try {
             if (action === 'lock') {
-                await lockAccount(loginId);
-                setSnackbar({open: true, message: `${loginId} 계정이 잠금되었습니다.`, severity: 'success'});
+                const res = await lockAccount(loginId);
+                if (res.code !== "0000") throw new Error(res.message || `계정 잠금 실패 (${res.code})`);
+                showAlert(`${loginId} 계정이 잠금되었습니다.`, 'success');
             } else if (action === 'api-key-unlock') {
-                await unlockApiKey(loginId);
-                setSnackbar({open: true, message: `${loginId} 계정의 API Key 등록 잠금이 해제되었습니다.`, severity: 'success'});
+                const res = await unlockApiKey(loginId);
+                if (res.code !== "0000") throw new Error(res.message || `API Key 잠금 해제 실패 (${res.code})`);
+                showAlert(`${loginId} 계정의 API Key 등록 잠금이 해제되었습니다.`, 'success');
             } else {
-                await unlockAccount(loginId);
-                setSnackbar({open: true, message: `${loginId} 계정 잠금이 해제되었습니다.`, severity: 'success'});
+                const res = await unlockAccount(loginId);
+                if (res.code !== "0000") throw new Error(res.message || `계정 잠금 해제 실패 (${res.code})`);
+                showAlert(`${loginId} 계정 잠금이 해제되었습니다.`, 'success');
             }
             await loadMembers();
         } catch (error) {
@@ -127,12 +132,13 @@ export default function MemberManagement() {
         const {loginId} = totpResetDialog;
         setTotpResetDialog({open: false, loginId: ''});
         try {
-            await resetTotp(loginId);
-            setSnackbar({open: true, message: `${loginId} 계정의 TOTP가 초기화되었습니다.`, severity: 'success'});
+            const res = await resetTotp(loginId);
+            if (res.code !== "0000") throw new Error(res.message || `TOTP 초기화 실패 (${res.code})`);
+            showAlert(`${loginId} 계정의 TOTP가 초기화되었습니다.`, 'success');
             await loadMembers();
         } catch (error) {
             console.error(error);
-            setSnackbar({open: true, message: 'TOTP 초기화에 실패했습니다.', severity: 'error'});
+            showAlert('TOTP 초기화에 실패했습니다.', 'error');
         }
     };
 
@@ -140,12 +146,13 @@ export default function MemberManagement() {
         const {loginId, newRole} = roleDialog;
         setRoleDialog({open: false, loginId: '', currentRole: '', newRole: ''});
         try {
-            await changeRole(loginId, newRole);
-            setSnackbar({open: true, message: `${loginId} 계정의 역할이 변경되었습니다.`, severity: 'success'});
+            const res = await changeRole(loginId, newRole);
+            if (res.code !== "0000") throw new Error(res.message || `역할 변경 실패 (${res.code})`);
+            showAlert(`${loginId} 계정의 역할이 변경되었습니다.`, 'success');
             await loadMembers();
         } catch (error) {
             console.error(error);
-            setSnackbar({open: true, message: '권한 변경에 실패했습니다.', severity: 'error'});
+            showAlert('권한 변경에 실패했습니다.', 'error');
         }
     };
 
@@ -164,8 +171,9 @@ export default function MemberManagement() {
         setCreateErrors({});
         setCreateLoading(true);
         try {
-            await createMember(createForm);
-            setSnackbar({open: true, message: `${createForm.loginId} 계정이 생성되었습니다.`, severity: 'success'});
+            const res = await createMember(createForm);
+            if (res.code !== "0000") throw new Error(res.message || `회원 생성 실패 (${res.code})`);
+            showAlert(`${createForm.loginId} 계정이 생성되었습니다.`, 'success');
             setCreateDialog(false);
             setCreateForm(initialCreateForm);
             await loadMembers();
@@ -177,7 +185,7 @@ export default function MemberManagement() {
                 return;
             }
             const message = axiosErr.response?.data?.message || '회원 생성에 실패했습니다.';
-            setSnackbar({open: true, message, severity: 'error'});
+            showAlert(message, 'error');
         } finally {
             setCreateLoading(false);
         }
@@ -193,9 +201,9 @@ export default function MemberManagement() {
         },
         {field: 'loginId', headerName: '아이디', flex: 1, minWidth: 120},
         {
-            field: 'role', headerName: '역할', width: 80,
+            field: 'role', headerName: '역할', width: 130,
             renderCell: (params) => {
-                const role = getRoleLabel(params.value);
+                const role = getRoleLabel(params.value, roles);
                 return <Chip label={role.label} size="small" color={role.color}/>;
             }
         },
@@ -387,8 +395,9 @@ export default function MemberManagement() {
                             label="역할"
                             onChange={(e) => setRoleDialog({...roleDialog, newRole: e.target.value})}
                         >
-                            <MenuItem value="USER">사용자</MenuItem>
-                            <MenuItem value="GUEST">게스트</MenuItem>
+                            {roles.map(r => (
+                                <MenuItem key={r.code} value={r.code}>{r.name}</MenuItem>
+                            ))}
                         </Select>
                     </FormControl>
                 </DialogContent>
@@ -463,8 +472,9 @@ export default function MemberManagement() {
                                 label="역할"
                                 onChange={(e) => { setCreateForm({...createForm, role: e.target.value}); if (createErrors.role) setCreateErrors(prev => ({...prev, role: undefined})); }}
                             >
-                                <MenuItem value="USER">사용자</MenuItem>
-                                <MenuItem value="GUEST">게스트</MenuItem>
+                                {roles.map(r => (
+                                    <MenuItem key={r.code} value={r.code}>{r.name}</MenuItem>
+                                ))}
                             </Select>
                             {createErrors.role && <FormHelperText>{createErrors.role}</FormHelperText>}
                         </FormControl>
@@ -480,17 +490,6 @@ export default function MemberManagement() {
                     </Button>
                 </DialogActions>
             </Dialog>
-
-            <Snackbar
-                open={snackbar.open}
-                autoHideDuration={3000}
-                onClose={() => setSnackbar(prev => ({...prev, open: false}))}
-                anchorOrigin={{vertical: 'bottom', horizontal: 'center'}}
-            >
-                <Alert severity={snackbar.severity} onClose={() => setSnackbar(prev => ({...prev, open: false}))}>
-                    {snackbar.message}
-                </Alert>
-            </Snackbar>
         </Box>
     );
 }

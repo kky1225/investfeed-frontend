@@ -1,4 +1,4 @@
-import {useEffect, useMemo, useState} from "react";
+import {useMemo, useState} from "react";
 import {useNavigate, useParams} from "react-router-dom";
 import Box from "@mui/material/Box";
 import Typography from "@mui/material/Typography";
@@ -37,15 +37,21 @@ export default function CryptoHoldingPage() {
         [myCryptoBrokers]
     );
 
-    useEffect(() => {
-        if (myBrokers.length === 0) return;
-        if (brokerId) {
-            const index = myBrokers.findIndex(b => b.id === Number(brokerId));
-            setSelectedTab(index >= 0 ? index : 0);
-        } else {
-            setSelectedTab(0);
+    // URL brokerId / broker 목록 변화에 selectedTab 동기화 — render 중 비교 패턴
+    // 초기값 sentinel("") 사용 — 첫 렌더에서도 동기화 트리거 (원래 useEffect 가 마운트 후 한 번 실행됐던 것과 동일)
+    const syncKey = `${brokerId ?? ''}|${myBrokers.map(b => b.id).join(',')}`;
+    const [prevSyncKey, setPrevSyncKey] = useState<string>('__INITIAL__');
+    if (syncKey !== prevSyncKey) {
+        setPrevSyncKey(syncKey);
+        if (myBrokers.length > 0) {
+            if (brokerId) {
+                const index = myBrokers.findIndex(b => b.id === Number(brokerId));
+                setSelectedTab(index >= 0 ? index : 0);
+            } else {
+                setSelectedTab(0);
+            }
         }
-    }, [brokerId, myBrokers]);
+    }
 
     const handleTabChange = (_: unknown, index: number) => {
         const broker = myBrokers[index];
@@ -57,7 +63,8 @@ export default function CryptoHoldingPage() {
     const handleRemoveBroker = async () => {
         if (!deleteTarget) return;
         try {
-            await removeMyCryptoBroker(deleteTarget.id);
+            const res = await removeMyCryptoBroker(deleteTarget.id);
+            if (res.code !== "0000") throw new Error(res.message || `거래소 삭제 실패 (${res.code})`);
             await invalidateMyCryptoBrokers();
             navigate('/crypto/holding/list', {replace: true});
         } catch (err) {

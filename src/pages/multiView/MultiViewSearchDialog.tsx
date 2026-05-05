@@ -1,4 +1,5 @@
-import {useEffect, useRef, useState} from "react";
+import {useRef, useState} from "react";
+import {useQuery} from "@tanstack/react-query";
 import Dialog from "@mui/material/Dialog";
 import DialogTitle from "@mui/material/DialogTitle";
 import DialogContent from "@mui/material/DialogContent";
@@ -16,14 +17,7 @@ import ListItemText from "@mui/material/ListItemText";
 import {fetchStockSearch} from "../../api/stock/StockApi.ts";
 import {fetchCryptoSearch} from "../../api/crypto/CryptoApi.ts";
 import {fetchCommodityList} from "../../api/commodity/CommodityApi.ts";
-
-export type AssetType = 'STOCK' | 'CRYPTO' | 'COMMODITY';
-
-export interface SelectedAsset {
-    type: AssetType;
-    code: string;
-    name: string;
-}
+import type {MultiViewAssetType, SelectedAsset} from "../../type/MultiViewType.ts";
 
 interface MultiViewSearchDialogProps {
     open: boolean;
@@ -42,26 +36,23 @@ export default function MultiViewSearchDialog({open, onClose, onSelect}: MultiVi
     const [searchKeyword, setSearchKeyword] = useState("");
     const [searchResults, setSearchResults] = useState<SearchItem[]>([]);
     const [searchLoading, setSearchLoading] = useState(false);
-    const [commodityList, setCommodityList] = useState<SearchItem[]>([]);
     const searchTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
 
-    useEffect(() => {
-        if (open && tab === 2 && commodityList.length === 0) {
-            (async () => {
-                try {
-                    const data = await fetchCommodityList();
-                    const items = data.result?.map((item: {stkCd: string; stkNm: string}) => ({
-                        stkCd: item.stkCd,
-                        stkNm: item.stkNm,
-                    })) ?? [];
-                    setCommodityList(items);
-                } catch (error) {
-                    console.error(error);
-                    setCommodityList([]);
-                }
-            })();
-        }
-    }, [open, tab]);
+    // 원자재 목록 — open && tab === 2 일 때만 fetch (lazy load)
+    const {data: commodityListData} = useQuery<SearchItem[]>({
+        queryKey: ['multiView', 'commodityList'],
+        queryFn: async () => {
+            const data = await fetchCommodityList();
+            if (data.code !== "0000") throw new Error(data.message || `원자재 목록 조회 실패 (${data.code})`);
+            return (data.result?.commodityList ?? []).map((item: {stkCd: string; stkNm: string}) => ({
+                stkCd: item.stkCd,
+                stkNm: item.stkNm,
+            }));
+        },
+        enabled: open && tab === 2,
+        staleTime: Infinity,  // 한 번 로드한 뒤 재요청 X (정적 데이터)
+    });
+    const commodityList = commodityListData ?? [];
 
     const handleClose = () => {
         setSearchKeyword("");
@@ -79,9 +70,21 @@ export default function MultiViewSearchDialog({open, onClose, onSelect}: MultiVi
         searchTimerRef.current = setTimeout(async () => {
             setSearchLoading(true);
             try {
-                const searchFn = tab === 0 ? fetchStockSearch : fetchCryptoSearch;
-                const data = await searchFn(keyword.trim());
-                setSearchResults(data.result ?? []);
+                if (tab === 0) {
+                    const data = await fetchStockSearch(keyword.trim());
+                    if (data.code !== "0000") throw new Error(data.message || `주식 검색 실패 (${data.code})`);
+                    setSearchResults(data.result ?? []);
+                } else {
+                    // 코인: backend {market, koreanName, englishName} → SearchItem 으로 매핑
+                    const data = await fetchCryptoSearch(keyword.trim());
+                    if (data.code !== "0000") throw new Error(data.message || `코인 검색 실패 (${data.code})`);
+                    const items: SearchItem[] = (data.result ?? []).map((item: {market: string; koreanName: string; englishName?: string}) => ({
+                        stkCd: item.market,
+                        stkNm: item.koreanName,
+                        marketName: item.englishName,
+                    }));
+                    setSearchResults(items);
+                }
             } catch (error) {
                 console.error(error);
                 setSearchResults([]);
@@ -92,7 +95,7 @@ export default function MultiViewSearchDialog({open, onClose, onSelect}: MultiVi
     };
 
     const handleSelect = (item: SearchItem) => {
-        const typeMap: AssetType[] = ['STOCK', 'CRYPTO', 'COMMODITY'];
+        const typeMap: MultiViewAssetType[] = ['STOCK', 'CRYPTO', 'COMMODITY'];
         onSelect({type: typeMap[tab], code: item.stkCd, name: item.stkNm});
         handleClose();
     };

@@ -1,4 +1,6 @@
-import {useEffect, useState} from "react";
+import {useState} from "react";
+import {useQuery} from "@tanstack/react-query";
+import {unwrapResponse} from "../../lib/apiResponse.ts";
 import Box from "@mui/material/Box";
 import Typography from "@mui/material/Typography";
 import Card from "@mui/material/Card";
@@ -37,37 +39,49 @@ export default function EconomicCalendarPage() {
 
     const [year, setYear] = useState(now.getFullYear());
     const [month, setMonth] = useState(now.getMonth() + 1);
-    const [events, setEvents] = useState<CalendarEvent[]>([]);
-    const [indicators, setIndicators] = useState<EconomicIndicator[]>([]);
-    const [loading, setLoading] = useState(true);
-    const [lastUpdated, setLastUpdated] = useState<string | null>(null);
     const [selectedIndicator, setSelectedIndicator] = useState<EconomicIndicator | null>(null);
-    const [history, setHistory] = useState<IndicatorHistoryRes | null>(null);
-    const [chartLoading, setChartLoading] = useState(false);
     const [popoverAnchor, setPopoverAnchor] = useState<null | HTMLElement>(null);
     const [popoverEvents, setPopoverEvents] = useState<CalendarEvent[]>([]);
     const [popoverDate, setPopoverDate] = useState('');
 
-    const loadData = async (y: number, m: number) => {
-        setLoading(true);
-        try {
+    // year/month 변경 시 자동 재요청 (queryKey)
+    const {data: queryRes, isLoading: loading} = useQuery<{
+        events: CalendarEvent[];
+        indicators: EconomicIndicator[];
+        lastUpdated: string | null;
+    }>({
+        queryKey: ['economicCalendar', year, month],
+        queryFn: async () => {
             const [eventsRes, indicatorsRes] = await Promise.all([
-                fetchCalendarEvents({year: y, month: m}),
+                fetchCalendarEvents({year, month}),
                 fetchEconomicIndicators(),
             ]);
-            setEvents(eventsRes.result?.events ?? []);
-            setIndicators(indicatorsRes.result?.indicators ?? []);
-            setLastUpdated(eventsRes.result?.lastUpdated ?? null);
-        } catch (err) {
-            console.error(err);
-        } finally {
-            setLoading(false);
-        }
-    };
+            if (eventsRes.code !== "0000") throw new Error(eventsRes.message || `캘린더 조회 실패 (${eventsRes.code})`);
+            if (indicatorsRes.code !== "0000") throw new Error(indicatorsRes.message || `지표 조회 실패 (${indicatorsRes.code})`);
+            return {
+                events: eventsRes.result?.events ?? [],
+                indicators: indicatorsRes.result?.indicators ?? [],
+                lastUpdated: eventsRes.result?.lastUpdated ?? null,
+            };
+        },
+    });
+    const events: CalendarEvent[] = queryRes?.events ?? [];
+    const indicators: EconomicIndicator[] = queryRes?.indicators ?? [];
+    const lastUpdated = queryRes?.lastUpdated ?? null;
 
-    useEffect(() => {
-        loadData(year, month);
-    }, [year, month]);
+    // selectedIndicator 변경 시 history 자동 fetch
+    const {data: historyData, isLoading: chartLoading} = useQuery<IndicatorHistoryRes | null>({
+        queryKey: ['indicatorHistory', selectedIndicator?.code, selectedIndicator?.country],
+        queryFn: async () => {
+            if (!selectedIndicator) return null;
+            return unwrapResponse<IndicatorHistoryRes | null>(
+                await fetchIndicatorHistory({code: selectedIndicator.code, country: selectedIndicator.country}),
+                null,
+            );
+        },
+        enabled: !!selectedIndicator,
+    });
+    const history = historyData ?? null;
 
     const handlePrevMonth = () => {
         if (month === 1) { setYear(year - 1); setMonth(12); }
@@ -79,21 +93,12 @@ export default function EconomicCalendarPage() {
         else setMonth(month + 1);
     };
 
-    const handleIndicatorClick = async (indicator: EconomicIndicator) => {
+    const handleIndicatorClick = (indicator: EconomicIndicator) => {
         if (selectedIndicator?.code === indicator.code) {
             setSelectedIndicator(null);
-            setHistory(null);
-            return;
-        }
-        setSelectedIndicator(indicator);
-        setChartLoading(true);
-        try {
-            const res = await fetchIndicatorHistory({code: indicator.code, country: indicator.country});
-            if (res.result) setHistory(res.result);
-        } catch (err) {
-            console.error(err);
-        } finally {
-            setChartLoading(false);
+        } else {
+            setSelectedIndicator(indicator);
+            // history 는 useQuery 가 selectedIndicator 변경 시 자동 fetch
         }
     };
 

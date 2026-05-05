@@ -1,4 +1,5 @@
-import {createContext, useContext, useState, useEffect, useCallback, useRef, ReactNode} from 'react';
+import {createContext, useContext, useEffect, useRef, ReactNode, useCallback} from 'react';
+import {useQuery, useQueryClient} from '@tanstack/react-query';
 import {useAuth} from './AuthContext';
 import {fetchNotifications, fetchUnreadCount, markAsRead, markAllAsRead} from '../api/notification/NotificationApi';
 import type {Notification} from '../type/NotificationType';
@@ -7,6 +8,8 @@ interface NotificationContextType {
     notifications: Notification[];
     unreadCount: number;
     loading: boolean;
+    lastUpdated: Date | null;
+    pollError: boolean;
     loadNotifications: (silent?: boolean) => Promise<boolean>;
     refreshAll: (silent?: boolean) => Promise<boolean>;
     handleMarkAsRead: (id: number) => Promise<void>;
@@ -15,56 +18,118 @@ interface NotificationContextType {
 
 const NotificationContext = createContext<NotificationContextType | null>(null);
 
+const NOTIFICATIONS_KEY = ['notifications'] as const;
+const UNREAD_COUNT_KEY = ['notifications', 'unreadCount'] as const;
+
+interface NotificationsRes {
+    code: string;
+    msg?: string;
+    result: Notification[];
+}
+
+interface UnreadCountRes {
+    code: string;
+    msg?: string;
+    result: number;
+}
+
 export function NotificationProvider({children}: { children: ReactNode }) {
     const {isAuthenticated} = useAuth();
-    const [notifications, setNotifications] = useState<Notification[]>([]);
-    const [unreadCount, setUnreadCount] = useState(0);
-    const [loading, setLoading] = useState(true);
+    const queryClient = useQueryClient();
     const wsRef = useRef<WebSocket | null>(null);
 
-    const loadNotifications = useCallback(async (silent: boolean = false) => {
+    // 알림 목록 — 인증된 경우에만 1분 폴링
+    const notificationsQuery = useQuery<NotificationsRes>({
+        queryKey: NOTIFICATIONS_KEY,
+        queryFn: async ({signal}) => {
+            const res = await fetchNotifications(undefined, {signal, skipGlobalError: true});
+            if (res.code !== "0000") throw new Error(res.message || `알림 조회 실패 (${res.code})`);
+            return res;
+        },
+        enabled: isAuthenticated,
+        refetchInterval: 60_000,
+        refetchIntervalInBackground: false,
+    });
+
+    // 미읽음 카운트 — 인증된 경우에만 1분 폴링
+    const unreadCountQuery = useQuery<UnreadCountRes>({
+        queryKey: UNREAD_COUNT_KEY,
+        queryFn: async ({signal}) => {
+            const res = await fetchUnreadCount({signal, skipGlobalError: true});
+            if (res.code !== "0000") throw new Error(res.message || `미읽음 카운트 조회 실패 (${res.code})`);
+            return res;
+        },
+        enabled: isAuthenticated,
+        refetchInterval: 60_000,
+        refetchIntervalInBackground: false,
+    });
+
+    const notifications: Notification[] = notificationsQuery.data?.result ?? [];
+    const unreadCount: number = unreadCountQuery.data?.result ?? 0;
+    const loading = notificationsQuery.isLoading;
+    const lastUpdated: Date | null = notificationsQuery.data ? new Date(notificationsQuery.dataUpdatedAt) : null;
+    const pollError: boolean = !!notificationsQuery.error;
+
+    // 기존 외부 인터페이스 호환을 위한 wrapper
+    const loadNotifications = useCallback(async (_silent: boolean = false) => {
         try {
-            const res = await fetchNotifications(undefined, silent ? { skipGlobalError: true } : undefined);
-            setNotifications(res.result ?? []);
+            await queryClient.refetchQueries({queryKey: NOTIFICATIONS_KEY});
             return true;
         } catch (error) {
             console.error(error);
             return false;
-        } finally {
-            setLoading(false);
         }
-    }, []);
+    }, [queryClient]);
 
-    const loadUnreadCount = useCallback(async (silent: boolean = false) => {
+    const refreshAll = useCallback(async (_silent: boolean = false) => {
         try {
-            const res = await fetchUnreadCount(silent ? { skipGlobalError: true } : undefined);
-            setUnreadCount(res.result ?? 0);
+            await Promise.all([
+                queryClient.refetchQueries({queryKey: NOTIFICATIONS_KEY}),
+                queryClient.refetchQueries({queryKey: UNREAD_COUNT_KEY}),
+            ]);
+            return true;
         } catch (error) {
             console.error(error);
+            return false;
         }
-    }, []);
+    }, [queryClient]);
 
     const handleMarkAsRead = useCallback(async (id: number) => {
-        await markAsRead(id);
-        setNotifications(prev => prev.map(n => n.id === id ? {...n, isRead: true} : n));
-        setUnreadCount(prev => Math.max(0, prev - 1));
-    }, []);
+        const res = await markAsRead(id);
+        if (res.code !== "0000") throw new Error(res.message || `알림 읽음 처리 실패 (${res.code})`);
+        // optimistic cache 갱신
+        queryClient.setQueryData<NotificationsRes | undefined>(NOTIFICATIONS_KEY, (prev) => {
+            if (!prev) return prev;
+            return {
+                ...prev,
+                result: prev.result.map(n => n.id === id ? {...n, isRead: true} : n),
+            };
+        });
+        queryClient.setQueryData<UnreadCountRes | undefined>(UNREAD_COUNT_KEY, (prev) => {
+            if (!prev) return prev;
+            return {...prev, result: Math.max(0, prev.result - 1)};
+        });
+    }, [queryClient]);
 
     const handleMarkAllAsRead = useCallback(async () => {
-        await markAllAsRead();
-        setNotifications(prev => prev.map(n => ({...n, isRead: true})));
-        setUnreadCount(0);
-    }, []);
+        const res = await markAllAsRead();
+        if (res.code !== "0000") throw new Error(res.message || `전체 알림 읽음 처리 실패 (${res.code})`);
+        queryClient.setQueryData<NotificationsRes | undefined>(NOTIFICATIONS_KEY, (prev) => {
+            if (!prev) return prev;
+            return {
+                ...prev,
+                result: prev.result.map(n => ({...n, isRead: true})),
+            };
+        });
+        queryClient.setQueryData<UnreadCountRes | undefined>(UNREAD_COUNT_KEY, (prev) => {
+            if (!prev) return prev;
+            return {...prev, result: 0};
+        });
+    }, [queryClient]);
 
-    const refreshAll = useCallback(async (silent: boolean = false) => {
-        const [ok] = await Promise.all([loadNotifications(silent), loadUnreadCount(silent)]);
-        return ok;
-    }, [loadNotifications, loadUnreadCount]);
-
+    // WebSocket 라이프사이클 — 신규 알림 push 수신
     useEffect(() => {
         if (!isAuthenticated) return;
-
-        refreshAll();
 
         let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
         let reconnectAttempt = 0;
@@ -79,14 +144,24 @@ export function NotificationProvider({children}: { children: ReactNode }) {
             wsRef.current = ws;
 
             ws.onopen = () => {
-                reconnectAttempt = 0; // 연결 성공 시 backoff 리셋
+                reconnectAttempt = 0;
             };
 
             ws.onmessage = (event) => {
                 try {
                     const notification: Notification = JSON.parse(event.data);
-                    setNotifications(prev => [notification, ...prev]);
-                    setUnreadCount(prev => prev + 1);
+                    queryClient.setQueryData<NotificationsRes | undefined>(NOTIFICATIONS_KEY, (prev) => {
+                        if (!prev) {
+                            return {code: '0000', result: [notification]};
+                        }
+                        return {...prev, result: [notification, ...prev.result]};
+                    });
+                    queryClient.setQueryData<UnreadCountRes | undefined>(UNREAD_COUNT_KEY, (prev) => {
+                        if (!prev) {
+                            return {code: '0000', result: 1};
+                        }
+                        return {...prev, result: prev.result + 1};
+                    });
                 } catch (error) {
                     console.error(error);
                 }
@@ -94,7 +169,6 @@ export function NotificationProvider({children}: { children: ReactNode }) {
 
             ws.onerror = (event) => {
                 console.error('[NotificationWS] connection error:', event);
-                // UI 알림 없음 — onclose 에서 reconnect 로 복구
             };
 
             ws.onclose = () => {
@@ -103,7 +177,9 @@ export function NotificationProvider({children}: { children: ReactNode }) {
                     const delay = Math.min(3000 * Math.pow(2, reconnectAttempt), 60_000);
                     reconnectAttempt++;
                     reconnectTimer = setTimeout(() => {
-                        refreshAll(true);
+                        // 재연결 시 최신 데이터 동기화 후 connect
+                        queryClient.invalidateQueries({queryKey: NOTIFICATIONS_KEY});
+                        queryClient.invalidateQueries({queryKey: UNREAD_COUNT_KEY});
                         connect();
                     }, delay);
                 }
@@ -118,13 +194,15 @@ export function NotificationProvider({children}: { children: ReactNode }) {
             wsRef.current?.close();
             wsRef.current = null;
         };
-    }, [isAuthenticated, refreshAll]);
+    }, [isAuthenticated, queryClient]);
 
     return (
         <NotificationContext.Provider value={{
             notifications,
             unreadCount,
             loading,
+            lastUpdated,
+            pollError,
             loadNotifications,
             refreshAll,
             handleMarkAsRead,

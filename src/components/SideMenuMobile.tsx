@@ -16,7 +16,7 @@ import LogoutRoundedIcon from '@mui/icons-material/LogoutRounded';
 import LockResetIcon from '@mui/icons-material/LockReset';
 import PinIcon from '@mui/icons-material/Pin';
 import VpnKeyIcon from '@mui/icons-material/VpnKey';
-import Snackbar from '@mui/material/Snackbar';
+import {useAlert} from '../context/AlertContext';
 import MoreVertRoundedIcon from '@mui/icons-material/MoreVertRounded';
 import MenuButton from './MenuButton';
 import MenuContent from './MenuContent';
@@ -39,7 +39,7 @@ interface SideMenuMobileProps {
 export default function SideMenuMobile({ open, toggleDrawer }: SideMenuMobileProps) {
     const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
     const [changeSecondaryOpen, setChangeSecondaryOpen] = useState(false);
-    const [snackbar, setSnackbar] = useState('');
+    const showAlert = useAlert();
     const menuOpen = Boolean(anchorEl);
     const { user, clearAuth } = useAuth();
     const navigate = useNavigate();
@@ -212,17 +212,11 @@ export default function SideMenuMobile({ open, toggleDrawer }: SideMenuMobilePro
                     open={changeSecondaryOpen}
                     onSuccess={() => {
                         setChangeSecondaryOpen(false);
-                        setSnackbar('2차 비밀번호가 변경되었습니다.');
+                        showAlert('2차 비밀번호가 변경되었습니다.', 'success');
                     }}
                     onClose={() => setChangeSecondaryOpen(false)}
                 />
             </Suspense>
-            <Snackbar
-                open={!!snackbar}
-                autoHideDuration={3000}
-                onClose={() => setSnackbar('')}
-                message={snackbar}
-            />
         </Drawer>
     );
 }

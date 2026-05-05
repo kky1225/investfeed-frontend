@@ -1,26 +1,40 @@
 import {Box, InputLabel, Select, SelectChangeEvent} from "@mui/material";
 import Typography from "@mui/material/Typography";
 import Grid from "@mui/material/Grid";
-import {useEffect, useRef, useState} from "react";
-import {ThemeListItem, ThemeListReq} from "../../type/ThemeType.ts";
+import {useState} from "react";
+import {ThemeGridRow, ThemeListItem, ThemeListReq} from "../../type/ThemeType.ts";
 import {fetchThemeList} from "../../api/theme/ThemeApi.ts";
 import FreshnessIndicator from "../../components/FreshnessIndicator.tsx";
-import ThemeTable, {ThemeGridRow} from "../../components/ThemeTable.tsx";
+import ThemeTable from "../../components/ThemeTable.tsx";
 import {GridColDef} from "@mui/x-data-grid";
 import Chip from "@mui/material/Chip";
 import NumberSpinner from "../../components/NumberSpinner.tsx";
 import FormControl from "@mui/material/FormControl";
 import MenuItem from "@mui/material/MenuItem";
+import {usePollingQuery} from "../../lib/pollingQuery.ts";
 
 const ThemeList = () => {
     const [req, setReq] = useState<ThemeListReq>({
         dateTp: "1",
         fluPlAmtTp: "3"
     });
-    const [row, setRow] = useState<ThemeGridRow[]>([]);
-    const [loading, setLoading] = useState(true);
-    const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
-    const [pollError, setPollError] = useState(false);
+
+    const {data, isLoading, lastUpdated, pollError} = usePollingQuery(
+        ['themeList', req],
+        (config) => fetchThemeList(req, config),
+    );
+
+    const row: ThemeGridRow[] = (data?.result?.themeList ?? []).map(
+        (theme: ThemeListItem, index: number) => ({
+            id: theme.themaGrpCd,
+            rank: index + 1,
+            themaNm: theme.themaNm,
+            fluSig: theme.fluSig,
+            fluRt: theme.fluRt,
+            dtPrftRt: theme.dtPrftRt,
+        })
+    );
+
     const columns: GridColDef[] = [
         {
             field: 'rank',
@@ -50,60 +64,6 @@ const ThemeList = () => {
             renderCell: (params) => renderStatus(params.value as number),
         }
     ];
-
-    const chartTimer = useRef<number>(0);
-
-    useEffect(() => {
-        let chartTimeout: ReturnType<typeof setTimeout>;
-        let interval: ReturnType<typeof setInterval>;
-
-        (async () => {
-            await themeList(req);
-
-            const now = Date.now() + chartTimer.current;
-            const waitTime = 60_000 - (now % 60_000);
-
-            chartTimeout = setTimeout(() => {
-                themeList(req);
-                interval = setInterval(() => {
-                    themeList(req, true);
-                }, (60 * 1000));
-            }, waitTime + 200);
-        })();
-
-        return () => {
-            clearTimeout(chartTimeout);
-            clearInterval(interval);
-        }
-    }, [req]);
-
-    const themeList = async (req: ThemeListReq, silent: boolean = false) => {
-        try {
-            const data = await fetchThemeList(req, silent ? { skipGlobalError: true } : undefined);
-
-            const { themeList } = data.result;
-
-            const newRowData: ThemeGridRow[] = themeList.map((theme: ThemeListItem, index: number) => {
-                return {
-                    id: theme.themaGrpCd,
-                    rank: index + 1,
-                    themaNm: theme.themaNm,
-                    fluSig: theme.fluSig,
-                    fluRt: theme.fluRt,
-                    dtPrftRt: theme.dtPrftRt,
-                }
-            });
-
-            setRow(newRowData);
-            setLastUpdated(new Date());
-            setPollError(false);
-        } catch (error) {
-            console.error(error);
-            if (silent) setPollError(true);
-        } finally {
-            setLoading(false);
-        }
-    }
 
     function renderStatus(status: number) {
         const colors = status == 0 ? 'default' : status > 0 ? 'error': 'info';
@@ -186,7 +146,7 @@ const ThemeList = () => {
                         columns={12}
                         sx={{ mt: 1, mb: (theme) => theme.spacing(2) }}
                     >
-                        <ThemeTable rows={row} columns={columns} pageSize={100} loading={loading} />
+                        <ThemeTable rows={row} columns={columns} pageSize={100} loading={isLoading} />
                     </Grid>
                 </Box>
             </Grid>

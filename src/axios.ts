@@ -42,6 +42,7 @@ api.interceptors.response.use(
                         if (res.result.role) user.role = res.result.role;
                         if (res.result.nickname) user.nickname = res.result.nickname;
                         if (res.result.email) user.email = res.result.email;
+                        if (res.result.permissions) user.permissions = res.result.permissions;
                         sessionStorage.setItem('user', JSON.stringify(user));
                     }
                 }

@@ -1,4 +1,6 @@
-import {useEffect, useState} from "react";
+import {useState} from "react";
+import {useQueryClient} from "@tanstack/react-query";
+import {usePollingQuery} from "../../lib/pollingQuery.ts";
 import Alert from "@mui/material/Alert";
 import Box from "@mui/material/Box";
 import Typography from "@mui/material/Typography";
@@ -36,68 +38,33 @@ import {useApiKeyStatus} from "../../context/ApiKeyStatusContext.tsx";
 
 export default function GoalPage() {
     const {apiBrokers, myApiBrokerIds, validBrokerIds, isLoaded: apiKeyLoaded} = useApiKeyStatus();
-    const [goals, setGoals] = useState<InvestmentGoalRes[]>([]);
-    const [loading, setLoading] = useState(true);
-    const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
-    const [pollError, setPollError] = useState(false);
+    const queryClient = useQueryClient();
     const [goalDialogOpen, setGoalDialogOpen] = useState(false);
     const [editGoal, setEditGoal] = useState<InvestmentGoalRes | null>(null);
     const [deleteTarget, setDeleteTarget] = useState<InvestmentGoalRes | null>(null);
     const [anchorEl, setAnchorEl] = useState<HTMLElement | null>(null);
     const [menuTarget, setMenuTarget] = useState<InvestmentGoalRes | null>(null);
 
-    const loadGoals = async (silent: boolean = false) => {
-        try {
-            const res = await fetchGoalDashboard(silent ? { skipGlobalError: true } : undefined);
-            if (res.code === "0000") {
-                setGoals(res.result?.goals ?? []);
-                setLastUpdated(new Date());
-                setPollError(false);
-            }
-        } catch (error) {
-            console.error(error);
-            if (silent) setPollError(true);
-        } finally {
-            setLoading(false);
-        }
+    const hasMissing = apiKeyLoaded && [...myApiBrokerIds].some(id => !validBrokerIds.has(id));
+
+    const {data: res, isLoading, lastUpdated, pollError} = usePollingQuery(
+        ['goalDashboard'],
+        (config) => fetchGoalDashboard(config),
+        {enabled: apiKeyLoaded && !hasMissing},
+    );
+
+    const goals: InvestmentGoalRes[] = res ? (res?.goals ?? []) : [];
+    const loading = !apiKeyLoaded || (isLoading && !hasMissing);
+
+    const reloadGoals = async () => {
+        await queryClient.invalidateQueries({queryKey: ['goalDashboard']});
     };
-
-    useEffect(() => {
-        if (!apiKeyLoaded) return;
-
-        const hasMissing = [...myApiBrokerIds].some(id => !validBrokerIds.has(id));
-        if (hasMissing) {
-            setLoading(false);
-            return;
-        }
-
-        let timeout: ReturnType<typeof setTimeout>;
-        let interval: ReturnType<typeof setInterval>;
-
-        (async () => {
-            await loadGoals();
-
-            const now = Date.now();
-            const waitTime = 60_000 - (now % 60_000);
-
-            timeout = setTimeout(() => {
-                loadGoals(true);
-                interval = setInterval(() => {
-                    loadGoals(true);
-                }, 60_000);
-            }, waitTime + 200);
-        })();
-
-        return () => {
-            clearTimeout(timeout);
-            clearInterval(interval);
-        };
-    }, [apiKeyLoaded, myApiBrokerIds, validBrokerIds]);
 
     const handleDelete = async () => {
         if (!deleteTarget) return;
-        await deleteGoal(deleteTarget.id);
-        await loadGoals();
+        const res = await deleteGoal(deleteTarget.id);
+        if (res.code !== "0000") throw new Error(res.message || `투자 목표 삭제 실패 (${res.code})`);
+        await reloadGoals();
         setDeleteTarget(null);
     };
 
@@ -228,7 +195,7 @@ export default function GoalPage() {
             <GoalSettingDialog
                 open={goalDialogOpen}
                 onClose={() => { setGoalDialogOpen(false); setEditGoal(null); }}
-                onSaved={loadGoals}
+                onSaved={reloadGoals}
                 editGoal={editGoal}
                 existingTypes={goals.map(g => g.type)}
             />

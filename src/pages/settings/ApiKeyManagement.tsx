@@ -3,7 +3,6 @@ import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
 import Button from '@mui/material/Button';
 import Alert from '@mui/material/Alert';
-import Snackbar from '@mui/material/Snackbar';
 import Dialog from '@mui/material/Dialog';
 import DialogTitle from '@mui/material/DialogTitle';
 import DialogContent from '@mui/material/DialogContent';
@@ -30,6 +29,7 @@ import ColorModeSelect from '../../components/ColorModeSelect';
 import AppTheme from '../../components/AppTheme';
 import {createApiKey, deleteApiKey} from '../../api/auth/AuthApi';
 import {useApiKeyStatus} from '../../context/ApiKeyStatusContext';
+import {useAlert} from '../../context/AlertContext';
 import type {ApiKeyReq} from '../../type/AuthType';
 
 function formatDateTime(dateStr: string) {
@@ -60,10 +60,8 @@ const initialForm: ApiKeyReq = {brokerId: 0, appKey: '', secretKey: '', expiresA
 
 export default function ApiKeyManagement() {
     const navigate = useNavigate();
+    const showAlert = useAlert();
     const {apiKeys, apiBrokers, isLoaded: apiKeyLoaded, invalidateApiKeys} = useApiKeyStatus();
-    const [snackbar, setSnackbar] = useState<{open: boolean; message: string; severity: 'success' | 'error'}>({
-        open: false, message: '', severity: 'success'
-    });
     const [formDialog, setFormDialog] = useState(false);
     const [form, setForm] = useState<ApiKeyReq>(initialForm);
     const [formLoading, setFormLoading] = useState(false);
@@ -93,8 +91,9 @@ export default function ApiKeyManagement() {
         setFormErrors({});
         setFormLoading(true);
         try {
-            await createApiKey(form);
-            setSnackbar({open: true, message: 'API Key가 등록되었습니다.', severity: 'success'});
+            const res = await createApiKey(form);
+            if (res.code !== "0000") throw new Error(res.message || `API Key 등록 실패 (${res.code})`);
+            showAlert('API Key가 등록되었습니다.', 'success');
             setFormDialog(false);
             setForm(initialForm);
             await invalidateApiKeys();
@@ -113,13 +112,14 @@ export default function ApiKeyManagement() {
 
     const handleDelete = async () => {
         try {
-            await deleteApiKey(deleteDialog.id);
-            setSnackbar({open: true, message: 'API Key가 삭제되었습니다.', severity: 'success'});
+            const res = await deleteApiKey(deleteDialog.id);
+            if (res.code !== "0000") throw new Error(res.message || `API Key 삭제 실패 (${res.code})`);
+            showAlert('API Key가 삭제되었습니다.', 'success');
             setDeleteDialog({open: false, id: 0, brokerName: ''});
             await invalidateApiKeys();
         } catch (error) {
             console.error(error);
-            setSnackbar({open: true, message: 'API Key 삭제에 실패했습니다.', severity: 'error'});
+            showAlert('API Key 삭제에 실패했습니다.', 'error');
         }
     };
 
@@ -268,17 +268,6 @@ export default function ApiKeyManagement() {
                         sx={{bgcolor: '#d32f2f', '&:hover': {bgcolor: '#b71c1c'}}}>삭제</Button>
                 </DialogActions>
             </Dialog>
-
-            <Snackbar
-                open={snackbar.open}
-                autoHideDuration={3000}
-                onClose={() => setSnackbar(prev => ({...prev, open: false}))}
-                anchorOrigin={{vertical: 'bottom', horizontal: 'center'}}
-            >
-                <Alert severity={snackbar.severity} onClose={() => setSnackbar(prev => ({...prev, open: false}))}>
-                    {snackbar.message}
-                </Alert>
-            </Snackbar>
         </Box>
         </AppTheme>
     );

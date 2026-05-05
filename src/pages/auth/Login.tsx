@@ -123,14 +123,18 @@ export default function Login(props: { disableCustomTheme?: boolean }) {
         }, 1000);
     }, [clearTimer]);
 
-    useEffect(() => {
+    // 카운트다운 만료 시 자동으로 credentials step 으로 복귀 — render 중 비교 패턴
+    const expiryKey = `${remainingSeconds === 0}|${step}`;
+    const [prevExpiryKey, setPrevExpiryKey] = useState('');
+    if (expiryKey !== prevExpiryKey) {
+        setPrevExpiryKey(expiryKey);
         if (remainingSeconds === 0 && step !== 'credentials') {
             setStep('credentials');
             setTotpCode('');
             setQrCodeImage('');
             setErrorMessage('인증 시간이 만료되었습니다. 다시 로그인해주세요.');
         }
-    }, [remainingSeconds, step]);
+    }
 
     useEffect(() => () => { clearTimer(); clearLockTimer(); }, [clearTimer, clearLockTimer]);
 
@@ -159,10 +163,12 @@ export default function Login(props: { disableCustomTheme?: boolean }) {
         setErrorMessage('');
         try {
             const res = await login({ loginId, password });
+            if (res.code !== "0000") throw new Error(res.message || `로그인 실패 (${res.code})`);
             if (res.result) {
                 if (res.result.totpSetupRequired) {
                     startTimer(600); // 등록 10분
                     const setupRes = await totpSetup();
+                    if (setupRes.code !== "0000") throw new Error(setupRes.message || `TOTP 설정 실패 (${setupRes.code})`);
                     if (setupRes.result) {
                         setQrCodeImage(setupRes.result.qrCodeImage);
                     }
@@ -211,16 +217,17 @@ export default function Login(props: { disableCustomTheme?: boolean }) {
         setErrorMessage('');
         try {
             const res = await totpVerify({ code: totpCode });
+            if (res.code !== "0000") throw new Error(res.message || `TOTP 인증 실패 (${res.code})`);
             if (res.result) {
                 clearTimer();
                 setAuth(
-                    { loginId, nickname: res.result.nickname, email: res.result.email, role: res.result.role, secondaryPasswordEnabled: res.result.secondaryPasswordEnabled },
+                    { loginId, nickname: res.result.nickname, email: res.result.email, role: res.result.role, secondaryPasswordEnabled: res.result.secondaryPasswordEnabled, permissions: res.result.permissions ?? [] },
                     res.result.passwordChangeRequired,
                 );
                 if (res.result.passwordChangeRequired) {
                     navigate('/settings/change-password');
                 } else {
-                    navigate('/');
+                    navigate(res.result.defaultPath ?? '/');
                 }
             }
         } catch (err: unknown) {

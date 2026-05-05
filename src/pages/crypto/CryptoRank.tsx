@@ -1,4 +1,5 @@
-import {useEffect, useRef, useState} from "react";
+import {useEffect, useMemo, useRef, useState} from "react";
+import {useQuery} from "@tanstack/react-query";
 import Typography from "@mui/material/Typography";
 import Box from "@mui/material/Box";
 import Grid from "@mui/material/Grid";
@@ -77,101 +78,78 @@ const columns: GridColDef[] = [
 
 const CryptoRank = () => {
     const navigate = useNavigate();
-    const [rows, setRows] = useState<CryptoRankRow[]>([]);
-    const [loading, setLoading] = useState(true);
+    const [liveOverlay, setLiveOverlay] = useState<Map<string, CryptoTickerStream>>(new Map());
     const bufferMap = useRef<Map<string, CryptoTickerStream>>(new Map());
 
+    const {data: res, isLoading: loading} = useQuery({
+        queryKey: ['cryptoRankList'],
+        queryFn: async ({signal}) => {
+            const data = await fetchCryptoRankList({signal, skipGlobalError: true});
+            if (data.code !== "0000") throw new Error(data.message || `랭킹 조회 실패 (${data.code})`);
+            return data;
+        },
+    });
+
+    const rows: CryptoRankRow[] = useMemo(() => {
+        if (!res) return [];
+        const items: CryptoRankItem[] = res.result ?? [];
+        return items.map((item, index) => {
+            const live = liveOverlay.get(item.market);
+            return {
+                id: item.market,
+                rank: index + 1,
+                koreanName: item.koreanName,
+                tradePrice: live?.tradePrice ?? item.tradePrice,
+                signedChangeRate: live?.signedChangeRate ?? item.signedChangeRate,
+                change: live?.change ?? item.change,
+                accTradePrice24h: live?.accTradePrice24h ?? item.accTradePrice24h,
+            };
+        });
+    }, [res, liveOverlay]);
+
+    // WebSocket 라이프사이클 (스트림 등록 + buffer flush)
     useEffect(() => {
         let displayInterval: ReturnType<typeof setInterval>;
-        let socket: WebSocket;
+        let socket: WebSocket | undefined;
 
         (async () => {
-            await loadRankList();
-
             try {
                 await fetchCryptoRankStream();
             } catch (e) {
                 console.error(e);
             }
 
-            socket = openSocket();
+            socket = new WebSocket("ws://localhost:8080/ws");
+            socket.onmessage = (event) => {
+                const data = JSON.parse(event.data);
+                if (data.type === "CRYPTO_TICKER") {
+                    bufferMap.current.set(data.market, {
+                        market: data.market,
+                        tradePrice: data.tradePrice,
+                        signedChangeRate: data.signedChangeRate,
+                        change: data.change,
+                        accTradePrice24h: data.accTradePrice24h,
+                    });
+                }
+            };
 
+            // 500ms 단위로 buffer flush → liveOverlay 갱신 (렌더 빈도 조절)
             displayInterval = setInterval(() => {
                 if (bufferMap.current.size === 0) return;
-
-                setRows(prev => {
-                    const isUpdated = prev.some(item => bufferMap.current.has(item.id));
-                    if (!isUpdated) return prev;
-
-                    return prev.map(row => {
-                        const update = bufferMap.current.get(row.id);
-                        if (!update) return row;
-
-                        return {
-                            ...row,
-                            tradePrice: update.tradePrice,
-                            signedChangeRate: update.signedChangeRate,
-                            change: update.change,
-                            accTradePrice24h: update.accTradePrice24h,
-                        };
-                    });
+                setLiveOverlay((prev) => {
+                    const next = new Map(prev);
+                    bufferMap.current.forEach((v, k) => next.set(k, v));
+                    return next;
                 });
-
                 bufferMap.current.clear();
             }, 500);
         })();
 
         return () => {
             if (displayInterval) clearInterval(displayInterval);
-            if (socket) socket.close();
+            socket?.close();
         };
     }, []);
-
-    const loadRankList = async () => {
-        try {
-            const data = await fetchCryptoRankList();
-
-            if (data.code !== "0000") {
-                throw new Error(data.msg);
-            }
-
-            const items: CryptoRankItem[] = data.result;
-
-            setRows(items.map((item, index) => ({
-                id: item.market,
-                rank: index + 1,
-                koreanName: item.koreanName,
-                tradePrice: item.tradePrice,
-                signedChangeRate: item.signedChangeRate,
-                change: item.change,
-                accTradePrice24h: item.accTradePrice24h,
-            })));
-        } catch (e) {
-            console.error(e);
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    const openSocket = () => {
-        const socket = new WebSocket("ws://localhost:8080/ws");
-
-        socket.onmessage = (event) => {
-            const data = JSON.parse(event.data);
-
-            if (data.type === "CRYPTO_TICKER") {
-                bufferMap.current.set(data.market, {
-                    market: data.market,
-                    tradePrice: data.tradePrice,
-                    signedChangeRate: data.signedChangeRate,
-                    change: data.change,
-                    accTradePrice24h: data.accTradePrice24h,
-                });
-            }
-        };
-
-        return socket;
-    };
 
     const onClick = (params: { row: { id: string } }) => {
         navigate(`/crypto/detail/${params.row.id}`);

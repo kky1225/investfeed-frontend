@@ -4,16 +4,13 @@ export interface MenuRes {
     url: string | null;
     icon: string | null;
     parentId: number | null;
+    requiredPermissionId: number | null;
+    requiredPermissionCode: string | null;
+    requiredPermissionName: string | null;
     orderIndex: number;
     visible: boolean;
-    permissions: MenuPermissionRes[];
     requiredBrokerIds: number[];
     children: MenuRes[];
-}
-
-export interface MenuPermissionRes {
-    role: string;
-    readable: boolean;
 }
 
 export interface CreateMenuReq {
@@ -21,6 +18,7 @@ export interface CreateMenuReq {
     url: string | null;
     icon: string | null;
     parentId: number | null;
+    requiredPermissionId: number | null;
     orderIndex: number;
     visible: boolean;
     requiredBrokerIds: number[];
@@ -31,6 +29,7 @@ export interface UpdateMenuReq {
     url: string | null;
     icon: string | null;
     parentId: number | null;
+    requiredPermissionId: number | null;
     visible: boolean;
 }
 
@@ -48,24 +47,17 @@ export interface UpdateMenuStructureReq {
     structures: MenuStructureItem[];
 }
 
-export interface MenuPermissionItem {
-    role: string;
-    readable: boolean;
-}
-
-export interface UpdateMenuPermissionReq {
-    permissions: MenuPermissionItem[];
-}
-
 export interface FlatMenuItem {
     id: number;
     name: string;
     url: string | null;
     icon: string | null;
     parentId: number | null;
+    requiredPermissionId: number | null;
+    requiredPermissionCode: string | null;
+    requiredPermissionName: string | null;
     orderIndex: number;
     visible: boolean;
     depth: number;
-    permissions: MenuPermissionRes[];
     requiredBrokerIds: number[];
 }

@@ -7,13 +7,8 @@ export const fetchCryptoList = async (config?: AxiosRequestConfig) => {
     return res.data;
 }
 
-export const fetchCryptoListStream = async () => {
-    const res = await api.get(`/cryptos/stream`);
-    return res.data;
-}
-
-export const fetchCryptoDetailStream = async (market: string) => {
-    const res = await api.get(`/cryptos/${market}/stream`);
+export const fetchCryptoStream = async (items: string[]) => {
+    const res = await api.post(`/cryptos/stream`, {items});
     return res.data;
 }
 

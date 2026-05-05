@@ -3,7 +3,7 @@ import Box from "@mui/material/Box";
 import Grid from "@mui/material/Grid";
 import StockTable from "../../components/StockTable.tsx";
 import * as React from "react";
-import {useEffect, useRef, useState} from "react";
+import {useEffect, useMemo, useRef, useState} from "react";
 import {Tab, Tabs} from "@mui/material";
 import {fetchTimeNow} from "../../api/time/TimeApi.ts";
 import {MarketType} from "../../type/timeType.ts";
@@ -13,10 +13,17 @@ import {InvestorListItem, InvestorListReq, InvestorStreamReq} from "../../type/I
 import {fetchInvestorList, fetchInvestorStream} from "../../api/investor/InvestorApi.ts";
 import {renderChip, renderTradePricaColor} from "../../components/CustomRender.tsx";
 import FreshnessIndicator from "../../components/FreshnessIndicator.tsx";
+import {usePollingQuery} from "../../lib/pollingQuery.ts";
+
+interface LiveInvestorUpdate {
+    curPrc: string;
+    fluRt: string;
+    trend: string;
+}
 
 const InvestorList = () => {
     const navigate = useNavigate();
-    const { orgnTp, trdeTp } = useParams();
+    const {orgnTp, trdeTp} = useParams();
 
     const [req, setReq] = useState<InvestorListReq>({
         trdeTp: trdeTp || "1",
@@ -25,11 +32,37 @@ const InvestorList = () => {
 
     const [value, setValue] = useState(orgnTp === "6" ? 0 : 1);
     const [tradeValue, setTradeValue] = useState(trdeTp === "1" ? 0 : 1);
-    const [row, setRow] = useState<StockGridRow[]>([]);
-    const [loading, setLoading] = useState(true);
-    // 폴링 신선도 표시용: 마지막 성공 시각 + 최근 폴링 에러 여부
-    const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
-    const [pollError, setPollError] = useState(false);
+
+    const [liveOverlay, setLiveOverlay] = useState<Map<string, LiveInvestorUpdate>>(new Map());
+    const stockBufferMap = useRef<Map<string, StockStream>>(new Map());
+    const subscribedKeyRef = useRef<string>('');
+
+    const chartTimer = useRef<number>(0);
+    const marketTimer = useRef<number>(0);
+
+    const {data: res, isLoading, lastUpdated, pollError} = usePollingQuery(
+        ['investorList', req.orgnTp, req.trdeTp],
+        (config) => fetchInvestorList(req, config),
+    );
+
+    const row: StockGridRow[] = useMemo(() => {
+        if (res?.code !== "0000" || !res.result) return [];
+        const list: InvestorListItem[] = res.result.investorList ?? [];
+        return list.map((investor, index) => {
+            const live = liveOverlay.get(investor.stkCd);
+            return {
+                id: investor.stkCd,
+                rank: index + 1,
+                stkNm: investor.stkNm,
+                fluRt: live?.fluRt ?? investor.fluRt,
+                curPrc: live?.curPrc ?? investor.curPrc,
+                netprpsAmt: investor.netprpsAmt,
+                trend: live?.trend,
+            } as StockGridRow;
+        });
+    }, [res, liveOverlay]);
+
+    const loading = isLoading;
 
     const columns = [
         {
@@ -68,235 +101,126 @@ const InvestorList = () => {
         }
     ];
 
-    const chartTimer = useRef<number>(0);
-    const marketTimer = useRef<number>(0);
-
-    const stockBufferMap = useRef<Map<string, StockStream>>(new Map());
-
-    useEffect(() => {
-        let chartTimeout: ReturnType<typeof setTimeout>;
-        let socketTimeout: ReturnType<typeof setTimeout>;
-        let interval: ReturnType<typeof setInterval>;
-        let displayInterval: ReturnType<typeof setInterval>;
-        let socket: WebSocket;
-
-        setLoading(true);
-
-        (async () => {
-            const items = await investorList(req);
-            const investorStreamReq: InvestorStreamReq = {
-                items: items,
-            }
-
-            const updateDisplay = () => {
-                if (displayInterval) {
-                    return;
-                }
-
-                displayInterval = setInterval(() => {
-                    if (stockBufferMap.current.size === 0) {
-                        return;
-                    }
-
-                    setRow((oldRow) => {
-                        const isUpdated = oldRow.some(item => stockBufferMap.current.has(item.id));
-                        if (!isUpdated) {
-                            return oldRow;
-                        }
-
-                        return oldRow.map((item) => {
-                            const newRow = stockBufferMap.current.get(item.id);
-                            if (newRow) {
-                                return {
-                                    ...item,
-                                    curPrc: newRow.value,
-                                    fluRt: newRow.fluRt,
-                                    trend: newRow.trend,
-                                };
-                            }
-                            return item;
-                        });
-                    });
-
-                    stockBufferMap.current.clear();
-                }, 500);
-            }
-
-            const connectSocket = async (req: InvestorStreamReq) => {
-                await fetchInvestorStream(req);
-                socket = openSocket();
-                updateDisplay();
-            };
-
-            const marketInfo = await timeNow();
-
-            const now = Date.now() + chartTimer.current;
-            const waitTime = 60_000 - (now % 60_000);
-
-            if (marketInfo.isMarketOpen) {
-                await connectSocket(investorStreamReq);
-            } else {
-                socketTimeout = setTimeout(async () => {
-                    socket?.close();
-
-                    const again = await timeNow();
-                    if (again.isMarketOpen) {
-                        await connectSocket(investorStreamReq);
-                    }
-                }, marketTimer.current + 200);
-            }
-
-            chartTimeout = setTimeout(() => {
-                investorList(req);
-                interval = setInterval(() => {
-                    investorList(req, true);
-                }, (60 * 1000));
-            }, waitTime + 200);
-        })();
-
-        return () => {
-            socket?.close();
-            clearInterval(socketTimeout);
-            clearTimeout(chartTimeout);
-            clearInterval(interval);
-            clearInterval(displayInterval);
-        }
-    }, [req]);
-
     const timeNow = async () => {
         try {
             const startTime = Date.now();
-            const data = await fetchTimeNow({
-                marketType: MarketType.STOCK
-            });
+            const data = await fetchTimeNow({marketType: MarketType.STOCK});
 
-            if(data.code !== "0000") {
-                throw new Error(data.msg);
-            }
+            if (data.code !== "0000") throw new Error(data.message);
 
-            const { time, isMarketOpen, startMarketTime, marketType } = data.result
-
-            if(marketType !== MarketType.STOCK) {
-                throw new Error(data.msg);
-            }
+            const {time, isMarketOpen, startMarketTime, marketType} = data.result;
+            if (marketType !== MarketType.STOCK) throw new Error(data.message);
 
             const endTime = Date.now();
             const delayTime = endTime - startTime;
-
-            const revisionServerTime = time + delayTime / 2; // startTime과 endTime 사이에 API 응답을 받기 때문에 2를 나눠서 보정
+            const revisionServerTime = time + delayTime / 2;
 
             chartTimer.current = revisionServerTime - endTime;
+            if (!isMarketOpen) marketTimer.current = startMarketTime - revisionServerTime;
 
-            if(!isMarketOpen) {
-                marketTimer.current = startMarketTime - revisionServerTime;
-            }
-
-            return {
-                ...data.result
-            }
-        }catch (error) {
-            console.error(error);
-        }
-    }
-
-    const investorList = async (req: InvestorListReq, silent: boolean = false) => {
-        try {
-            const data = await fetchInvestorList(req, silent ? { skipGlobalError: true } : undefined);
-
-            if (data.code !== "0000") {
-                throw new Error(data.msg);
-            }
-
-            const { investorList } = data.result;
-
-            const ranking = investorList.map((investor: InvestorListItem, index: number) => {
-                return {
-                    id: investor.stkCd,
-                    rank: index + 1,
-                    stkNm: investor.stkNm,
-                    fluRt: investor.fluRt,
-                    curPrc: investor.curPrc,
-                    netprpsAmt: investor.netprpsAmt,
-                }
-            });
-
-            setRow(ranking);
-            // 폴링 성공 시 신선도 갱신 + 에러 상태 해제
-            setLastUpdated(new Date());
-            setPollError(false);
-
-            return investorList.map((row: InvestorListItem) => {
-                return row.stkCd
-            });
+            return {...data.result};
         } catch (error) {
             console.error(error);
-            // 폴링 실패(silent) 시에만 신선도 인디케이터를 "경고" 로 표시. 초기 로드 실패는 전역 Dialog 가 이미 띄움.
-            if (silent) setPollError(true);
-        } finally {
-            setLoading(false);
         }
-    }
+    };
 
     const openSocket = () => {
         const socket = new WebSocket("ws://localhost:8080/ws");
         socket.onmessage = (event) => {
             const data = JSON.parse(event.data);
-
             if (data.trnm === "REAL" && Array.isArray(data.data)) {
-                data.data.forEach((res: StockStreamRes) => {
-                    const values = res.values;
-
-                    stockBufferMap.current.set(res.item, {
-                        code: res.item,
+                data.data.forEach((entry: StockStreamRes) => {
+                    const values = entry.values;
+                    stockBufferMap.current.set(entry.item, {
+                        code: entry.item,
                         value: String(values["10"]).replace(/^[+-]/, ''),
                         fluRt: String(values["12"]),
                         predPre: String(values["11"]),
-                        trend: String(values["25"])
+                        trend: String(values["25"]),
                     });
                 });
             }
         };
-
         return socket;
-    }
+    };
+
+    // WebSocket 라이프사이클 — query 결과 stkCd 들로 stream 등록.
+    useEffect(() => {
+        if (res?.code !== "0000" || !res.result) return;
+        const items = (res.result.investorList ?? []).map((s: InvestorListItem) => s.stkCd);
+        if (items.length === 0) return;
+
+        const key = `${req.orgnTp}|${req.trdeTp}|${items.join(',')}`;
+        if (subscribedKeyRef.current === key) return;
+        subscribedKeyRef.current = key;
+
+        // req 변경 시 overlay reset
+        setLiveOverlay(new Map());
+
+        let socketTimeout: ReturnType<typeof setTimeout>;
+        let displayInterval: ReturnType<typeof setInterval>;
+        let socket: WebSocket | undefined;
+
+        const startDisplayLoop = () => {
+            displayInterval = setInterval(() => {
+                if (stockBufferMap.current.size === 0) return;
+                setLiveOverlay((prev) => {
+                    const next = new Map(prev);
+                    stockBufferMap.current.forEach((v, k) => {
+                        next.set(k, {
+                            curPrc: v.value,
+                            fluRt: v.fluRt,
+                            trend: v.trend,
+                        });
+                    });
+                    return next;
+                });
+                stockBufferMap.current.clear();
+            }, 500);
+        };
+
+        const connectSocket = async (req: InvestorStreamReq) => {
+            const data = await fetchInvestorStream(req);
+            if (data.code !== "0000") throw new Error(data.message || `투자자 스트림 실패 (${data.code})`);
+            socket = openSocket();
+            startDisplayLoop();
+        };
+
+        (async () => {
+            const marketInfo = await timeNow();
+            if (marketInfo?.isMarketOpen) {
+                await connectSocket({items});
+            } else {
+                socketTimeout = setTimeout(async () => {
+                    socket?.close();
+                    const again = await timeNow();
+                    if (again?.isMarketOpen) {
+                        await connectSocket({items});
+                    }
+                }, marketTimer.current + 200);
+            }
+        })();
+
+        return () => {
+            socket?.close();
+            clearTimeout(socketTimeout);
+            clearInterval(displayInterval);
+        };
+    }, [res, req.orgnTp, req.trdeTp]);
 
     const handleChange = (_event: React.SyntheticEvent, newValue: number) => {
-        let orgnTp = "6";
-
-        if (newValue === 0) {
-            orgnTp = "6";
-        } else if (newValue === 1) {
-            orgnTp = "7";
-        }
-
-        const newReq: InvestorListReq = {
-            trdeTp: req.trdeTp,
-            orgnTp: orgnTp
-        }
-
-        setReq(newReq);
+        const newOrgnTp = newValue === 0 ? "6" : "7";
+        setReq({trdeTp: req.trdeTp, orgnTp: newOrgnTp});
         setValue(newValue);
-        navigate(`/stock/investor/${orgnTp}/list/${req.trdeTp}`);
+        navigate(`/stock/investor/${newOrgnTp}/list/${req.trdeTp}`);
     };
 
     const handleChangeInvestor = (_event: React.SyntheticEvent, newValue: number) => {
-        let trdeTp = "1";
-
-        if (newValue === 0) {
-            trdeTp = "1";
-        } else if (newValue === 1) {
-            trdeTp = "2";
-        }
-
-        const newReq: InvestorListReq = {
-            trdeTp: trdeTp,
-            orgnTp: req.orgnTp
-        }
-
-        setReq(newReq);
+        const newTrdeTp = newValue === 0 ? "1" : "2";
+        setReq({trdeTp: newTrdeTp, orgnTp: req.orgnTp});
         setTradeValue(newValue);
-        navigate(`/stock/investor/${req.orgnTp}/list/${trdeTp}`);
-    }
+        navigate(`/stock/investor/${req.orgnTp}/list/${newTrdeTp}`);
+    };
 
     function a11yProps(index: number) {
         return {
@@ -306,22 +230,22 @@ const InvestorList = () => {
     }
 
     return (
-        <Box sx={{ width: '100%', maxWidth: { sm: '100%', md: '1700px' } }}>
-            <Box sx={{ display: 'flex', alignItems: 'center', mb: 2, gap: 2 }}>
+        <Box sx={{width: '100%', maxWidth: {sm: '100%', md: '1700px'}}}>
+            <Box sx={{display: 'flex', alignItems: 'center', mb: 2, gap: 2}}>
                 <Typography component="h2" variant="h6">
                     투자자별 목록
                 </Typography>
-                <Box sx={{ flex: 1 }} />
-                <FreshnessIndicator lastUpdated={lastUpdated} error={pollError} />
+                <Box sx={{flex: 1}}/>
+                <FreshnessIndicator lastUpdated={lastUpdated} error={pollError}/>
             </Box>
             <Grid
                 container
                 spacing={2}
                 columns={12}
-                sx={{ mb: (theme) => theme.spacing(2) }}
+                sx={{mb: (theme) => theme.spacing(2)}}
             >
-                <Box sx={{ width: '100%' }}>
-                    <Box sx={{ borderBottom: 1, borderColor: 'divider' }}>
+                <Box sx={{width: '100%'}}>
+                    <Box sx={{borderBottom: 1, borderColor: 'divider'}}>
                         <Tabs value={value} onChange={handleChange} aria-label="basic tabs example">
                             <Tab label="외국인" {...a11yProps(0)} />
                             <Tab label="기관" {...a11yProps(1)} />
@@ -331,11 +255,11 @@ const InvestorList = () => {
                             <Tab label="순매도" {...a11yProps(1)} />
                         </Tabs>
                     </Box>
-                    <StockTable rows={row} columns={columns} pageSize={100} loading={loading} />
+                    <StockTable rows={row} columns={columns} pageSize={100} loading={loading}/>
                 </Box>
             </Grid>
         </Box>
-    )
-}
+    );
+};
 
-export default InvestorList
+export default InvestorList;
