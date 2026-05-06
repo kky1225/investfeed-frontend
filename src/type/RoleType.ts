@@ -12,6 +12,7 @@ export interface CreateRoleReq {
     code: string;
     name: string;
     defaultLandingPath: string | null;
+    afterRoleId: number | null;
 }
 
 export interface UpdateRoleReq {
@@ -21,7 +22,7 @@ export interface UpdateRoleReq {
 
 export interface RoleOrderItem {
     id: number;
-    orderIndex: number;
+    priority: number;
 }
 
 export interface UpdateRoleMutationVars {

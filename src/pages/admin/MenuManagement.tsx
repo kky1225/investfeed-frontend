@@ -697,10 +697,10 @@ export default function MenuManagement() {
                             onChange={e => setEditForm({...editForm, url: e.target.value})}
                             helperText="하위 메뉴가 있는 대메뉴는 비워두세요" />
                         <FormControl fullWidth size="small">
-                            <InputLabel>가시성 권한</InputLabel>
+                            <InputLabel>접근 권한</InputLabel>
                             <Select
                                 value={editForm.requiredPermissionId}
-                                label="가시성 권한"
+                                label="접근 권한"
                                 onChange={e => setEditForm({...editForm, requiredPermissionId: e.target.value})}
                             >
                                 <MenuItem value="">없음 (항상 표시)</MenuItem>

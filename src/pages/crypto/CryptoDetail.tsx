@@ -528,7 +528,7 @@ const CryptoDetail = () => {
                                 <ToggleButton value="DAY" key="DAY" aria-label="DAY">일</ToggleButton>
                                 <ToggleButton value="WEEK" key="WEEK" aria-label="WEEK">주</ToggleButton>
                                 <ToggleButton value="MONTH" key="MONTH" aria-label="MONTH">월</ToggleButton>
-                                <ToggleButton value="YEAR" key="YEAR" aria-label="YEAR">연</ToggleButton>
+                                <ToggleButton value="YEAR" key="YEAR" aria-label="YEAR">년</ToggleButton>
                             </StyledToggleButtonGroup>
 
                             <StyledToggleButtonGroup

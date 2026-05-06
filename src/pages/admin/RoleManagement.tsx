@@ -15,6 +15,7 @@ import DialogActions from '@mui/material/DialogActions';
 import TextField from '@mui/material/TextField';
 import Paper from '@mui/material/Paper';
 import Stack from '@mui/material/Stack';
+import Tooltip from '@mui/material/Tooltip';
 import IconButton from '@mui/material/IconButton';
 import Menu from '@mui/material/Menu';
 import MenuItem from '@mui/material/MenuItem';
@@ -32,6 +33,7 @@ import {CSS} from '@dnd-kit/utilities';
 import {createRole, deleteRole, fetchRoles, updateRole, updateRoleOrder} from '../../api/admin/AdminApi';
 import type {CreateRoleReq, RoleOrderItem, RoleRes, UpdateRoleMutationVars} from '../../type/RoleType';
 import {useAlert} from '../../context/AlertContext';
+import {useAuth} from '../../context/AuthContext';
 
 interface FormState {
     code: string;
@@ -74,7 +76,7 @@ function SortableRoleRow({role, onMenuClick}: SortableRowProps) {
                     {role.name}
                 </Typography>
                 <Typography variant="caption" color="text.secondary" noWrap>
-                    {role.defaultLandingPath || '-'}
+                    {role.defaultLandingPath || '/'}
                 </Typography>
             </Box>
             {role.isSystem && <Chip label="시스템" size="small" color="warning" />}
@@ -88,7 +90,9 @@ function SortableRoleRow({role, onMenuClick}: SortableRowProps) {
 export default function RoleManagement() {
     const showAlert = useAlert();
     const queryClient = useQueryClient();
+    const {user} = useAuth();
     const [orderChanged, setOrderChanged] = useState(false);
+    const [pendingAfterRoleId, setPendingAfterRoleId] = useState<number | null>(null);
     // 드래그로 인한 로컬 순서 override (서버 데이터에 우선 적용)
     const [orderOverride, setOrderOverride] = useState<RoleRes[] | null>(null);
 
@@ -98,6 +102,7 @@ export default function RoleManagement() {
     });
     const fetchedRoles = rolesData ?? [];
     const roles = orderOverride ?? fetchedRoles;
+    const currentUserPriority = fetchedRoles.find(r => r.code === user?.role)?.priority ?? 0;
 
     const [prevError, setPrevError] = useState(false);
     if (rolesError !== prevError) {
@@ -154,13 +159,15 @@ export default function RoleManagement() {
     });
 
     const handleSaveOrder = () => {
-        const orders: RoleOrderItem[] = roles.map((r, idx) => ({id: r.id, orderIndex: idx}));
+        const sortedPriorities = [...fetchedRoles].sort((a, b) => a.priority - b.priority).map(r => r.priority);
+        const orders: RoleOrderItem[] = roles.map((r, idx) => ({id: r.id, priority: sortedPriorities[idx]}));
         updateOrderMutation.mutate(orders);
     };
 
-    const handleOpenCreate = () => {
+    const handleOpenCreate = (afterRoleId: number | null = null) => {
         setForm(initialForm);
         setErrors({});
+        setPendingAfterRoleId(afterRoleId);
         setEditDialog({open: true, mode: 'create'});
     };
 
@@ -208,7 +215,7 @@ export default function RoleManagement() {
         },
         onSuccess: () => {
             showAlert('권한이 삭제되었습니다.', 'success');
-            setDeleteDialog({open: false, role: null});
+            setDeleteDialog(prev => ({...prev, open: false}));
             loadRoles();
         },
         onError: (err) => {
@@ -231,6 +238,7 @@ export default function RoleManagement() {
                 code: form.code.trim().toUpperCase(),
                 name: form.name.trim(),
                 defaultLandingPath: form.defaultLandingPath.trim() || null,
+                afterRoleId: pendingAfterRoleId,
             };
             createMutation.mutate(req);
         } else if (editDialog.id !== undefined) {
@@ -260,14 +268,14 @@ export default function RoleManagement() {
                             순서 저장
                         </Button>
                     )}
-                    <Button variant="contained" startIcon={<AddIcon />} onClick={handleOpenCreate}>
+                    <Button variant="contained" startIcon={<AddIcon />} onClick={() => handleOpenCreate()}>
                         권한 추가
                     </Button>
                 </Box>
             </Box>
 
             <Alert severity="info" sx={{mb: 2}}>
-                새로 추가한 역할은 어떤 권한도 갖지 않은 상태로 시작합니다. 권한 관리 화면에서 역할별 R/W/U/D 를 부여하세요.
+                새 역할은 권한이 없는 상태로 추가되니, 권한 부여 메뉴에서 부여해 주세요. 순서를 변경하면 우선순위도 함께 바뀝니다.
             </Alert>
 
             {loading ? (
@@ -277,14 +285,55 @@ export default function RoleManagement() {
             ) : (
                 <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
                     <SortableContext items={roles.map(r => r.id)} strategy={verticalListSortingStrategy}>
-                        <Stack spacing={1}>
-                            {roles.map((role) => (
-                                <SortableRoleRow
-                                    key={role.id}
-                                    role={role}
-                                    onMenuClick={(e, r) => { setMenuAnchorEl(e.currentTarget); setMenuTargetRole(r); }}
-                                />
-                            ))}
+                        <Stack spacing={0}>
+                            {roles.map((role) => {
+                                const canInsertAfter = role.priority >= currentUserPriority;
+                                const insertEnabled = canInsertAfter && !orderChanged;
+                                return (
+                                    <Box key={role.id}>
+                                        <Box sx={{mb: canInsertAfter ? 0 : 1}}>
+                                            <SortableRoleRow
+                                                role={role}
+                                                onMenuClick={(e, r) => { setMenuAnchorEl(e.currentTarget); setMenuTargetRole(r); }}
+                                            />
+                                        </Box>
+                                        {canInsertAfter && (
+                                            <Tooltip title={orderChanged ? '순서를 먼저 저장해주세요' : ''} placement="top">
+                                                <Box
+                                                    sx={{
+                                                        height: 24,
+                                                        display: 'flex',
+                                                        alignItems: 'center',
+                                                        justifyContent: 'center',
+                                                        position: 'relative',
+                                                        cursor: insertEnabled ? 'pointer' : 'not-allowed',
+                                                        opacity: 0,
+                                                        transition: 'opacity 0.15s',
+                                                        '&:hover': {opacity: insertEnabled ? 1 : 0.4},
+                                                    }}
+                                                    onClick={() => { if (insertEnabled) handleOpenCreate(role.id); }}
+                                                >
+                                                    <Box sx={{position: 'absolute', left: 0, right: 0, top: '50%', height: '2px', bgcolor: insertEnabled ? 'primary.main' : 'action.disabled', borderRadius: 1}} />
+                                                    <IconButton
+                                                        size="small"
+                                                        disabled={!insertEnabled}
+                                                        sx={{
+                                                            bgcolor: insertEnabled ? 'primary.main' : 'action.disabledBackground',
+                                                            color: insertEnabled ? 'primary.contrastText' : 'action.disabled',
+                                                            zIndex: 1,
+                                                            width: 20,
+                                                            height: 20,
+                                                            '&:hover': {bgcolor: insertEnabled ? 'primary.dark' : 'action.disabledBackground'},
+                                                        }}
+                                                    >
+                                                        <AddIcon sx={{fontSize: 14}} />
+                                                    </IconButton>
+                                                </Box>
+                                            </Tooltip>
+                                        )}
+                                    </Box>
+                                );
+                            })}
                         </Stack>
                     </SortableContext>
                 </DndContext>
@@ -305,7 +354,16 @@ export default function RoleManagement() {
             </Menu>
 
             <Dialog open={editDialog.open} onClose={() => setEditDialog({open: false, mode: 'create'})} maxWidth="sm" fullWidth>
-                <DialogTitle>{editDialog.mode === 'create' ? '권한 추가' : '권한 수정'}</DialogTitle>
+                <DialogTitle>
+                    {editDialog.mode === 'create' ? '권한 추가' : '권한 수정'}
+                    {editDialog.mode === 'create' && (
+                        <Typography variant="body2" color="error" fontWeight={600} sx={{display: 'block', mt: 0.5}}>
+                            {pendingAfterRoleId !== null
+                                ? `'${fetchedRoles.find(r => r.id === pendingAfterRoleId)?.name ?? ''}' 아래에 추가됩니다`
+                                : '본인 권한 바로 아래에 추가됩니다'}
+                        </Typography>
+                    )}
+                </DialogTitle>
                 <DialogContent>
                     <Box sx={{display: 'flex', flexDirection: 'column', gap: 2, mt: 1}}>
                         <TextField
@@ -342,16 +400,22 @@ export default function RoleManagement() {
                 </DialogActions>
             </Dialog>
 
-            <Dialog open={deleteDialog.open} onClose={() => setDeleteDialog({open: false, role: null})}>
+            <Dialog
+                open={deleteDialog.open}
+                onClose={() => setDeleteDialog(prev => ({...prev, open: false}))}
+                slotProps={{transition: {onExited: () => setDeleteDialog({open: false, role: null})}}}
+            >
                 <DialogTitle>권한 삭제</DialogTitle>
                 <DialogContent>
                     <DialogContentText>
                         <strong>{deleteDialog.role?.name}</strong>({deleteDialog.role?.code}) 권한을 삭제하시겠습니까?
                     </DialogContentText>
-                    <Alert severity="warning" sx={{mt: 1}}>해당 권한을 사용 중인 회원이 있으면 삭제되지 않습니다.</Alert>
+                    <DialogContentText sx={{mt: 1, color: 'error.main'}}>
+                        해당 권한을 사용 중인 회원이 있으면 삭제되지 않습니다.
+                    </DialogContentText>
                 </DialogContent>
                 <DialogActions>
-                    <Button onClick={() => setDeleteDialog({open: false, role: null})}>취소</Button>
+                    <Button onClick={() => setDeleteDialog(prev => ({...prev, open: false}))}>취소</Button>
                     <Button onClick={handleDelete} variant="contained" color="error" disabled={deleteMutation.isPending}>삭제</Button>
                 </DialogActions>
             </Dialog>
