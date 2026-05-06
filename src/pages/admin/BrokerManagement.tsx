@@ -1,6 +1,6 @@
 import {useState} from 'react';
 import {useQuery, useQueryClient} from '@tanstack/react-query';
-import {unwrapResponse} from '../../lib/apiResponse';
+import {requireOk} from '../../lib/apiResponse';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
 import Button from '@mui/material/Button';
@@ -33,7 +33,7 @@ export default function BrokerManagement() {
     const {data: brokersData, isLoading: loading, isError: brokersError} = useQuery<Broker[]>({
         queryKey: ['admin', 'brokers'],
         queryFn: async ({signal}) => {
-            const data = unwrapResponse<{brokers?: Broker[]} | null>(await fetchAdminBrokerList({signal, skipGlobalError: true}), null);
+            const data = requireOk<{brokers?: Broker[]} | null>(await fetchAdminBrokerList({signal, skipGlobalError: true}), null);
             return data?.brokers ?? [];
         },
     });

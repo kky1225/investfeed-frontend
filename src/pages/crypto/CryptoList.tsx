@@ -12,6 +12,7 @@ import {fetchCryptoList, fetchCryptoStream} from "../../api/crypto/CryptoApi.ts"
 import {useEffect, useMemo, useRef, useState} from "react";
 import {CryptoChartMinute, CryptoListItem, CryptoListRes, FearGreedItem} from "../../type/CryptoType.ts";
 import {usePollingQuery} from "../../lib/pollingQuery.ts";
+import {parseTradeStamp} from "../../lib/tradeStamp.ts";
 
 interface CryptoTickerData {
     market: string;
@@ -33,6 +34,7 @@ interface LiveCryptoUpdate {
     trend: 'up' | 'down' | 'neutral';
     interval: string;
     accTradePrice24h: string;
+    stamp: number;
 }
 
 const trendColor = (change: string): 'up' | 'down' | 'neutral' => {
@@ -72,6 +74,15 @@ const formatTradePrice = (price: number) => {
 
 const CryptoList = () => {
     const [liveOverlay, setLiveOverlay] = useState<Map<string, LiveCryptoUpdate>>(new Map());
+    const updateIfNewer = (market: string, incoming: LiveCryptoUpdate) => {
+        setLiveOverlay(prev => {
+            const cur = prev.get(market);
+            if (cur && cur.stamp >= incoming.stamp) return prev;
+            const next = new Map(prev);
+            next.set(market, incoming);
+            return next;
+        });
+    };
     const subscribedMarketsRef = useRef<string>('');
 
     const {data: result, isLoading, lastUpdated, pollError} = usePollingQuery<CryptoListRes>(
@@ -139,23 +150,36 @@ const CryptoList = () => {
 
             if (data.type === "CRYPTO_TICKER" && data.data) {
                 const ticker: CryptoTickerData = data.data;
-                setLiveOverlay((prev) => {
-                    const next = new Map(prev);
-                    next.set(ticker.market, {
-                        value: ticker.tradePrice.toLocaleString(),
-                        changeRate: (ticker.signedChangeRate * 100).toFixed(2),
-                        changePrice: ticker.signedChangePrice,
-                        trend: trendColor(ticker.change),
-                        interval: cryptoDateFormat(ticker.tradeDateTimeKst),
-                        accTradePrice24h: formatTradePrice(ticker.accTradePrice24h),
-                    });
-                    return next;
+                updateIfNewer(ticker.market, {
+                    value: ticker.tradePrice.toLocaleString(),
+                    changeRate: (ticker.signedChangeRate * 100).toFixed(2),
+                    changePrice: ticker.signedChangePrice,
+                    trend: trendColor(ticker.change),
+                    interval: cryptoDateFormat(ticker.tradeDateTimeKst),
+                    accTradePrice24h: formatTradePrice(ticker.accTradePrice24h),
+                    stamp: parseTradeStamp(ticker.tradeDateTimeKst),
                 });
             }
         };
 
         return socket;
     };
+
+    // 폴링 결과 → 각 자산별 updateIfNewer (stamp 비교)
+    useEffect(() => {
+        if (!result?.cryptoList) return;
+        (result.cryptoList as CryptoListItem[]).forEach((item) => {
+            updateIfNewer(item.market, {
+                value: item.tradePrice.toLocaleString(),
+                changeRate: (item.signedChangeRate * 100).toFixed(2),
+                changePrice: item.signedChangePrice,
+                trend: trendColor(item.change),
+                interval: cryptoDateFormat(item.tradeDateTimeKst),
+                accTradePrice24h: formatTradePrice(item.accTradePrice24h),
+                stamp: parseTradeStamp(item.tradeDateTimeKst),
+            });
+        });
+    }, [result]);
 
     // 폴링 결과로 markets 가 도출되면 그 시점에 stream 등록 + WebSocket 연결.
     // 24시간 거래라 시장 시간 체크 불필요.

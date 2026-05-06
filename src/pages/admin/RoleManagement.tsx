@@ -1,6 +1,6 @@
 import {useState} from 'react';
 import {useQuery, useQueryClient} from '@tanstack/react-query';
-import {unwrapResponse} from '../../lib/apiResponse';
+import {requireOk} from '../../lib/apiResponse';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
 import Button from '@mui/material/Button';
@@ -94,7 +94,7 @@ export default function RoleManagement() {
 
     const {data: rolesData, isLoading: loading, isError: rolesError} = useQuery<RoleRes[]>({
         queryKey: ['admin', 'roles'],
-        queryFn: async ({signal}) => unwrapResponse(await fetchRoles({signal, skipGlobalError: true}), [] as RoleRes[]),
+        queryFn: async ({signal}) => requireOk(await fetchRoles({signal, skipGlobalError: true}), [] as RoleRes[]),
     });
     const fetchedRoles = rolesData ?? [];
     const roles = orderOverride ?? fetchedRoles;

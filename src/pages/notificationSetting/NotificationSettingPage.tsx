@@ -1,6 +1,6 @@
 import {useState} from "react";
 import {useQuery, useQueryClient} from "@tanstack/react-query";
-import {unwrapResponse} from "../../lib/apiResponse.ts";
+import {requireOk} from "../../lib/apiResponse.ts";
 import Box from "@mui/material/Box";
 import Typography from "@mui/material/Typography";
 import Card from "@mui/material/Card";
@@ -61,7 +61,7 @@ export default function NotificationSettingPage() {
 
     const {data: setting, isLoading: loading} = useQuery<NotificationSettingRes | null>({
         queryKey: ['notificationSetting'],
-        queryFn: async ({signal}) => unwrapResponse<NotificationSettingRes | null>(await fetchNotificationSetting({signal, skipGlobalError: true}), null),
+        queryFn: async ({signal}) => requireOk<NotificationSettingRes | null>(await fetchNotificationSetting({signal, skipGlobalError: true}), null),
         // optimistic toggle 과의 race condition 방지
         refetchOnWindowFocus: false,
     });

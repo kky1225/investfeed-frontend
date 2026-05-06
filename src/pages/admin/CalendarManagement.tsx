@@ -28,7 +28,7 @@ import {
     startBulkRefresh, fetchBulkRefreshStatus,
 } from '../../api/calendar/EconomicCalendarApi';
 import type {CalendarEvent, BulkRefreshStatus} from '../../type/EconomicCalendarType';
-import {unwrapResponse} from '../../lib/apiResponse';
+import {requireOk} from '../../lib/apiResponse';
 import {useAlert} from '../../context/AlertContext';
 
 type TabKey = 'manual' | 'bulk';
@@ -64,7 +64,7 @@ export default function CalendarManagement() {
 
     const {data: events = [], isLoading: loading} = useQuery<CalendarEvent[]>({
         queryKey: ['admin', 'calendarEvents', year],
-        queryFn: async ({signal}) => unwrapResponse(
+        queryFn: async ({signal}) => requireOk(
             await fetchManualCalendarEvents({year, month: 0}, {signal, skipGlobalError: true}),
             [] as CalendarEvent[],
         ),

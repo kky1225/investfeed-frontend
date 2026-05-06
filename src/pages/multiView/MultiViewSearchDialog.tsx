@@ -18,7 +18,7 @@ import {fetchStockSearch} from "../../api/stock/StockApi.ts";
 import {fetchCryptoSearch} from "../../api/crypto/CryptoApi.ts";
 import {fetchCommodityList} from "../../api/commodity/CommodityApi.ts";
 import type {MultiViewAssetType, SelectedAsset} from "../../type/MultiViewType.ts";
-import {unwrapResponse} from "../../lib/apiResponse.ts";
+import {requireOk} from "../../lib/apiResponse.ts";
 
 interface MultiViewSearchDialogProps {
     open: boolean;
@@ -43,7 +43,7 @@ export default function MultiViewSearchDialog({open, onClose, onSelect}: MultiVi
     const {data: commodityListData} = useQuery<SearchItem[]>({
         queryKey: ['multiView', 'commodityList'],
         queryFn: async ({signal}) => {
-            const result = unwrapResponse(await fetchCommodityList({signal, skipGlobalError: true}), {commodityList: [] as {stkCd: string; stkNm: string}[]});
+            const result = requireOk(await fetchCommodityList({signal, skipGlobalError: true}), {commodityList: [] as {stkCd: string; stkNm: string}[]});
             return (result.commodityList ?? []).map((item: {stkCd: string; stkNm: string}) => ({
                 stkCd: item.stkCd,
                 stkNm: item.stkNm,

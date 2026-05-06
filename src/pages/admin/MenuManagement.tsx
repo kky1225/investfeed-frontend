@@ -1,6 +1,6 @@
 import {useCallback, useEffect, useRef, useState} from 'react';
 import {useQuery} from '@tanstack/react-query';
-import {unwrapResponse} from '../../lib/apiResponse';
+import {requireOk} from '../../lib/apiResponse';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
 import Button from '@mui/material/Button';
@@ -242,7 +242,7 @@ export default function MenuManagement() {
     const loadMenus = useCallback(async () => {
         setLoading(true);
         try {
-            const result = unwrapResponse<MenuRes[] | null>(await fetchAllMenus(), null);
+            const result = requireOk<MenuRes[] | null>(await fetchAllMenus(), null);
             if (result) {
                 const flat = flattenTree(result);
                 setFlatItems(flat);
@@ -271,14 +271,14 @@ export default function MenuManagement() {
     // 권한 목록 / 어드민 broker 목록은 정적 — useQuery 결과 직접 사용 (별도 useState 불필요)
     const {data: permissionsData} = useQuery<PermissionRes[]>({
         queryKey: ['admin', 'permissions'],
-        queryFn: async ({signal}) => unwrapResponse(await fetchPermissions({signal, skipGlobalError: true}), [] as PermissionRes[]),
+        queryFn: async ({signal}) => requireOk(await fetchPermissions({signal, skipGlobalError: true}), [] as PermissionRes[]),
     });
     const permissions = permissionsData ?? [];
 
     const {data: apiBrokersData} = useQuery<Broker[]>({
         queryKey: ['admin', 'apiBrokers'],
         queryFn: async ({signal}) => {
-            const data = unwrapResponse<{brokers?: Broker[]} | null>(await fetchAdminBrokerList({signal, skipGlobalError: true}), null);
+            const data = requireOk<{brokers?: Broker[]} | null>(await fetchAdminBrokerList({signal, skipGlobalError: true}), null);
             const all: Broker[] = data?.brokers ?? [];
             return all.filter(b => b.type === 'API');
         },

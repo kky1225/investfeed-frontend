@@ -48,6 +48,13 @@ const ThemeStockList = () => {
         (config) => fetchThemeStockList(themeGrpCdParam, DEFAULT_REQ, config),
     );
 
+    // 키움 ka90002 응답에 시각 필드가 없어 stamp 비교 불가. 폴링 도착 시 WS overlay 를
+    // 비워서 stale 가격이 새 폴링 결과를 덮어쓰지 못하게 한다.
+    useEffect(() => {
+        if (!result) return;
+        setLiveOverlay(new Map());
+    }, [result]);
+
     const row: ThemeStockGridRow[] = useMemo(() => {
         if (!result) return [];
         const list: ThemeStockListItem[] = result.themeStockList ?? [];

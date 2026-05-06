@@ -6,7 +6,7 @@ import Stack from "@mui/material/Stack";
 import Chip from "@mui/material/Chip";
 import Card from "@mui/material/Card";
 import Skeleton from "@mui/material/Skeleton";
-import {MouseEvent, ReactElement, useMemo, useRef, useState} from "react";
+import {MouseEvent, ReactElement, useEffect, useMemo, useRef, useState} from "react";
 import CandlestickChartIcon from '@mui/icons-material/CandlestickChart';
 import StackedLineChartIcon from '@mui/icons-material/StackedLineChart';
 import ToggleButton from '@mui/material/ToggleButton';
@@ -25,6 +25,7 @@ import NotificationsActiveIcon from "@mui/icons-material/NotificationsActive";
 import PriceTargetDialog from "../../components/PriceTargetDialog.tsx";
 import FreshnessIndicator from "../../components/FreshnessIndicator.tsx";
 import {usePollingQuery} from "../../lib/pollingQuery.ts";
+import {parseTradeStamp} from "../../lib/tradeStamp.ts";
 
 interface CryptoTickerData {
     market: string;
@@ -163,18 +164,40 @@ const CryptoDetail = () => {
     );
     const loading = isLoading;
 
-    // WebSocket 으로 들어오는 실시간 부분 갱신을 보관하는 overlay state.
-    // 폴링 결과 (base*) 와 머지해서 최종 값을 만든다.
-    const [liveChartOverlay, setLiveChartOverlay] = useState<Partial<CryptoDetailLineChartProps>>({});
-    const [liveInfoOverlay, setLiveInfoOverlay] = useState<Partial<CryptoInfoProps>>({});
+    type LivePrice = {
+        tradePrice: number;
+        signedChangeRate: number;
+        signedChangePrice: number;
+        change: string;
+        accTradeVolume24h: number;
+        accTradePrice24h: number;
+        tradeDateTimeKst: string;
+        stamp: number;
+    };
+    const [livePrice, setLivePrice] = useState<LivePrice | null>(null);
+    const updateIfNewer = (incoming: LivePrice) =>
+        setLivePrice(prev => (!prev || incoming.stamp > prev.stamp) ? incoming : prev);
 
-    // market 변경 시 overlay reset
     const [prevMarket, setPrevMarket] = useState(market);
     if (market !== prevMarket) {
         setPrevMarket(market);
-        setLiveChartOverlay({});
-        setLiveInfoOverlay({});
+        setLivePrice(null);
     }
+
+    useEffect(() => {
+        if (!result?.cryptoInfo) return;
+        const c = result.cryptoInfo;
+        updateIfNewer({
+            tradePrice: c.tradePrice,
+            signedChangeRate: c.signedChangeRate,
+            signedChangePrice: c.signedChangePrice,
+            change: c.change,
+            accTradeVolume24h: c.accTradeVolume24h,
+            accTradePrice24h: c.accTradePrice24h,
+            tradeDateTimeKst: c.tradeDateTimeKst,
+            stamp: parseTradeStamp(c.tradeDateTimeKst),
+        });
+    }, [result]);
 
     // 폴링 결과 → base chartData (useMemo)
     const baseChartData = useMemo<CryptoDetailLineChartProps>(() => {
@@ -297,16 +320,28 @@ const CryptoDetail = () => {
         ];
     }, [result]);
 
-    // 최종 chartData / info = base + WS overlay 머지
-    const chartData = useMemo<CryptoDetailLineChartProps>(() => ({
-        ...baseChartData,
-        ...liveChartOverlay,
-    }), [baseChartData, liveChartOverlay]);
+    // 최종 chartData / info = base (chart series 등) + livePrice (실시간 헤더 필드) 머지
+    const chartData = useMemo<CryptoDetailLineChartProps>(() => {
+        if (!livePrice) return baseChartData;
+        return {
+            ...baseChartData,
+            value: livePrice.tradePrice.toLocaleString(),
+            changeRate: (livePrice.signedChangeRate * 100).toFixed(2),
+            changePrice: livePrice.signedChangePrice,
+            trend: trendColor(livePrice.change),
+            interval: cryptoDateFormat(livePrice.tradeDateTimeKst, true),
+        };
+    }, [baseChartData, livePrice]);
 
-    const info = useMemo<CryptoInfoProps>(() => ({
-        ...baseInfo,
-        ...liveInfoOverlay,
-    }), [baseInfo, liveInfoOverlay]);
+    const info = useMemo<CryptoInfoProps>(() => {
+        if (!livePrice) return baseInfo;
+        return {
+            ...baseInfo,
+            tradePrice: livePrice.tradePrice,
+            accTradeVolume24h: livePrice.accTradeVolume24h,
+            accTradePrice24h: livePrice.accTradePrice24h,
+        };
+    }, [baseInfo, livePrice]);
 
     // WebSocket 라이프사이클 — 24시간 거래라 시장 시간 체크 불필요. useCryptoWebSocket 훅이 연결/정리 처리.
     useCryptoWebSocket({
@@ -320,20 +355,15 @@ const CryptoDetail = () => {
             // 현재 상세 페이지의 코인만 업데이트
             if (ticker.market !== id) return;
 
-            const tradeDateTimeKst = cryptoDateFormat(ticker.tradeDateTimeKst, true);
-
-            setLiveChartOverlay({
-                value: ticker.tradePrice.toLocaleString(),
-                changeRate: (ticker.signedChangeRate * 100).toFixed(2),
-                changePrice: ticker.signedChangePrice,
-                trend: trendColor(ticker.change),
-                interval: tradeDateTimeKst,
-            });
-
-            setLiveInfoOverlay({
+            updateIfNewer({
                 tradePrice: ticker.tradePrice,
+                signedChangeRate: ticker.signedChangeRate,
+                signedChangePrice: ticker.signedChangePrice,
+                change: ticker.change,
                 accTradeVolume24h: ticker.accTradeVolume24h,
                 accTradePrice24h: ticker.accTradePrice24h,
+                tradeDateTimeKst: ticker.tradeDateTimeKst,
+                stamp: parseTradeStamp(ticker.tradeDateTimeKst),
             });
         },
     });

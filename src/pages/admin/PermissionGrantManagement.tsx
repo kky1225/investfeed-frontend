@@ -1,6 +1,6 @@
 import {useMemo, useState} from 'react';
 import {useQuery, useQueryClient} from '@tanstack/react-query';
-import {unwrapResponse} from '../../lib/apiResponse';
+import {requireOk} from '../../lib/apiResponse';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
 import Button from '@mui/material/Button';
@@ -37,13 +37,13 @@ export default function PermissionGrantManagement() {
 
     const {data: permissionsData, isLoading: loading, isError: permError} = useQuery<PermissionRes[]>({
         queryKey: ['admin', 'permissionGrants'],
-        queryFn: async ({signal}) => unwrapResponse(await fetchPermissionGrants({signal, skipGlobalError: true}), [] as PermissionRes[]),
+        queryFn: async ({signal}) => requireOk(await fetchPermissionGrants({signal, skipGlobalError: true}), [] as PermissionRes[]),
     });
     const permissions = permissionsData ?? [];
 
     const {data: rolesData} = useQuery<RoleRes[]>({
         queryKey: ['admin', 'roles'],
-        queryFn: async ({signal}) => unwrapResponse(await fetchRoles({signal, skipGlobalError: true}), [] as RoleRes[]),
+        queryFn: async ({signal}) => requireOk(await fetchRoles({signal, skipGlobalError: true}), [] as RoleRes[]),
     });
     const roles = rolesData ?? [];
 

@@ -1,4 +1,4 @@
-import {JSX, MouseEvent, ReactElement, useMemo, useRef, useState} from "react";
+import {JSX, MouseEvent, ReactElement, useEffect, useMemo, useRef, useState} from "react";
 import {useParams} from "react-router-dom";
 import {Accordion, AccordionDetails, AccordionSummary, Box, Select, SelectChangeEvent, Slider, Tooltip} from "@mui/material";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
@@ -37,6 +37,7 @@ import {MarketType} from "../../type/timeType.ts";
 import {renderChangeAmount} from "../../components/CustomRender.tsx";
 import FreshnessIndicator from "../../components/FreshnessIndicator.tsx";
 import {usePollingQuery} from "../../lib/pollingQuery.ts";
+import {parseKiwoomStamp} from "../../lib/tradeStamp.ts";
 
 const StyledToggleButtonGroup = styled(ToggleButtonGroup)(({ theme }) => ({
     border: 'none',
@@ -189,14 +190,22 @@ const CommodityDetail = () => {
     );
     const loading = isLoading;
 
-    // WebSocket 으로 들어오는 실시간 부분 갱신을 보관하는 overlay state.
-    const [liveChartOverlay, setLiveChartOverlay] = useState<Partial<CommodityDetailLineChartProps>>({});
+    type LivePrice = {
+        value: string;
+        fluRt: string;
+        predPre: string;
+        trend: 'up' | 'down' | 'neutral';
+        stamp: number;
+    };
+    const [livePrice, setLivePrice] = useState<LivePrice | null>(null);
+    const updateIfNewer = (incoming: LivePrice) =>
+        setLivePrice(prev => (!prev || incoming.stamp > prev.stamp) ? incoming : prev);
 
-    // stkCd 변경 시 overlay reset
+    // stkCd 변경 시 reset
     const [prevStkCd, setPrevStkCd] = useState(stkCd);
     if (stkCd !== prevStkCd) {
         setPrevStkCd(stkCd);
-        setLiveChartOverlay({});
+        setLivePrice(null);
     }
 
     // 폴링 결과 → base chartData
@@ -328,11 +337,30 @@ const CommodityDetail = () => {
         return checkInvestor(commodityInfo.stkNm, commodityInfo.frgnrNetprps, commodityInfo.orgnNetprps);
     }, [result]);
 
-    // 최종 commodityChartData = base + WS overlay 머지
-    const commodityChartData = useMemo<CommodityDetailLineChartProps>(() => ({
-        ...baseCommodityChartData,
-        ...liveChartOverlay,
-    }), [baseCommodityChartData, liveChartOverlay]);
+    // 폴링 결과 → livePrice (stamp 비교)
+    useEffect(() => {
+        if (!result?.commodityInfo) return;
+        const c = result.commodityInfo;
+        updateIfNewer({
+            value: Number(c.curPrc.replace(/^[+-]/, '')).toLocaleString(),
+            fluRt: c.fluRt,
+            predPre: c.predPre || '0',
+            trend: trendColor(c.predPreSig),
+            stamp: parseKiwoomStamp(c.tm),
+        });
+    }, [result]);
+
+    // 최종 commodityChartData = base (chart series 등) + livePrice (실시간 헤더)
+    const commodityChartData = useMemo<CommodityDetailLineChartProps>(() => {
+        if (!livePrice) return baseCommodityChartData;
+        return {
+            ...baseCommodityChartData,
+            value: livePrice.value,
+            fluRt: livePrice.fluRt,
+            predPre: livePrice.predPre,
+            trend: livePrice.trend,
+        };
+    }, [baseCommodityChartData, livePrice]);
 
     const [toggle, setToggle] = useState('DAY');
     const [formats, setFormats] = useState('line');
@@ -363,17 +391,19 @@ const CommodityDetail = () => {
                     value: values["10"],
                     change: values["11"],
                     fluRt: values["12"],
-                    trend: values["25"]
+                    trend: values["25"],
+                    tradeTime: values["20"],
                 };
             });
 
-            commodityList.forEach((commodity: CommodityStream) => {
+            commodityList.forEach((commodity: CommodityStream & {tradeTime?: string}) => {
                 if (commodity.code === stkCd) {
-                    setLiveChartOverlay({
+                    updateIfNewer({
                         value: commodity.value.replace(/^[+-]/, '').toLocaleString(),
                         predPre: commodity.change || '0',
                         fluRt: commodity.fluRt,
-                        trend: trendColor(commodity.trend)
+                        trend: trendColor(commodity.trend),
+                        stamp: parseKiwoomStamp(commodity.tradeTime),
                     });
                 }
             });

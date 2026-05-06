@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { fetchApiKeys } from '../api/auth/AuthApi';
 import { fetchBrokerList, fetchMyBrokerList } from '../api/broker/BrokerApi';
 import { fetchMyCryptoBrokerList } from '../api/cryptoBroker/CryptoBrokerApi';
-import { unwrapResponse } from '../lib/apiResponse';
+import { requireOk } from '../lib/apiResponse';
 import type { ApiKeyRes } from '../type/AuthType';
 import type { Broker, MemberBroker } from '../type/BrokerType';
 import { useAuth } from './AuthContext';
@@ -56,14 +56,14 @@ export function ApiKeyStatusProvider({ children }: { children: ReactNode }) {
 
     const apiKeysQuery = useQuery<ApiKeyRes[]>({
         queryKey: apiKeyStatusKeys.apiKeys,
-        queryFn: async ({signal}) => unwrapResponse(await fetchApiKeys({signal, skipGlobalError: true}), [] as ApiKeyRes[]),
+        queryFn: async ({signal}) => requireOk(await fetchApiKeys({signal, skipGlobalError: true}), [] as ApiKeyRes[]),
         enabled: isInitialized && isAuthenticated,
     });
 
     const brokersQuery = useQuery<Broker[]>({
         queryKey: apiKeyStatusKeys.brokers,
         queryFn: async ({signal}) => {
-            const result = unwrapResponse(await fetchBrokerList({signal, skipGlobalError: true}), {brokers: [] as Broker[]});
+            const result = requireOk(await fetchBrokerList({signal, skipGlobalError: true}), {brokers: [] as Broker[]});
             return result.brokers ?? [];
         },
         enabled: isInitialized && isAuthenticated && canReadStockBroker,
@@ -72,7 +72,7 @@ export function ApiKeyStatusProvider({ children }: { children: ReactNode }) {
     const myStockBrokersQuery = useQuery<MemberBroker[]>({
         queryKey: apiKeyStatusKeys.myStockBrokers,
         queryFn: async ({signal}) => {
-            const result = unwrapResponse(await fetchMyBrokerList({signal, skipGlobalError: true}), {brokers: [] as MemberBroker[]});
+            const result = requireOk(await fetchMyBrokerList({signal, skipGlobalError: true}), {brokers: [] as MemberBroker[]});
             return result.brokers ?? [];
         },
         enabled: isInitialized && isAuthenticated && canReadStockBroker,
@@ -81,7 +81,7 @@ export function ApiKeyStatusProvider({ children }: { children: ReactNode }) {
     const myCryptoBrokersQuery = useQuery<MemberBroker[]>({
         queryKey: apiKeyStatusKeys.myCryptoBrokers,
         queryFn: async ({signal}) => {
-            const result = unwrapResponse(await fetchMyCryptoBrokerList({signal, skipGlobalError: true}), {brokers: [] as MemberBroker[]});
+            const result = requireOk(await fetchMyCryptoBrokerList({signal, skipGlobalError: true}), {brokers: [] as MemberBroker[]});
             return result.brokers ?? [];
         },
         enabled: isInitialized && isAuthenticated && canReadCryptoBroker,

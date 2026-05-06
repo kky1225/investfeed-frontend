@@ -13,12 +13,14 @@ import {fetchCommodityList, fetchCommodityStream} from "../../api/commodity/Comm
 import FreshnessIndicator from "../../components/FreshnessIndicator.tsx";
 import {ChartMinute, CommodityListItem, CommodityListRes, CommodityStream, CommodityStreamRes} from "../../type/CommodityType.ts";
 import {usePollingQuery} from "../../lib/pollingQuery.ts";
+import {parseKiwoomStamp} from "../../lib/tradeStamp.ts";
 
 interface LiveCommodityUpdate {
     value: string;
     fluRt: string;
     predPre: string;
     trend: 'up' | 'down' | 'neutral';
+    stamp: number;
 }
 
 const trendColor = (value: string): 'up' | 'down' | 'neutral' =>
@@ -39,6 +41,15 @@ const CommodityList = () => {
     const chartTimer = useRef<number>(0);
     const marketTimer = useRef<number>(0);
     const [liveOverlay, setLiveOverlay] = useState<Map<string, LiveCommodityUpdate>>(new Map());
+    const updateIfNewer = (code: string, incoming: LiveCommodityUpdate) => {
+        setLiveOverlay(prev => {
+            const cur = prev.get(code);
+            if (cur && cur.stamp >= incoming.stamp) return prev;
+            const next = new Map(prev);
+            next.set(code, incoming);
+            return next;
+        });
+    };
 
     const {data: result, isLoading, lastUpdated, pollError} = usePollingQuery<CommodityListRes>(
         ['commodityList'],
@@ -53,8 +64,8 @@ const CommodityList = () => {
         const year = list[0].chartMinuteList[0]?.cntrTm?.substring(0, 4) ?? '';
         const month = list[0].chartMinuteList[0]?.cntrTm?.substring(4, 6) ?? '';
         const day = list[0].chartMinuteList[0]?.cntrTm?.substring(6, 8) ?? '';
-        const hour = list[0].tm.substring(0, 2);
-        const minute = list[0].tm.substring(2, 4);
+        const hour = list[0].tmN.substring(0, 2);
+        const minute = list[0].tmN.substring(2, 4);
 
         const today = (Number(hour) >= 20 || Number(hour) < 8)
             ? `${year}.${month}.${day} 장마감`
@@ -140,7 +151,7 @@ const CommodityList = () => {
             const data = JSON.parse(event.data);
 
             if (data.trnm === "REAL" && Array.isArray(data.data)) {
-                const updates = data.data.map((entry: CommodityStreamRes): CommodityStream => {
+                const updates = data.data.map((entry: CommodityStreamRes) => {
                     const values = entry.values;
                     return {
                         code: entry.item,
@@ -148,26 +159,38 @@ const CommodityList = () => {
                         change: values["11"],
                         fluRt: values["12"],
                         trend: values["25"],
+                        tradeTime: values["20"],
                     };
                 });
 
-                setLiveOverlay((prev) => {
-                    const next = new Map(prev);
-                    updates.forEach((u: CommodityStream) => {
-                        next.set(u.code, {
-                            value: Number(u.value.replace(/^[+-]/, '')).toLocaleString(),
-                            fluRt: u.fluRt,
-                            predPre: u.change || '0',
-                            trend: trendColor(u.trend),
-                        });
+                updates.forEach((u: CommodityStream & {tradeTime?: string}) => {
+                    updateIfNewer(u.code, {
+                        value: Number(u.value.replace(/^[+-]/, '')).toLocaleString(),
+                        fluRt: u.fluRt,
+                        predPre: u.change || '0',
+                        trend: trendColor(u.trend),
+                        stamp: parseKiwoomStamp(u.tradeTime),
                     });
-                    return next;
                 });
             }
         };
 
         return socket;
     };
+
+    // 폴링 결과 → 각 자산별 updateIfNewer (stamp 비교)
+    useEffect(() => {
+        if (!result?.commodityList) return;
+        (result.commodityList as CommodityListItem[]).forEach((item) => {
+            updateIfNewer(item.stkCd, {
+                value: Number(item.curPrc.replace(/^[+-]/, '')).toLocaleString(),
+                fluRt: item.fluRt,
+                predPre: item.predPre || '0',
+                trend: trendColor(item.predPreSig),
+                stamp: parseKiwoomStamp(item.tmN),
+            });
+        });
+    }, [result]);
 
     useEffect(() => {
         let socketTimeout: ReturnType<typeof setTimeout>;

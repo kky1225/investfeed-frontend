@@ -50,6 +50,7 @@ import * as React from "react";
 import {renderTradeColor, renderChangeAmount} from "../../components/CustomRender.tsx";
 import FavoriteBorderIcon from "@mui/icons-material/FavoriteBorder";
 import {usePollingQuery} from "../../lib/pollingQuery.ts";
+import {parseTradeStamp} from "../../lib/tradeStamp.ts";
 import FavoriteIcon from "@mui/icons-material/Favorite";
 import IconButton from "@mui/material/IconButton";
 import Button from "@mui/material/Button";
@@ -287,18 +288,34 @@ const StockDetail = () => {
     const [programChartLoaded, setProgramChartLoaded] = useState(false);
     const [priceTargetOpen, setPriceTargetOpen] = useState(false);
 
-    // WebSocket 으로 들어오는 실시간 부분 갱신 overlay.
-    // expectedPrice 는 WS 가 set/clear 둘 다 하므로 sentinel 삼중 상태:
-    //   undefined = 폴링 base 사용, null = WS 가 명시적으로 지움, object = WS 가 채움
-    const [liveStockChartOverlay, setLiveStockChartOverlay] = useState<Partial<CustomStockDetailLineChartProps>>({});
-    const [liveExpectedPriceOverlay, setLiveExpectedPriceOverlay] = useState<ExpectedPriceShape | null | undefined>(undefined);
+    // 폴링 (`stockInfo.tm`) 와 WS (values["20"]) 양쪽이 같은 종목의 실시간 가격을 독립적으로 갱신.
+    // stamp (epoch ms) 비교로 last-write-wins — 더 오래된 값이 더 새로운 값을 덮지 않게.
+    type LivePrice = {
+        value: string;
+        fluRt: string;
+        predPre: string;
+        trend: 'up' | 'down' | 'neutral';
+        stamp: number;
+    };
+    // 예상 체결가 — WS "0H" / 폴링 expCntrPric 가 채우고, WS 정규 메시지 / 폴링 미수신이 clear.
+    // 둘 다 stamp 로 last-write-wins. value=null 은 명시적 clear, state 자체가 null 이면 미수신 → base 사용.
+    type LiveExpected = {
+        value: ExpectedPriceShape | null;
+        stamp: number;
+    };
+    const [livePrice, setLivePrice] = useState<LivePrice | null>(null);
+    const [liveExpected, setLiveExpected] = useState<LiveExpected | null>(null);
+    const updateIfNewerLive = (incoming: LivePrice) =>
+        setLivePrice(prev => (!prev || incoming.stamp > prev.stamp) ? incoming : prev);
+    const updateIfNewerExp = (incoming: LiveExpected) =>
+        setLiveExpected(prev => (!prev || incoming.stamp > prev.stamp) ? incoming : prev);
 
-    // stkCd 변경 시 overlay reset (이전 종목 데이터 잔존 방지)
+    // stkCd 변경 시 reset
     const [prevStkCd, setPrevStkCd] = useState(stkCd);
     if (stkCd !== prevStkCd) {
         setPrevStkCd(stkCd);
-        setLiveStockChartOverlay({});
-        setLiveExpectedPriceOverlay(undefined);
+        setLivePrice(null);
+        setLiveExpected(null);
     }
 
     const {data: result, isLoading, lastUpdated, pollError} = usePollingQuery<StockDetailRes>(
@@ -319,20 +336,25 @@ const StockDetail = () => {
             data.data.forEach((res: StockStreamRes) => {
                 if (res.item !== stkCd) return;
                 const values = res.values;
+                const stamp = parseTradeStamp(values["20"]);
 
                 if (res.type === "0H") {
-                    setLiveExpectedPriceOverlay({
-                        value: Number(values["10"]?.replace(/^[+-]/, '') ?? '0').toLocaleString(),
-                        fluRt: values["12"] ?? '0',
-                        trend: trendColor(values["25"] ?? '3'),
+                    updateIfNewerExp({
+                        value: {
+                            value: Number(values["10"]?.replace(/^[+-]/, '') ?? '0').toLocaleString(),
+                            fluRt: values["12"] ?? '0',
+                            trend: trendColor(values["25"] ?? '3'),
+                        },
+                        stamp,
                     });
                 } else {
-                    setLiveExpectedPriceOverlay(null);
-                    setLiveStockChartOverlay({
+                    updateIfNewerExp({value: null, stamp});
+                    updateIfNewerLive({
                         value: Number(values["10"]?.replace(/^[+-]/, '') ?? '0').toLocaleString(),
                         fluRt: values["12"] ?? '0',
                         predPre: values["11"] || '0',
                         trend: trendColor(values["25"] ?? '3'),
+                        stamp,
                     });
                 }
             });
@@ -577,19 +599,52 @@ const StockDetail = () => {
         };
     }, [result]);
 
-    // 최종 stockChartData / expectedPrice = base + WS overlay 머지
-    const stockChartData = useMemo<CustomStockDetailLineChartProps>(() => ({
-        ...baseStockChartData,
-        ...liveStockChartOverlay,
-    }), [baseStockChartData, liveStockChartOverlay]);
+    // 폴링 결과 도착 시 stamp 비교 후 livePrice / liveExpected 갱신
+    useEffect(() => {
+        if (!result?.stockInfo) return;
+        const s = result.stockInfo;
+        const stamp = parseTradeStamp(s.tm);
 
-    // expectedPrice: WS overlay 의 sentinel 처리
-    //   undefined = WS 메시지 없음 → base 사용
-    //   null      = WS 가 명시적으로 지움 → null
-    //   object    = WS 가 채움 → object
+        updateIfNewerLive({
+            value: Number(s.curPrc.replace(/^[+-]/, '')).toLocaleString(),
+            fluRt: s.fluRt,
+            predPre: s.predPre || '0',
+            trend: trendColor(s.preSig),
+            stamp,
+        });
+
+        // 폴링 base expected — expCntrPric 가 있으면 채우고 없으면 명시적 clear (둘 다 같은 stamp)
+        const expPric = s.expCntrPric;
+        if (!expPric || Number(expPric) === 0) {
+            updateIfNewerExp({value: null, stamp});
+        } else {
+            updateIfNewerExp({
+                value: {
+                    value: Number(expPric.replace(/^[+-]/, '')).toLocaleString(),
+                    fluRt: s.expCntrFluRt || undefined,
+                    trend: s.expCntrPreSig ? trendColor(s.expCntrPreSig) : undefined,
+                },
+                stamp,
+            });
+        }
+    }, [result]);
+
+    // 최종 stockChartData = base (chart series, title 등) + livePrice (실시간 헤더)
+    const stockChartData = useMemo<CustomStockDetailLineChartProps>(() => {
+        if (!livePrice) return baseStockChartData;
+        return {
+            ...baseStockChartData,
+            value: livePrice.value,
+            fluRt: livePrice.fluRt,
+            predPre: livePrice.predPre,
+            trend: livePrice.trend,
+        };
+    }, [baseStockChartData, livePrice]);
+
+    // expectedPrice: liveExpected 가 있으면 그 value (null 포함), 없으면 baseExpectedPrice
     const expectedPrice = useMemo<ExpectedPriceShape | null>(() => {
-        return liveExpectedPriceOverlay !== undefined ? liveExpectedPriceOverlay : baseExpectedPrice;
-    }, [baseExpectedPrice, liveExpectedPriceOverlay]);
+        return liveExpected !== null ? liveExpected.value : baseExpectedPrice;
+    }, [baseExpectedPrice, liveExpected]);
 
     // loadProgramChart 가 초기 로드 후, 폴링이 들어올 때마다 오늘의 prmNetprpsQty 를 누적.
     // (이건 useMemo 로 못 풂 — prev 에 append 하는 stateful accumulation 패턴.)

@@ -24,7 +24,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { fetchProfile, updateProfile } from '../../api/auth/AuthApi';
 import { useAuth } from '../../context/AuthContext';
-import { unwrapResponse } from '../../lib/apiResponse';
+import { requireOk } from '../../lib/apiResponse';
 import type { MemberRes } from '../../type/AuthType';
 
 const ERROR_MESSAGES: Record<string, string> = {
@@ -95,7 +95,7 @@ export default function Profile(props: { disableCustomTheme?: boolean }) {
 
     const {data: profile, isLoading: initialLoading, isError: profileError} = useQuery<MemberRes | null>({
         queryKey: ['profile'],
-        queryFn: async ({signal}) => unwrapResponse<MemberRes | null>(await fetchProfile({signal, skipGlobalError: true}), null),
+        queryFn: async ({signal}) => requireOk<MemberRes | null>(await fetchProfile({signal, skipGlobalError: true}), null),
     });
 
     // 서버 응답 도착 시 form 입력 필드를 한 번만 초기화 (이후 사용자 편집 보존).

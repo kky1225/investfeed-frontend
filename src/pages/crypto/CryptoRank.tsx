@@ -7,7 +7,7 @@ import {GridColDef} from "@mui/x-data-grid";
 import {DataGrid} from "@mui/x-data-grid";
 import {fetchCryptoRankList, fetchCryptoRankStream} from "../../api/crypto/CryptoApi.ts";
 import {CryptoRankItem} from "../../type/CryptoType.ts";
-import {unwrapResponse} from "../../lib/apiResponse.ts";
+import {requireOk} from "../../lib/apiResponse.ts";
 import {useNavigate} from "react-router-dom";
 import {renderChip} from "../../components/CustomRender.tsx";
 
@@ -84,7 +84,7 @@ const CryptoRank = () => {
 
     const {data: items, isLoading: loading} = useQuery<CryptoRankItem[]>({
         queryKey: ['cryptoRankList'],
-        queryFn: async ({signal}) => unwrapResponse(await fetchCryptoRankList({signal, skipGlobalError: true}), [] as CryptoRankItem[]),
+        queryFn: async ({signal}) => requireOk(await fetchCryptoRankList({signal, skipGlobalError: true}), [] as CryptoRankItem[]),
     });
 
     const rows: CryptoRankRow[] = useMemo(() => {

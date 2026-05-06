@@ -1,6 +1,6 @@
 import {useMemo, useState} from 'react';
 import {useQuery, useQueryClient} from '@tanstack/react-query';
-import {unwrapResponse} from '../../lib/apiResponse';
+import {requireOk} from '../../lib/apiResponse';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
 import Button from '@mui/material/Button';
@@ -66,7 +66,7 @@ export default function PermissionCatalogManagement() {
 
     const {data: permissionsData, isLoading: loading, isError: permError} = useQuery<PermissionRes[]>({
         queryKey: ['admin', 'permissionCatalog'],
-        queryFn: async ({signal}) => unwrapResponse(await fetchPermissionCatalog({signal, skipGlobalError: true}), [] as PermissionRes[]),
+        queryFn: async ({signal}) => requireOk(await fetchPermissionCatalog({signal, skipGlobalError: true}), [] as PermissionRes[]),
     });
     const permissions = permissionsData ?? [];
 

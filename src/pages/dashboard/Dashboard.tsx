@@ -68,6 +68,13 @@ export default function Dashboard() {
         (config) => fetchDashboard(config),
     );
 
+    // 키움 응답에 시각 필드가 없어 stamp 비교 불가. 폴링 도착 시 WS overlay 를
+    // 비워서 stale 가격이 새 폴링 결과를 덮어쓰지 못하게 한다.
+    useEffect(() => {
+        if (!result) return;
+        setLiveOverlay(new Map());
+    }, [result]);
+
     // 폴링 결과 + 실시간 overlay 합산
     const indexDataList: StatCardProps[] = useMemo(() => {
         if (!result?.indexList || result.indexList.length === 0) {

@@ -14,7 +14,7 @@ import LinkIcon from "@mui/icons-material/Link";
 import {fetchCryptoBrokerList, addMyCryptoBroker} from "../../api/cryptoBroker/CryptoBrokerApi.ts";
 import type {Broker} from "../../type/BrokerType.ts";
 import {useApiKeyStatus, apiKeyStatusKeys} from "../../context/ApiKeyStatusContext.tsx";
-import {unwrapResponse} from "../../lib/apiResponse.ts";
+import {requireOk} from "../../lib/apiResponse.ts";
 
 interface AddCryptoBrokerDialogProps {
     open: boolean;
@@ -31,7 +31,7 @@ export default function AddCryptoBrokerDialog({open, onClose}: AddCryptoBrokerDi
 
     const {data: brokersData} = useQuery<Broker[]>({
         queryKey: ['cryptoBrokerList'],
-        queryFn: async ({signal}) => unwrapResponse(await fetchCryptoBrokerList({signal, skipGlobalError: true}), {brokers: [] as Broker[]}).brokers ?? [],
+        queryFn: async ({signal}) => requireOk(await fetchCryptoBrokerList({signal, skipGlobalError: true}), {brokers: [] as Broker[]}).brokers ?? [],
         enabled: open,
     });
     const brokers = brokersData ?? [];

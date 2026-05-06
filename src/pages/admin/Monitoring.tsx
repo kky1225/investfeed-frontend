@@ -1,6 +1,6 @@
 import {useState} from 'react';
 import {useQuery, useQueryClient} from '@tanstack/react-query';
-import {unwrapResponse} from '../../lib/apiResponse';
+import {requireOk} from '../../lib/apiResponse';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
 import Tabs from '@mui/material/Tabs';
@@ -162,7 +162,7 @@ export default function Monitoring() {
             logsFromDate ? logsFromDate.format('YYYY-MM-DD') : null,
             logsToDate ? logsToDate.format('YYYY-MM-DD') : null,
             logsMessageKeyword],
-        queryFn: async ({signal}) => unwrapResponse(await fetchSchedulerOverview({
+        queryFn: async ({signal}) => requireOk(await fetchSchedulerOverview({
             page: logsPage,
             size: logsSize,
             schedulerName: logsSchedulerFilter || null,
@@ -179,7 +179,7 @@ export default function Monitoring() {
 
     const configQuery = useQuery({
         queryKey: ['monitoring', 'config', configLogsPage, configLogsSize],
-        queryFn: async ({signal}) => unwrapResponse(await fetchConfigLogsOverview(
+        queryFn: async ({signal}) => requireOk(await fetchConfigLogsOverview(
             {page: configLogsPage, size: configLogsSize},
             {signal, skipGlobalError: true},
         ), null),
@@ -190,7 +190,7 @@ export default function Monitoring() {
 
     const redisQuery = useQuery({
         queryKey: ['monitoring', 'redis'],
-        queryFn: async ({signal}) => unwrapResponse(await fetchRedisOverview({signal, skipGlobalError: true}), null),
+        queryFn: async ({signal}) => requireOk(await fetchRedisOverview({signal, skipGlobalError: true}), null),
         enabled: tab === 'redis',
         refetchInterval: 60_000,
         refetchIntervalInBackground: false,
@@ -201,7 +201,7 @@ export default function Monitoring() {
             errorFromDate ? errorFromDate.format('YYYY-MM-DD') : null,
             errorToDate ? errorToDate.format('YYYY-MM-DD') : null,
             errorMessageKeyword],
-        queryFn: async ({signal}) => unwrapResponse(await fetchErrorLogsOverview({
+        queryFn: async ({signal}) => requireOk(await fetchErrorLogsOverview({
             page: errorLogsPage,
             size: errorLogsSize,
             acknowledged: errorUnackOnly ? false : null,
@@ -216,7 +216,7 @@ export default function Monitoring() {
 
     const apiCallQuery = useQuery({
         queryKey: ['monitoring', 'apicall'],
-        queryFn: async ({signal}) => unwrapResponse(await fetchApiCallsOverview({signal, skipGlobalError: true}), null),
+        queryFn: async ({signal}) => requireOk(await fetchApiCallsOverview({signal, skipGlobalError: true}), null),
         enabled: tab === 'apicall',
         refetchInterval: 60_000,
         refetchIntervalInBackground: false,
@@ -224,7 +224,7 @@ export default function Monitoring() {
 
     const systemQuery = useQuery({
         queryKey: ['monitoring', 'system'],
-        queryFn: async ({signal}) => unwrapResponse(await fetchSystemOverview({signal, skipGlobalError: true}), null),
+        queryFn: async ({signal}) => requireOk(await fetchSystemOverview({signal, skipGlobalError: true}), null),
         enabled: tab === 'system',
         refetchInterval: 60_000,
         refetchIntervalInBackground: false,

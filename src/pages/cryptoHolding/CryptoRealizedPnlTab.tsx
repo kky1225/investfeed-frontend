@@ -40,7 +40,7 @@ import {
 } from "../../api/realizedPnl/RealizedPnlApi.ts";
 import AddManualPnlDialog from "../holding/AddManualPnlDialog.tsx";
 import EditManualPnlDialog from "../holding/EditManualPnlDialog.tsx";
-import {unwrapResponse} from "../../lib/apiResponse.ts";
+import {requireOk} from "../../lib/apiResponse.ts";
 
 type ViewMode = 'monthly' | 'yearly' | 'all';
 
@@ -76,7 +76,7 @@ export default function CryptoRealizedPnlTab({myBrokers}: CryptoRealizedPnlTabPr
         queryFn: async ({signal}) => {
             const yearParam = viewMode !== 'all' ? year : undefined;
             const monthParam = viewMode === 'monthly' ? month : undefined;
-            return unwrapResponse(await fetchCryptoRealizedPnlList(yearParam, monthParam, {signal, skipGlobalError: true}), {items: [] as RealizedPnlItem[]}).items ?? [];
+            return requireOk(await fetchCryptoRealizedPnlList(yearParam, monthParam, {signal, skipGlobalError: true}), {items: [] as RealizedPnlItem[]}).items ?? [];
         },
         enabled: myBrokers.length > 0 && !!selectedBroker,
         refetchOnWindowFocus: false,

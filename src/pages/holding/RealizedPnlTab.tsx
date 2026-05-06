@@ -41,7 +41,7 @@ import {
 } from "../../api/realizedPnl/RealizedPnlApi.ts";
 import AddManualPnlDialog from "./AddManualPnlDialog.tsx";
 import EditManualPnlDialog from "./EditManualPnlDialog.tsx";
-import {unwrapResponse} from "../../lib/apiResponse.ts";
+import {requireOk} from "../../lib/apiResponse.ts";
 
 type ViewMode = 'monthly' | 'yearly' | 'all';
 
@@ -81,11 +81,11 @@ export default function RealizedPnlTab({myBrokers}: RealizedPnlTabProps) {
                 const syncReq = viewMode === 'monthly' ? {year, month}
                     : viewMode === 'yearly' ? {year}
                     : {};
-                return unwrapResponse(await syncStockRealizedPnl(syncReq, {signal, skipGlobalError: true}), {items: [] as RealizedPnlItem[]}).items ?? [];
+                return requireOk(await syncStockRealizedPnl(syncReq, {signal, skipGlobalError: true}), {items: [] as RealizedPnlItem[]}).items ?? [];
             } else {
                 const yearParam = viewMode !== 'all' ? year : undefined;
                 const monthParam = viewMode === 'monthly' ? month : undefined;
-                return unwrapResponse(await fetchStockRealizedPnlList(yearParam, monthParam, {signal, skipGlobalError: true}), {items: [] as RealizedPnlItem[]}).items ?? [];
+                return requireOk(await fetchStockRealizedPnlList(yearParam, monthParam, {signal, skipGlobalError: true}), {items: [] as RealizedPnlItem[]}).items ?? [];
             }
         },
         enabled: myBrokers.length > 0 && !!selectedBroker,

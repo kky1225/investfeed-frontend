@@ -1,6 +1,6 @@
 import {useMemo, useState} from "react";
 import {useQuery, useQueryClient} from "@tanstack/react-query";
-import {unwrapResponse} from "../lib/apiResponse.ts";
+import {requireOk} from "../lib/apiResponse.ts";
 import Dialog from "@mui/material/Dialog";
 import DialogTitle from "@mui/material/DialogTitle";
 import DialogContent from "@mui/material/DialogContent";
@@ -35,7 +35,7 @@ export default function PriceTargetDialog({open, onClose, assetType, assetCode, 
 
     const {data: allTargetsData} = useQuery<PriceTarget[]>({
         queryKey: ['priceTargets'],
-        queryFn: async ({signal}) => unwrapResponse(await fetchPriceTargets({signal, skipGlobalError: true}), [] as PriceTarget[]),
+        queryFn: async ({signal}) => requireOk(await fetchPriceTargets({signal, skipGlobalError: true}), [] as PriceTarget[]),
         enabled: open,
         refetchOnWindowFocus: false,
     });

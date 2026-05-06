@@ -174,7 +174,11 @@ export default function AddCryptoManualHoldingDialog({open, onClose, brokerId, o
                         label="매수단가" required
                         size="small"
                         value={purPrice ? Number(purPrice).toLocaleString() : ''}
-                        onChange={e => { setPurPrice(e.target.value.replace(/,/g, '').replace(/[^0-9]/g, '')); if (formErrors.purPrice) setFormErrors(prev => ({...prev, purPrice: undefined})); }}
+                        onChange={e => {
+                            setPurPrice(e.target.value.replace(/,/g, '').replace(/[^0-9]/g, ''));
+                            setPurAmtOverride(null);
+                            if (formErrors.purPrice) setFormErrors(prev => ({...prev, purPrice: undefined}));
+                        }}
                         error={!!formErrors.purPrice} helperText={formErrors.purPrice}
                         slotProps={{htmlInput: {inputMode: 'numeric'}}}
                     />
@@ -183,7 +187,11 @@ export default function AddCryptoManualHoldingDialog({open, onClose, brokerId, o
                         type="number"
                         size="small"
                         value={quantity}
-                        onChange={e => { setQuantity(e.target.value); if (formErrors.quantity) setFormErrors(prev => ({...prev, quantity: undefined})); }}
+                        onChange={e => {
+                            setQuantity(e.target.value);
+                            setPurAmtOverride(null);
+                            if (formErrors.quantity) setFormErrors(prev => ({...prev, quantity: undefined}));
+                        }}
                         error={!!formErrors.quantity} helperText={formErrors.quantity}
                         slotProps={{htmlInput: {min: 0, step: "any"}}}
                     />
@@ -192,7 +200,8 @@ export default function AddCryptoManualHoldingDialog({open, onClose, brokerId, o
                         size="small"
                         value={purAmt ? Number(purAmt).toLocaleString() : ''}
                         onChange={e => {
-                            setPurAmtOverride(e.target.value.replace(/,/g, '').replace(/[^0-9]/g, ''));
+                            const val = e.target.value.replace(/,/g, '').replace(/[^0-9]/g, '');
+                            setPurAmtOverride(val === '' ? null : val);
                             if (formErrors.purAmt) setFormErrors(prev => ({...prev, purAmt: undefined}));
                         }}
                         error={!!formErrors.purAmt}

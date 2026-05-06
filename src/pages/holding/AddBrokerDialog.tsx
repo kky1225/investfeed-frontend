@@ -13,7 +13,7 @@ import Typography from "@mui/material/Typography";
 import LinkIcon from "@mui/icons-material/Link";
 import {fetchBrokerList, addMyBroker} from "../../api/broker/BrokerApi.ts";
 import type {Broker} from "../../type/BrokerType.ts";
-import {unwrapResponse} from "../../lib/apiResponse.ts";
+import {requireOk} from "../../lib/apiResponse.ts";
 import {useApiKeyStatus, apiKeyStatusKeys} from "../../context/ApiKeyStatusContext.tsx";
 
 interface AddBrokerDialogProps {
@@ -32,7 +32,7 @@ export default function AddBrokerDialog({open, onClose}: AddBrokerDialogProps) {
     const {data: brokersData} = useQuery<Broker[]>({
         queryKey: ['brokerList', 'stock'],
         queryFn: async ({signal}) => {
-            const result = unwrapResponse(await fetchBrokerList({signal, skipGlobalError: true}), {brokers: [] as Broker[]});
+            const result = requireOk(await fetchBrokerList({signal, skipGlobalError: true}), {brokers: [] as Broker[]});
             return (result.brokers ?? []).filter((b: Broker) => b.market === 'STOCK');
         },
         enabled: open,

@@ -6,7 +6,7 @@ import Stack from "@mui/material/Stack";
 import Chip from "@mui/material/Chip";
 import Card from "@mui/material/Card";
 import Skeleton from "@mui/material/Skeleton";
-import {JSX, MouseEvent, ReactElement, useMemo, useRef, useState} from "react";
+import {JSX, MouseEvent, ReactElement, useEffect, useMemo, useRef, useState} from "react";
 import CandlestickChartIcon from '@mui/icons-material/CandlestickChart';
 import StackedLineChartIcon from '@mui/icons-material/StackedLineChart';
 import ToggleButton from '@mui/material/ToggleButton';
@@ -42,6 +42,7 @@ import {LineSeriesType} from "@mui/x-charts";
 import { MakeOptional } from '@mui/x-internals/types';
 import ProgramLineChart from "../../components/ProgramLineChart.tsx";
 import {usePollingQuery} from "../../lib/pollingQuery.ts";
+import {parseKiwoomStamp} from "../../lib/tradeStamp.ts";
 
 const StyledToggleButtonGroup = styled(ToggleButtonGroup)(({ theme }) => ({
     border: 'none',
@@ -251,14 +252,23 @@ const IndexDetail = () => {
     );
     const loading = isLoading;
 
-    // WebSocket 으로 들어오는 실시간 부분 갱신을 보관하는 overlay state.
-    const [liveSectChartOverlay, setLiveSectChartOverlay] = useState<Partial<CustomIndexDetailLineChartProps>>({});
+    // 폴링 (`indexInfo.tmN`) 와 WS (values["20"]) 양쪽 stamp 비교로 last-write-wins.
+    type LivePrice = {
+        value: string;
+        fluRt: string;
+        predPre: string;
+        trend: 'up' | 'down' | 'neutral';
+        stamp: number;
+    };
+    const [livePrice, setLivePrice] = useState<LivePrice | null>(null);
+    const updateIfNewer = (incoming: LivePrice) =>
+        setLivePrice(prev => (!prev || incoming.stamp > prev.stamp) ? incoming : prev);
 
-    // indsCd 변경 시 overlay reset
+    // indsCd 변경 시 reset
     const [prevIndsCd, setPrevIndsCd] = useState(indsCd);
     if (indsCd !== prevIndsCd) {
         setPrevIndsCd(indsCd);
-        setLiveSectChartOverlay({});
+        setLivePrice(null);
     }
 
     // 폴링 결과 → base sectChartData
@@ -470,11 +480,30 @@ const IndexDetail = () => {
         };
     }, [result]);
 
-    // 최종 sectChartData = base + WS overlay 머지
-    const sectChartData = useMemo<CustomIndexDetailLineChartProps>(() => ({
-        ...baseSectChartData,
-        ...liveSectChartOverlay,
-    }), [baseSectChartData, liveSectChartOverlay]);
+    // 폴링 결과 → livePrice (stamp 비교)
+    useEffect(() => {
+        if (!result?.indexInfo) return;
+        const i = result.indexInfo;
+        updateIfNewer({
+            value: Number(i.curPrc.replace(/^[+-]/, '')).toLocaleString(),
+            fluRt: i.fluRt,
+            predPre: i.predPre || '0',
+            trend: trendColor(i.predPreSig),
+            stamp: parseKiwoomStamp(i.tmN),
+        });
+    }, [result]);
+
+    // 최종 sectChartData = base (chart series, title 등) + livePrice (실시간 헤더)
+    const sectChartData = useMemo<CustomIndexDetailLineChartProps>(() => {
+        if (!livePrice) return baseSectChartData;
+        return {
+            ...baseSectChartData,
+            value: livePrice.value,
+            fluRt: livePrice.fluRt,
+            predPre: livePrice.predPre,
+            trend: livePrice.trend,
+        };
+    }, [baseSectChartData, livePrice]);
 
     // WebSocket 라이프사이클 — useMarketWebSocket 훅이 시장 시각/연결/정리 모두 처리.
     useMarketWebSocket({
@@ -492,17 +521,19 @@ const IndexDetail = () => {
                     value: values["10"],
                     change: values["11"],
                     fluRt: values["12"],
-                    trend: values["25"]
+                    trend: values["25"],
+                    tradeTime: values["20"],
                 };
             });
 
-            indexList.forEach((index: IndexStream) => {
+            indexList.forEach((index: IndexStream & {tradeTime?: string}) => {
                 if (index.code === indsCd) {
-                    setLiveSectChartOverlay({
+                    updateIfNewer({
                         value: index.value.replace(/^[+-]/, ''),
                         fluRt: index.fluRt,
                         predPre: index.change || '0',
                         trend: trendColor(index.trend),
+                        stamp: parseKiwoomStamp(index.tradeTime),
                     });
                 }
             });

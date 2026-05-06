@@ -1,6 +1,6 @@
 import {useMemo, useState} from "react";
 import {useQuery} from "@tanstack/react-query";
-import {unwrapResponse} from "../../lib/apiResponse.ts";
+import {requireOk} from "../../lib/apiResponse.ts";
 import Dialog from "@mui/material/Dialog";
 import DialogContent from "@mui/material/DialogContent";
 import IconButton from "@mui/material/IconButton";
@@ -109,7 +109,7 @@ export default function ChartDetailDialog({open, onClose, assetType, code, name}
                     MONTH: StockChartType.MONTH,
                     YEAR: StockChartType.YEAR,
                 };
-                return unwrapResponse(await fetchStockChart(code, {chartType: chartTypeMap[chartType] ?? StockChartType.DAY}, {signal, skipGlobalError: true}), null);
+                return requireOk(await fetchStockChart(code, {chartType: chartTypeMap[chartType] ?? StockChartType.DAY}, {signal, skipGlobalError: true}), null);
             }
             if (assetType === 'CRYPTO') {
                 const chartTypeMap: Record<string, CryptoChartType> = {
@@ -119,7 +119,7 @@ export default function ChartDetailDialog({open, onClose, assetType, code, name}
                     MONTH: CryptoChartType.MONTH,
                     YEAR: CryptoChartType.YEAR,
                 };
-                return unwrapResponse(await fetchCryptoDetail(code, {chartType: chartTypeMap[chartType] ?? CryptoChartType.DAY}, {signal, skipGlobalError: true}), null);
+                return requireOk(await fetchCryptoDetail(code, {chartType: chartTypeMap[chartType] ?? CryptoChartType.DAY}, {signal, skipGlobalError: true}), null);
             }
             if (assetType === 'COMMODITY') {
                 const chartTypeMap: Record<string, CommodityChartType> = {
@@ -128,7 +128,7 @@ export default function ChartDetailDialog({open, onClose, assetType, code, name}
                     WEEK: CommodityChartType.WEEK,
                     MONTH: CommodityChartType.MONTH,
                 };
-                return unwrapResponse(await fetchCommodityDetail(code, {chartType: chartTypeMap[chartType] ?? CommodityChartType.DAY}, {signal, skipGlobalError: true}), null);
+                return requireOk(await fetchCommodityDetail(code, {chartType: chartTypeMap[chartType] ?? CommodityChartType.DAY}, {signal, skipGlobalError: true}), null);
             }
             return null;
         },

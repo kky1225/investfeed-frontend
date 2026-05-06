@@ -1,6 +1,6 @@
 import {useState} from "react";
 import {useQuery} from "@tanstack/react-query";
-import {unwrapResponse} from "../../lib/apiResponse.ts";
+import {requireOk} from "../../lib/apiResponse.ts";
 import Box from "@mui/material/Box";
 import Typography from "@mui/material/Typography";
 import Card from "@mui/material/Card";
@@ -74,7 +74,7 @@ export default function EconomicCalendarPage() {
         queryKey: ['indicatorHistory', selectedIndicator?.code, selectedIndicator?.country],
         queryFn: async ({signal}) => {
             if (!selectedIndicator) return null;
-            return unwrapResponse<IndicatorHistoryRes | null>(
+            return requireOk<IndicatorHistoryRes | null>(
                 await fetchIndicatorHistory({code: selectedIndicator.code, country: selectedIndicator.country}, {signal, skipGlobalError: true}),
                 null,
             );

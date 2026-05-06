@@ -1,6 +1,6 @@
 import {useState} from 'react';
 import {useQuery, useQueryClient} from '@tanstack/react-query';
-import {unwrapResponse} from '../../lib/apiResponse';
+import {requireOk} from '../../lib/apiResponse';
 import {useNavigate} from 'react-router-dom';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
@@ -132,7 +132,7 @@ export default function NotificationList() {
     const queryClient = useQueryClient();
     const {data: priceTargetsData} = useQuery<PriceTarget[]>({
         queryKey: ['priceTargets'],
-        queryFn: async ({signal}) => unwrapResponse(await fetchPriceTargets({signal, skipGlobalError: true}), [] as PriceTarget[]),
+        queryFn: async ({signal}) => requireOk(await fetchPriceTargets({signal, skipGlobalError: true}), [] as PriceTarget[]),
         // optimistic delete 와의 race condition 방지
         refetchOnWindowFocus: false,
     });

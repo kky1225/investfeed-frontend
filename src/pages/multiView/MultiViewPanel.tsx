@@ -1,6 +1,6 @@
 import {type MouseEvent, useMemo, useState} from "react";
 import {useQuery} from "@tanstack/react-query";
-import {unwrapResponse} from "../../lib/apiResponse.ts";
+import {requireOk} from "../../lib/apiResponse.ts";
 import Box from "@mui/material/Box";
 import Typography from "@mui/material/Typography";
 import Card from "@mui/material/Card";
@@ -135,15 +135,15 @@ export default function MultiViewPanel({asset, onSearch, onChartExpand, onRemove
             if (!asset) return null;
             if (asset.type === 'STOCK') {
                 const stockChartType = chartType as StockChartType;
-                return unwrapResponse(await fetchMultiViewStockChart(asset.code, {chartType: stockChartType}, {signal, skipGlobalError: true}), null);
+                return requireOk(await fetchMultiViewStockChart(asset.code, {chartType: stockChartType}, {signal, skipGlobalError: true}), null);
             }
             if (asset.type === 'CRYPTO') {
                 const cryptoChartType = chartType as CryptoChartType;
-                return unwrapResponse(await fetchMultiViewCryptoDetail(asset.code, {chartType: cryptoChartType}, {signal, skipGlobalError: true}), null);
+                return requireOk(await fetchMultiViewCryptoDetail(asset.code, {chartType: cryptoChartType}, {signal, skipGlobalError: true}), null);
             }
             if (asset.type === 'COMMODITY') {
                 const commodityChartType = chartType as CommodityChartType;
-                return unwrapResponse(await fetchMultiViewCommodityDetail(asset.code, {chartType: commodityChartType}, {signal, skipGlobalError: true}), null);
+                return requireOk(await fetchMultiViewCommodityDetail(asset.code, {chartType: commodityChartType}, {signal, skipGlobalError: true}), null);
             }
             return null;
         },

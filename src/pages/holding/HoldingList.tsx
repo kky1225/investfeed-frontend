@@ -1,6 +1,6 @@
 import React, {createContext, useCallback, useContext, useMemo, useState} from "react";
 import {useQuery} from "@tanstack/react-query";
-import {unwrapResponse} from "../../lib/apiResponse.ts";
+import {requireOk} from "../../lib/apiResponse.ts";
 import {useNavigate} from "react-router-dom";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
@@ -127,7 +127,7 @@ const HoldingList = () => {
     } | null;
     const {data: holdingData, isLoading: loading} = useQuery<HoldingListData>({
         queryKey: ['holdingList'],
-        queryFn: async ({signal}) => unwrapResponse<HoldingListData>(await fetchHoldingList({signal, skipGlobalError: true}), null),
+        queryFn: async ({signal}) => requireOk<HoldingListData>(await fetchHoldingList({signal, skipGlobalError: true}), null),
         refetchOnWindowFocus: false,
     });
 
