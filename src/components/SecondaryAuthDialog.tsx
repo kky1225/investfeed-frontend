@@ -1,4 +1,5 @@
 import {useState, useEffect, useRef, useCallback} from 'react';
+import {useMutation} from '@tanstack/react-query';
 import Dialog from '@mui/material/Dialog';
 import DialogTitle from '@mui/material/DialogTitle';
 import DialogContent from '@mui/material/DialogContent';
@@ -8,6 +9,7 @@ import Alert from '@mui/material/Alert';
 import LockOutlinedIcon from '@mui/icons-material/LockOutlined';
 import SecurityKeypad from './SecurityKeypad';
 import {setupSecondaryPassword, verifySecondaryPassword, fetchSecondaryPasswordLockStatus} from '../api/auth/AuthApi';
+import {requireOk} from '../lib/apiResponse';
 import {useAuth} from '../context/AuthContext';
 
 interface SecondaryAuthDialogProps {
@@ -21,7 +23,6 @@ export default function SecondaryAuthDialog({open, mode, onSuccess, onClose}: Se
     const [step, setStep] = useState<'input' | 'confirm'>('input');
     const [firstInput, setFirstInput] = useState('');
     const [error, setError] = useState('');
-    const [loading, setLoading] = useState(false);
     const [remainingSeconds, setRemainingSeconds] = useState(0);
     const [key, setKey] = useState(0);
     const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -74,7 +75,6 @@ export default function SecondaryAuthDialog({open, mode, onSuccess, onClose}: Se
         setStep('input');
         setFirstInput('');
         setError('');
-        setLoading(false);
         setRemainingSeconds(0);
         clearTimer();
         setKey(prev => prev + 1);
@@ -100,27 +100,17 @@ export default function SecondaryAuthDialog({open, mode, onSuccess, onClose}: Se
         setKey(prev => prev + 1);
     };
 
-    const handleSetupConfirm = async (code: string) => {
-        if (code !== firstInput) {
-            setError('비밀번호가 일치하지 않습니다. 다시 입력해주세요.');
-            setStep('input');
-            setFirstInput('');
-            setKey(prev => prev + 1);
-            return;
-        }
-
-        setLoading(true);
-        try {
-            const setupRes = await setupSecondaryPassword({password: code});
-            if (setupRes.code !== "0000") throw new Error(setupRes.message || `2차 비밀번호 설정 실패 (${setupRes.code})`);
-            if (user) {
-                updateUser({...user, secondaryPasswordEnabled: true});
-            }
-            const verifyRes = await verifySecondaryPassword({password: code});
-            if (verifyRes.code !== "0000") throw new Error(verifyRes.message || `2차 비밀번호 인증 실패 (${verifyRes.code})`);
+    const setupMutation = useMutation({
+        mutationFn: async (code: string) => {
+            requireOk(await setupSecondaryPassword({password: code}), '2차 비밀번호 설정');
+            if (user) updateUser({...user, secondaryPasswordEnabled: true});
+            requireOk(await verifySecondaryPassword({password: code}), '2차 비밀번호 인증');
+        },
+        onSuccess: () => {
             resetState();
             onSuccess();
-        } catch (err: unknown) {
+        },
+        onError: (err: unknown) => {
             console.error(err);
             if (!handleLockError(err)) {
                 setError('2차 비밀번호 설정에 실패했습니다.');
@@ -128,28 +118,42 @@ export default function SecondaryAuthDialog({open, mode, onSuccess, onClose}: Se
             setStep('input');
             setFirstInput('');
             setKey(prev => prev + 1);
-        } finally {
-            setLoading(false);
-        }
-    };
+        },
+    });
 
-    const handleVerify = async (code: string) => {
-        setLoading(true);
-        setError('');
-        try {
-            const res = await verifySecondaryPassword({password: code});
-            if (res.code !== "0000") throw new Error(res.message || `2차 비밀번호 인증 실패 (${res.code})`);
+    const verifyMutation = useMutation({
+        mutationFn: async (code: string) => {
+            requireOk(await verifySecondaryPassword({password: code}), '2차 비밀번호 인증');
+        },
+        onSuccess: () => {
             resetState();
             onSuccess();
-        } catch (err: unknown) {
+        },
+        onError: (err: unknown) => {
             console.error(err);
             if (!handleLockError(err)) {
                 setError('2차 비밀번호가 올바르지 않습니다.');
             }
             setKey(prev => prev + 1);
-        } finally {
-            setLoading(false);
+        },
+    });
+
+    const loading = setupMutation.isPending || verifyMutation.isPending;
+
+    const handleSetupConfirm = (code: string) => {
+        if (code !== firstInput) {
+            setError('비밀번호가 일치하지 않습니다. 다시 입력해주세요.');
+            setStep('input');
+            setFirstInput('');
+            setKey(prev => prev + 1);
+            return;
         }
+        setupMutation.mutate(code);
+    };
+
+    const handleVerify = (code: string) => {
+        setError('');
+        verifyMutation.mutate(code);
     };
 
     const handleClose = () => {

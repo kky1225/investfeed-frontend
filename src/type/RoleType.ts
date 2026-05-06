@@ -23,3 +23,8 @@ export interface RoleOrderItem {
     id: number;
     orderIndex: number;
 }
+
+export interface UpdateRoleMutationVars {
+    id: number;
+    req: UpdateRoleReq;
+}

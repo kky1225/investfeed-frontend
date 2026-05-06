@@ -1,5 +1,5 @@
 import {useState} from 'react';
-import {useQuery, useQueryClient} from '@tanstack/react-query';
+import {useMutation, useQuery, useQueryClient} from '@tanstack/react-query';
 import {requireOk} from '../../lib/apiResponse';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
@@ -30,7 +30,7 @@ import {DndContext, type DragEndEvent, PointerSensor, useSensor, useSensors, clo
 import {SortableContext, verticalListSortingStrategy, arrayMove, useSortable} from '@dnd-kit/sortable';
 import {CSS} from '@dnd-kit/utilities';
 import {createRole, deleteRole, fetchRoles, updateRole, updateRoleOrder} from '../../api/admin/AdminApi';
-import type {CreateRoleReq, RoleRes, UpdateRoleReq} from '../../type/RoleType';
+import type {CreateRoleReq, RoleOrderItem, RoleRes, UpdateRoleMutationVars} from '../../type/RoleType';
 import {useAlert} from '../../context/AlertContext';
 
 interface FormState {
@@ -117,7 +117,6 @@ export default function RoleManagement() {
     const [editDialog, setEditDialog] = useState<{open: boolean; mode: 'create' | 'edit'; id?: number}>({open: false, mode: 'create'});
     const [form, setForm] = useState<FormState>(initialForm);
     const [errors, setErrors] = useState<FormErrors>({});
-    const [submitting, setSubmitting] = useState(false);
     const [deleteDialog, setDeleteDialog] = useState<{open: boolean; role: RoleRes | null}>({open: false, role: null});
     const [menuAnchorEl, setMenuAnchorEl] = useState<HTMLElement | null>(null);
     const [menuTargetRole, setMenuTargetRole] = useState<RoleRes | null>(null);
@@ -140,16 +139,23 @@ export default function RoleManagement() {
         setOrderChanged(true);
     };
 
-    const handleSaveOrder = async () => {
-        try {
-            const res = await updateRoleOrder(roles.map((r, idx) => ({id: r.id, orderIndex: idx})));
-            if (res.code !== "0000") throw new Error(res.message || `역할 순서 변경 실패 (${res.code})`);
+    const updateOrderMutation = useMutation({
+        mutationFn: async (orders: RoleOrderItem[]) => {
+            requireOk(await updateRoleOrder(orders), '역할 순서 변경');
+        },
+        onSuccess: () => {
             showAlert('순서가 저장되었습니다.', 'success');
-            await loadRoles();
-        } catch (err) {
+            loadRoles();
+        },
+        onError: (err) => {
             console.error(err);
             showAlert('순서 저장에 실패했습니다.', 'error');
-        }
+        },
+    });
+
+    const handleSaveOrder = () => {
+        const orders: RoleOrderItem[] = roles.map((r, idx) => ({id: r.id, orderIndex: idx}));
+        updateOrderMutation.mutate(orders);
     };
 
     const handleOpenCreate = () => {
@@ -164,7 +170,55 @@ export default function RoleManagement() {
         setEditDialog({open: true, mode: 'edit', id: role.id});
     };
 
-    const handleSubmit = async () => {
+    const onSubmitError = (err: unknown) => {
+        console.error(err);
+        const axiosErr = err as {response?: {data?: {message?: string; result?: FormErrors}; status?: number}};
+        if (axiosErr.response?.status === 400 && axiosErr.response?.data?.result) {
+            setErrors(axiosErr.response.data.result);
+        } else {
+            showAlert(axiosErr.response?.data?.message || '권한 저장에 실패했습니다.', 'error');
+        }
+    };
+
+    const createMutation = useMutation({
+        mutationFn: async (req: CreateRoleReq) =>
+            requireOk(await createRole(req), '역할 생성'),
+        onSuccess: () => {
+            showAlert('권한이 생성되었습니다.', 'success');
+            setEditDialog({open: false, mode: 'create'});
+            loadRoles();
+        },
+        onError: onSubmitError,
+    });
+
+    const updateMutation = useMutation({
+        mutationFn: async (vars: UpdateRoleMutationVars) =>
+            requireOk(await updateRole(vars.id, vars.req), '역할 수정'),
+        onSuccess: () => {
+            showAlert('권한이 수정되었습니다.', 'success');
+            setEditDialog({open: false, mode: 'create'});
+            loadRoles();
+        },
+        onError: onSubmitError,
+    });
+
+    const deleteMutation = useMutation({
+        mutationFn: async (id: number) => {
+            requireOk(await deleteRole(id), '역할 삭제');
+        },
+        onSuccess: () => {
+            showAlert('권한이 삭제되었습니다.', 'success');
+            setDeleteDialog({open: false, role: null});
+            loadRoles();
+        },
+        onError: (err) => {
+            console.error(err);
+            const axiosErr = err as {response?: {data?: {message?: string}}};
+            showAlert(axiosErr.response?.data?.message || '권한 삭제에 실패했습니다.', 'error');
+        },
+    });
+
+    const handleSubmit = () => {
         const errs: FormErrors = {};
         if (editDialog.mode === 'create' && !form.code.trim()) errs.code = '권한 코드를 입력해주세요.';
         if (!form.name.trim()) errs.name = '권한 이름을 입력해주세요.';
@@ -172,55 +226,28 @@ export default function RoleManagement() {
             setErrors(errs);
             return;
         }
-
-        setSubmitting(true);
-        try {
-            if (editDialog.mode === 'create') {
-                const req: CreateRoleReq = {
-                    code: form.code.trim().toUpperCase(),
+        if (editDialog.mode === 'create') {
+            const req: CreateRoleReq = {
+                code: form.code.trim().toUpperCase(),
+                name: form.name.trim(),
+                defaultLandingPath: form.defaultLandingPath.trim() || null,
+            };
+            createMutation.mutate(req);
+        } else if (editDialog.id !== undefined) {
+            const vars: UpdateRoleMutationVars = {
+                id: editDialog.id,
+                req: {
                     name: form.name.trim(),
                     defaultLandingPath: form.defaultLandingPath.trim() || null,
-                };
-                const res = await createRole(req);
-                if (res.code !== "0000") throw new Error(res.message || `역할 생성 실패 (${res.code})`);
-                showAlert('권한이 생성되었습니다.', 'success');
-            } else if (editDialog.id !== undefined) {
-                const req: UpdateRoleReq = {
-                    name: form.name.trim(),
-                    defaultLandingPath: form.defaultLandingPath.trim() || null,
-                };
-                const res = await updateRole(editDialog.id, req);
-                if (res.code !== "0000") throw new Error(res.message || `역할 수정 실패 (${res.code})`);
-                showAlert('권한이 수정되었습니다.', 'success');
-            }
-            setEditDialog({open: false, mode: 'create'});
-            await loadRoles();
-        } catch (err: unknown) {
-            console.error(err);
-            const axiosErr = err as {response?: {data?: {message?: string; result?: FormErrors}; status?: number}};
-            if (axiosErr.response?.status === 400 && axiosErr.response?.data?.result) {
-                setErrors(axiosErr.response.data.result);
-            } else {
-                showAlert(axiosErr.response?.data?.message || '권한 저장에 실패했습니다.', 'error');
-            }
-        } finally {
-            setSubmitting(false);
+                },
+            };
+            updateMutation.mutate(vars);
         }
     };
 
-    const handleDelete = async () => {
+    const handleDelete = () => {
         if (!deleteDialog.role) return;
-        try {
-            const res = await deleteRole(deleteDialog.role.id);
-            if (res.code !== "0000") throw new Error(res.message || `역할 삭제 실패 (${res.code})`);
-            showAlert('권한이 삭제되었습니다.', 'success');
-            setDeleteDialog({open: false, role: null});
-            await loadRoles();
-        } catch (err: unknown) {
-            console.error(err);
-            const axiosErr = err as {response?: {data?: {message?: string}}};
-            showAlert(axiosErr.response?.data?.message || '권한 삭제에 실패했습니다.', 'error');
-        }
+        deleteMutation.mutate(deleteDialog.role.id);
     };
 
     return (
@@ -229,7 +256,7 @@ export default function RoleManagement() {
                 <Typography variant="h5">역할 관리</Typography>
                 <Box sx={{display: 'flex', gap: 1}}>
                     {orderChanged && (
-                        <Button variant="outlined" startIcon={<SaveIcon />} onClick={handleSaveOrder}>
+                        <Button variant="outlined" startIcon={<SaveIcon />} onClick={handleSaveOrder} disabled={updateOrderMutation.isPending}>
                             순서 저장
                         </Button>
                     )}
@@ -309,8 +336,8 @@ export default function RoleManagement() {
                 </DialogContent>
                 <DialogActions>
                     <Button onClick={() => setEditDialog({open: false, mode: 'create'})}>취소</Button>
-                    <Button onClick={handleSubmit} variant="contained" disabled={submitting}>
-                        {submitting ? '저장 중...' : (editDialog.mode === 'create' ? '생성' : '수정')}
+                    <Button onClick={handleSubmit} variant="contained" disabled={createMutation.isPending || updateMutation.isPending}>
+                        {(createMutation.isPending || updateMutation.isPending) ? '저장 중...' : (editDialog.mode === 'create' ? '생성' : '수정')}
                     </Button>
                 </DialogActions>
             </Dialog>
@@ -325,7 +352,7 @@ export default function RoleManagement() {
                 </DialogContent>
                 <DialogActions>
                     <Button onClick={() => setDeleteDialog({open: false, role: null})}>취소</Button>
-                    <Button onClick={handleDelete} variant="contained" color="error">삭제</Button>
+                    <Button onClick={handleDelete} variant="contained" color="error" disabled={deleteMutation.isPending}>삭제</Button>
                 </DialogActions>
             </Dialog>
         </Box>

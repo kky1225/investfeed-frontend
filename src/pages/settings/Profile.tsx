@@ -20,12 +20,12 @@ import { styled } from '@mui/material/styles';
 import ColorModeSelect from '../../components/ColorModeSelect.tsx';
 import AppTheme from '../../components/AppTheme.tsx';
 import { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { fetchProfile, updateProfile } from '../../api/auth/AuthApi';
 import { useAuth } from '../../context/AuthContext';
 import { requireOk } from '../../lib/apiResponse';
-import type { MemberRes } from '../../type/AuthType';
+import type { MemberRes, UpdateProfileReq } from '../../type/AuthType';
 
 const ERROR_MESSAGES: Record<string, string> = {
     AUTH_4010: '인증 정보가 유효하지 않습니다. 다시 로그인해 주세요.',
@@ -77,6 +77,7 @@ const Container = styled(Stack)(({ theme }) => ({
 }));
 
 export default function Profile(props: { disableCustomTheme?: boolean }) {
+    const queryClient = useQueryClient();
     const [nickname, setNickname] = useState('');
     const [email, setEmail] = useState('');
     const [name, setName] = useState('');
@@ -87,7 +88,6 @@ export default function Profile(props: { disableCustomTheme?: boolean }) {
     const [nameError, setNameError] = useState('');
     const [phoneError, setPhoneError] = useState('');
     const [errorMessage, setErrorMessage] = useState('');
-    const [loading, setLoading] = useState(false);
     const [dialog, setDialog] = useState<{ title: string; message: string; onConfirm: () => void } | null>(null);
 
     const navigate = useNavigate();
@@ -154,26 +154,21 @@ export default function Profile(props: { disableCustomTheme?: boolean }) {
         return valid;
     };
 
-    const handleSubmit = async (e: React.FormEvent) => {
-        e.preventDefault();
-        if (!validate()) return;
-
-        setLoading(true);
-        setErrorMessage('');
-        try {
-            const res = await updateProfile({ nickname, email, name, phone });
-            if (res.code !== "0000") throw new Error(res.message || `프로필 수정 실패 (${res.code})`);
-
-            if (user) {
-                updateUser({ ...user, nickname, email });
-            }
-
+    const updateProfileMutation = useMutation({
+        mutationFn: async (req: UpdateProfileReq) => {
+            requireOk(await updateProfile(req), '프로필 수정');
+            return req;
+        },
+        onSuccess: ({nickname, email}) => {
+            if (user) updateUser({ ...user, nickname, email });
+            queryClient.invalidateQueries({queryKey: ['profile']});
             setDialog({
                 title: '프로필 수정 완료',
                 message: '프로필이 성공적으로 수정되었습니다.',
                 onConfirm: () => navigate('/'),
             });
-        } catch (err: unknown) {
+        },
+        onError: (err: unknown) => {
             console.error(err);
             const axiosErr = err as { response?: { status?: number; data?: { code?: string; result?: Record<string, string> } } };
             const code = axiosErr.response?.data?.code ?? '';
@@ -192,9 +187,15 @@ export default function Profile(props: { disableCustomTheme?: boolean }) {
             } else {
                 setErrorMessage(ERROR_MESSAGES[code] ?? DEFAULT_ERROR);
             }
-        } finally {
-            setLoading(false);
-        }
+        },
+    });
+
+    const handleSubmit = (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!validate()) return;
+        setErrorMessage('');
+        const req: UpdateProfileReq = { nickname, email, name, phone };
+        updateProfileMutation.mutate(req);
     };
 
     if (initialLoading) {
@@ -319,9 +320,9 @@ export default function Profile(props: { disableCustomTheme?: boolean }) {
                             type="submit"
                             fullWidth
                             variant="contained"
-                            disabled={loading}
+                            disabled={updateProfileMutation.isPending}
                         >
-                            {loading ? '수정 중...' : '수정하기'}
+                            {updateProfileMutation.isPending ? '수정 중...' : '수정하기'}
                         </Button>
                     </Box>
                     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>

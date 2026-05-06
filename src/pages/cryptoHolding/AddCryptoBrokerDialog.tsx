@@ -1,5 +1,5 @@
 import {useState} from "react";
-import {useQuery, useQueryClient} from "@tanstack/react-query";
+import {useMutation, useQuery, useQueryClient} from "@tanstack/react-query";
 import Dialog from "@mui/material/Dialog";
 import DialogTitle from "@mui/material/DialogTitle";
 import DialogContent from "@mui/material/DialogContent";
@@ -36,17 +36,22 @@ export default function AddCryptoBrokerDialog({open, onClose}: AddCryptoBrokerDi
     });
     const brokers = brokersData ?? [];
 
-    const handleSelect = async (broker: Broker) => {
-        try {
-            setError("");
-            const res = await addMyCryptoBroker({brokerId: broker.id});
-            if (res.code !== "0000") throw new Error(res.message || `거래소 추가 실패 (${res.code})`);
-            await queryClient.invalidateQueries({queryKey: apiKeyStatusKeys.myCryptoBrokers});
+    const addMyCryptoBrokerMutation = useMutation({
+        mutationFn: async (brokerId: number) =>
+            requireOk(await addMyCryptoBroker({brokerId}), '거래소 추가'),
+        onSuccess: () => {
+            queryClient.invalidateQueries({queryKey: apiKeyStatusKeys.myCryptoBrokers});
             onClose();
-        } catch (error) {
-            console.error(error);
+        },
+        onError: (err) => {
+            console.error(err);
             setError("거래소 추가에 실패했습니다.");
-        }
+        },
+    });
+
+    const handleSelect = (broker: Broker) => {
+        setError("");
+        addMyCryptoBrokerMutation.mutate(broker.id);
     };
 
     return (

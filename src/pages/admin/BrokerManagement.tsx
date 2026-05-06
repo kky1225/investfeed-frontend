@@ -1,5 +1,5 @@
 import {useState} from 'react';
-import {useQuery, useQueryClient} from '@tanstack/react-query';
+import {useMutation, useQuery, useQueryClient} from '@tanstack/react-query';
 import {requireOk} from '../../lib/apiResponse';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
@@ -23,7 +23,7 @@ import EditIcon from '@mui/icons-material/Edit';
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
 import MoreVertIcon from '@mui/icons-material/MoreVert';
 import {fetchAdminBrokerList, createBroker, updateBroker, deleteBroker} from '../../api/broker/BrokerApi';
-import type {Broker, BrokerType, BrokerMarket} from '../../type/BrokerType';
+import type {Broker, BrokerType, BrokerMarket, CreateBrokerReq, UpdateBrokerMutationVars} from '../../type/BrokerType';
 import {useAlert} from '../../context/AlertContext';
 
 export default function BrokerManagement() {
@@ -56,7 +56,6 @@ export default function BrokerManagement() {
     const [name, setName] = useState('');
     const [type, setType] = useState<BrokerType>('MANUAL');
     const [market, setMarket] = useState<BrokerMarket>('STOCK');
-    const [formLoading, setFormLoading] = useState(false);
     const [formErrors, setFormErrors] = useState<{name?: string}>({});
 
     const [deleteTarget, setDeleteTarget] = useState<Broker | null>(null);
@@ -87,7 +86,56 @@ export default function BrokerManagement() {
         setFormOpen(true);
     };
 
-    const handleSubmit = async () => {
+    const onSubmitError = (err: unknown) => {
+        console.error(err);
+        const axiosErr = err as {response?: {status?: number; data?: {code?: string; result?: Record<string, string>}}};
+        if (axiosErr.response?.status === 400 && axiosErr.response?.data?.code === 'VALIDATION_4001') {
+            setFormErrors(axiosErr.response.data.result ?? {});
+            return;
+        }
+        showAlert(formMode === 'create' ? '증권사 등록에 실패했습니다.' : '증권사 수정에 실패했습니다.', 'error');
+    };
+
+    const createMutation = useMutation({
+        mutationFn: async (req: CreateBrokerReq) =>
+            requireOk(await createBroker(req), '증권사 등록'),
+        onSuccess: (_data, req) => {
+            showAlert(`${req.name} 증권사가 등록되었습니다.`, 'success');
+            resetForm();
+            loadBrokers();
+        },
+        onError: onSubmitError,
+    });
+
+    const updateMutation = useMutation({
+        mutationFn: async (vars: UpdateBrokerMutationVars) =>
+            requireOk(await updateBroker(vars.id, vars.req), '증권사 수정'),
+        onSuccess: (_data, vars) => {
+            showAlert(`${vars.req.name} 증권사가 수정되었습니다.`, 'success');
+            resetForm();
+            loadBrokers();
+        },
+        onError: onSubmitError,
+    });
+
+    const deleteMutation = useMutation({
+        mutationFn: async (broker: Broker) => {
+            requireOk(await deleteBroker(broker.id), '증권사 삭제');
+            return broker;
+        },
+        onSuccess: (broker) => {
+            showAlert(`${broker.name} 증권사가 삭제되었습니다.`, 'success');
+            loadBrokers();
+            setDeleteTarget(null);
+        },
+        onError: (err) => {
+            console.error(err);
+            showAlert('증권사 삭제에 실패했습니다.', 'error');
+            setDeleteTarget(null);
+        },
+    });
+
+    const handleSubmit = () => {
         const errors: {name?: string} = {};
         if (!name.trim()) errors.name = '증권사명을 입력해주세요.';
         if (Object.keys(errors).length > 0) {
@@ -95,44 +143,18 @@ export default function BrokerManagement() {
             return;
         }
         setFormErrors({});
-        setFormLoading(true);
-        try {
-            if (formMode === 'create') {
-                const res = await createBroker({name: name.trim(), type, market});
-                if (res.code !== "0000") throw new Error(res.message || `증권사 등록 실패 (${res.code})`);
-                showAlert(`${name.trim()} 증권사가 등록되었습니다.`, 'success');
-            } else {
-                const res = await updateBroker(formTargetId!, {name: name.trim(), type, market});
-                if (res.code !== "0000") throw new Error(res.message || `증권사 수정 실패 (${res.code})`);
-                showAlert(`${name.trim()} 증권사가 수정되었습니다.`, 'success');
-            }
-            resetForm();
-            await loadBrokers();
-        } catch (err) {
-            console.error(err);
-            const axiosErr = err as {response?: {status?: number; data?: {code?: string; result?: Record<string, string>}}};
-            if (axiosErr.response?.status === 400 && axiosErr.response?.data?.code === 'VALIDATION_4001') {
-                setFormErrors(axiosErr.response.data.result ?? {});
-                return;
-            }
-            showAlert(formMode === 'create' ? '증권사 등록에 실패했습니다.' : '증권사 수정에 실패했습니다.', 'error');
-        } finally {
-            setFormLoading(false);
+        if (formMode === 'create') {
+            const req: CreateBrokerReq = {name: name.trim(), type, market};
+            createMutation.mutate(req);
+        } else if (formTargetId !== null) {
+            const vars: UpdateBrokerMutationVars = {id: formTargetId, req: {name: name.trim(), type, market}};
+            updateMutation.mutate(vars);
         }
     };
 
-    const handleDelete = async () => {
+    const handleDelete = () => {
         if (!deleteTarget) return;
-        try {
-            const res = await deleteBroker(deleteTarget.id);
-            if (res.code !== "0000") throw new Error(res.message || `증권사 삭제 실패 (${res.code})`);
-            showAlert(`${deleteTarget.name} 증권사가 삭제되었습니다.`, 'success');
-            await loadBrokers();
-        } catch (error) {
-            console.error(error);
-            showAlert('증권사 삭제에 실패했습니다.', 'error');
-        }
-        setDeleteTarget(null);
+        deleteMutation.mutate(deleteTarget);
     };
 
     const columns: GridColDef[] = [
@@ -284,8 +306,8 @@ export default function BrokerManagement() {
                 </DialogContent>
                 <DialogActions>
                     <Button onClick={resetForm}>취소</Button>
-                    <Button onClick={handleSubmit} variant="contained" disabled={formLoading}>
-                        {formLoading ? '처리 중...' : formMode === 'create' ? '등록' : '수정'}
+                    <Button onClick={handleSubmit} variant="contained" disabled={createMutation.isPending || updateMutation.isPending}>
+                        {(createMutation.isPending || updateMutation.isPending) ? '처리 중...' : formMode === 'create' ? '등록' : '수정'}
                     </Button>
                 </DialogActions>
             </Dialog>
@@ -302,7 +324,7 @@ export default function BrokerManagement() {
                 </DialogContent>
                 <DialogActions>
                     <Button onClick={() => setDeleteTarget(null)}>취소</Button>
-                    <Button color="error" onClick={handleDelete} variant="contained">삭제</Button>
+                    <Button color="error" onClick={handleDelete} variant="contained" disabled={deleteMutation.isPending}>삭제</Button>
                 </DialogActions>
             </Dialog>
         </Box>

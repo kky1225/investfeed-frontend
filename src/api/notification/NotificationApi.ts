@@ -1,49 +1,51 @@
 import type {AxiosRequestConfig} from "axios";
 import api from "../../axios.ts";
-import type {NotificationSettingReq} from "../../type/NotificationSettingType.ts";
+import type {ApiResponse} from "../../type/AuthType";
+import type {Notification, PriceTarget, PriceTargetCreateReq} from "../../type/NotificationType.ts";
+import type {NotificationSettingReq, NotificationSettingRes} from "../../type/NotificationSettingType.ts";
 
-export const fetchNotifications = async (assetType?: string, config?: AxiosRequestConfig) => {
+export const fetchNotifications = async (assetType?: string, config?: AxiosRequestConfig): Promise<ApiResponse<Notification[]>> => {
     const params = assetType ? {assetType} : {};
-    const res = await api.get("/notifications", {...config, params});
+    const res = await api.get<ApiResponse<Notification[]>>("/notifications", {...config, params});
     return res.data;
 };
 
-export const fetchUnreadCount = async (config?: AxiosRequestConfig) => {
-    const res = await api.get("/notifications/unread-count", config);
+export const fetchUnreadCount = async (config?: AxiosRequestConfig): Promise<ApiResponse<number>> => {
+    const res = await api.get<ApiResponse<number>>("/notifications/unread-count", config);
     return res.data;
 };
 
-export const markAsRead = async (id: number) => {
-    const res = await api.patch(`/notifications/${id}/read`);
+export const markAsRead = async (id: number): Promise<ApiResponse<null>> => {
+    const res = await api.patch<ApiResponse<null>>(`/notifications/${id}/read`);
     return res.data;
 };
 
-export const markAllAsRead = async () => {
-    const res = await api.patch("/notifications/read-all");
+export const markAllAsRead = async (): Promise<ApiResponse<null>> => {
+    const res = await api.patch<ApiResponse<null>>("/notifications/read-all");
     return res.data;
 };
 
-export const createPriceTarget = async (req: import("../../type/NotificationType.ts").PriceTargetCreateReq) => {
-    const res = await api.post("/notifications/price-targets", req);
+export const createPriceTarget = async (req: PriceTargetCreateReq): Promise<ApiResponse<PriceTarget>> => {
+    const res = await api.post<ApiResponse<PriceTarget>>("/notifications/price-targets", req);
     return res.data;
 };
 
-export const fetchPriceTargets = async (config?: AxiosRequestConfig) => {
-    const res = await api.get("/notifications/price-targets", config);
+export const fetchPriceTargets = async (config?: AxiosRequestConfig): Promise<ApiResponse<PriceTarget[]>> => {
+    const res = await api.get<ApiResponse<PriceTarget[]>>("/notifications/price-targets", config);
     return res.data;
 };
 
-export const deletePriceTarget = async (id: number) => {
-    const res = await api.delete(`/notifications/price-targets/${id}`);
+export const deletePriceTarget = async (id: number): Promise<ApiResponse<null>> => {
+    const res = await api.delete<ApiResponse<null>>(`/notifications/price-targets/${id}`);
     return res.data;
 };
 
-export const fetchNotificationSetting = async (config?: AxiosRequestConfig) => {
-    const res = await api.get("/notifications/settings", config);
+export const fetchNotificationSetting = async (config?: AxiosRequestConfig): Promise<ApiResponse<NotificationSettingRes>> => {
+    const res = await api.get<ApiResponse<NotificationSettingRes>>("/notifications/settings", config);
     return res.data;
 };
 
-export const saveNotificationSetting = async (req: NotificationSettingReq) => {
-    const res = await api.put("/notifications/settings", req);
+export const saveNotificationSetting = async (req: NotificationSettingReq): Promise<ApiResponse<NotificationSettingRes>> => {
+    const res = await api.put<ApiResponse<NotificationSettingRes>>("/notifications/settings", req);
     return res.data;
 };

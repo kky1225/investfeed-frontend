@@ -1,4 +1,7 @@
 import {useMemo, useRef, useState} from "react";
+import {useMutation} from "@tanstack/react-query";
+import {requireOk} from "../../lib/apiResponse.ts";
+import type {CreateManualHoldingReq} from "../../type/BrokerType.ts";
 import Dialog from "@mui/material/Dialog";
 import DialogTitle from "@mui/material/DialogTitle";
 import DialogContent from "@mui/material/DialogContent";
@@ -79,7 +82,25 @@ export default function AddCryptoManualHoldingDialog({open, onClose, brokerId, o
         }, 300);
     };
 
-    const handleSubmit = async () => {
+    const createMutation = useMutation({
+        mutationFn: async (req: CreateManualHoldingReq) =>
+            requireOk(await createCryptoManualHolding(req), '수동 보유코인 등록'),
+        onSuccess: () => {
+            onCreated();
+            handleClose();
+        },
+        onError: (err) => {
+            console.error(err);
+            const axiosErr = err as {response?: {status?: number; data?: {code?: string; result?: Record<string, string>}}};
+            if (axiosErr.response?.status === 400 && axiosErr.response?.data?.code === 'VALIDATION_4001') {
+                setFormErrors((axiosErr.response.data.result ?? {}) as typeof formErrors);
+                return;
+            }
+            setFormErrors({purAmt: "매수 등록에 실패했습니다."});
+        },
+    });
+
+    const handleSubmit = () => {
         const errors: {stkCd?: string; purPrice?: string; quantity?: string; purAmt?: string} = {};
         if (!selectedCrypto) errors.stkCd = "코인을 선택해주세요.";
         if (!purPrice || Number(purPrice) <= 0) errors.purPrice = "매수단가를 입력해주세요.";
@@ -90,27 +111,15 @@ export default function AddCryptoManualHoldingDialog({open, onClose, brokerId, o
             return;
         }
         setFormErrors({});
-        try {
-            const res = await createCryptoManualHolding({
-                brokerId,
-                stkCd: selectedCrypto!.market,
-                stkNm: selectedCrypto!.koreanName,
-                purPrice: Number(purPrice),
-                quantity: Number(quantity),
-                purAmt: Number(purAmt),
-            });
-            if (res.code !== "0000") throw new Error(res.message || `수동 보유코인 등록 실패 (${res.code})`);
-            onCreated();
-            handleClose();
-        } catch (err) {
-            console.error(err);
-            const axiosErr = err as {response?: {status?: number; data?: {code?: string; result?: Record<string, string>}}};
-            if (axiosErr.response?.status === 400 && axiosErr.response?.data?.code === 'VALIDATION_4001') {
-                setFormErrors((axiosErr.response.data.result ?? {}) as typeof formErrors);
-                return;
-            }
-            setFormErrors({purAmt: "매수 등록에 실패했습니다."});
-        }
+        const req: CreateManualHoldingReq = {
+            brokerId,
+            stkCd: selectedCrypto!.market,
+            stkNm: selectedCrypto!.koreanName,
+            purPrice: Number(purPrice),
+            quantity: Number(quantity),
+            purAmt: Number(purAmt),
+        };
+        createMutation.mutate(req);
     };
 
     return (
@@ -212,7 +221,7 @@ export default function AddCryptoManualHoldingDialog({open, onClose, brokerId, o
             </DialogContent>
             <DialogActions>
                 <Button onClick={handleClose}>취소</Button>
-                <Button onClick={handleSubmit}>등록</Button>
+                <Button onClick={handleSubmit} disabled={createMutation.isPending}>등록</Button>
             </DialogActions>
         </Dialog>
     );

@@ -12,10 +12,13 @@ import { styled } from '@mui/material/styles';
 
 import ColorModeSelect from "../../components/ColorModeSelect.tsx";
 import AppTheme from "../../components/AppTheme.tsx";
-import { useState, useEffect, useRef, useCallback } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
+import { useMutation } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext.tsx";
 import { login, totpSetup, totpVerify } from "../../api/auth/AuthApi.ts";
+import type { LoginReq, TotpVerifyReq } from "../../type/AuthType.ts";
+import { requireOk } from "../../lib/apiResponse.ts";
 
 type LoginStep = 'credentials' | 'totp-setup' | 'totp-verify';
 
@@ -67,7 +70,6 @@ export default function Login(props: { disableCustomTheme?: boolean }) {
     const [loginIdError, setLoginIdError] = useState('');
     const [passwordError, setPasswordError] = useState('');
     const [errorMessage, setErrorMessage] = useState('');
-    const [loading, setLoading] = useState(false);
     const [lockRemainingSeconds, setLockRemainingSeconds] = useState(0);
     const lockTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -155,30 +157,33 @@ export default function Login(props: { disableCustomTheme?: boolean }) {
         return valid;
     };
 
-    const handleLoginSubmit = async (e: React.FormEvent) => {
-        e.preventDefault();
-        if (!validate()) return;
+    const totpSetupMutation = useMutation({
+        mutationFn: async () =>
+            requireOk(await totpSetup(), 'TOTP 설정'),
+        onSuccess: (setup) => {
+            if (setup) setQrCodeImage(setup.qrCodeImage);
+            setStep('totp-setup');
+        },
+        onError: (err) => {
+            console.error(err);
+            setErrorMessage('TOTP 설정에 실패했습니다.');
+        },
+    });
 
-        setLoading(true);
-        setErrorMessage('');
-        try {
-            const res = await login({ loginId, password });
-            if (res.code !== "0000") throw new Error(res.message || `로그인 실패 (${res.code})`);
-            if (res.result) {
-                if (res.result.totpSetupRequired) {
-                    startTimer(600); // 등록 10분
-                    const setupRes = await totpSetup();
-                    if (setupRes.code !== "0000") throw new Error(setupRes.message || `TOTP 설정 실패 (${setupRes.code})`);
-                    if (setupRes.result) {
-                        setQrCodeImage(setupRes.result.qrCodeImage);
-                    }
-                    setStep('totp-setup');
-                } else {
-                    startTimer(300); // 인증 5분
-                    setStep('totp-verify');
-                }
+    const loginMutation = useMutation({
+        mutationFn: async (req: LoginReq) =>
+            requireOk(await login(req), '로그인'),
+        onSuccess: (preAuth) => {
+            if (!preAuth) return;
+            if (preAuth.totpSetupRequired) {
+                startTimer(600); // 등록 10분
+                totpSetupMutation.mutate();
+            } else {
+                startTimer(300); // 인증 5분
+                setStep('totp-verify');
             }
-        } catch (err: unknown) {
+        },
+        onError: (err: unknown) => {
             console.error(err);
             const axiosErr = err as { response?: { data?: { code?: string; message?: string; result?: { lockRemainingSeconds?: number } } } };
             const code = axiosErr.response?.data?.code;
@@ -201,36 +206,26 @@ export default function Login(props: { disableCustomTheme?: boolean }) {
                 default:
                     setErrorMessage('로그인에 실패했습니다.');
             }
-        } finally {
-            setLoading(false);
-        }
-    };
+        },
+    });
 
-    const handleTotpVerify = async (e: React.FormEvent) => {
-        e.preventDefault();
-        if (!totpCode || totpCode.length !== 6) {
-            setTotpCodeError('6자리 인증 코드를 입력해주세요.');
-            return;
-        }
-        setTotpCodeError('');
-        setLoading(true);
-        setErrorMessage('');
-        try {
-            const res = await totpVerify({ code: totpCode });
-            if (res.code !== "0000") throw new Error(res.message || `TOTP 인증 실패 (${res.code})`);
-            if (res.result) {
-                clearTimer();
-                setAuth(
-                    { loginId, nickname: res.result.nickname, email: res.result.email, role: res.result.role, secondaryPasswordEnabled: res.result.secondaryPasswordEnabled, permissions: res.result.permissions ?? [] },
-                    res.result.passwordChangeRequired,
-                );
-                if (res.result.passwordChangeRequired) {
-                    navigate('/settings/change-password');
-                } else {
-                    navigate(res.result.defaultPath ?? '/');
-                }
+    const totpVerifyMutation = useMutation({
+        mutationFn: async (req: TotpVerifyReq) =>
+            requireOk(await totpVerify(req), 'TOTP 인증'),
+        onSuccess: (verify) => {
+            if (!verify) return;
+            clearTimer();
+            setAuth(
+                { loginId, nickname: verify.nickname, email: verify.email, role: verify.role, secondaryPasswordEnabled: verify.secondaryPasswordEnabled, permissions: verify.permissions ?? [] },
+                verify.passwordChangeRequired,
+            );
+            if (verify.passwordChangeRequired) {
+                navigate('/settings/change-password');
+            } else {
+                navigate(verify.defaultPath ?? '/');
             }
-        } catch (err: unknown) {
+        },
+        onError: (err: unknown) => {
             console.error(err);
             const axiosErr = err as { response?: { status?: number } };
             if (axiosErr.response?.status === 401) {
@@ -243,9 +238,29 @@ export default function Login(props: { disableCustomTheme?: boolean }) {
                 setErrorMessage('TOTP 인증 코드가 올바르지 않습니다.');
                 setTotpCode('');
             }
-        } finally {
-            setLoading(false);
+        },
+    });
+
+    const loading = loginMutation.isPending || totpSetupMutation.isPending || totpVerifyMutation.isPending;
+
+    const handleLoginSubmit = (e: React.SubmitEvent<HTMLFormElement>) => {
+        e.preventDefault();
+        if (!validate()) return;
+        setErrorMessage('');
+        const req: LoginReq = { loginId, password };
+        loginMutation.mutate(req);
+    };
+
+    const handleTotpVerify = (e: React.SubmitEvent<HTMLFormElement>) => {
+        e.preventDefault();
+        if (!totpCode || totpCode.length !== 6) {
+            setTotpCodeError('6자리 인증 코드를 입력해주세요.');
+            return;
         }
+        setTotpCodeError('');
+        setErrorMessage('');
+        const req: TotpVerifyReq = { code: totpCode };
+        totpVerifyMutation.mutate(req);
     };
 
     const locked = lockRemainingSeconds > 0;
@@ -341,7 +356,7 @@ export default function Login(props: { disableCustomTheme?: boolean }) {
                     variant="outlined"
                     value={totpCode}
                     onChange={(e) => setTotpCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
-                    inputProps={{ maxLength: 6, inputMode: 'numeric' }}
+                    slotProps={{ htmlInput: { maxLength: 6, inputMode: 'numeric' } }}
                 />
             </FormControl>
             <Button type="submit" fullWidth variant="contained" disabled={loading}>
@@ -374,7 +389,7 @@ export default function Login(props: { disableCustomTheme?: boolean }) {
                     variant="outlined"
                     value={totpCode}
                     onChange={(e) => setTotpCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
-                    inputProps={{ maxLength: 6, inputMode: 'numeric' }}
+                    slotProps={{ htmlInput: { maxLength: 6, inputMode: 'numeric' } }}
                 />
             </FormControl>
             <Button type="submit" fullWidth variant="contained" disabled={loading}>

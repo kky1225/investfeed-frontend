@@ -1,5 +1,5 @@
 import {useMemo, useState} from "react";
-import {useQuery, useQueryClient} from "@tanstack/react-query";
+import {useMutation, useQuery, useQueryClient} from "@tanstack/react-query";
 import Box from "@mui/material/Box";
 import Typography from "@mui/material/Typography";
 import Button from "@mui/material/Button";
@@ -95,16 +95,23 @@ export default function CryptoRealizedPnlTab({myBrokers}: CryptoRealizedPnlTabPr
         queryClient.invalidateQueries({queryKey: ['cryptoRealizedPnl']});
     };
 
-    const handleDelete = async () => {
-        if (!deleteTarget) return;
-        try {
-            const res = await deleteCryptoManualPnl(deleteTarget.id);
-            if (res.code !== "0000") throw new Error(res.message || `실현손익 삭제 실패 (${res.code})`);
+    const deleteMutation = useMutation({
+        mutationFn: async (id: number) => {
+            requireOk(await deleteCryptoManualPnl(id), '실현손익 삭제');
+        },
+        onSuccess: () => {
             reload();
-        } catch (err) {
+            setDeleteTarget(null);
+        },
+        onError: (err) => {
             console.error(err);
-        }
-        setDeleteTarget(null);
+            setDeleteTarget(null);
+        },
+    });
+
+    const handleDelete = () => {
+        if (!deleteTarget) return;
+        deleteMutation.mutate(deleteTarget.id);
     };
 
     const pnlColor = totalPnl > 0 ? 'error.main' : totalPnl < 0 ? 'info.main' : 'text.primary';
@@ -282,7 +289,7 @@ export default function CryptoRealizedPnlTab({myBrokers}: CryptoRealizedPnlTabPr
                 </DialogContent>
                 <DialogActions>
                     <Button onClick={() => setDeleteTarget(null)}>취소</Button>
-                    <Button color="error" onClick={handleDelete}>삭제</Button>
+                    <Button color="error" onClick={handleDelete} disabled={deleteMutation.isPending}>삭제</Button>
                 </DialogActions>
             </Dialog>
         </Box>

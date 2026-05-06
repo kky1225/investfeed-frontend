@@ -28,3 +28,23 @@ export interface AddItemReq {
 export interface ReorderReq {
     orderedIds: number[];
 }
+
+export interface UpdateGroupMutationVars {
+    id: number;
+    req: UpdateGroupReq;
+}
+
+export interface ReorderItemsMutationVars {
+    groupId: number;
+    req: ReorderReq;
+}
+
+export interface AddItemMutationVars {
+    groupId: number;
+    req: AddItemReq;
+}
+
+export interface DeleteItemMutationVars {
+    groupId: number;
+    itemId: number;
+}

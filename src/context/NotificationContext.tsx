@@ -1,5 +1,6 @@
 import {createContext, useContext, useEffect, useRef, ReactNode, useCallback} from 'react';
-import {useQueryClient} from '@tanstack/react-query';
+import {useMutation, useQueryClient} from '@tanstack/react-query';
+import {requireOk} from '../lib/apiResponse';
 import {usePollingQuery} from '../lib/pollingQuery';
 import {useAuth} from './AuthContext';
 import {fetchNotifications, fetchUnreadCount, markAsRead, markAllAsRead} from '../api/notification/NotificationApi';
@@ -71,29 +72,47 @@ export function NotificationProvider({children}: { children: ReactNode }) {
         }
     }, [queryClient]);
 
+    const markAsReadMutation = useMutation({
+        mutationFn: async (id: number) => {
+            requireOk(await markAsRead(id), '알림 읽음 처리');
+            return id;
+        },
+        onSuccess: (id) => {
+            queryClient.setQueryData<Notification[] | null>(NOTIFICATIONS_KEY, (prev) => {
+                if (!prev) return prev;
+                return prev.map(n => n.id === id ? {...n, isRead: true} : n);
+            });
+            queryClient.setQueryData<number | null>(UNREAD_COUNT_KEY, (prev) => {
+                if (prev == null) return prev;
+                return Math.max(0, prev - 1);
+            });
+            queryClient.invalidateQueries({queryKey: NOTIFICATIONS_KEY});
+            queryClient.invalidateQueries({queryKey: UNREAD_COUNT_KEY});
+        },
+    });
+
+    const markAllAsReadMutation = useMutation({
+        mutationFn: async () => {
+            requireOk(await markAllAsRead(), '전체 알림 읽음 처리');
+        },
+        onSuccess: () => {
+            queryClient.setQueryData<Notification[] | null>(NOTIFICATIONS_KEY, (prev) => {
+                if (!prev) return prev;
+                return prev.map(n => ({...n, isRead: true}));
+            });
+            queryClient.setQueryData<number | null>(UNREAD_COUNT_KEY, () => 0);
+            queryClient.invalidateQueries({queryKey: NOTIFICATIONS_KEY});
+            queryClient.invalidateQueries({queryKey: UNREAD_COUNT_KEY});
+        },
+    });
+
     const handleMarkAsRead = useCallback(async (id: number) => {
-        const res = await markAsRead(id);
-        if (res.code !== "0000") throw new Error(res.message || `알림 읽음 처리 실패 (${res.code})`);
-        // optimistic cache 갱신
-        queryClient.setQueryData<Notification[] | null>(NOTIFICATIONS_KEY, (prev) => {
-            if (!prev) return prev;
-            return prev.map(n => n.id === id ? {...n, isRead: true} : n);
-        });
-        queryClient.setQueryData<number | null>(UNREAD_COUNT_KEY, (prev) => {
-            if (prev == null) return prev;
-            return Math.max(0, prev - 1);
-        });
-    }, [queryClient]);
+        await markAsReadMutation.mutateAsync(id);
+    }, [markAsReadMutation]);
 
     const handleMarkAllAsRead = useCallback(async () => {
-        const res = await markAllAsRead();
-        if (res.code !== "0000") throw new Error(res.message || `전체 알림 읽음 처리 실패 (${res.code})`);
-        queryClient.setQueryData<Notification[] | null>(NOTIFICATIONS_KEY, (prev) => {
-            if (!prev) return prev;
-            return prev.map(n => ({...n, isRead: true}));
-        });
-        queryClient.setQueryData<number | null>(UNREAD_COUNT_KEY, () => 0);
-    }, [queryClient]);
+        await markAllAsReadMutation.mutateAsync();
+    }, [markAllAsReadMutation]);
 
     // WebSocket 라이프사이클 — 신규 알림 push 수신
     useEffect(() => {

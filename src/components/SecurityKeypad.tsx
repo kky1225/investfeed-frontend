@@ -1,4 +1,4 @@
-import {useState, useMemo, useCallback} from 'react';
+import {useState, useMemo} from 'react';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Typography from '@mui/material/Typography';
@@ -22,7 +22,7 @@ export default function SecurityKeypad({length = 6, onComplete, disabled = false
         return nums;
     }, []);
 
-    const handleNumber = useCallback((num: number) => {
+    const handleNumber = (num: number) => {
         if (disabled) return;
         setCode(prev => {
             const next = prev + num;
@@ -31,12 +31,12 @@ export default function SecurityKeypad({length = 6, onComplete, disabled = false
             }
             return next.length <= length ? next : prev;
         });
-    }, [disabled, length, onComplete]);
+    };
 
-    const handleDelete = useCallback(() => {
+    const handleDelete = () => {
         if (disabled) return;
         setCode(prev => prev.slice(0, -1));
-    }, [disabled]);
+    };
 
     const dots = Array.from({length}, (_, i) => (
         <Box

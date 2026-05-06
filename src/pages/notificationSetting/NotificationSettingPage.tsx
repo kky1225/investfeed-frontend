@@ -1,5 +1,5 @@
 import {useState} from "react";
-import {useQuery, useQueryClient} from "@tanstack/react-query";
+import {useMutation, useQuery, useQueryClient} from "@tanstack/react-query";
 import {requireOk} from "../../lib/apiResponse.ts";
 import Box from "@mui/material/Box";
 import Typography from "@mui/material/Typography";
@@ -10,7 +10,7 @@ import Stack from "@mui/material/Stack";
 import Alert from "@mui/material/Alert";
 import Skeleton from "@mui/material/Skeleton";
 import {fetchNotificationSetting, saveNotificationSetting} from "../../api/notification/NotificationApi.ts";
-import type {NotificationSettingRes} from "../../type/NotificationSettingType.ts";
+import type {NotificationSettingReq, NotificationSettingRes} from "../../type/NotificationSettingType.ts";
 
 interface SettingItem {
     key: keyof NotificationSettingRes;
@@ -66,20 +66,32 @@ export default function NotificationSettingPage() {
         refetchOnWindowFocus: false,
     });
 
-    const handleToggle = async (key: keyof NotificationSettingRes) => {
-        if (!setting) return;
-        const updated = {...setting, [key]: !setting[key]};
-        // optimistic update
-        queryClient.setQueryData<NotificationSettingRes | null>(['notificationSetting'], updated);
-        try {
-            const res = await saveNotificationSetting(updated);
-            if (res.code !== "0000") throw new Error(res.message || `알림 설정 저장 실패 (${res.code})`);
+    const saveSettingMutation = useMutation({
+        mutationFn: async (req: NotificationSettingReq) => {
+            requireOk(await saveNotificationSetting(req), '알림 설정 저장');
+        },
+        onMutate: (req) => {
+            const previous = queryClient.getQueryData<NotificationSettingRes | null>(['notificationSetting']) ?? null;
+            queryClient.setQueryData<NotificationSettingRes | null>(['notificationSetting'], req);
+            return {previous};
+        },
+        onSuccess: () => {
             setSaved(true);
             setTimeout(() => setSaved(false), 2000);
-        } catch (error) {
+            queryClient.invalidateQueries({queryKey: ['notificationSetting']});
+        },
+        onError: (error, _req, context) => {
             console.error(error);
-            queryClient.setQueryData<NotificationSettingRes | null>(['notificationSetting'], setting);
-        }
+            if (context) {
+                queryClient.setQueryData<NotificationSettingRes | null>(['notificationSetting'], context.previous);
+            }
+        },
+    });
+
+    const handleToggle = (key: keyof NotificationSettingRes) => {
+        if (!setting) return;
+        const req: NotificationSettingReq = {...setting, [key]: !setting[key]};
+        saveSettingMutation.mutate(req);
     };
 
     return (

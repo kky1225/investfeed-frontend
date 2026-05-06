@@ -63,6 +63,8 @@ import List from "@mui/material/List";
 import ListItemButton from "@mui/material/ListItemButton";
 import ListItemText from "@mui/material/ListItemText";
 import {addInterestItem, fetchInterestGroups} from "../../api/interest/InterestApi.ts";
+import {useMutation} from "@tanstack/react-query";
+import {requireOk} from "../../lib/apiResponse.ts";
 import {useAlert} from "../../context/AlertContext";
 import NotificationsActiveIcon from "@mui/icons-material/NotificationsActive";
 import PriceTargetDialog from "../../components/PriceTargetDialog.tsx";
@@ -784,19 +786,23 @@ const StockDetail = () => {
         }
     };
 
-    const handleAddToGroup = async (group: InterestGroup) => {
-        try {
-            const res = await addInterestItem(group.id, {
-                stkCd: stockChartData.id,
-                stkNm: stockChartData.title,
-            });
-            if (res.code !== "0000") throw new Error(res.message || `관심 종목 추가 실패 (${res.code})`);
+    const addToGroupMutation = useMutation({
+        mutationFn: async (group: InterestGroup) => {
+            requireOk(await addInterestItem(group.id, {stkCd: stockChartData.id, stkNm: stockChartData.title}), '관심 종목 추가');
+            return group;
+        },
+        onSuccess: (group) => {
             setAddedGroupIds(prev => new Set(prev).add(group.id));
             showAlert(`${group.groupNm}에 추가되었습니다.`, 'success');
-        } catch (error) {
+        },
+        onError: (error) => {
             console.error(error);
             showAlert('이미 추가된 종목이거나 오류가 발생했습니다.', 'error');
-        }
+        },
+    });
+
+    const handleAddToGroup = (group: InterestGroup) => {
+        addToGroupMutation.mutate(group);
     };
 
     return (

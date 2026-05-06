@@ -1,4 +1,7 @@
 import {useMemo, useState} from "react";
+import {useMutation} from "@tanstack/react-query";
+import {requireOk} from "../../lib/apiResponse.ts";
+import type {UpdateManualHoldingMutationVars} from "../../type/BrokerType.ts";
 import Dialog from "@mui/material/Dialog";
 import DialogTitle from "@mui/material/DialogTitle";
 import DialogContent from "@mui/material/DialogContent";
@@ -48,7 +51,25 @@ export default function EditManualHoldingDialog({open, onClose, holding, onUpdat
         onClose();
     };
 
-    const handleSubmit = async () => {
+    const updateMutation = useMutation({
+        mutationFn: async (vars: UpdateManualHoldingMutationVars) =>
+            requireOk(await updateManualHolding(vars.id, vars.req), '수동 보유주식 수정'),
+        onSuccess: () => {
+            onUpdated();
+            handleClose();
+        },
+        onError: (err) => {
+            console.error(err);
+            const axiosErr = err as {response?: {status?: number; data?: {code?: string; result?: Record<string, string>}}};
+            if (axiosErr.response?.status === 400 && axiosErr.response?.data?.code === 'VALIDATION_4001') {
+                setFormErrors((axiosErr.response.data.result ?? {}) as typeof formErrors);
+                return;
+            }
+            setFormErrors({purAmt: "수정에 실패했습니다."});
+        },
+    });
+
+    const handleSubmit = () => {
         if (!holding) return;
         const errors: {purPrice?: string; quantity?: string; purAmt?: string} = {};
         if (!purPrice || Number(purPrice) <= 0) errors.purPrice = "매수단가를 입력해주세요.";
@@ -59,24 +80,15 @@ export default function EditManualHoldingDialog({open, onClose, holding, onUpdat
             return;
         }
         setFormErrors({});
-        try {
-            const res = await updateManualHolding(holding.id, {
+        const vars: UpdateManualHoldingMutationVars = {
+            id: holding.id,
+            req: {
                 purPrice: Number(purPrice),
                 quantity: Number(quantity),
                 purAmt: Number(purAmt),
-            });
-            if (res.code !== "0000") throw new Error(res.message || `수동 보유주식 수정 실패 (${res.code})`);
-            onUpdated();
-            handleClose();
-        } catch (err) {
-            console.error(err);
-            const axiosErr = err as {response?: {status?: number; data?: {code?: string; result?: Record<string, string>}}};
-            if (axiosErr.response?.status === 400 && axiosErr.response?.data?.code === 'VALIDATION_4001') {
-                setFormErrors((axiosErr.response.data.result ?? {}) as typeof formErrors);
-                return;
-            }
-            setFormErrors({purAmt: "수정에 실패했습니다."});
-        }
+            },
+        };
+        updateMutation.mutate(vars);
     };
 
     return (
@@ -129,7 +141,7 @@ export default function EditManualHoldingDialog({open, onClose, holding, onUpdat
             </DialogContent>
             <DialogActions>
                 <Button onClick={handleClose}>취소</Button>
-                <Button onClick={handleSubmit}>저장</Button>
+                <Button onClick={handleSubmit} disabled={updateMutation.isPending}>저장</Button>
             </DialogActions>
         </Dialog>
     );

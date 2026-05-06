@@ -21,7 +21,8 @@ import AddCryptoBrokerDialog from "./AddCryptoBrokerDialog.tsx";
 import BlindToggle from "../../components/BlindToggle.tsx";
 import CryptoRealizedPnlTab from "./CryptoRealizedPnlTab.tsx";
 import ApiKeyRequiredEmptyState from "../../components/ApiKeyRequiredEmptyState.tsx";
-import {useQueryClient} from "@tanstack/react-query";
+import {useMutation, useQueryClient} from "@tanstack/react-query";
+import {requireOk} from "../../lib/apiResponse.ts";
 import {useApiKeyStatus, apiKeyStatusKeys} from "../../context/ApiKeyStatusContext.tsx";
 
 export default function CryptoHoldingPage() {
@@ -62,17 +63,24 @@ export default function CryptoHoldingPage() {
         }
     };
 
-    const handleRemoveBroker = async () => {
-        if (!deleteTarget) return;
-        try {
-            const res = await removeMyCryptoBroker(deleteTarget.id);
-            if (res.code !== "0000") throw new Error(res.message || `거래소 삭제 실패 (${res.code})`);
-            await queryClient.invalidateQueries({queryKey: apiKeyStatusKeys.myCryptoBrokers});
+    const removeBrokerMutation = useMutation({
+        mutationFn: async (id: number) => {
+            requireOk(await removeMyCryptoBroker(id), '거래소 삭제');
+        },
+        onSuccess: () => {
+            queryClient.invalidateQueries({queryKey: apiKeyStatusKeys.myCryptoBrokers});
             navigate('/crypto/holding/list', {replace: true});
-        } catch (err) {
+            setDeleteTarget(null);
+        },
+        onError: (err) => {
             console.error(err);
-        }
-        setDeleteTarget(null);
+            setDeleteTarget(null);
+        },
+    });
+
+    const handleRemoveBroker = () => {
+        if (!deleteTarget) return;
+        removeBrokerMutation.mutate(deleteTarget.id);
     };
 
     const renderTabContent = () => {
@@ -165,7 +173,7 @@ export default function CryptoHoldingPage() {
                 </DialogContent>
                 <DialogActions>
                     <Button onClick={() => setDeleteTarget(null)}>취소</Button>
-                    <Button color="error" onClick={handleRemoveBroker}>제거</Button>
+                    <Button color="error" onClick={handleRemoveBroker} disabled={removeBrokerMutation.isPending}>제거</Button>
                 </DialogActions>
             </Dialog>
         </Box>

@@ -1,5 +1,6 @@
 import {useState} from "react";
-import {useQueryClient} from "@tanstack/react-query";
+import {useMutation, useQueryClient} from "@tanstack/react-query";
+import {requireOk} from "../../lib/apiResponse.ts";
 import {usePollingQuery} from "../../lib/pollingQuery.ts";
 import Box from "@mui/material/Box";
 import Typography from "@mui/material/Typography";
@@ -30,7 +31,7 @@ import {DataGrid, type GridColDef} from "@mui/x-data-grid";
 import BlindText from "../../components/BlindText.tsx";
 import BlindToggle from "../../components/BlindToggle.tsx";
 import {useBlindMode} from "../../context/BlindModeContext.tsx";
-import type {RebalancingStatusRes, RatioDirection} from "../../type/RebalancingType.ts";
+import type {RebalancingSettingReq, RebalancingStatusRes, RatioDirection} from "../../type/RebalancingType.ts";
 import {saveRebalancingSetting, fetchRebalancingStatus, deleteRebalancingSetting} from "../../api/rebalancing/RebalancingApi.ts";
 import FreshnessIndicator from "../../components/FreshnessIndicator.tsx";
 import ApiKeyRequiredEmptyState from "../../components/ApiKeyRequiredEmptyState.tsx";
@@ -64,7 +65,7 @@ export default function RebalancingPage() {
 
     const hasMissing = apiKeyLoaded && [...myApiBrokerIds].some(id => !validBrokerIds.has(id));
 
-    const {data: pollStatus, isFetched, lastUpdated, pollError} = usePollingQuery<RebalancingStatusRes>(
+    const {data: pollStatus, isFetched, lastUpdated, pollError} = usePollingQuery<RebalancingStatusRes | null>(
         ['rebalancingStatus'],
         (config) => fetchRebalancingStatus(config),
         {enabled: apiKeyLoaded && !hasMissing},
@@ -95,7 +96,49 @@ export default function RebalancingPage() {
         }
     }
 
-    const handleSave = async () => {
+    const saveSettingMutation = useMutation({
+        mutationFn: async (req: RebalancingSettingReq) =>
+            requireOk(await saveRebalancingSetting(req), '리밸런싱 설정 저장'),
+        onSuccess: () => {
+            setEditMode(false);
+            reloadStatus();
+        },
+        onError: (err) => {
+            console.error(err);
+            const axiosErr = err as {response?: {status?: number; data?: {code?: string; result?: Record<string, string>}}};
+            if (axiosErr.response?.status === 400 && axiosErr.response?.data?.code === 'VALIDATION_4001') {
+                const result = axiosErr.response.data.result ?? {};
+                const serverFieldErrs: {stockRatio?: boolean; cryptoRatio?: boolean; cashRatio?: boolean; maxStockRatio?: boolean} = {};
+                const messages: string[] = [];
+                (['stockRatio', 'cryptoRatio', 'cashRatio', 'maxStockRatio'] as const).forEach(key => {
+                    if (result[key]) { serverFieldErrs[key] = true; messages.push(result[key]); }
+                });
+                setFieldErrors(serverFieldErrs);
+                setError(messages.join(' ') || '입력값을 확인해주세요.');
+                return;
+            }
+            setError("설정 저장에 실패했습니다.");
+        },
+    });
+
+    const deleteSettingMutation = useMutation({
+        mutationFn: async () => {
+            requireOk(await deleteRebalancingSetting(), '리밸런싱 설정 삭제');
+        },
+        onSuccess: () => {
+            setStatusOverride('cleared');
+            queryClient.removeQueries({queryKey: ['rebalancingStatus']});
+            setStockRatio(""); setCryptoRatio(""); setCashRatio(""); setMaxStockRatio("");
+            setDeleteOpen(false);
+        },
+        onError: (error) => {
+            console.error(error);
+            setError("설정 삭제에 실패했습니다.");
+            setDeleteOpen(false);
+        },
+    });
+
+    const handleSave = () => {
         const fieldErrs: {stockRatio?: boolean; cryptoRatio?: boolean; cashRatio?: boolean; maxStockRatio?: boolean} = {};
         if (!stockRatio) fieldErrs.stockRatio = true;
         if (!cryptoRatio) fieldErrs.cryptoRatio = true;
@@ -113,45 +156,17 @@ export default function RebalancingPage() {
         }
         setFieldErrors({});
         setError("");
-        try {
-            const res = await saveRebalancingSetting({
-                stockRatio: Number(stockRatio), stockDirection,
-                cryptoRatio: Number(cryptoRatio), cryptoDirection,
-                cashRatio: Number(cashRatio), cashDirection,
-                maxStockRatio: Number(maxStockRatio)
-            });
-            if (res.code !== "0000") throw new Error(res.message || `리밸런싱 설정 저장 실패 (${res.code})`);
-            setEditMode(false);
-            await reloadStatus();
-        } catch (err) {
-            console.error(err);
-            const axiosErr = err as {response?: {status?: number; data?: {code?: string; result?: Record<string, string>}}};
-            if (axiosErr.response?.status === 400 && axiosErr.response?.data?.code === 'VALIDATION_4001') {
-                const result = axiosErr.response.data.result ?? {};
-                const serverFieldErrs: typeof fieldErrs = {};
-                const messages: string[] = [];
-                (['stockRatio', 'cryptoRatio', 'cashRatio', 'maxStockRatio'] as const).forEach(key => {
-                    if (result[key]) { serverFieldErrs[key] = true; messages.push(result[key]); }
-                });
-                setFieldErrors(serverFieldErrs);
-                setError(messages.join(' ') || '입력값을 확인해주세요.');
-                return;
-            }
-            setError("설정 저장에 실패했습니다.");
-        }
+        const req: RebalancingSettingReq = {
+            stockRatio: Number(stockRatio), stockDirection,
+            cryptoRatio: Number(cryptoRatio), cryptoDirection,
+            cashRatio: Number(cashRatio), cashDirection,
+            maxStockRatio: Number(maxStockRatio),
+        };
+        saveSettingMutation.mutate(req);
     };
 
-    const handleDelete = async () => {
-        try {
-            await deleteRebalancingSetting();
-            setStatusOverride('cleared');
-            queryClient.removeQueries({queryKey: ['rebalancingStatus']});
-            setStockRatio(""); setCryptoRatio(""); setCashRatio(""); setMaxStockRatio("");
-        } catch (error) {
-            console.error(error);
-            setError("설정 삭제에 실패했습니다.");
-        }
-        setDeleteOpen(false);
+    const handleDelete = () => {
+        deleteSettingMutation.mutate();
     };
 
     const columns: GridColDef[] = [
@@ -317,7 +332,7 @@ export default function RebalancingPage() {
                             </Grid>
                             {error && <Typography variant="caption" color="error" sx={{mb: 1, display: 'block'}}>{error}</Typography>}
                             <Stack direction="row" spacing={1}>
-                                <Button variant="contained" size="small" startIcon={<SaveIcon/>} onClick={handleSave}>저장</Button>
+                                <Button variant="contained" size="small" startIcon={<SaveIcon/>} onClick={handleSave} disabled={saveSettingMutation.isPending}>저장</Button>
                                 {status && <Button size="small" onClick={() => setEditMode(false)}>취소</Button>}
                             </Stack>
                         </>
@@ -443,7 +458,7 @@ export default function RebalancingPage() {
                 </DialogContent>
                 <DialogActions>
                     <Button onClick={() => setDeleteOpen(false)}>취소</Button>
-                    <Button color="error" onClick={handleDelete}>삭제</Button>
+                    <Button color="error" onClick={handleDelete} disabled={deleteSettingMutation.isPending}>삭제</Button>
                 </DialogActions>
             </Dialog>
         </Box>

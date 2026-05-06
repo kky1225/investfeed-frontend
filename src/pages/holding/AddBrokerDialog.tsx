@@ -1,5 +1,5 @@
 import {useState} from "react";
-import {useQuery, useQueryClient} from "@tanstack/react-query";
+import {useMutation, useQuery, useQueryClient} from "@tanstack/react-query";
 import Dialog from "@mui/material/Dialog";
 import DialogTitle from "@mui/material/DialogTitle";
 import DialogContent from "@mui/material/DialogContent";
@@ -39,17 +39,22 @@ export default function AddBrokerDialog({open, onClose}: AddBrokerDialogProps) {
     });
     const brokers = brokersData ?? [];
 
-    const handleSelect = async (broker: Broker) => {
-        try {
-            setError("");
-            const res = await addMyBroker({brokerId: broker.id});
-            if (res.code !== "0000") throw new Error(res.message || `증권사 추가 실패 (${res.code})`);
-            await queryClient.invalidateQueries({queryKey: apiKeyStatusKeys.myStockBrokers});
+    const addMyBrokerMutation = useMutation({
+        mutationFn: async (brokerId: number) =>
+            requireOk(await addMyBroker({brokerId}), '증권사 추가'),
+        onSuccess: () => {
+            queryClient.invalidateQueries({queryKey: apiKeyStatusKeys.myStockBrokers});
             onClose();
-        } catch (error) {
-            console.error(error);
+        },
+        onError: (err) => {
+            console.error(err);
             setError("증권사 추가에 실패했습니다.");
-        }
+        },
+    });
+
+    const handleSelect = (broker: Broker) => {
+        setError("");
+        addMyBrokerMutation.mutate(broker.id);
     };
 
     return (

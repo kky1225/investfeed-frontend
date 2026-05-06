@@ -67,3 +67,33 @@ export interface RolePermissionGrant {
 export interface UpdateRolePermissionReq {
     grants: RolePermissionGrant[];
 }
+
+export interface UpdatePermissionMutationVars {
+    id: number;
+    req: UpdatePermissionReq;
+}
+
+export interface AddPatternMutationVars {
+    permissionId: number;
+    req: AddApiPatternReq;
+}
+
+export interface DeletePatternMutationVars {
+    permissionId: number;
+    patternId: number;
+}
+
+export interface AddActionMutationVars {
+    permissionId: number;
+    req: AddPermissionActionReq;
+}
+
+export interface DeleteActionMutationVars {
+    permissionId: number;
+    action: string;
+}
+
+export interface UpdateRolePermissionsMutationVars {
+    id: number;
+    req: UpdateRolePermissionReq;
+}

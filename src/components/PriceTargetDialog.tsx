@@ -1,5 +1,5 @@
 import {useMemo, useState} from "react";
-import {useQuery, useQueryClient} from "@tanstack/react-query";
+import {useMutation, useQuery, useQueryClient} from "@tanstack/react-query";
 import {requireOk} from "../lib/apiResponse.ts";
 import Dialog from "@mui/material/Dialog";
 import DialogTitle from "@mui/material/DialogTitle";
@@ -16,7 +16,7 @@ import ListItemText from "@mui/material/ListItemText";
 import IconButton from "@mui/material/IconButton";
 import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
 import {createPriceTarget, fetchPriceTargets, deletePriceTarget} from "../api/notification/NotificationApi.ts";
-import type {AssetType, PriceTarget} from "../type/NotificationType.ts";
+import type {AssetType, PriceTarget, PriceTargetCreateReq} from "../type/NotificationType.ts";
 
 interface PriceTargetDialogProps {
     open: boolean;
@@ -31,7 +31,6 @@ export default function PriceTargetDialog({open, onClose, assetType, assetCode, 
     const queryClient = useQueryClient();
     const [targetPrice, setTargetPrice] = useState("");
     const [targetPriceError, setTargetPriceError] = useState("");
-    const [loading, setLoading] = useState(false);
 
     const {data: allTargetsData} = useQuery<PriceTarget[]>({
         queryKey: ['priceTargets'],
@@ -50,7 +49,40 @@ export default function PriceTargetDialog({open, onClose, assetType, assetCode, 
         onClose();
     };
 
-    const handleSubmit = async () => {
+    const createMutation = useMutation({
+        mutationFn: async (req: PriceTargetCreateReq) =>
+            requireOk(await createPriceTarget(req), '목표가 등록'),
+        onSuccess: (created) => {
+            queryClient.setQueryData<PriceTarget[]>(['priceTargets'], prev => [created, ...(prev ?? [])]);
+            queryClient.invalidateQueries({queryKey: ['priceTargets']});
+            setTargetPrice("");
+            setTargetPriceError("");
+        },
+        onError: (err) => {
+            console.error(err);
+            const axiosErr = err as {response?: {status?: number; data?: {code?: string; result?: Record<string, string>}}};
+            if (axiosErr.response?.status === 400 && axiosErr.response?.data?.code === 'VALIDATION_4001') {
+                const result = axiosErr.response.data.result ?? {};
+                setTargetPriceError(result.targetPrice ?? "목표가를 확인해주세요.");
+                return;
+            }
+            setTargetPriceError("목표가 알림 등록에 실패했습니다.");
+        },
+    });
+
+    const deleteMutation = useMutation({
+        mutationFn: async (id: number) => {
+            requireOk(await deletePriceTarget(id), '목표가 삭제');
+            return id;
+        },
+        onSuccess: (id) => {
+            queryClient.setQueryData<PriceTarget[]>(['priceTargets'], prev => (prev ?? []).filter(t => t.id !== id));
+            queryClient.invalidateQueries({queryKey: ['priceTargets']});
+        },
+        onError: (e) => console.error(e),
+    });
+
+    const handleSubmit = () => {
         const cur = Number(currentPrice.replace(/,/g, ''));
         const target = Number(targetPrice);
 
@@ -62,40 +94,12 @@ export default function PriceTargetDialog({open, onClose, assetType, assetCode, 
 
         const direction = target >= cur ? 'ABOVE' as const : 'BELOW' as const;
 
-        setLoading(true);
-        try {
-            const res = await createPriceTarget({
-                assetType,
-                assetCode,
-                assetName,
-                targetPrice: target,
-                direction,
-            });
-            if (res.code !== "0000" || !res.result) throw new Error(res.message || `목표가 등록 실패 (${res.code})`);
-            queryClient.setQueryData<PriceTarget[]>(['priceTargets'], prev => [res.result, ...(prev ?? [])]);
-            setTargetPrice("");
-            setTargetPriceError("");
-        } catch (err) {
-            console.error(err);
-            const axiosErr = err as {response?: {status?: number; data?: {code?: string; result?: Record<string, string>}}};
-            if (axiosErr.response?.status === 400 && axiosErr.response?.data?.code === 'VALIDATION_4001') {
-                const result = axiosErr.response.data.result ?? {};
-                setTargetPriceError(result.targetPrice ?? "목표가를 확인해주세요.");
-                return;
-            }
-            setTargetPriceError("목표가 알림 등록에 실패했습니다.");
-        } finally {
-            setLoading(false);
-        }
+        const req: PriceTargetCreateReq = {assetType, assetCode, assetName, targetPrice: target, direction};
+        createMutation.mutate(req);
     };
 
-    const handleDelete = async (id: number) => {
-        try {
-            await deletePriceTarget(id);
-            queryClient.setQueryData<PriceTarget[]>(['priceTargets'], prev => (prev ?? []).filter(t => t.id !== id));
-        } catch (e) {
-            console.error(e);
-        }
+    const handleDelete = (id: number) => {
+        deleteMutation.mutate(id);
     };
 
     return (
@@ -162,7 +166,7 @@ export default function PriceTargetDialog({open, onClose, assetType, assetCode, 
             </DialogContent>
             <DialogActions>
                 <Button onClick={handleClose}>닫기</Button>
-                <Button onClick={handleSubmit} disabled={loading}>등록</Button>
+                <Button onClick={handleSubmit} disabled={createMutation.isPending}>등록</Button>
             </DialogActions>
         </Dialog>
     );

@@ -1,5 +1,5 @@
 import React, {createContext, useCallback, useContext, useMemo, useState} from "react";
-import {useQuery} from "@tanstack/react-query";
+import {useMutation, useQuery, useQueryClient} from "@tanstack/react-query";
 import {requireOk} from "../../lib/apiResponse.ts";
 import {useNavigate} from "react-router-dom";
 import Box from "@mui/material/Box";
@@ -16,7 +16,8 @@ import {DndContext, DragEndEvent, PointerSensor, TouchSensor, useSensor, useSens
 import {arrayMove, SortableContext, useSortable, verticalListSortingStrategy} from "@dnd-kit/sortable";
 import {CSS} from "@dnd-kit/utilities";
 import CustomPieChart from "../../components/CustomPieChart.tsx";
-import {HoldingStock} from "../../type/HoldingType.ts";
+import type {HoldingReorderReq} from "../../type/BrokerType.ts";
+import {HoldingStock, HoldingListData} from "../../type/HoldingType.ts";
 import {fetchHoldingList, reorderApiHoldings} from "../../api/holding/HoldingApi.ts";
 import {renderChip, renderTradeColor} from "../../components/CustomRender.tsx";
 import BlindText from "../../components/BlindText.tsx";
@@ -106,7 +107,6 @@ const HoldingList = () => {
 
     const [orderOverride, setOrderOverride] = useState<number[] | null>(null);
     const [orderDirty, setOrderDirty] = useState(false);
-    const [savingOrder, setSavingOrder] = useState(false);
 
     // WebSocket 으로 들어오는 실시간 부분 갱신 overlay (curPrc/rmndQty/purPric 등)
     const [liveOverlay, setLiveOverlay] = useState<Map<string, HoldingBuffer>>(new Map());
@@ -117,14 +117,6 @@ const HoldingList = () => {
     );
 
     // 한 번만 fetch (폴링 X). useQuery 가 mount 시 자동 호출 + cancel 처리.
-    type HoldingListData = {
-        holdingList?: HoldingStock[];
-        totPurAmt?: string;
-        totEvltAmt?: string;
-        totEvltPl?: string;
-        totPrftRt?: string;
-        balance?: string;
-    } | null;
     const {data: holdingData, isLoading: loading} = useQuery<HoldingListData>({
         queryKey: ['holdingList'],
         queryFn: async ({signal}) => requireOk<HoldingListData>(await fetchHoldingList({signal, skipGlobalError: true}), null),
@@ -206,15 +198,21 @@ const HoldingList = () => {
         setOrderDirty(true);
     };
 
-    const handleSaveOrder = async () => {
-        setSavingOrder(true);
-        try {
-            const res = await reorderApiHoldings({orderedIds: holdings.map(h => h.id)});
-            if (res.code !== "0000") throw new Error(res.message || `보유주식 순서 변경 실패 (${res.code})`);
+    const queryClient = useQueryClient();
+    const reorderMutation = useMutation({
+        mutationFn: async (req: HoldingReorderReq) => {
+            requireOk(await reorderApiHoldings(req), '보유주식 순서 변경');
+        },
+        onSuccess: () => {
             setOrderDirty(false);
-        } finally {
-            setSavingOrder(false);
-        }
+            queryClient.invalidateQueries({queryKey: ['holdingList']});
+        },
+        onError: (err) => console.error(err),
+    });
+
+    const handleSaveOrder = () => {
+        const req: HoldingReorderReq = {orderedIds: holdings.map(h => h.id)};
+        reorderMutation.mutate(req);
     };
 
     const columns: GridColDef[] = [
@@ -273,9 +271,9 @@ const HoldingList = () => {
                     <Button
                         variant="contained"
                         size="small"
-                        startIcon={savingOrder ? <CircularProgress size={12} color="inherit"/> : <SaveIcon/>}
+                        startIcon={reorderMutation.isPending ? <CircularProgress size={12} color="inherit"/> : <SaveIcon/>}
                         onClick={handleSaveOrder}
-                        disabled={savingOrder}
+                        disabled={reorderMutation.isPending}
                     >
                         순서 저장
                     </Button>

@@ -1,4 +1,6 @@
 import React, {createContext, useContext, useEffect, useRef, useState} from "react";
+import {useMutation, useQuery, useQueryClient} from "@tanstack/react-query";
+import {requireOk} from "../../lib/apiResponse.ts";
 import Box from "@mui/material/Box";
 import Typography from "@mui/material/Typography";
 import Stack from "@mui/material/Stack";
@@ -43,7 +45,7 @@ import {
     reorderCryptoInterestItems,
     updateCryptoInterestGroup,
 } from "../../api/cryptoInterest/CryptoInterestApi.ts";
-import {CryptoInterestGroup, CryptoInterestItem} from "../../type/CryptoInterestType.ts";
+import {AddItemMutationVars, CreateCryptoGroupReq, CryptoInterestGroup, CryptoInterestItem, DeleteItemMutationVars, ReorderItemsMutationVars, ReorderReq, UpdateGroupMutationVars} from "../../type/CryptoInterestType.ts";
 import {fetchCryptoSearch} from "../../api/crypto/CryptoApi.ts";
 
 interface CryptoSearchItem {
@@ -182,17 +184,52 @@ const DraggableRow = React.forwardRef<HTMLDivElement, GridRowProps>((props, _ref
 const CryptoInterest = () => {
     const navigate = useNavigate();
     const {groupId} = useParams<{ groupId: string }>();
+    const queryClient = useQueryClient();
 
-    const [groups, setGroups] = useState<CryptoInterestGroup[]>([]);
+    const {data: groupsData, isLoading: groupsLoading} = useQuery<CryptoInterestGroup[]>({
+        queryKey: ['cryptoInterestGroups'],
+        queryFn: async () => requireOk(await fetchCryptoInterestGroups(), [] as CryptoInterestGroup[]),
+    });
+    const [groupOrderOverride, setGroupOrderOverride] = useState<CryptoInterestGroup[] | null>(null);
+    const groups = groupOrderOverride ?? groupsData ?? [];
+
     const [selectedGroup, setSelectedGroup] = useState<CryptoInterestGroup | null>(null);
-    const [items, setItems] = useState<CryptoInterestItem[]>([]);
-    const [groupsLoading, setGroupsLoading] = useState(false);
-    const [itemsLoading, setItemsLoading] = useState(false);
-
     const [groupOrderDirty, setGroupOrderDirty] = useState(false);
-    const [savingGroupOrder, setSavingGroupOrder] = useState(false);
     const [itemOrderDirty, setItemOrderDirty] = useState(false);
-    const [savingItemOrder, setSavingItemOrder] = useState(false);
+
+    const [prevGroupsData, setPrevGroupsData] = useState(groupsData);
+    if (groupsData !== prevGroupsData) {
+        setPrevGroupsData(groupsData);
+        setGroupOrderOverride(null);
+        if (groupsData && groupsData.length > 0) {
+            if (!selectedGroup || !groupsData.some(g => g.id === selectedGroup.id)) {
+                const target = groupId
+                    ? groupsData.find(g => g.id === Number(groupId)) ?? groupsData[0]
+                    : groupsData[0];
+                setSelectedGroup(target);
+            }
+        } else if (groupsData) {
+            setSelectedGroup(null);
+        }
+    }
+
+    const {data: itemsData, isLoading: itemsLoading} = useQuery<CryptoInterestItem[]>({
+        queryKey: ['cryptoInterestItems', selectedGroup?.id],
+        queryFn: async () => {
+            if (!selectedGroup) return [];
+            return requireOk(await fetchCryptoInterestItems(selectedGroup.id), [] as CryptoInterestItem[]);
+        },
+        enabled: selectedGroup !== null,
+    });
+    const [itemsOrderOverride, setItemsOrderOverride] = useState<CryptoInterestItem[] | null>(null);
+    const items = itemsOrderOverride ?? itemsData ?? [];
+
+    const [prevSelectedGroupId, setPrevSelectedGroupId] = useState(selectedGroup?.id);
+    if (selectedGroup?.id !== prevSelectedGroupId) {
+        setPrevSelectedGroupId(selectedGroup?.id);
+        setItemsOrderOverride(null);
+        setItemOrderDirty(false);
+    }
 
     const [addGroupOpen, setAddGroupOpen] = useState(false);
     const [newGroupName, setNewGroupName] = useState("");
@@ -215,167 +252,152 @@ const CryptoInterest = () => {
     const [editGroupError, setEditGroupError] = useState("");
     const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-    const loadingGroupRef = useRef<number | null>(null);
     const socketRef = useRef<WebSocket | null>(null);
 
-    // 클릭과 드래그를 구분하기 위해 distance: 5 적용, 모바일 터치 지원
     const sensors = useSensors(
         useSensor(PointerSensor, {activationConstraint: {distance: 5}}),
         useSensor(TouchSensor, {activationConstraint: {delay: 200, tolerance: 5}})
     );
 
     useEffect(() => {
-        loadGroups();
-        return () => {
-            socketRef.current?.close();
-        };
-    }, []);
+        if (!selectedGroup) return;
+        const targetGroupId = selectedGroup.id;
+        let cancelled = false;
 
-    const loadGroups = async () => {
-        setGroupsLoading(true);
-        setGroupOrderDirty(false);
-        try {
-            const data = await fetchCryptoInterestGroups();
-            if (data.code !== "0000") throw new Error(data.message || `관심 그룹 조회 실패 (${data.code})`);
-            const groupList: CryptoInterestGroup[] = data.result ?? [];
-            setGroups(groupList);
-            if (groupList.length > 0) {
-                const target = groupId
-                    ? groupList.find(g => g.id === Number(groupId)) ?? groupList[0]
-                    : groupList[0];
-                setSelectedGroup(target);
-                loadItems(target.id);
-            }
-        } catch (err) {
-            console.error(err);
-        } finally {
-            setGroupsLoading(false);
-        }
-    };
+        socketRef.current?.close();
+        socketRef.current = null;
 
-    const loadItems = async (groupId: number) => {
-        if (loadingGroupRef.current === groupId) return;
-        loadingGroupRef.current = groupId;
-        setItemsLoading(true);
-        setItemOrderDirty(false);
-        try {
-            const data = await fetchCryptoInterestItems(groupId);
-            if (data.code !== "0000") throw new Error(data.message || `관심 코인 조회 실패 (${data.code})`);
-            setItems(data.result ?? []);
+        (async () => {
+            try {
+                const streamRes = await fetchCryptoInterestItemsStream(targetGroupId);
+                if (cancelled) return;
+                if (streamRes.code !== "0000") throw new Error(streamRes.message || `관심 코인 스트림 실패 (${streamRes.code})`);
 
-            // 암호화폐는 24시간 운영이므로 시장 오픈 체크 불필요
-            socketRef.current?.close();
-            const streamRes = await fetchCryptoInterestItemsStream(groupId);
-            if (streamRes.code !== "0000") throw new Error(streamRes.message || `관심 코인 스트림 실패 (${streamRes.code})`);
-            socketRef.current = openSocket();
-        } catch (err) {
-            console.error(err);
-        } finally {
-            setItemsLoading(false);
-            loadingGroupRef.current = null;
-        }
-    };
-
-    const openSocket = () => {
-        const socket = new WebSocket("ws://localhost:8080/ws");
-        socket.onmessage = (event) => {
-            const data = JSON.parse(event.data);
-            if (data.type === "CRYPTO_TICKER" && data.data) {
-                const ticker = data.data;
-                setItems(prev => prev.map(item => {
-                    if (item.market === ticker.market) {
-                        return {
-                            ...item,
-                            tradePrice: ticker.tradePrice,
-                            signedChangeRate: ticker.signedChangeRate,
-                            change: ticker.change,
-                        };
+                const socket = new WebSocket("ws://localhost:8080/ws");
+                socket.onmessage = (event) => {
+                    const data = JSON.parse(event.data);
+                    if (data.type === "CRYPTO_TICKER" && data.data) {
+                        const ticker = data.data;
+                        queryClient.setQueryData<CryptoInterestItem[]>(['cryptoInterestItems', targetGroupId], (prev) => {
+                            if (!prev) return prev;
+                            return prev.map(item => {
+                                if (item.market === ticker.market) {
+                                    return {
+                                        ...item,
+                                        tradePrice: ticker.tradePrice,
+                                        signedChangeRate: ticker.signedChangeRate,
+                                        change: ticker.change,
+                                    };
+                                }
+                                return item;
+                            });
+                        });
                     }
-                    return item;
-                }));
+                };
+                if (cancelled) {
+                    socket.close();
+                    return;
+                }
+                socketRef.current = socket;
+            } catch (err) {
+                console.error(err);
             }
+        })();
+
+        return () => {
+            cancelled = true;
+            socketRef.current?.close();
+            socketRef.current = null;
         };
-        return socket;
-    };
+    }, [selectedGroup, queryClient]);
 
     const handleSelectGroup = (group: CryptoInterestGroup) => {
         setSelectedGroup(group);
         navigate(`/crypto/interest/list/${group.id}`, {replace: true});
-        setItems([]);
-        socketRef.current?.close();
-        socketRef.current = null;
-        loadItems(group.id);
     };
 
-    const handleAddGroup = async () => {
-        if (!newGroupName.trim()) {
-            setNewGroupError("그룹명을 입력해주세요.");
-            return;
-        }
-        setNewGroupError("");
-        try {
-            const res = await createCryptoInterestGroup({groupNm: newGroupName.trim()});
-            if (res.code !== "0000" || !res.result) throw new Error(res.message || `관심 그룹 생성 실패 (${res.code})`);
-            const created: CryptoInterestGroup = res.result;
-            setGroups(prev => [...prev, created]);
+    const createGroupMutation = useMutation({
+        mutationFn: async (req: CreateCryptoGroupReq) =>
+            requireOk(await createCryptoInterestGroup(req), '관심 그룹 생성'),
+        onSuccess: (created) => {
+            queryClient.invalidateQueries({queryKey: ['cryptoInterestGroups']});
             setAddGroupOpen(false);
             setNewGroupName("");
             setSelectedGroup(created);
-            setItems([]);
-        } catch (err) {
+        },
+        onError: (err) => {
             console.error(err);
             const axiosErr = err as {response?: {status?: number; data?: {code?: string; result?: Record<string, string>}}};
             if (axiosErr.response?.status === 400 && axiosErr.response?.data?.code === 'VALIDATION_4001') {
                 setNewGroupError(axiosErr.response.data.result?.groupNm ?? "그룹명을 확인해주세요.");
             }
+        },
+    });
+
+    const updateGroupMutation = useMutation({
+        mutationFn: async (vars: UpdateGroupMutationVars) => {
+            requireOk(await updateCryptoInterestGroup(vars.id, vars.req), '관심 그룹 수정');
+            return vars;
+        },
+        onSuccess: ({id, req}) => {
+            queryClient.invalidateQueries({queryKey: ['cryptoInterestGroups']});
+            if (selectedGroup?.id === id) {
+                setSelectedGroup(prev => prev ? {...prev, groupNm: req.groupNm} : prev);
+            }
+            setEditGroupOpen(false);
+            setEditGroupId(null);
+        },
+        onError: (err) => {
+            console.error(err);
+            const axiosErr = err as {response?: {status?: number; data?: {code?: string; result?: Record<string, string>}}};
+            if (axiosErr.response?.status === 400 && axiosErr.response?.data?.code === 'VALIDATION_4001') {
+                setEditGroupError(axiosErr.response.data.result?.groupNm ?? "그룹명을 확인해주세요.");
+            }
+        },
+    });
+
+    const deleteGroupMutation = useMutation({
+        mutationFn: async (id: number) => {
+            requireOk(await deleteCryptoInterestGroup(id), '관심 그룹 삭제');
+            return id;
+        },
+        onSuccess: (id) => {
+            const remaining = groups.filter(g => g.id !== id);
+            if (selectedGroup?.id === id) {
+                setSelectedGroup(remaining.length > 0 ? remaining[0] : null);
+            }
+            queryClient.invalidateQueries({queryKey: ['cryptoInterestGroups']});
+            setGroupOrderDirty(false);
+            setDeleteGroupOpen(false);
+            setGroupMenu(null);
+        },
+        onError: (err) => console.error(err),
+    });
+
+    const handleAddGroup = () => {
+        if (!newGroupName.trim()) {
+            setNewGroupError("그룹명을 입력해주세요.");
+            return;
         }
+        setNewGroupError("");
+        const req: CreateCryptoGroupReq = {groupNm: newGroupName.trim()};
+        createGroupMutation.mutate(req);
     };
 
-    const handleEditGroup = async () => {
+    const handleEditGroup = () => {
         if (!editGroupName.trim()) {
             setEditGroupError("그룹명을 입력해주세요.");
             return;
         }
         if (!editGroupId) return;
         setEditGroupError("");
-        try {
-            const res = await updateCryptoInterestGroup(editGroupId, {groupNm: editGroupName.trim()});
-            if (res.code !== "0000") throw new Error(res.message || `관심 그룹 수정 실패 (${res.code})`);
-            setGroups(prev =>
-                prev.map(g => g.id === editGroupId ? {...g, groupNm: editGroupName.trim()} : g)
-            );
-            if (selectedGroup?.id === editGroupId) {
-                setSelectedGroup(prev => prev ? {...prev, groupNm: editGroupName.trim()} : prev);
-            }
-            setEditGroupOpen(false);
-            setEditGroupId(null);
-        } catch (err) {
-            console.error(err);
-            const axiosErr = err as {response?: {status?: number; data?: {code?: string; result?: Record<string, string>}}};
-            if (axiosErr.response?.status === 400 && axiosErr.response?.data?.code === 'VALIDATION_4001') {
-                setEditGroupError(axiosErr.response.data.result?.groupNm ?? "그룹명을 확인해주세요.");
-            }
-        }
+        const vars: UpdateGroupMutationVars = {id: editGroupId, req: {groupNm: editGroupName.trim()}};
+        updateGroupMutation.mutate(vars);
     };
 
-    const handleDeleteGroup = async () => {
+    const handleDeleteGroup = () => {
         if (!groupMenu) return;
-        const res = await deleteCryptoInterestGroup(groupMenu.group.id);
-        if (res.code !== "0000") throw new Error(res.message || `관심 그룹 삭제 실패 (${res.code})`);
-        const newGroups = groups.filter(g => g.id !== groupMenu.group.id);
-        setGroups(newGroups);
-        if (selectedGroup?.id === groupMenu.group.id) {
-            if (newGroups.length > 0) {
-                setSelectedGroup(newGroups[0]);
-                loadItems(newGroups[0].id);
-            } else {
-                setSelectedGroup(null);
-                setItems([]);
-            }
-        }
-        setGroupOrderDirty(false);
-        setDeleteGroupOpen(false);
-        setGroupMenu(null);
+        deleteGroupMutation.mutate(groupMenu.group.id);
     };
 
     const handleGroupDragEnd = (event: DragEndEvent) => {
@@ -383,7 +405,7 @@ const CryptoInterest = () => {
         if (!over || active.id === over.id) return;
         const oldIndex = groups.findIndex(g => g.id === active.id);
         const newIndex = groups.findIndex(g => g.id === over.id);
-        setGroups(prev => arrayMove(prev, oldIndex, newIndex));
+        setGroupOrderOverride(arrayMove(groups, oldIndex, newIndex));
         setGroupOrderDirty(true);
     };
 
@@ -392,31 +414,41 @@ const CryptoInterest = () => {
         if (!over || active.id === over.id) return;
         const oldIndex = items.findIndex(i => i.id === active.id);
         const newIndex = items.findIndex(i => i.id === over.id);
-        setItems(prev => arrayMove(prev, oldIndex, newIndex));
+        setItemsOrderOverride(arrayMove(items, oldIndex, newIndex));
         setItemOrderDirty(true);
     };
 
-    const handleSaveGroupOrder = async () => {
-        setSavingGroupOrder(true);
-        try {
-            const res = await reorderCryptoInterestGroups({orderedIds: groups.map(g => g.id)});
-            if (res.code !== "0000") throw new Error(res.message || `관심 그룹 순서 변경 실패 (${res.code})`);
+    const reorderGroupsMutation = useMutation({
+        mutationFn: async (req: ReorderReq) => {
+            requireOk(await reorderCryptoInterestGroups(req), '관심 그룹 순서 변경');
+        },
+        onSuccess: () => {
             setGroupOrderDirty(false);
-        } finally {
-            setSavingGroupOrder(false);
-        }
+            queryClient.invalidateQueries({queryKey: ['cryptoInterestGroups']});
+        },
+        onError: (err) => console.error(err),
+    });
+
+    const reorderItemsMutation = useMutation({
+        mutationFn: async (vars: ReorderItemsMutationVars) => {
+            requireOk(await reorderCryptoInterestItems(vars.groupId, vars.req), '관심 종목 순서 변경');
+        },
+        onSuccess: (_data, vars) => {
+            setItemOrderDirty(false);
+            queryClient.invalidateQueries({queryKey: ['cryptoInterestItems', vars.groupId]});
+        },
+        onError: (err) => console.error(err),
+    });
+
+    const handleSaveGroupOrder = () => {
+        const req: ReorderReq = {orderedIds: groups.map(g => g.id)};
+        reorderGroupsMutation.mutate(req);
     };
 
-    const handleSaveItemOrder = async () => {
+    const handleSaveItemOrder = () => {
         if (!selectedGroup) return;
-        setSavingItemOrder(true);
-        try {
-            const res = await reorderCryptoInterestItems(selectedGroup.id, {orderedIds: items.map(i => i.id)});
-            if (res.code !== "0000") throw new Error(res.message || `관심 종목 순서 변경 실패 (${res.code})`);
-            setItemOrderDirty(false);
-        } finally {
-            setSavingItemOrder(false);
-        }
+        const vars: ReorderItemsMutationVars = {groupId: selectedGroup.id, req: {orderedIds: items.map(i => i.id)}};
+        reorderItemsMutation.mutate(vars);
     };
 
     const handleSearchKeywordChange = (keyword: string) => {
@@ -442,35 +474,48 @@ const CryptoInterest = () => {
         }, 300);
     };
 
-    const handleAddItem = async () => {
-        if (!selectedGroup) return;
-        if (!selectedCrypto) {
-            setAddItemError("코인을 선택해주세요.");
-            return;
-        }
-        try {
-            const res = await addCryptoInterestItem(selectedGroup.id, {
-                market: selectedCrypto.market,
-                koreanName: selectedCrypto.koreanName,
-            });
-            if (res.code !== "0000") throw new Error(res.message || `관심 종목 추가 실패 (${res.code})`);
-            await loadItems(selectedGroup.id);
+    const addItemMutation = useMutation({
+        mutationFn: async (vars: AddItemMutationVars) =>
+            requireOk(await addCryptoInterestItem(vars.groupId, vars.req), '관심 종목 추가'),
+        onSuccess: (_data, vars) => {
+            queryClient.invalidateQueries({queryKey: ['cryptoInterestItems', vars.groupId]});
             setAddItemOpen(false);
             setSearchKeyword("");
             setSearchResults([]);
             setSelectedCrypto(null);
             setAddItemError("");
-        } catch (error) {
-            console.error(error);
+        },
+        onError: (err) => {
+            console.error(err);
             setAddItemError("이미 추가된 코인이거나 오류가 발생했습니다.");
+        },
+    });
+
+    const deleteItemMutation = useMutation({
+        mutationFn: async (vars: DeleteItemMutationVars) => {
+            requireOk(await deleteCryptoInterestItem(vars.groupId, vars.itemId), '관심 종목 삭제');
+            return vars;
+        },
+        onSuccess: (vars) => {
+            queryClient.invalidateQueries({queryKey: ['cryptoInterestItems', vars.groupId]});
+        },
+        onError: (err) => console.error(err),
+    });
+
+    const handleAddItem = () => {
+        if (!selectedGroup) return;
+        if (!selectedCrypto) {
+            setAddItemError("코인을 선택해주세요.");
+            return;
         }
+        const vars: AddItemMutationVars = {groupId: selectedGroup.id, req: {market: selectedCrypto.market, koreanName: selectedCrypto.koreanName}};
+        addItemMutation.mutate(vars);
     };
 
-    const handleDeleteItem = async (itemId: number) => {
+    const handleDeleteItem = (itemId: number) => {
         if (!selectedGroup) return;
-        const res = await deleteCryptoInterestItem(selectedGroup.id, itemId);
-        if (res.code !== "0000") throw new Error(res.message || `관심 종목 삭제 실패 (${res.code})`);
-        setItems(prev => prev.filter(i => i.id !== itemId));
+        const vars: DeleteItemMutationVars = {groupId: selectedGroup.id, itemId};
+        deleteItemMutation.mutate(vars);
     };
 
     const trendColor = (change: string) => {
@@ -576,9 +621,9 @@ const CryptoInterest = () => {
                                     size="small"
                                     variant="contained"
                                     color="primary"
-                                    startIcon={savingGroupOrder ? <CircularProgress size={12} color="inherit"/> : <SaveIcon sx={{fontSize: 14}}/>}
+                                    startIcon={reorderGroupsMutation.isPending ? <CircularProgress size={12} color="inherit"/> : <SaveIcon sx={{fontSize: 14}}/>}
                                     onClick={handleSaveGroupOrder}
-                                    disabled={savingGroupOrder}
+                                    disabled={reorderGroupsMutation.isPending}
                                     sx={{fontSize: 11, px: 1, py: 0.25, minWidth: 0}}
                                 >
                                     저장
@@ -653,9 +698,9 @@ const CryptoInterest = () => {
                                 <Button
                                     variant="contained"
                                     size="small"
-                                    startIcon={savingItemOrder ? <CircularProgress size={12} color="inherit"/> : <SaveIcon/>}
+                                    startIcon={reorderItemsMutation.isPending ? <CircularProgress size={12} color="inherit"/> : <SaveIcon/>}
                                     onClick={handleSaveItemOrder}
-                                    disabled={savingItemOrder}
+                                    disabled={reorderItemsMutation.isPending}
                                 >
                                     순서 저장
                                 </Button>
@@ -779,7 +824,7 @@ const CryptoInterest = () => {
                 </DialogContent>
                 <DialogActions>
                     <Button onClick={() => { setAddGroupOpen(false); setNewGroupError(""); }}>취소</Button>
-                    <Button onClick={handleAddGroup}>추가</Button>
+                    <Button onClick={handleAddGroup} disabled={createGroupMutation.isPending}>추가</Button>
                 </DialogActions>
             </Dialog>
 
@@ -799,7 +844,7 @@ const CryptoInterest = () => {
                 </DialogContent>
                 <DialogActions>
                     <Button onClick={() => { setEditGroupOpen(false); setEditGroupError(""); }}>취소</Button>
-                    <Button onClick={handleEditGroup}>저장</Button>
+                    <Button onClick={handleEditGroup} disabled={updateGroupMutation.isPending}>저장</Button>
                 </DialogActions>
             </Dialog>
 
@@ -815,7 +860,7 @@ const CryptoInterest = () => {
                 </DialogContent>
                 <DialogActions>
                     <Button onClick={() => setDeleteGroupOpen(false)}>취소</Button>
-                    <Button color="error" onClick={handleDeleteGroup}>삭제</Button>
+                    <Button color="error" onClick={handleDeleteGroup} disabled={deleteGroupMutation.isPending}>삭제</Button>
                 </DialogActions>
             </Dialog>
 
@@ -881,7 +926,7 @@ const CryptoInterest = () => {
                 </DialogContent>
                 <DialogActions>
                     <Button onClick={() => setAddItemOpen(false)}>취소</Button>
-                    <Button onClick={handleAddItem} disabled={!selectedCrypto}>추가</Button>
+                    <Button onClick={handleAddItem} disabled={!selectedCrypto || addItemMutation.isPending}>추가</Button>
                 </DialogActions>
             </Dialog>
         </Box>

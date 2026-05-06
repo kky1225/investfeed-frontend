@@ -1,4 +1,5 @@
 import {useState, useEffect, useRef, useCallback} from 'react';
+import {useMutation} from '@tanstack/react-query';
 import Dialog from '@mui/material/Dialog';
 import DialogTitle from '@mui/material/DialogTitle';
 import DialogContent from '@mui/material/DialogContent';
@@ -8,6 +9,8 @@ import Alert from '@mui/material/Alert';
 import LockOutlinedIcon from '@mui/icons-material/LockOutlined';
 import SecurityKeypad from './SecurityKeypad';
 import {changeSecondaryPassword, verifySecondaryPassword, fetchSecondaryPasswordLockStatus} from '../api/auth/AuthApi';
+import type {SecondaryPasswordChangeReq, SecondaryPasswordVerifyReq} from '../type/AuthType';
+import {requireOk} from '../lib/apiResponse';
 
 type Step = 'current' | 'new' | 'confirm';
 
@@ -28,7 +31,6 @@ export default function ChangeSecondaryPasswordDialog({open, onSuccess, onClose}
     const [currentPassword, setCurrentPassword] = useState('');
     const [newPassword, setNewPassword] = useState('');
     const [error, setError] = useState('');
-    const [loading, setLoading] = useState(false);
     const [remainingSeconds, setRemainingSeconds] = useState(0);
     const [key, setKey] = useState(0);
     const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -81,7 +83,6 @@ export default function ChangeSecondaryPasswordDialog({open, onSuccess, onClose}
         setCurrentPassword('');
         setNewPassword('');
         setError('');
-        setLoading(false);
         setRemainingSeconds(0);
         clearTimer();
         setKey(prev => prev + 1);
@@ -97,16 +98,17 @@ export default function ChangeSecondaryPasswordDialog({open, onSuccess, onClose}
         return false;
     };
 
-    const handleCurrentInput = async (code: string) => {
-        setLoading(true);
-        setError('');
-        try {
-            const res = await verifySecondaryPassword({password: code});
-            if (res.code !== "0000") throw new Error(res.message || `2차 비밀번호 인증 실패 (${res.code})`);
+    const verifyCurrentMutation = useMutation({
+        mutationFn: async (req: SecondaryPasswordVerifyReq) => {
+            requireOk(await verifySecondaryPassword(req), '2차 비밀번호 인증');
+            return req.password;
+        },
+        onSuccess: (code) => {
             setCurrentPassword(code);
             setStep('new');
             setKey(prev => prev + 1);
-        } catch (err: unknown) {
+        },
+        onError: (err: unknown) => {
             console.error(err);
             if (!handleLockError(err)) {
                 const axiosErr = err as { response?: { data?: { code?: string } } };
@@ -114,9 +116,12 @@ export default function ChangeSecondaryPasswordDialog({open, onSuccess, onClose}
                 setError(ERROR_MESSAGES[errCode] ?? '현재 2차 비밀번호가 올바르지 않습니다.');
             }
             setKey(prev => prev + 1);
-        } finally {
-            setLoading(false);
-        }
+        },
+    });
+
+    const handleCurrentInput = (code: string) => {
+        setError('');
+        verifyCurrentMutation.mutate({password: code});
     };
 
     const handleNewInput = (code: string) => {
@@ -126,22 +131,15 @@ export default function ChangeSecondaryPasswordDialog({open, onSuccess, onClose}
         setKey(prev => prev + 1);
     };
 
-    const handleConfirmInput = async (code: string) => {
-        if (code !== newPassword) {
-            setError('새 비밀번호가 일치하지 않습니다. 다시 입력해주세요.');
-            setStep('new');
-            setNewPassword('');
-            setKey(prev => prev + 1);
-            return;
-        }
-
-        setLoading(true);
-        try {
-            const res = await changeSecondaryPassword({currentPassword, newPassword});
-            if (res.code !== "0000") throw new Error(res.message || `2차 비밀번호 변경 실패 (${res.code})`);
+    const changePasswordMutation = useMutation({
+        mutationFn: async (req: SecondaryPasswordChangeReq) => {
+            requireOk(await changeSecondaryPassword(req), '2차 비밀번호 변경');
+        },
+        onSuccess: () => {
             resetState();
             onSuccess();
-        } catch (err: unknown) {
+        },
+        onError: (err: unknown) => {
             console.error(err);
             const axiosErr = err as { response?: { data?: { code?: string } } };
             const errCode = axiosErr.response?.data?.code ?? '';
@@ -150,9 +148,21 @@ export default function ChangeSecondaryPasswordDialog({open, onSuccess, onClose}
             setCurrentPassword('');
             setNewPassword('');
             setKey(prev => prev + 1);
-        } finally {
-            setLoading(false);
+        },
+    });
+
+    const loading = verifyCurrentMutation.isPending || changePasswordMutation.isPending;
+
+    const handleConfirmInput = (code: string) => {
+        if (code !== newPassword) {
+            setError('새 비밀번호가 일치하지 않습니다. 다시 입력해주세요.');
+            setStep('new');
+            setNewPassword('');
+            setKey(prev => prev + 1);
+            return;
         }
+        const req: SecondaryPasswordChangeReq = {currentPassword, newPassword};
+        changePasswordMutation.mutate(req);
     };
 
     const handleClose = () => {

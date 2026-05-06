@@ -1,5 +1,5 @@
 import {useState} from 'react';
-import {useQuery, useQueryClient} from '@tanstack/react-query';
+import {useMutation, useQuery, useQueryClient} from '@tanstack/react-query';
 import {usePollingQuery} from '../../lib/pollingQuery';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
@@ -27,7 +27,7 @@ import {
     fetchManualCalendarEvents, createCalendarEvent, updateCalendarEvent, deleteCalendarEvent,
     startBulkRefresh, fetchBulkRefreshStatus,
 } from '../../api/calendar/EconomicCalendarApi';
-import type {CalendarEvent, BulkRefreshStatus} from '../../type/EconomicCalendarType';
+import type {BulkRefreshReq, BulkRefreshStatus, CalendarEvent, ManualCalendarEventReq, UpdateCalendarEventMutationVars} from '../../type/EconomicCalendarType';
 import {requireOk} from '../../lib/apiResponse';
 import {useAlert} from '../../context/AlertContext';
 
@@ -44,7 +44,6 @@ export default function CalendarManagement() {
     const [bulkFrom, setBulkFrom] = useState<number>(2021);
     const [bulkTo, setBulkTo] = useState<number>(now.getFullYear());
     const [localBulkStatus, setLocalBulkStatus] = useState<BulkRefreshStatus | null>(null);
-    const [bulkStarting, setBulkStarting] = useState(false);
 
     // 등록/수정 공통 state
     const [formOpen, setFormOpen] = useState(false);
@@ -55,7 +54,6 @@ export default function CalendarManagement() {
     const [formCountry, setFormCountry] = useState('KR');
     const [formType, setFormType] = useState('RATE_DECISION');
     const [formValue, setFormValue] = useState('');
-    const [formLoading, setFormLoading] = useState(false);
     const [formErrors, setFormErrors] = useState<{date?: string; name?: string; country?: string; type?: string}>({});
 
     const [deleteTarget, setDeleteTarget] = useState<CalendarEvent | null>(null);
@@ -84,24 +82,27 @@ export default function CalendarManagement() {
     // 시작 직후 즉시 UI 반영 위해 localBulkStatus를 fallback으로. 폴링 결과가 도착하면 그것을 우선시.
     const effectiveBulkStatus: BulkRefreshStatus | null = bulkStatus ?? localBulkStatus;
 
-    const handleBulkRefresh = async () => {
+    const bulkRefreshMutation = useMutation({
+        mutationFn: async (vars: BulkRefreshReq) =>
+            requireOk(await startBulkRefresh(vars), '일괄 재생성 시작'),
+        onSuccess: (status) => {
+            if (status) setLocalBulkStatus(status);
+            showAlert('일괄 재생성을 시작했습니다.', 'success');
+        },
+        onError: (e) => {
+            console.error(e);
+            const msg = (e as {response?: {data?: {message?: string}}})?.response?.data?.message ?? '재생성 시작 실패';
+            showAlert(msg, 'error');
+        },
+    });
+
+    const handleBulkRefresh = () => {
         if (bulkFrom > bulkTo) {
             showAlert('시작 연도가 종료 연도보다 클 수 없습니다.', 'error');
             return;
         }
-        setBulkStarting(true);
-        try {
-            const res = await startBulkRefresh({yearFrom: bulkFrom, yearTo: bulkTo});
-            if (res.code !== "0000") throw new Error(res.message || `일괄 재생성 시작 실패 (${res.code})`);
-            if (res.result) setLocalBulkStatus(res.result);
-            showAlert('일괄 재생성을 시작했습니다.', 'success');
-        } catch (e: unknown) {
-            console.error(e);
-            const msg = (e as {response?: {data?: {message?: string}}})?.response?.data?.message ?? '재생성 시작 실패';
-            showAlert(msg, 'error');
-        } finally {
-            setBulkStarting(false);
-        }
+        const vars: BulkRefreshReq = {yearFrom: bulkFrom, yearTo: bulkTo};
+        bulkRefreshMutation.mutate(vars);
     };
 
     const resetForm = () => {
@@ -133,7 +134,50 @@ export default function CalendarManagement() {
         setAnchorEl(null);
     };
 
-    const handleSubmit = async () => {
+
+    const onSubmitError = (err: unknown) => {
+        console.error(err);
+        showAlert('일정 처리에 실패했습니다.', 'error');
+    };
+
+    const createMutation = useMutation({
+        mutationFn: async (req: ManualCalendarEventReq) =>
+            requireOk(await createCalendarEvent(req), '일정 등록'),
+        onSuccess: () => {
+            showAlert('일정이 등록되었습니다.', 'success');
+            resetForm();
+            reloadEvents();
+        },
+        onError: onSubmitError,
+    });
+
+    const updateMutation = useMutation({
+        mutationFn: async (vars: UpdateCalendarEventMutationVars) =>
+            requireOk(await updateCalendarEvent(vars.id, vars.req), '일정 수정'),
+        onSuccess: () => {
+            showAlert('일정이 수정되었습니다.', 'success');
+            resetForm();
+            reloadEvents();
+        },
+        onError: onSubmitError,
+    });
+
+    const deleteMutation = useMutation({
+        mutationFn: async (id: number) => {
+            requireOk(await deleteCalendarEvent(id), '일정 삭제');
+        },
+        onSuccess: () => {
+            showAlert('일정이 삭제되었습니다.', 'success');
+            setDeleteTarget(null);
+            reloadEvents();
+        },
+        onError: (err) => {
+            console.error(err);
+            showAlert('일정 삭제에 실패했습니다.', 'error');
+        },
+    });
+
+    const handleSubmit = () => {
         const errors: {date?: string; name?: string; country?: string; type?: string} = {};
         if (!formDate) errors.date = '날짜를 입력해주세요.';
         if (!formName.trim()) errors.name = '일정명을 입력해주세요.';
@@ -144,40 +188,18 @@ export default function CalendarManagement() {
             return;
         }
         setFormErrors({});
-        setFormLoading(true);
-        try {
-            const req = {date: formDate, name: formName, country: formCountry, type: formType, value: formValue || null};
-            if (formMode === 'create') {
-                const res = await createCalendarEvent(req);
-                if (res.code !== "0000") throw new Error(res.message || `일정 등록 실패 (${res.code})`);
-                showAlert('일정이 등록되었습니다.', 'success');
-            } else if (formTargetId) {
-                const res = await updateCalendarEvent(formTargetId, req);
-                if (res.code !== "0000") throw new Error(res.message || `일정 수정 실패 (${res.code})`);
-                showAlert('일정이 수정되었습니다.', 'success');
-            }
-            resetForm();
-            reloadEvents();
-        } catch (error) {
-            console.error(error);
-            showAlert('일정 처리에 실패했습니다.', 'error');
-        } finally {
-            setFormLoading(false);
+        const req: ManualCalendarEventReq = {date: formDate, name: formName, country: formCountry, type: formType, value: formValue || null};
+        if (formMode === 'create') {
+            createMutation.mutate(req);
+        } else if (formTargetId) {
+            const vars: UpdateCalendarEventMutationVars = {id: formTargetId, req};
+            updateMutation.mutate(vars);
         }
     };
 
-    const handleDelete = async () => {
+    const handleDelete = () => {
         if (!deleteTarget?.id) return;
-        try {
-            const res = await deleteCalendarEvent(deleteTarget.id);
-            if (res.code !== "0000") throw new Error(res.message || `일정 삭제 실패 (${res.code})`);
-            showAlert('일정이 삭제되었습니다.', 'success');
-            setDeleteTarget(null);
-            reloadEvents();
-        } catch (error) {
-            console.error(error);
-            showAlert('일정 삭제에 실패했습니다.', 'error');
-        }
+        deleteMutation.mutate(deleteTarget.id);
     };
 
     const typeLabel = (type: string) => {
@@ -287,7 +309,7 @@ export default function CalendarManagement() {
                             <Button
                                 variant="contained" size="small"
                                 onClick={handleBulkRefresh}
-                                disabled={bulkStarting}
+                                disabled={bulkRefreshMutation.isPending}
                             >
                                 재생성 실행
                             </Button>
@@ -362,7 +384,7 @@ export default function CalendarManagement() {
                 </DialogContent>
                 <DialogActions>
                     <Button onClick={resetForm}>취소</Button>
-                    <Button variant="contained" onClick={handleSubmit} disabled={formLoading}>
+                    <Button variant="contained" onClick={handleSubmit} disabled={createMutation.isPending || updateMutation.isPending}>
                         {formMode === 'create' ? '등록' : '수정'}
                     </Button>
                 </DialogActions>
@@ -378,7 +400,7 @@ export default function CalendarManagement() {
                 </DialogContent>
                 <DialogActions>
                     <Button onClick={() => setDeleteTarget(null)}>취소</Button>
-                    <Button variant="contained" color="error" onClick={handleDelete}>삭제</Button>
+                    <Button variant="contained" color="error" onClick={handleDelete} disabled={deleteMutation.isPending}>삭제</Button>
                 </DialogActions>
             </Dialog>
 

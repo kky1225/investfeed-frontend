@@ -1,5 +1,5 @@
 import {useMemo, useState} from 'react';
-import {useQuery, useQueryClient} from '@tanstack/react-query';
+import {useMutation, useQuery, useQueryClient} from '@tanstack/react-query';
 import {requireOk} from '../../lib/apiResponse';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
@@ -32,7 +32,7 @@ import {
     fetchPermissionCatalog,
     updatePermission,
 } from '../../api/admin/PermissionCatalogApi';
-import type {PermissionRes} from '../../type/PermissionType';
+import type {AddActionMutationVars, AddApiPatternReq, AddPatternMutationVars, AddPermissionActionReq, CreatePermissionReq, DeleteActionMutationVars, DeletePatternMutationVars, PermissionRes, UpdatePermissionMutationVars, UpdatePermissionReq} from '../../type/PermissionType';
 import {useAlert} from '../../context/AlertContext';
 
 interface CreateForm {
@@ -93,7 +93,6 @@ export default function PermissionCatalogManagement() {
     const [createDialog, setCreateDialog] = useState(false);
     const [createForm, setCreateForm] = useState<CreateForm>(initialCreateForm);
     const [createErrors, setCreateErrors] = useState<Partial<Record<keyof CreateForm, string>>>({});
-    const [submitting, setSubmitting] = useState(false);
 
     // 이름/설명 수정
     const [editDialog, setEditDialog] = useState(false);
@@ -136,7 +135,26 @@ export default function PermissionCatalogManagement() {
         setCreateDialog(true);
     };
 
-    const handleCreate = async () => {
+    const createMutation = useMutation({
+        mutationFn: async (req: CreatePermissionReq) =>
+            requireOk(await createPermission(req), '권한 생성'),
+        onSuccess: (created) => {
+            setCreateDialog(false);
+            showAlert('권한이 생성되었습니다.', 'success');
+            loadPermissions();
+            if (created) setSelectedId(created.id);
+        },
+        onError: (err) => {
+            const axiosErr = err as {response?: {data?: {message?: string; result?: Partial<Record<keyof CreateForm, string>>}; status?: number}};
+            if (axiosErr.response?.status === 400 && axiosErr.response?.data?.result) {
+                setCreateErrors(axiosErr.response.data.result);
+            } else {
+                showAxiosError(err, '권한 생성에 실패했습니다.');
+            }
+        },
+    });
+
+    const handleCreate = () => {
         const errs: Partial<Record<keyof CreateForm, string>> = {};
         if (!createForm.code.trim()) errs.code = '코드를 입력해주세요.';
         if (!createForm.name.trim()) errs.name = '이름을 입력해주세요.';
@@ -148,29 +166,13 @@ export default function PermissionCatalogManagement() {
             .split('\n')
             .map(s => s.trim())
             .filter(s => s.length > 0);
-        setSubmitting(true);
-        try {
-            const res = await createPermission({
-                code: createForm.code.trim().toUpperCase(),
-                name: createForm.name.trim(),
-                description: createForm.description.trim() || null,
-                apiPatterns: patterns,
-            });
-            if (res.code !== "0000") throw new Error(res.message || `권한 생성 실패 (${res.code})`);
-            setCreateDialog(false);
-            showAlert('권한이 생성되었습니다.', 'success');
-            await loadPermissions();
-            if (res.result) setSelectedId(res.result.id);
-        } catch (err) {
-            const axiosErr = err as {response?: {data?: {message?: string; result?: Partial<Record<keyof CreateForm, string>>}; status?: number}};
-            if (axiosErr.response?.status === 400 && axiosErr.response?.data?.result) {
-                setCreateErrors(axiosErr.response.data.result);
-            } else {
-                showAxiosError(err, '권한 생성에 실패했습니다.');
-            }
-        } finally {
-            setSubmitting(false);
-        }
+        const req: CreatePermissionReq = {
+            code: createForm.code.trim().toUpperCase(),
+            name: createForm.name.trim(),
+            description: createForm.description.trim() || null,
+            apiPatterns: patterns,
+        };
+        createMutation.mutate(req);
     };
 
     const handleOpenEdit = () => {
@@ -180,38 +182,48 @@ export default function PermissionCatalogManagement() {
         setEditDialog(true);
     };
 
-    const handleSaveEdit = async () => {
+    const updateMutation = useMutation({
+        mutationFn: async (vars: UpdatePermissionMutationVars) => {
+            requireOk(await updatePermission(vars.id, vars.req), '권한 수정');
+        },
+        onSuccess: () => {
+            setEditDialog(false);
+            showAlert('권한이 수정되었습니다.', 'success');
+            loadPermissions();
+        },
+        onError: (err) => showAxiosError(err, '수정에 실패했습니다.'),
+    });
+
+    const deleteMutation = useMutation({
+        mutationFn: async (id: number) => {
+            requireOk(await deletePermission(id), '권한 삭제');
+        },
+        onSuccess: () => {
+            setDeleteDialog(false);
+            showAlert('권한이 삭제되었습니다.', 'success');
+            setSelectedId(null);
+            loadPermissions();
+        },
+        onError: (err) => showAxiosError(err, '삭제에 실패했습니다.'),
+    });
+
+    const handleSaveEdit = () => {
         if (!selected) return;
         if (!editForm.name.trim()) {
             setEditErrors({name: '이름을 입력해주세요.'});
             return;
         }
-        try {
-            const res = await updatePermission(selected.id, {
-                name: editForm.name.trim(),
-                description: editForm.description.trim() || null,
-            });
-            if (res.code !== "0000") throw new Error(res.message || `권한 수정 실패 (${res.code})`);
-            setEditDialog(false);
-            showAlert('권한이 수정되었습니다.', 'success');
-            await loadPermissions();
-        } catch (err) {
-            showAxiosError(err, '수정에 실패했습니다.');
-        }
+        const req: UpdatePermissionReq = {
+            name: editForm.name.trim(),
+            description: editForm.description.trim() || null,
+        };
+        const vars: UpdatePermissionMutationVars = {id: selected.id, req};
+        updateMutation.mutate(vars);
     };
 
-    const handleDelete = async () => {
+    const handleDelete = () => {
         if (!selected) return;
-        try {
-            const res = await deletePermission(selected.id);
-            if (res.code !== "0000") throw new Error(res.message || `권한 삭제 실패 (${res.code})`);
-            setDeleteDialog(false);
-            showAlert('권한이 삭제되었습니다.', 'success');
-            setSelectedId(null);
-            await loadPermissions();
-        } catch (err) {
-            showAxiosError(err, '삭제에 실패했습니다.');
-        }
+        deleteMutation.mutate(selected.id);
     };
 
     // ──────────────────────── api 패턴 ────────────────────────
@@ -222,35 +234,48 @@ export default function PermissionCatalogManagement() {
         setPatternDialog(true);
     };
 
-    const handleAddPattern = async () => {
+    const addPatternMutation = useMutation({
+        mutationFn: async (vars: AddPatternMutationVars) => {
+            requireOk(await addApiPattern(vars.permissionId, vars.req), 'API 패턴 추가');
+        },
+        onSuccess: () => {
+            setPatternDialog(false);
+            showAlert('API 패턴이 추가되었습니다.', 'success');
+            loadPermissions();
+        },
+        onError: (err) => {
+            const axiosErr = err as {response?: {data?: {message?: string}}};
+            setPatternError(axiosErr.response?.data?.message || '패턴 추가에 실패했습니다.');
+        },
+    });
+
+    const deletePatternMutation = useMutation({
+        mutationFn: async (vars: DeletePatternMutationVars) => {
+            requireOk(await deleteApiPattern(vars.permissionId, vars.patternId), 'API 패턴 삭제');
+        },
+        onSuccess: () => {
+            showAlert('API 패턴이 삭제되었습니다.', 'success');
+            loadPermissions();
+        },
+        onError: (err) => showAxiosError(err, '패턴 삭제에 실패했습니다.'),
+    });
+
+    const handleAddPattern = () => {
         if (!selected) return;
         const value = patternInput.trim();
         if (!value) {
             setPatternError('API 패턴을 입력해주세요.');
             return;
         }
-        try {
-            const res = await addApiPattern(selected.id, {apiPattern: value});
-            if (res.code !== "0000") throw new Error(res.message || `API 패턴 추가 실패 (${res.code})`);
-            setPatternDialog(false);
-            showAlert('API 패턴이 추가되었습니다.', 'success');
-            await loadPermissions();
-        } catch (err) {
-            const axiosErr = err as {response?: {data?: {message?: string}}};
-            setPatternError(axiosErr.response?.data?.message || '패턴 추가에 실패했습니다.');
-        }
+        const req: AddApiPatternReq = {apiPattern: value};
+        const vars: AddPatternMutationVars = {permissionId: selected.id, req};
+        addPatternMutation.mutate(vars);
     };
 
-    const handleDeletePattern = async (patternId: number) => {
+    const handleDeletePattern = (patternId: number) => {
         if (!selected) return;
-        try {
-            const res = await deleteApiPattern(selected.id, patternId);
-            if (res.code !== "0000") throw new Error(res.message || `API 패턴 삭제 실패 (${res.code})`);
-            showAlert('API 패턴이 삭제되었습니다.', 'success');
-            await loadPermissions();
-        } catch (err) {
-            showAxiosError(err, '패턴 삭제에 실패했습니다.');
-        }
+        const vars: DeletePatternMutationVars = {permissionId: selected.id, patternId};
+        deletePatternMutation.mutate(vars);
     };
 
     // ──────────────────────── 지원 action ────────────────────────
@@ -262,38 +287,51 @@ export default function PermissionCatalogManagement() {
         setActionDialog(true);
     };
 
-    const handleAddAction = async () => {
+    const addActionMutation = useMutation({
+        mutationFn: async (vars: AddActionMutationVars) => {
+            requireOk(await addPermissionAction(vars.permissionId, vars.req), 'action 추가');
+        },
+        onSuccess: () => {
+            setActionDialog(false);
+            showAlert('action 이 추가되었습니다.', 'success');
+            loadPermissions();
+        },
+        onError: (err) => {
+            const axiosErr = err as {response?: {data?: {message?: string}}};
+            setActionError(axiosErr.response?.data?.message || 'action 추가에 실패했습니다.');
+        },
+    });
+
+    const deleteActionMutation = useMutation({
+        mutationFn: async (vars: DeleteActionMutationVars) => {
+            requireOk(await deletePermissionAction(vars.permissionId, vars.action), 'action 삭제');
+        },
+        onSuccess: () => {
+            showAlert('action 이 삭제되었습니다.', 'success');
+            loadPermissions();
+        },
+        onError: (err) => showAxiosError(err, 'action 삭제에 실패했습니다.'),
+    });
+
+    const handleAddAction = () => {
         if (!selected) return;
         const value = actionInput.trim().toUpperCase();
         if (!value) {
             setActionError('action 코드를 입력해주세요.');
             return;
         }
-        try {
-            const res = await addPermissionAction(selected.id, {
-                action: value,
-                description: actionDescInput.trim() || null,
-            });
-            if (res.code !== "0000") throw new Error(res.message || `action 추가 실패 (${res.code})`);
-            setActionDialog(false);
-            showAlert('action 이 추가되었습니다.', 'success');
-            await loadPermissions();
-        } catch (err) {
-            const axiosErr = err as {response?: {data?: {message?: string}}};
-            setActionError(axiosErr.response?.data?.message || 'action 추가에 실패했습니다.');
-        }
+        const req: AddPermissionActionReq = {
+            action: value,
+            description: actionDescInput.trim() || null,
+        };
+        const vars: AddActionMutationVars = {permissionId: selected.id, req};
+        addActionMutation.mutate(vars);
     };
 
-    const handleDeleteAction = async (action: string) => {
+    const handleDeleteAction = (action: string) => {
         if (!selected) return;
-        try {
-            const res = await deletePermissionAction(selected.id, action);
-            if (res.code !== "0000") throw new Error(res.message || `action 삭제 실패 (${res.code})`);
-            showAlert('action 이 삭제되었습니다.', 'success');
-            await loadPermissions();
-        } catch (err) {
-            showAxiosError(err, 'action 삭제에 실패했습니다.');
-        }
+        const vars: DeleteActionMutationVars = {permissionId: selected.id, action};
+        deleteActionMutation.mutate(vars);
     };
 
     const systemPermissions = permissions.filter(p => p.isSystem);
@@ -505,8 +543,8 @@ export default function PermissionCatalogManagement() {
                 </DialogContent>
                 <DialogActions>
                     <Button onClick={() => setCreateDialog(false)}>취소</Button>
-                    <Button onClick={handleCreate} variant="contained" disabled={submitting}>
-                        {submitting ? '저장 중...' : '생성'}
+                    <Button onClick={handleCreate} variant="contained" disabled={createMutation.isPending}>
+                        {createMutation.isPending ? '저장 중...' : '생성'}
                     </Button>
                 </DialogActions>
             </Dialog>
@@ -532,7 +570,7 @@ export default function PermissionCatalogManagement() {
                 </DialogContent>
                 <DialogActions>
                     <Button onClick={() => setEditDialog(false)}>취소</Button>
-                    <Button onClick={handleSaveEdit} variant="contained">저장</Button>
+                    <Button onClick={handleSaveEdit} variant="contained" disabled={updateMutation.isPending}>저장</Button>
                 </DialogActions>
             </Dialog>
 
@@ -552,7 +590,7 @@ export default function PermissionCatalogManagement() {
                 </DialogContent>
                 <DialogActions>
                     <Button onClick={() => setPatternDialog(false)}>취소</Button>
-                    <Button onClick={handleAddPattern} variant="contained">추가</Button>
+                    <Button onClick={handleAddPattern} variant="contained" disabled={addPatternMutation.isPending}>추가</Button>
                 </DialogActions>
             </Dialog>
 
@@ -579,7 +617,7 @@ export default function PermissionCatalogManagement() {
                 </DialogContent>
                 <DialogActions>
                     <Button onClick={() => setActionDialog(false)}>취소</Button>
-                    <Button onClick={handleAddAction} variant="contained">추가</Button>
+                    <Button onClick={handleAddAction} variant="contained" disabled={addActionMutation.isPending}>추가</Button>
                 </DialogActions>
             </Dialog>
 
@@ -596,7 +634,7 @@ export default function PermissionCatalogManagement() {
                 </DialogContent>
                 <DialogActions>
                     <Button onClick={() => setDeleteDialog(false)}>취소</Button>
-                    <Button onClick={handleDelete} variant="contained" color="error">삭제</Button>
+                    <Button onClick={handleDelete} variant="contained" color="error" disabled={deleteMutation.isPending}>삭제</Button>
                 </DialogActions>
             </Dialog>
         </Box>

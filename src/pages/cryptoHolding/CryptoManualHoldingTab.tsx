@@ -1,5 +1,5 @@
 import React, {createContext, useCallback, useContext, useMemo, useState} from "react";
-import {useQuery, useQueryClient} from "@tanstack/react-query";
+import {useMutation, useQuery, useQueryClient} from "@tanstack/react-query";
 import {requireOk} from "../../lib/apiResponse.ts";
 import {useNavigate} from "react-router-dom";
 import Box from "@mui/material/Box";
@@ -33,7 +33,7 @@ import CustomPieChart from "../../components/CustomPieChart.tsx";
 import {renderChip, renderTradeColor} from "../../components/CustomRender.tsx";
 import BlindText from "../../components/BlindText.tsx";
 import {fetchCryptoManualHoldingList, deleteCryptoManualHolding, reorderCryptoHoldings, updateCryptoBrokerBalance} from "../../api/cryptoBroker/CryptoBrokerApi.ts";
-import type {MemberBroker, ManualHolding} from "../../type/BrokerType.ts";
+import type {HoldingReorderReq, ManualHolding, MemberBroker, UpdateBalanceReq} from "../../type/BrokerType.ts";
 import type {HoldingStock} from "../../type/HoldingType.ts";
 import HoldingSummaryCard from "../holding/HoldingSummaryCard.tsx";
 import AddCryptoManualHoldingDialog from "./AddCryptoManualHoldingDialog.tsx";
@@ -172,7 +172,6 @@ export default function CryptoManualHoldingTab({broker}: CryptoManualHoldingTabP
     const [menuTarget, setMenuTarget] = useState<ManualHolding | null>(null);
     const [orderOverride, setOrderOverride] = useState<number[] | null>(null);
     const [orderDirty, setOrderDirty] = useState(false);
-    const [savingOrder, setSavingOrder] = useState(false);
     const [balanceOverride, setBalanceOverride] = useState<string | null>(null);
 
     const [liveOverlay, setLiveOverlay] = useState<Map<string, CryptoHoldingBuffer>>(new Map());
@@ -261,22 +260,52 @@ export default function CryptoManualHoldingTab({broker}: CryptoManualHoldingTabP
 
     useCryptoHoldingStream(stableMarkets, handleStreamUpdate, fetchCryptoHoldingStream);
 
-    const loadData = useCallback(async () => {
+    const loadData = async () => {
         setOrderOverride(null);
         setOrderDirty(false);
         await queryClient.invalidateQueries({queryKey: ['cryptoManualHoldingList', broker.id]});
-    }, [queryClient, broker.id]);
+    };
 
-    const handleDelete = async () => {
-        if (!deleteTarget) return;
-        try {
-            const res = await deleteCryptoManualHolding(deleteTarget.id);
-            if (res.code !== "0000") throw new Error(res.message || `수동 보유코인 삭제 실패 (${res.code})`);
-            await loadData();
-        } catch (err) {
+    const deleteMutation = useMutation({
+        mutationFn: async (id: number) => {
+            requireOk(await deleteCryptoManualHolding(id), '수동 보유코인 삭제');
+        },
+        onSuccess: () => {
+            loadData();
+            setDeleteTarget(null);
+        },
+        onError: (err) => {
             console.error(err);
-        }
-        setDeleteTarget(null);
+            setDeleteTarget(null);
+        },
+    });
+
+    const reorderMutation = useMutation({
+        mutationFn: async (req: HoldingReorderReq) => {
+            requireOk(await reorderCryptoHoldings(req), '보유코인 순서 변경');
+        },
+        onSuccess: () => {
+            setOrderDirty(false);
+            queryClient.invalidateQueries({queryKey: ['cryptoManualHoldingList', broker.id]});
+        },
+        onError: (err) => console.error(err),
+    });
+
+    const balanceMutation = useMutation({
+        mutationFn: async (req: UpdateBalanceReq) => {
+            requireOk(await updateCryptoBrokerBalance(broker.id, req), '거래소 잔액 수정');
+            return req.balance;
+        },
+        onSuccess: (newBalance) => {
+            setBalanceOverride(String(newBalance));
+            queryClient.invalidateQueries({queryKey: ['cryptoManualHoldingList', broker.id]});
+        },
+        onError: (err) => console.error(err),
+    });
+
+    const handleDelete = () => {
+        if (!deleteTarget) return;
+        deleteMutation.mutate(deleteTarget.id);
     };
 
     const handleDragEnd = (event: DragEndEvent) => {
@@ -289,25 +318,14 @@ export default function CryptoManualHoldingTab({broker}: CryptoManualHoldingTabP
         setOrderDirty(true);
     };
 
-    const handleSaveOrder = async () => {
-        setSavingOrder(true);
-        try {
-            const res = await reorderCryptoHoldings({orderedIds: holdings.map(h => h.id)});
-            if (res.code !== "0000") throw new Error(res.message || `보유코인 순서 변경 실패 (${res.code})`);
-            setOrderDirty(false);
-        } finally {
-            setSavingOrder(false);
-        }
+    const handleSaveOrder = () => {
+        const req: HoldingReorderReq = {orderedIds: holdings.map(h => h.id)};
+        reorderMutation.mutate(req);
     };
 
-    const handleBalanceUpdate = async (newBalance: number) => {
-        try {
-            const res = await updateCryptoBrokerBalance(broker.id, {balance: newBalance});
-            if (res.code !== "0000") throw new Error(res.message || `거래소 잔액 수정 실패 (${res.code})`);
-            setBalanceOverride(String(newBalance));
-        } catch (err) {
-            console.error(err);
-        }
+    const handleBalanceUpdate = (newBalance: number) => {
+        const req: UpdateBalanceReq = {balance: newBalance};
+        balanceMutation.mutate(req);
     };
 
     const findManualHolding = (stkCd: string) => manualHoldings.find(h => h.stkCd === stkCd) ?? null;
@@ -383,9 +401,9 @@ export default function CryptoManualHoldingTab({broker}: CryptoManualHoldingTabP
                         <Button
                             variant="contained"
                             size="small"
-                            startIcon={savingOrder ? <CircularProgress size={12} color="inherit"/> : <SaveIcon/>}
+                            startIcon={reorderMutation.isPending ? <CircularProgress size={12} color="inherit"/> : <SaveIcon/>}
                             onClick={handleSaveOrder}
-                            disabled={savingOrder}
+                            disabled={reorderMutation.isPending}
                         >
                             순서 저장
                         </Button>
@@ -499,7 +517,7 @@ export default function CryptoManualHoldingTab({broker}: CryptoManualHoldingTabP
                 </DialogContent>
                 <DialogActions>
                     <Button onClick={() => setDeleteTarget(null)}>취소</Button>
-                    <Button variant="contained" color="error" onClick={handleDelete}>매도</Button>
+                    <Button variant="contained" color="error" onClick={handleDelete} disabled={deleteMutation.isPending}>매도</Button>
                 </DialogActions>
             </Dialog>
         </Box>

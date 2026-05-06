@@ -1,5 +1,5 @@
 import {useCallback, useEffect, useRef, useState} from 'react';
-import {useQuery} from '@tanstack/react-query';
+import {useMutation, useQuery} from '@tanstack/react-query';
 import {requireOk} from '../../lib/apiResponse';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
@@ -61,7 +61,16 @@ import {
 } from '../../api/menu/MenuApi';
 import {fetchPermissionGrants as fetchPermissions} from '../../api/admin/PermissionGrantApi';
 import {fetchAdminBrokerList} from '../../api/broker/BrokerApi';
-import type {FlatMenuItem, MenuRes} from '../../type/MenuType';
+import type {
+    CreateMenuReq,
+    FlatMenuItem,
+    MenuRes,
+    MenuStructureItem,
+    UpdateMenuBrokersMutationVars,
+    UpdateMenuBrokersReq,
+    UpdateMenuMutationVars,
+    UpdateMenuStructureReq
+} from '../../type/MenuType';
 import type {PermissionRes} from '../../type/PermissionType';
 import type {Broker} from '../../type/BrokerType';
 import {getMenuIcon, iconOptions} from '../../components/MenuIconMap';
@@ -441,23 +450,32 @@ export default function MenuManagement() {
         setDropTarget(null);
     };
 
-    const handleSaveStructure = async () => {
-        try {
-            const orderByParent = new Map<number | null, number>();
-            const structures = flatItems.map(item => {
-                const key = item.parentId;
-                const order = orderByParent.get(key) ?? 0;
-                orderByParent.set(key, order + 1);
-                return {id: item.id, parentId: item.parentId, orderIndex: order};
-            });
-            const res = await updateMenuStructure({structures});
-            if (res.code !== "0000") throw new Error(res.message || `메뉴 구조 변경 실패 (${res.code})`);
+    const updateStructureMutation = useMutation({
+        mutationFn: async (req: UpdateMenuStructureReq) => {
+            requireOk(await updateMenuStructure(req), '메뉴 구조 변경');
+        },
+        onSuccess: () => {
             showAlert('메뉴 구조가 저장되었습니다.', 'success');
-            await reloadMenus();
-        } catch (error) {
-            console.error(error);
+            reloadMenus();
+        },
+        onError: (err) => {
+            console.error(err);
             showAlert('메뉴 구조 저장에 실패했습니다.', 'error');
+        },
+    });
+
+    const handleSaveStructure = () => {
+        const orderByParent = new Map<number | null, number>();
+        const structures: MenuStructureItem[] = flatItems.map(item => {
+            const key = item.parentId;
+            const order = orderByParent.get(key) ?? 0;
+            orderByParent.set(key, order + 1);
+            return {id: item.id, parentId: item.parentId, orderIndex: order};
+        });
+        const req: UpdateMenuStructureReq = {
+            structures: structures
         }
+        updateStructureMutation.mutate(req);
     };
 
     const handleOpenCreate = () => {
@@ -486,7 +504,55 @@ export default function MenuManagement() {
         });
     };
 
-    const handleSaveMenu = async () => {
+    const onSaveMenuError = (err: unknown) => {
+        console.error(err);
+        const axiosErr = err as {response?: {status?: number; data?: {code?: string; message?: string; result?: Record<string, string>}}};
+        if (axiosErr.response?.status === 400 && axiosErr.response?.data?.code === 'VALIDATION_4001') {
+            setEditErrors((axiosErr.response.data.result ?? {}) as {name?: string});
+            return;
+        }
+        showAlert(axiosErr.response?.data?.message || '메뉴 저장에 실패했습니다.', 'error');
+    };
+
+    const createMenuMutation = useMutation({
+        mutationFn: async (req: CreateMenuReq) =>
+            requireOk(await createMenu(req), '메뉴 생성'),
+        onSuccess: () => {
+            showAlert('메뉴가 생성되었습니다.', 'success');
+            setEditDialog({open: false, mode: 'create'});
+            reloadMenus();
+        },
+        onError: onSaveMenuError,
+    });
+
+    const updateMenuMutation = useMutation({
+        mutationFn: async (vars: UpdateMenuMutationVars) =>
+            requireOk(await updateMenu(vars.id, vars.req), '메뉴 수정'),
+        onSuccess: () => {
+            showAlert('메뉴가 수정되었습니다.', 'success');
+            setEditDialog({open: false, mode: 'create'});
+            reloadMenus();
+        },
+        onError: onSaveMenuError,
+    });
+
+    const deleteMenuMutation = useMutation({
+        mutationFn: async (id: number) => {
+            requireOk(await deleteMenu(id), '메뉴 삭제');
+        },
+        onSuccess: () => {
+            showAlert('메뉴가 삭제되었습니다.', 'success');
+            setDeleteDialog({open: false, item: null});
+            reloadMenus();
+        },
+        onError: (err: unknown) => {
+            console.error(err);
+            const axiosErr = err as {response?: {data?: {message?: string}}};
+            showAlert(axiosErr.response?.data?.message || '메뉴 삭제에 실패했습니다.', 'error');
+        },
+    });
+
+    const handleSaveMenu = () => {
         const errors: {name?: string} = {};
         if (!editForm.name.trim()) errors.name = '메뉴명을 입력해주세요.';
         if (Object.keys(errors).length > 0) {
@@ -494,56 +560,36 @@ export default function MenuManagement() {
             return;
         }
         setEditErrors({});
-        try {
-            const permId = editForm.requiredPermissionId ? parseInt(editForm.requiredPermissionId) : null;
-            if (editDialog.mode === 'create') {
-                const res = await createMenu({
-                    name: editForm.name, url: editForm.url || null,
-                    icon: editForm.icon || null,
-                    parentId: editForm.parentId ? parseInt(editForm.parentId) : null,
-                    requiredPermissionId: permId,
-                    orderIndex: flatItems.length, visible: editForm.visible,
-                    // API Key 의존성은 생성 후 "API Key 권한 설정" 다이얼로그에서 별도로 지정한다.
-                    requiredBrokerIds: [],
-                });
-                if (res.code !== "0000") throw new Error(res.message || `메뉴 생성 실패 (${res.code})`);
-                showAlert('메뉴가 생성되었습니다.', 'success');
-            } else {
-                const res = await updateMenu(editDialog.menuId!, {
+        const permId = editForm.requiredPermissionId ? parseInt(editForm.requiredPermissionId) : null;
+        if (editDialog.mode === 'create') {
+            const req: CreateMenuReq = {
+                name: editForm.name, url: editForm.url || null,
+                icon: editForm.icon || null,
+                parentId: editForm.parentId ? parseInt(editForm.parentId) : null,
+                requiredPermissionId: permId,
+                orderIndex: flatItems.length, visible: editForm.visible,
+                // API Key 의존성은 생성 후 "API Key 권한 설정" 다이얼로그에서 별도로 지정한다.
+                requiredBrokerIds: [],
+            };
+            createMenuMutation.mutate(req);
+        } else if (editDialog.menuId !== undefined) {
+            const vars: UpdateMenuMutationVars = {
+                id: editDialog.menuId,
+                req: {
                     name: editForm.name, url: editForm.url || null,
                     icon: editForm.icon || null,
                     parentId: editForm.parentId ? parseInt(editForm.parentId) : null,
                     requiredPermissionId: permId,
                     visible: editForm.visible,
-                });
-                if (res.code !== "0000") throw new Error(res.message || `메뉴 수정 실패 (${res.code})`);
-                showAlert('메뉴가 수정되었습니다.', 'success');
-            }
-            setEditDialog({open: false, mode: 'create'});
-            await reloadMenus();
-        } catch (err) {
-            console.error(err);
-            const axiosErr = err as {response?: {status?: number; data?: {code?: string; message?: string; result?: Record<string, string>}}};
-            if (axiosErr.response?.status === 400 && axiosErr.response?.data?.code === 'VALIDATION_4001') {
-                setEditErrors((axiosErr.response.data.result ?? {}) as {name?: string});
-                return;
-            }
-            showAlert(axiosErr.response?.data?.message || '메뉴 저장에 실패했습니다.', 'error');
+                },
+            };
+            updateMenuMutation.mutate(vars);
         }
     };
 
-    const handleDeleteMenu = async () => {
+    const handleDeleteMenu = () => {
         if (!deleteDialog.item) return;
-        try {
-            const res = await deleteMenu(deleteDialog.item.id);
-            if (res.code !== "0000") throw new Error(res.message || `메뉴 삭제 실패 (${res.code})`);
-            showAlert('메뉴가 삭제되었습니다.', 'success');
-            setDeleteDialog({open: false, item: null});
-            await reloadMenus();
-        } catch (error: any) {
-            console.error(error);
-            showAlert(error?.response?.data?.message || '메뉴 삭제에 실패했습니다.', 'error');
-        }
+        deleteMenuMutation.mutate(deleteDialog.item.id);
     };
 
     const handleOpenBroker = (item: FlatMenuItem) => {
@@ -551,19 +597,27 @@ export default function MenuManagement() {
         setBrokerDialog({open: true, item});
     };
 
-    const handleSaveBroker = async () => {
-        if (!brokerDialog.item) return;
-        try {
-            const res = await updateMenuBrokers(brokerDialog.item.id, {brokerIds: brokerForm.brokerIds});
-            if (res.code !== "0000") throw new Error(res.message || `메뉴 API Key 의존성 변경 실패 (${res.code})`);
+    const updateBrokerMutation = useMutation({
+        mutationFn: async (vars: UpdateMenuBrokersMutationVars) => {
+            requireOk(await updateMenuBrokers(vars.menuId, vars.req), '메뉴 API Key 의존성 변경');
+        },
+        onSuccess: () => {
             showAlert('API Key 권한이 변경되었습니다.', 'success');
             setBrokerDialog({open: false, item: null});
-            await reloadMenus();
-        } catch (err) {
+            reloadMenus();
+        },
+        onError: (err) => {
             console.error(err);
             const axiosErr = err as {response?: {data?: {message?: string}}};
             showAlert(axiosErr.response?.data?.message || 'API Key 권한 변경에 실패했습니다.', 'error');
-        }
+        },
+    });
+
+    const handleSaveBroker = () => {
+        if (!brokerDialog.item) return;
+        const req: UpdateMenuBrokersReq = {brokerIds: brokerForm.brokerIds};
+        const vars: UpdateMenuBrokersMutationVars = {menuId: brokerDialog.item.id, req};
+        updateBrokerMutation.mutate(vars);
     };
 
     return (
@@ -577,7 +631,7 @@ export default function MenuManagement() {
                         </IconButton>
                     </Tooltip>
                     {structureChanged && (
-                        <Button variant="contained" color="warning" startIcon={<SaveIcon />} onClick={handleSaveStructure}>구조 저장</Button>
+                        <Button variant="contained" color="warning" startIcon={<SaveIcon />} onClick={handleSaveStructure} disabled={updateStructureMutation.isPending}>구조 저장</Button>
                     )}
                     <Button variant="contained" startIcon={<AddIcon />} onClick={handleOpenCreate}>메뉴 추가</Button>
                 </Stack>
@@ -684,7 +738,7 @@ export default function MenuManagement() {
                 </DialogContent>
                 <DialogActions>
                     <Button onClick={() => { setEditDialog({open: false, mode: 'create'}); setEditErrors({}); }}>취소</Button>
-                    <Button onClick={handleSaveMenu} variant="contained">{editDialog.mode === 'create' ? '생성' : '수정'}</Button>
+                    <Button onClick={handleSaveMenu} variant="contained" disabled={createMenuMutation.isPending || updateMenuMutation.isPending}>{editDialog.mode === 'create' ? '생성' : '수정'}</Button>
                 </DialogActions>
             </Dialog>
 
@@ -713,7 +767,7 @@ export default function MenuManagement() {
                 </DialogContent>
                 <DialogActions>
                     <Button onClick={() => setDeleteDialog({open: false, item: null})}>취소</Button>
-                    <Button onClick={handleDeleteMenu} variant="contained" color="error">삭제</Button>
+                    <Button onClick={handleDeleteMenu} variant="contained" color="error" disabled={deleteMenuMutation.isPending}>삭제</Button>
                 </DialogActions>
             </Dialog>
 
@@ -746,7 +800,7 @@ export default function MenuManagement() {
                 </DialogContent>
                 <DialogActions>
                     <Button onClick={() => setBrokerDialog({open: false, item: null})}>취소</Button>
-                    <Button onClick={handleSaveBroker} variant="contained">저장</Button>
+                    <Button onClick={handleSaveBroker} variant="contained" disabled={updateBrokerMutation.isPending}>저장</Button>
                 </DialogActions>
             </Dialog>
         </Box>

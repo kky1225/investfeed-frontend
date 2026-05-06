@@ -217,3 +217,8 @@ export interface TriggerSchedulerRes {
 export interface RedisInvalidateRes {
     deleted: number;
 }
+
+export interface AckMutationVars {
+    id: number;
+    note: string | null;
+}

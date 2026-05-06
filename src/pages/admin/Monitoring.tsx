@@ -1,5 +1,5 @@
 import {useState} from 'react';
-import {useQuery, useQueryClient} from '@tanstack/react-query';
+import {useMutation, useQuery, useQueryClient} from '@tanstack/react-query';
 import {requireOk} from '../../lib/apiResponse';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
@@ -62,6 +62,7 @@ import {
 } from '../../api/admin/MonitoringApi';
 import FreshnessIndicator from '../../components/FreshnessIndicator';
 import type {
+    AckMutationVars,
     SchedulerCatalogRes,
     SchedulerStatusRes,
     SchedulerLogRes,
@@ -113,7 +114,6 @@ export default function Monitoring() {
     // Dialog 상태
     const [errorAckTarget, setErrorAckTarget] = useState<ErrorLogRes | null>(null);
     const [errorAckNote, setErrorAckNote] = useState('');
-    const [errorAckSaving, setErrorAckSaving] = useState(false);
     const [errorAckHistory, setErrorAckHistory] = useState<LogAckHistoryRes[]>([]);
     const [errorAckHistoryOpen, setErrorAckHistoryOpen] = useState(false);
     const [errorAckEditing, setErrorAckEditing] = useState(false);
@@ -123,7 +123,6 @@ export default function Monitoring() {
     const [editSaving, setEditSaving] = useState(false);
     const [ackTarget, setAckTarget] = useState<SchedulerLogRes | null>(null);
     const [ackNote, setAckNote] = useState<string>('');
-    const [ackSaving, setAckSaving] = useState(false);
     const [ackHistory, setAckHistory] = useState<LogAckHistoryRes[]>([]);
     const [ackHistoryOpen, setAckHistoryOpen] = useState(false);
     const [ackEditing, setAckEditing] = useState(false);
@@ -316,51 +315,55 @@ export default function Monitoring() {
             console.error(error);
         }
     };
+    const errorAckMutation = useMutation({
+        mutationFn: async (vars: AckMutationVars) => {
+            const updated = requireOk(await acknowledgeErrorLog(vars.id, {note: vars.note}), '에러 로그 확인 저장');
+            const history = updated ? requireOk(await fetchErrorLogAckHistory(updated.id), '에러 로그 확인 이력 조회') : [];
+            return {updated, history};
+        },
+        onSuccess: ({updated, history}) => {
+            if (updated) {
+                setErrorAckTarget(updated);
+                setErrorAckEditing(false);
+                setErrorAckHistory(history ?? []);
+            }
+            reloadCurrentTab();
+        },
+        onError: (e) => console.error('에러 로그 확인 저장 실패', e),
+    });
+
+    const errorAckCancelMutation = useMutation({
+        mutationFn: async (id: number) => {
+            const updated = requireOk(await cancelAcknowledgeErrorLog(id), '에러 로그 확인 취소');
+            const history = updated ? requireOk(await fetchErrorLogAckHistory(updated.id), '에러 로그 확인 이력 조회') : [];
+            return {updated, history};
+        },
+        onSuccess: ({updated, history}) => {
+            if (updated) {
+                setErrorAckTarget(updated);
+                setErrorAckNote('');
+                setErrorAckEditing(false);
+                setErrorAckHistory(history ?? []);
+            }
+            reloadCurrentTab();
+        },
+        onError: (e) => console.error('에러 로그 확인 취소 실패', e),
+    });
+
+    const errorAckSaving = errorAckMutation.isPending || errorAckCancelMutation.isPending;
+
     const closeErrorAck = () => {
         if (errorAckSaving) return;
         setErrorAckTarget(null);
     };
-    const saveErrorAck = async () => {
+    const saveErrorAck = () => {
         if (!errorAckTarget) return;
-        setErrorAckSaving(true);
-        try {
-            const res = await acknowledgeErrorLog(errorAckTarget.id, {note: errorAckNote || null});
-            if (res.code !== "0000") throw new Error(res.message || `에러 로그 확인 저장 실패 (${res.code})`);
-            if (res.result) {
-                setErrorAckTarget(res.result);
-                setErrorAckEditing(false);
-                // 이력 재조회
-                const h = await fetchErrorLogAckHistory(res.result.id);
-                if (h.code !== "0000") throw new Error(h.message || `에러 로그 확인 이력 조회 실패 (${h.code})`);
-                setErrorAckHistory(h.result ?? []);
-            }
-            reloadCurrentTab();
-        } catch (e) {
-            console.error('에러 로그 확인 저장 실패', e);
-        } finally {
-            setErrorAckSaving(false);
-        }
+        const vars: AckMutationVars = {id: errorAckTarget.id, note: errorAckNote || null};
+        errorAckMutation.mutate(vars);
     };
-    const cancelErrorAck = async () => {
+    const cancelErrorAck = () => {
         if (!errorAckTarget) return;
-        setErrorAckSaving(true);
-        try {
-            const res = await cancelAcknowledgeErrorLog(errorAckTarget.id);
-            if (res.code !== "0000") throw new Error(res.message || `에러 로그 확인 취소 실패 (${res.code})`);
-            if (res.result) {
-                setErrorAckTarget(res.result);
-                setErrorAckNote('');
-                setErrorAckEditing(false);
-                const h = await fetchErrorLogAckHistory(res.result.id);
-                if (h.code !== "0000") throw new Error(h.message || `에러 로그 확인 이력 조회 실패 (${h.code})`);
-                setErrorAckHistory(h.result ?? []);
-            }
-            reloadCurrentTab();
-        } catch (e) {
-            console.error('에러 로그 확인 취소 실패', e);
-        } finally {
-            setErrorAckSaving(false);
-        }
+        errorAckCancelMutation.mutate(errorAckTarget.id);
     };
 
     const openAck = async (log: SchedulerLogRes) => {
@@ -378,50 +381,55 @@ export default function Monitoring() {
             /* 이력 조회 실패해도 다이얼로그는 열림 */
         }
     };
+    const ackMutation = useMutation({
+        mutationFn: async (vars: AckMutationVars) => {
+            const updated = requireOk(await acknowledgeSchedulerLog(vars.id, {note: vars.note}), '스케줄러 로그 확인 저장');
+            const history = updated ? requireOk(await fetchSchedulerLogAckHistory(updated.id), '스케줄러 로그 확인 이력 조회') : [];
+            return {updated, history};
+        },
+        onSuccess: ({updated, history}) => {
+            if (updated) {
+                setAckTarget(updated);
+                setAckEditing(false);
+                setAckHistory(history ?? []);
+            }
+            reloadCurrentTab();
+        },
+        onError: (e) => console.error('스케줄러 로그 확인 저장 실패', e),
+    });
+
+    const ackCancelMutation = useMutation({
+        mutationFn: async (id: number) => {
+            const updated = requireOk(await cancelAcknowledgeSchedulerLog(id), '스케줄러 로그 확인 취소');
+            const history = updated ? requireOk(await fetchSchedulerLogAckHistory(updated.id), '스케줄러 로그 확인 이력 조회') : [];
+            return {updated, history};
+        },
+        onSuccess: ({updated, history}) => {
+            if (updated) {
+                setAckTarget(updated);
+                setAckNote('');
+                setAckEditing(false);
+                setAckHistory(history ?? []);
+            }
+            reloadCurrentTab();
+        },
+        onError: (e) => console.error('스케줄러 로그 확인 취소 실패', e),
+    });
+
+    const ackSaving = ackMutation.isPending || ackCancelMutation.isPending;
+
     const closeAck = () => {
         if (ackSaving) return;
         setAckTarget(null);
     };
-    const saveAck = async () => {
+    const saveAck = () => {
         if (!ackTarget) return;
-        setAckSaving(true);
-        try {
-            const res = await acknowledgeSchedulerLog(ackTarget.id, {note: ackNote || null});
-            if (res.code !== "0000") throw new Error(res.message || `스케줄러 로그 확인 저장 실패 (${res.code})`);
-            if (res.result) {
-                setAckTarget(res.result);
-                setAckEditing(false);
-                const h = await fetchSchedulerLogAckHistory(res.result.id);
-                if (h.code !== "0000") throw new Error(h.message || `스케줄러 로그 확인 이력 조회 실패 (${h.code})`);
-                setAckHistory(h.result ?? []);
-            }
-            reloadCurrentTab();
-        } catch (e) {
-            console.error('스케줄러 로그 확인 저장 실패', e);
-        } finally {
-            setAckSaving(false);
-        }
+        const vars: AckMutationVars = {id: ackTarget.id, note: ackNote || null};
+        ackMutation.mutate(vars);
     };
-    const cancelAck = async () => {
+    const cancelAck = () => {
         if (!ackTarget) return;
-        setAckSaving(true);
-        try {
-            const res = await cancelAcknowledgeSchedulerLog(ackTarget.id);
-            if (res.code !== "0000") throw new Error(res.message || `스케줄러 로그 확인 취소 실패 (${res.code})`);
-            if (res.result) {
-                setAckTarget(res.result);
-                setAckNote('');
-                setAckEditing(false);
-                const h = await fetchSchedulerLogAckHistory(res.result.id);
-                if (h.code !== "0000") throw new Error(h.message || `스케줄러 로그 확인 이력 조회 실패 (${h.code})`);
-                setAckHistory(h.result ?? []);
-            }
-            reloadCurrentTab();
-        } catch (e) {
-            console.error('스케줄러 로그 확인 취소 실패', e);
-        } finally {
-            setAckSaving(false);
-        }
+        ackCancelMutation.mutate(ackTarget.id);
     };
 
     const openBulkAck = async (target: 'scheduler' | 'error') => {

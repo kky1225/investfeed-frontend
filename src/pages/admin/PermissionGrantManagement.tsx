@@ -1,5 +1,5 @@
 import {useMemo, useState} from 'react';
-import {useQuery, useQueryClient} from '@tanstack/react-query';
+import {useMutation, useQuery, useQueryClient} from '@tanstack/react-query';
 import {requireOk} from '../../lib/apiResponse';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
@@ -17,7 +17,7 @@ import ListItemButton from '@mui/material/ListItemButton';
 import SaveIcon from '@mui/icons-material/Save';
 import {fetchPermissionGrants, updateRolePermissions} from '../../api/admin/PermissionGrantApi';
 import {fetchRoles} from '../../api/admin/AdminApi';
-import type {PermissionRes, RolePermissionGrant} from '../../type/PermissionType';
+import type {PermissionRes, RolePermissionGrant, UpdateRolePermissionReq} from '../../type/PermissionType';
 import type {RoleRes} from '../../type/RoleType';
 import {useAuth} from '../../context/AuthContext';
 import {useAlert} from '../../context/AlertContext';
@@ -28,6 +28,11 @@ import {getRoleChipColor} from '../../utils/roleColor';
  * 권한별 supportedActions 가 다르므로 동적으로 체크박스 노출.
  */
 type MatrixState = Record<string, Set<string>>;
+
+interface UpdateRolePermissionsMutationVars {
+    id: number;
+    req: UpdateRolePermissionReq;
+}
 
 export default function PermissionGrantManagement() {
     const {user} = useAuth();
@@ -75,7 +80,6 @@ export default function PermissionGrantManagement() {
 
     const [matrix, setMatrix] = useState<MatrixState>({});
     const [matrixDirty, setMatrixDirty] = useState(false);
-    const [submitting, setSubmitting] = useState(false);
 
     const loadPermissions = async () => {
         await queryClient.invalidateQueries({queryKey: ['admin', 'permissionGrants']});
@@ -127,7 +131,23 @@ export default function PermissionGrantManagement() {
         setMatrixDirty(true);
     };
 
-    const handleSave = async () => {
+    const updatePermissionsMutation = useMutation({
+        mutationFn: async (vars: UpdateRolePermissionsMutationVars) => {
+            requireOk(await updateRolePermissions(vars.id, vars.req), '역할별 권한 변경');
+        },
+        onSuccess: () => {
+            showAlert('역할별 권한이 저장되었습니다.', 'success');
+            setMatrixDirty(false);
+            loadPermissions();
+        },
+        onError: (err) => {
+            console.error(err);
+            const axiosErr = err as {response?: {data?: {message?: string}}};
+            showAlert(axiosErr.response?.data?.message || '저장에 실패했습니다.', 'error');
+        },
+    });
+
+    const handleSave = () => {
         if (!selected) return;
         // hierarchy: 본인보다 동등/상위 role 은 grants 에 포함 X (백엔드 검증과 일치)
         const blockedCodes = new Set(
@@ -139,20 +159,8 @@ export default function PermissionGrantManagement() {
                 roleCode,
                 actions: Array.from(actions),
             }));
-        setSubmitting(true);
-        try {
-            const res = await updateRolePermissions(selected.id, {grants});
-            if (res.code !== "0000") throw new Error(res.message || `역할별 권한 변경 실패 (${res.code})`);
-            showAlert('역할별 권한이 저장되었습니다.', 'success');
-            setMatrixDirty(false);
-            await loadPermissions();
-        } catch (err) {
-            console.error(err);
-            const axiosErr = err as {response?: {data?: {message?: string}}};
-            showAlert(axiosErr.response?.data?.message || '저장에 실패했습니다.', 'error');
-        } finally {
-            setSubmitting(false);
-        }
+        const vars: UpdateRolePermissionsMutationVars = {id: selected.id, req: {grants}};
+        updatePermissionsMutation.mutate(vars);
     };
 
     const systemPermissions = permissions.filter(p => p.isSystem);
@@ -274,10 +282,10 @@ export default function PermissionGrantManagement() {
                                             variant="contained"
                                             color="warning"
                                             startIcon={<SaveIcon />}
-                                            disabled={submitting}
+                                            disabled={updatePermissionsMutation.isPending}
                                             onClick={handleSave}
                                         >
-                                            {submitting ? '저장 중...' : '저장'}
+                                            {updatePermissionsMutation.isPending ? '저장 중...' : '저장'}
                                         </Button>
                                     )}
                                 </Box>

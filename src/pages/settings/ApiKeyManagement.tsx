@@ -28,7 +28,8 @@ import {useNavigate} from 'react-router-dom';
 import ColorModeSelect from '../../components/ColorModeSelect';
 import AppTheme from '../../components/AppTheme';
 import {createApiKey, deleteApiKey} from '../../api/auth/AuthApi';
-import {useQueryClient} from '@tanstack/react-query';
+import {useMutation, useQueryClient} from '@tanstack/react-query';
+import {requireOk} from '../../lib/apiResponse';
 import {useApiKeyStatus, apiKeyStatusKeys} from '../../context/ApiKeyStatusContext';
 import {useAlert} from '../../context/AlertContext';
 import type {ApiKeyReq} from '../../type/AuthType';
@@ -66,8 +67,7 @@ export default function ApiKeyManagement() {
     const queryClient = useQueryClient();
     const [formDialog, setFormDialog] = useState(false);
     const [form, setForm] = useState<ApiKeyReq>(initialForm);
-    const [formLoading, setFormLoading] = useState(false);
-    const [formErrors, setFormErrors] = useState<{brokerId?: string; appKey?: string; secretKey?: string}>({});
+    const [formErrors, setFormErrors] = useState<{brokerId?: string; appKey?: string; secretKey?: string; expiresAt?: string}>({});
     const [deleteDialog, setDeleteDialog] = useState<{open: boolean; id: number; brokerName: string}>({
         open: false, id: 0, brokerName: ''
     });
@@ -91,38 +91,46 @@ export default function ApiKeyManagement() {
             return;
         }
         setFormErrors({});
-        setFormLoading(true);
-        try {
-            const res = await createApiKey(form);
-            if (res.code !== "0000") throw new Error(res.message || `API Key 등록 실패 (${res.code})`);
+        createMutation.mutate(form);
+    };
+
+    const createMutation = useMutation({
+        mutationFn: async (req: ApiKeyReq) => {
+            requireOk(await createApiKey(req), 'API Key 등록');
+        },
+        onSuccess: () => {
             showAlert('API Key가 등록되었습니다.', 'success');
             setFormDialog(false);
             setForm(initialForm);
-            await queryClient.invalidateQueries({queryKey: apiKeyStatusKeys.apiKeys});
-        } catch (err) {
+            queryClient.invalidateQueries({queryKey: apiKeyStatusKeys.apiKeys});
+        },
+        onError: (err) => {
             console.error(err);
             const axiosErr = err as {response?: {status?: number; data?: {code?: string; message?: string; result?: Record<string, string>}}};
             if (axiosErr.response?.status === 400 && axiosErr.response?.data?.code === 'VALIDATION_4001') {
                 setFormErrors((axiosErr.response.data.result ?? {}) as typeof formErrors);
-                return;
             }
             // 그 외 오류(AUTH_4022 잘못된 키 / AUTH_4023 등록 잠금 등)는 axios 전역 인터셉터가 에러 다이얼로그로 표시
-        } finally {
-            setFormLoading(false);
-        }
-    };
+        },
+    });
 
-    const handleDelete = async () => {
-        try {
-            const res = await deleteApiKey(deleteDialog.id);
-            if (res.code !== "0000") throw new Error(res.message || `API Key 삭제 실패 (${res.code})`);
+    const deleteMutation = useMutation({
+        mutationFn: async (id: number) => {
+            requireOk(await deleteApiKey(id), 'API Key 삭제');
+        },
+        onSuccess: () => {
             showAlert('API Key가 삭제되었습니다.', 'success');
             setDeleteDialog({open: false, id: 0, brokerName: ''});
-            await queryClient.invalidateQueries({queryKey: apiKeyStatusKeys.apiKeys});
-        } catch (error) {
+            queryClient.invalidateQueries({queryKey: apiKeyStatusKeys.apiKeys});
+        },
+        onError: (error) => {
             console.error(error);
             showAlert('API Key 삭제에 실패했습니다.', 'error');
-        }
+        },
+    });
+
+    const handleDelete = () => {
+        deleteMutation.mutate(deleteDialog.id);
     };
 
     return (
@@ -250,8 +258,8 @@ export default function ApiKeyManagement() {
                     <Button onClick={() => { setFormDialog(false); setFormErrors({}); }}>취소</Button>
                     <Button onClick={handleSubmit} variant="contained"
                         sx={{bgcolor: 'text.primary', '&:hover': {bgcolor: 'text.secondary'}}}
-                        disabled={formLoading}>
-                        {formLoading ? '처리 중...' : '등록'}
+                        disabled={createMutation.isPending}>
+                        {createMutation.isPending ? '처리 중...' : '등록'}
                     </Button>
                 </DialogActions>
             </Dialog>
@@ -266,7 +274,7 @@ export default function ApiKeyManagement() {
                 </DialogContent>
                 <DialogActions>
                     <Button onClick={() => setDeleteDialog({open: false, id: 0, brokerName: ''})}>취소</Button>
-                    <Button onClick={handleDelete} variant="contained"
+                    <Button onClick={handleDelete} disabled={deleteMutation.isPending} variant="contained"
                         sx={{bgcolor: '#d32f2f', '&:hover': {bgcolor: '#b71c1c'}}}>삭제</Button>
                 </DialogActions>
             </Dialog>

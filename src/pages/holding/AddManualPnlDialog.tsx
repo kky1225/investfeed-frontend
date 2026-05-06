@@ -1,4 +1,6 @@
 import {useState} from "react";
+import {useMutation} from "@tanstack/react-query";
+import {requireOk} from "../../lib/apiResponse.ts";
 import Dialog from "@mui/material/Dialog";
 import DialogTitle from "@mui/material/DialogTitle";
 import DialogContent from "@mui/material/DialogContent";
@@ -9,6 +11,7 @@ import Box from "@mui/material/Box";
 import MenuItem from "@mui/material/MenuItem";
 import type {MemberBroker} from "../../type/BrokerType.ts";
 import type {ApiResponse} from "../../type/AuthType.ts";
+import type {ManualRealizedPnlCreateReq} from "../../type/RealizedPnlType.ts";
 
 interface AddManualPnlDialogProps {
     open: boolean;
@@ -37,7 +40,25 @@ export default function AddManualPnlDialog({open, onClose, brokers, onCreated, c
         onClose();
     };
 
-    const handleSubmit = async () => {
+    const createMutation = useMutation({
+        mutationFn: async (req: ManualRealizedPnlCreateReq) =>
+            requireOk(await createFn(req), '실현손익 등록'),
+        onSuccess: () => {
+            onCreated();
+            handleClose();
+        },
+        onError: (err) => {
+            console.error(err);
+            const axiosErr = err as {response?: {status?: number; data?: {code?: string; result?: Record<string, string>}}};
+            if (axiosErr.response?.status === 400 && axiosErr.response?.data?.code === 'VALIDATION_4001') {
+                setFormErrors((axiosErr.response.data.result ?? {}) as typeof formErrors);
+                return;
+            }
+            setFormErrors({realizedPnl: "실현손익 등록에 실패했습니다."});
+        },
+    });
+
+    const handleSubmit = () => {
         const errors: {brokerId?: string; realizedPnl?: string} = {};
         if (!brokerId) errors.brokerId = "증권사/거래소를 선택해주세요.";
         if (!realizedPnl) errors.realizedPnl = "실현손익을 입력해주세요.";
@@ -46,21 +67,9 @@ export default function AddManualPnlDialog({open, onClose, brokers, onCreated, c
             return;
         }
         setFormErrors({});
-        try {
-            const pnlValue = Number(realizedPnl) * (isNegative ? -1 : 1);
-            const res = await createFn({brokerId, year, month, realizedPnl: pnlValue});
-            if (res.code !== "0000") throw new Error(res.message || `실현손익 등록 실패 (${res.code})`);
-            onCreated();
-            handleClose();
-        } catch (err) {
-            console.error(err);
-            const axiosErr = err as {response?: {status?: number; data?: {code?: string; result?: Record<string, string>}}};
-            if (axiosErr.response?.status === 400 && axiosErr.response?.data?.code === 'VALIDATION_4001') {
-                setFormErrors((axiosErr.response.data.result ?? {}) as typeof formErrors);
-                return;
-            }
-            setFormErrors({realizedPnl: "실현손익 등록에 실패했습니다."});
-        }
+        const pnlValue = Number(realizedPnl) * (isNegative ? -1 : 1);
+        const req: ManualRealizedPnlCreateReq = {brokerId, year, month, realizedPnl: pnlValue};
+        createMutation.mutate(req);
     };
 
     const years = Array.from({length: 10}, (_, i) => currentDate.getFullYear() - i);
@@ -142,7 +151,7 @@ export default function AddManualPnlDialog({open, onClose, brokers, onCreated, c
             </DialogContent>
             <DialogActions>
                 <Button onClick={handleClose}>취소</Button>
-                <Button onClick={handleSubmit}>등록</Button>
+                <Button onClick={handleSubmit} disabled={createMutation.isPending}>등록</Button>
             </DialogActions>
         </Dialog>
     );

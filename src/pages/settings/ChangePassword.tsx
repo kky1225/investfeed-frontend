@@ -19,8 +19,11 @@ import { styled } from '@mui/material/styles';
 import ColorModeSelect from '../../components/ColorModeSelect.tsx';
 import AppTheme from '../../components/AppTheme.tsx';
 import { useState } from 'react';
+import { useMutation } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { changePassword, logout } from '../../api/auth/AuthApi';
+import type { ChangePasswordReq } from '../../type/AuthType';
+import { requireOk } from '../../lib/apiResponse';
 import { useAuth } from '../../context/AuthContext';
 
 const ERROR_MESSAGES: Record<string, string> = {
@@ -80,7 +83,6 @@ export default function ChangePassword(props: { disableCustomTheme?: boolean }) 
     const [newPasswordError, setNewPasswordError] = useState('');
     const [confirmPasswordError, setConfirmPasswordError] = useState('');
     const [errorMessage, setErrorMessage] = useState('');
-    const [loading, setLoading] = useState(false);
     const [dialog, setDialog] = useState<{ title: string; message: string; onConfirm: () => void } | null>(null);
 
     const navigate = useNavigate();
@@ -123,21 +125,18 @@ export default function ChangePassword(props: { disableCustomTheme?: boolean }) 
         return valid;
     };
 
-    const handleSubmit = async (e: React.FormEvent) => {
-        e.preventDefault();
-        if (!validate()) return;
-
-        setLoading(true);
-        setErrorMessage('');
-        try {
-            const res = await changePassword({ currentPassword, newPassword });
-            if (res.code !== "0000") throw new Error(res.message || `비밀번호 변경 실패 (${res.code})`);
+    const changePasswordMutation = useMutation({
+        mutationFn: async (req: ChangePasswordReq) => {
+            requireOk(await changePassword(req), '비밀번호 변경');
+        },
+        onSuccess: () => {
             setDialog({
                 title: '비밀번호 변경 완료',
                 message: '비밀번호가 변경되었습니다. 새 비밀번호로 다시 로그인해 주세요.',
                 onConfirm: forceLogout,
             });
-        } catch (err: unknown) {
+        },
+        onError: (err: unknown) => {
             console.error(err);
             const axiosErr = err as { response?: { status?: number; data?: { code?: string; result?: Record<string, string> } } };
             const code = axiosErr.response?.data?.code ?? '';
@@ -161,9 +160,15 @@ export default function ChangePassword(props: { disableCustomTheme?: boolean }) 
             } else {
                 setErrorMessage(DEFAULT_ERROR);
             }
-        } finally {
-            setLoading(false);
-        }
+        },
+    });
+
+    const handleSubmit = (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!validate()) return;
+        setErrorMessage('');
+        const req: ChangePasswordReq = { currentPassword, newPassword };
+        changePasswordMutation.mutate(req);
     };
 
     return (
@@ -247,9 +252,9 @@ export default function ChangePassword(props: { disableCustomTheme?: boolean }) 
                             type="submit"
                             fullWidth
                             variant="contained"
-                            disabled={loading}
+                            disabled={changePasswordMutation.isPending}
                         >
-                            {loading ? '변경 중...' : '비밀번호 변경'}
+                            {changePasswordMutation.isPending ? '변경 중...' : '비밀번호 변경'}
                         </Button>
                     </Box>
                     {!passwordChangeRequired && (

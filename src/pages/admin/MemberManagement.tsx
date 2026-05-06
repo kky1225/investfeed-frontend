@@ -1,5 +1,5 @@
 import {useState} from 'react';
-import {useQuery, useQueryClient} from '@tanstack/react-query';
+import {useMutation, useQuery, useQueryClient} from '@tanstack/react-query';
 import {requireOk} from '../../lib/apiResponse';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
@@ -63,6 +63,11 @@ const initialCreateForm: CreateMemberReq = {
     loginId: '', email: '', nickname: '', name: '', phone: '', role: 'GUEST'
 };
 
+interface ChangeRoleMutationVars {
+    loginId: string;
+    newRole: string;
+}
+
 export default function MemberManagement() {
     const showAlert = useAlert();
     const queryClient = useQueryClient();
@@ -71,7 +76,6 @@ export default function MemberManagement() {
     });
     const [createDialog, setCreateDialog] = useState(false);
     const [createForm, setCreateForm] = useState<CreateMemberReq>(initialCreateForm);
-    const [createLoading, setCreateLoading] = useState(false);
     const [createErrors, setCreateErrors] = useState<Partial<Record<keyof CreateMemberReq, string>>>({});
     const [roleDialog, setRoleDialog] = useState<{open: boolean; loginId: string; currentRole: string; newRole: string}>({
         open: false, loginId: '', currentRole: '', newRole: ''
@@ -105,58 +109,115 @@ export default function MemberManagement() {
         await queryClient.invalidateQueries({queryKey: ['admin', 'members']});
     };
 
-    const handleConfirm = async () => {
+    const lockMutation = useMutation({
+        mutationFn: async (loginId: string) => {
+            requireOk(await lockAccount(loginId), '계정 잠금');
+            return loginId;
+        },
+        onSuccess: (loginId) => {
+            showAlert(`${loginId} 계정이 잠금되었습니다.`, 'success');
+            loadMembers();
+        },
+        onError: (err) => console.error(err),
+    });
+
+    const unlockMutation = useMutation({
+        mutationFn: async (loginId: string) => {
+            requireOk(await unlockAccount(loginId), '계정 잠금 해제');
+            return loginId;
+        },
+        onSuccess: (loginId) => {
+            showAlert(`${loginId} 계정 잠금이 해제되었습니다.`, 'success');
+            loadMembers();
+        },
+        onError: (err) => console.error(err),
+    });
+
+    const unlockApiKeyMutation = useMutation({
+        mutationFn: async (loginId: string) => {
+            requireOk(await unlockApiKey(loginId), 'API Key 잠금 해제');
+            return loginId;
+        },
+        onSuccess: (loginId) => {
+            showAlert(`${loginId} 계정의 API Key 등록 잠금이 해제되었습니다.`, 'success');
+            loadMembers();
+        },
+        onError: (err) => console.error(err),
+    });
+
+    const resetTotpMutation = useMutation({
+        mutationFn: async (loginId: string) => {
+            requireOk(await resetTotp(loginId), 'TOTP 초기화');
+            return loginId;
+        },
+        onSuccess: (loginId) => {
+            showAlert(`${loginId} 계정의 TOTP가 초기화되었습니다.`, 'success');
+            loadMembers();
+        },
+        onError: (err) => {
+            console.error(err);
+            showAlert('TOTP 초기화에 실패했습니다.', 'error');
+        },
+    });
+
+    const changeRoleMutation = useMutation({
+        mutationFn: async (vars: ChangeRoleMutationVars) => {
+            requireOk(await changeRole(vars.loginId, vars.newRole), '역할 변경');
+            return vars.loginId;
+        },
+        onSuccess: (loginId) => {
+            showAlert(`${loginId} 계정의 역할이 변경되었습니다.`, 'success');
+            loadMembers();
+        },
+        onError: (err) => {
+            console.error(err);
+            showAlert('권한 변경에 실패했습니다.', 'error');
+        },
+    });
+
+    const createMemberMutation = useMutation({
+        mutationFn: async (req: CreateMemberReq) =>
+            requireOk(await createMember(req), '회원 생성'),
+        onSuccess: (_data, req) => {
+            showAlert(`${req.loginId} 계정이 생성되었습니다.`, 'success');
+            setCreateDialog(false);
+            setCreateForm(initialCreateForm);
+            loadMembers();
+        },
+        onError: (err) => {
+            console.error(err);
+            const axiosErr = err as {response?: {status?: number; data?: {code?: string; message?: string; result?: Record<string, string>}}};
+            if (axiosErr.response?.status === 400 && axiosErr.response?.data?.code === 'VALIDATION_4001') {
+                setCreateErrors((axiosErr.response.data.result ?? {}) as Partial<Record<keyof CreateMemberReq, string>>);
+                return;
+            }
+            const message = axiosErr.response?.data?.message || '회원 생성에 실패했습니다.';
+            showAlert(message, 'error');
+        },
+    });
+
+    const handleConfirm = () => {
         const {loginId, action} = confirmDialog;
         setConfirmDialog({open: false, loginId: '', action: 'unlock'});
-        try {
-            if (action === 'lock') {
-                const res = await lockAccount(loginId);
-                if (res.code !== "0000") throw new Error(res.message || `계정 잠금 실패 (${res.code})`);
-                showAlert(`${loginId} 계정이 잠금되었습니다.`, 'success');
-            } else if (action === 'api-key-unlock') {
-                const res = await unlockApiKey(loginId);
-                if (res.code !== "0000") throw new Error(res.message || `API Key 잠금 해제 실패 (${res.code})`);
-                showAlert(`${loginId} 계정의 API Key 등록 잠금이 해제되었습니다.`, 'success');
-            } else {
-                const res = await unlockAccount(loginId);
-                if (res.code !== "0000") throw new Error(res.message || `계정 잠금 해제 실패 (${res.code})`);
-                showAlert(`${loginId} 계정 잠금이 해제되었습니다.`, 'success');
-            }
-            await loadMembers();
-        } catch (error) {
-            console.error(error);
-        }
+        if (action === 'lock') lockMutation.mutate(loginId);
+        else if (action === 'api-key-unlock') unlockApiKeyMutation.mutate(loginId);
+        else unlockMutation.mutate(loginId);
     };
 
-    const handleResetTotp = async () => {
+    const handleResetTotp = () => {
         const {loginId} = totpResetDialog;
         setTotpResetDialog({open: false, loginId: ''});
-        try {
-            const res = await resetTotp(loginId);
-            if (res.code !== "0000") throw new Error(res.message || `TOTP 초기화 실패 (${res.code})`);
-            showAlert(`${loginId} 계정의 TOTP가 초기화되었습니다.`, 'success');
-            await loadMembers();
-        } catch (error) {
-            console.error(error);
-            showAlert('TOTP 초기화에 실패했습니다.', 'error');
-        }
+        resetTotpMutation.mutate(loginId);
     };
 
-    const handleChangeRole = async () => {
+    const handleChangeRole = () => {
         const {loginId, newRole} = roleDialog;
         setRoleDialog({open: false, loginId: '', currentRole: '', newRole: ''});
-        try {
-            const res = await changeRole(loginId, newRole);
-            if (res.code !== "0000") throw new Error(res.message || `역할 변경 실패 (${res.code})`);
-            showAlert(`${loginId} 계정의 역할이 변경되었습니다.`, 'success');
-            await loadMembers();
-        } catch (error) {
-            console.error(error);
-            showAlert('권한 변경에 실패했습니다.', 'error');
-        }
+        const vars: ChangeRoleMutationVars = {loginId, newRole};
+        changeRoleMutation.mutate(vars);
     };
 
-    const handleCreateMember = async () => {
+    const handleCreateMember = () => {
         const errors: Partial<Record<keyof CreateMemberReq, string>> = {};
         if (!createForm.loginId.trim()) errors.loginId = '아이디를 입력해주세요.';
         if (!createForm.email.trim()) errors.email = '이메일을 입력해주세요.';
@@ -169,26 +230,7 @@ export default function MemberManagement() {
             return;
         }
         setCreateErrors({});
-        setCreateLoading(true);
-        try {
-            const res = await createMember(createForm);
-            if (res.code !== "0000") throw new Error(res.message || `회원 생성 실패 (${res.code})`);
-            showAlert(`${createForm.loginId} 계정이 생성되었습니다.`, 'success');
-            setCreateDialog(false);
-            setCreateForm(initialCreateForm);
-            await loadMembers();
-        } catch (err) {
-            console.error(err);
-            const axiosErr = err as {response?: {status?: number; data?: {code?: string; message?: string; result?: Record<string, string>}}};
-            if (axiosErr.response?.status === 400 && axiosErr.response?.data?.code === 'VALIDATION_4001') {
-                setCreateErrors((axiosErr.response.data.result ?? {}) as Partial<Record<keyof CreateMemberReq, string>>);
-                return;
-            }
-            const message = axiosErr.response?.data?.message || '회원 생성에 실패했습니다.';
-            showAlert(message, 'error');
-        } finally {
-            setCreateLoading(false);
-        }
+        createMemberMutation.mutate(createForm);
     };
 
     const columns: GridColDef[] = [
@@ -485,8 +527,8 @@ export default function MemberManagement() {
                 </DialogContent>
                 <DialogActions>
                     <Button onClick={() => { setCreateDialog(false); setCreateForm(initialCreateForm); }}>취소</Button>
-                    <Button onClick={handleCreateMember} variant="contained" disabled={createLoading}>
-                        {createLoading ? '생성 중...' : '생성'}
+                    <Button onClick={handleCreateMember} variant="contained" disabled={createMemberMutation.isPending}>
+                        {createMemberMutation.isPending ? '생성 중...' : '생성'}
                     </Button>
                 </DialogActions>
             </Dialog>

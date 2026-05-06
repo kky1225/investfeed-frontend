@@ -1,4 +1,6 @@
 import React, {createContext, useContext, useEffect, useRef, useState} from "react";
+import {useMutation, useQuery, useQueryClient} from "@tanstack/react-query";
+import {requireOk} from "../../lib/apiResponse.ts";
 import Box from "@mui/material/Box";
 import Typography from "@mui/material/Typography";
 import Stack from "@mui/material/Stack";
@@ -45,7 +47,7 @@ import {
     reorderInterestItems,
     updateInterestGroup,
 } from "../../api/interest/InterestApi.ts";
-import {InterestGroup, InterestItem} from "../../type/InterestType.ts";
+import {AddItemMutationVars, CreateGroupReq, DeleteItemMutationVars, InterestGroup, InterestItem, ReorderItemsMutationVars, ReorderReq, UpdateGroupMutationVars} from "../../type/InterestType.ts";
 import {renderChip} from "../../components/CustomRender.tsx";
 import {fetchTimeNow} from "../../api/time/TimeApi.ts";
 import {MarketType} from "../../type/timeType.ts";
@@ -187,17 +189,53 @@ const DraggableRow = React.forwardRef<HTMLDivElement, GridRowProps>((props, _ref
 const Interest = () => {
     const navigate = useNavigate();
     const {groupId} = useParams<{ groupId: string }>();
+    const queryClient = useQueryClient();
 
-    const [groups, setGroups] = useState<InterestGroup[]>([]);
+    const {data: groupsData, isLoading: groupsLoading} = useQuery<InterestGroup[]>({
+        queryKey: ['interestGroups'],
+        queryFn: async () => requireOk(await fetchInterestGroups(), [] as InterestGroup[]),
+    });
+
+    const [groupOrderOverride, setGroupOrderOverride] = useState<InterestGroup[] | null>(null);
+    const groups = groupOrderOverride ?? groupsData ?? [];
+
     const [selectedGroup, setSelectedGroup] = useState<InterestGroup | null>(null);
-    const [items, setItems] = useState<InterestItem[]>([]);
-    const [groupsLoading, setGroupsLoading] = useState(false);
-    const [itemsLoading, setItemsLoading] = useState(false);
-
     const [groupOrderDirty, setGroupOrderDirty] = useState(false);
-    const [savingGroupOrder, setSavingGroupOrder] = useState(false);
     const [itemOrderDirty, setItemOrderDirty] = useState(false);
-    const [savingItemOrder, setSavingItemOrder] = useState(false);
+
+    const [prevGroupsData, setPrevGroupsData] = useState(groupsData);
+    if (groupsData !== prevGroupsData) {
+        setPrevGroupsData(groupsData);
+        setGroupOrderOverride(null);
+        if (groupsData && groupsData.length > 0) {
+            if (!selectedGroup || !groupsData.some(g => g.id === selectedGroup.id)) {
+                const target = groupId
+                    ? groupsData.find(g => g.id === Number(groupId)) ?? groupsData[0]
+                    : groupsData[0];
+                setSelectedGroup(target);
+            }
+        } else if (groupsData) {
+            setSelectedGroup(null);
+        }
+    }
+
+    const {data: itemsData, isLoading: itemsLoading} = useQuery<InterestItem[]>({
+        queryKey: ['interestItems', selectedGroup?.id],
+        queryFn: async () => {
+            if (!selectedGroup) return [];
+            return requireOk(await fetchInterestItems(selectedGroup.id), [] as InterestItem[]);
+        },
+        enabled: selectedGroup !== null,
+    });
+    const [itemsOrderOverride, setItemsOrderOverride] = useState<InterestItem[] | null>(null);
+    const items = itemsOrderOverride ?? itemsData ?? [];
+
+    const [prevSelectedGroupId, setPrevSelectedGroupId] = useState(selectedGroup?.id);
+    if (selectedGroup?.id !== prevSelectedGroupId) {
+        setPrevSelectedGroupId(selectedGroup?.id);
+        setItemsOrderOverride(null);
+        setItemOrderDirty(false);
+    }
 
     const [addGroupOpen, setAddGroupOpen] = useState(false);
     const [newGroupName, setNewGroupName] = useState("");
@@ -220,7 +258,6 @@ const Interest = () => {
     const [editGroupError, setEditGroupError] = useState("");
     const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-    const loadingGroupRef = useRef<number | null>(null);
     const socketRef = useRef<WebSocket | null>(null);
 
     // 클릭과 드래그를 구분하기 위해 distance: 5 적용, 모바일 터치 지원
@@ -230,154 +267,144 @@ const Interest = () => {
     );
 
     useEffect(() => {
-        loadGroups();
-        return () => {
-            socketRef.current?.close();
-        };
-    }, []);
+        if (!selectedGroup) return;
+        const targetGroupId = selectedGroup.id;
+        let cancelled = false;
 
-    const loadGroups = async () => {
-        setGroupsLoading(true);
-        setGroupOrderDirty(false);
-        try {
-            const data = await fetchInterestGroups();
-            if (data.code !== "0000") throw new Error(data.message || `관심 그룹 조회 실패 (${data.code})`);
-            const groupList: InterestGroup[] = data.result ?? [];
-            setGroups(groupList);
-            if (groupList.length > 0) {
-                const target = groupId
-                    ? groupList.find(g => g.id === Number(groupId)) ?? groupList[0]
-                    : groupList[0];
-                setSelectedGroup(target);
-                loadItems(target.id);
-            }
-        } catch (err) {
-            console.error(err);
-        } finally {
-            setGroupsLoading(false);
-        }
-    };
+        socketRef.current?.close();
+        socketRef.current = null;
 
-    const loadItems = async (groupId: number) => {
-        if (loadingGroupRef.current === groupId) return;
-        loadingGroupRef.current = groupId;
-        setItemsLoading(true);
-        setItemOrderDirty(false);
-        try {
-            const data = await fetchInterestItems(groupId);
-            if (data.code !== "0000") throw new Error(data.message || `관심 종목 조회 실패 (${data.code})`);
-            setItems(data.result ?? []);
+        (async () => {
+            try {
+                const marketInfo = await fetchTimeNow({marketType: MarketType.STOCK});
+                if (cancelled) return;
+                if (marketInfo.code !== "0000") throw new Error(marketInfo.message || `시장 시간 조회 실패 (${marketInfo.code})`);
+                if (!marketInfo.result.isMarketOpen) return;
 
-            socketRef.current?.close();
-            const marketInfo = await fetchTimeNow({marketType: MarketType.STOCK});
-            if (marketInfo.code !== "0000") throw new Error(marketInfo.message || `시장 시간 조회 실패 (${marketInfo.code})`);
-            if (marketInfo.result.isMarketOpen) {
-                const streamRes = await fetchInterestItemsStream(groupId);
+                const streamRes = await fetchInterestItemsStream(targetGroupId);
+                if (cancelled) return;
                 if (streamRes.code !== "0000") throw new Error(streamRes.message || `관심 종목 스트림 실패 (${streamRes.code})`);
-                socketRef.current = openSocket();
-            }
-        } catch (err) {
-            console.error(err);
-        } finally {
-            setItemsLoading(false);
-            loadingGroupRef.current = null;
-        }
-    };
 
-    const openSocket = () => {
-        const socket = new WebSocket("ws://localhost:8080/ws");
-        socket.onmessage = (event) => {
-            const data = JSON.parse(event.data);
-            if (data.trnm === "REAL" && Array.isArray(data.data)) {
-                setItems(prev => prev.map(item => {
-                    const newData = data.data.find((entry: { item: string; values: Record<string, string> }) => entry.item === item.stkCd);
-                    if (newData) {
-                        return {...item, curPrc: newData.values["10"], fluRt: newData.values["12"]};
+                const socket = new WebSocket("ws://localhost:8080/ws");
+                socket.onmessage = (event) => {
+                    const data = JSON.parse(event.data);
+                    if (data.trnm === "REAL" && Array.isArray(data.data)) {
+                        // useQuery 캐시 직접 갱신 (실시간 가격 머지)
+                        queryClient.setQueryData<InterestItem[]>(['interestItems', targetGroupId], (prev) => {
+                            if (!prev) return prev;
+                            return prev.map(item => {
+                                const newData = data.data.find((entry: { item: string; values: Record<string, string> }) => entry.item === item.stkCd);
+                                if (newData) {
+                                    return {...item, curPrc: newData.values["10"], fluRt: newData.values["12"]};
+                                }
+                                return item;
+                            });
+                        });
                     }
-                    return item;
-                }));
+                };
+                if (cancelled) {
+                    socket.close();
+                    return;
+                }
+                socketRef.current = socket;
+            } catch (err) {
+                console.error(err);
             }
+        })();
+
+        return () => {
+            cancelled = true;
+            socketRef.current?.close();
+            socketRef.current = null;
         };
-        return socket;
-    };
+    }, [selectedGroup, queryClient]);
 
     const handleSelectGroup = (group: InterestGroup) => {
         setSelectedGroup(group);
         navigate(`/stock/interest/list/${group.id}`, {replace: true});
-        setItems([]);
-        socketRef.current?.close();
-        socketRef.current = null;
-        loadItems(group.id);
     };
 
-    const handleAddGroup = async () => {
-        if (!newGroupName.trim()) {
-            setNewGroupError("그룹명을 입력해주세요.");
-            return;
-        }
-        setNewGroupError("");
-        try {
-            const res = await createInterestGroup({groupNm: newGroupName.trim()});
-            if (res.code !== "0000" || !res.result) throw new Error(res.message || `관심 그룹 생성 실패 (${res.code})`);
-            const created: InterestGroup = res.result;
-            setGroups(prev => [...prev, created]);
+    const createGroupMutation = useMutation({
+        mutationFn: async (req: CreateGroupReq) =>
+            requireOk(await createInterestGroup(req), '관심 그룹 생성'),
+        onSuccess: (created) => {
+            queryClient.invalidateQueries({queryKey: ['interestGroups']});
             setAddGroupOpen(false);
             setNewGroupName("");
             setSelectedGroup(created);
-            setItems([]);
-        } catch (err) {
+        },
+        onError: (err) => {
             console.error(err);
             const axiosErr = err as {response?: {status?: number; data?: {code?: string; result?: Record<string, string>}}};
             if (axiosErr.response?.status === 400 && axiosErr.response?.data?.code === 'VALIDATION_4001') {
                 setNewGroupError(axiosErr.response.data.result?.groupNm ?? "그룹명을 확인해주세요.");
             }
+        },
+    });
+
+    const handleAddGroup = () => {
+        if (!newGroupName.trim()) {
+            setNewGroupError("그룹명을 입력해주세요.");
+            return;
         }
+        setNewGroupError("");
+        const req: CreateGroupReq = {groupNm: newGroupName.trim()};
+        createGroupMutation.mutate(req);
     };
 
-    const handleEditGroup = async () => {
+    const updateGroupMutation = useMutation({
+        mutationFn: async (vars: UpdateGroupMutationVars) => {
+            requireOk(await updateInterestGroup(vars.id, vars.req), '관심 그룹 수정');
+            return vars;
+        },
+        onSuccess: ({id, req}) => {
+            queryClient.invalidateQueries({queryKey: ['interestGroups']});
+            if (selectedGroup?.id === id) {
+                setSelectedGroup(prev => prev ? {...prev, groupNm: req.groupNm} : prev);
+            }
+            setEditGroupOpen(false);
+            setEditGroupId(null);
+        },
+        onError: (err) => {
+            console.error(err);
+            const axiosErr = err as {response?: {status?: number; data?: {code?: string; result?: Record<string, string>}}};
+            if (axiosErr.response?.status === 400 && axiosErr.response?.data?.code === 'VALIDATION_4001') {
+                setEditGroupError(axiosErr.response.data.result?.groupNm ?? "그룹명을 확인해주세요.");
+            }
+        },
+    });
+
+    const handleEditGroup = () => {
         if (!editGroupName.trim()) {
             setEditGroupError("그룹명을 입력해주세요.");
             return;
         }
         if (!editGroupId) return;
         setEditGroupError("");
-        try {
-            const res = await updateInterestGroup(editGroupId, {groupNm: editGroupName.trim()});
-            if (res.code !== "0000") throw new Error(res.message || `관심 그룹 수정 실패 (${res.code})`);
-            setGroups(prev =>
-                prev.map(g => g.id === editGroupId ? {...g, groupNm: editGroupName.trim()} : g)
-            );
-            if (selectedGroup?.id === editGroupId) {
-                setSelectedGroup(prev => prev ? {...prev, groupNm: editGroupName.trim()} : prev);
-            }
-            setEditGroupOpen(false);
-            setEditGroupId(null);
-        } catch (err) {
-            console.error(err);
-            const axiosErr = err as {response?: {status?: number; data?: {code?: string; result?: Record<string, string>}}};
-            if (axiosErr.response?.status === 400 && axiosErr.response?.data?.code === 'VALIDATION_4001') {
-                setEditGroupError(axiosErr.response.data.result?.groupNm ?? "그룹명을 확인해주세요.");
-            }
-        }
+        const vars: UpdateGroupMutationVars = {id: editGroupId, req: {groupNm: editGroupName.trim()}};
+        updateGroupMutation.mutate(vars);
     };
 
-    const handleDeleteGroup = async () => {
-        if (!deleteGroupTarget) return;
-        const res = await deleteInterestGroup(deleteGroupTarget.id);
-        if (res.code !== "0000") throw new Error(res.message || `관심 그룹 삭제 실패 (${res.code})`);
-        const newGroups = groups.filter(g => g.id !== deleteGroupTarget.id);
-        setGroups(newGroups);
-        if (selectedGroup?.id === deleteGroupTarget.id) {
-            if (newGroups.length > 0) {
-                setSelectedGroup(newGroups[0]);
-                loadItems(newGroups[0].id);
-            } else {
-                setSelectedGroup(null);
-                setItems([]);
+    const deleteGroupMutation = useMutation({
+        mutationFn: async (id: number) => {
+            requireOk(await deleteInterestGroup(id), '관심 그룹 삭제');
+            return id;
+        },
+        onSuccess: (id) => {
+            const remaining = groups.filter(g => g.id !== id);
+            if (selectedGroup?.id === id) {
+                setSelectedGroup(remaining.length > 0 ? remaining[0] : null);
             }
-        }
-        setGroupOrderDirty(false);
-        setDeleteGroupTarget(null);
+            queryClient.invalidateQueries({queryKey: ['interestGroups']});
+            setGroupOrderDirty(false);
+            setDeleteGroupTarget(null);
+        },
+        onError: (err) => console.error(err),
+    });
+
+    const handleDeleteGroup = () => {
+        if (!deleteGroupTarget) return;
+        deleteGroupMutation.mutate(deleteGroupTarget.id);
     };
 
     const handleGroupDragEnd = (event: DragEndEvent) => {
@@ -385,7 +412,7 @@ const Interest = () => {
         if (!over || active.id === over.id) return;
         const oldIndex = groups.findIndex(g => g.id === active.id);
         const newIndex = groups.findIndex(g => g.id === over.id);
-        setGroups(prev => arrayMove(prev, oldIndex, newIndex));
+        setGroupOrderOverride(arrayMove(groups, oldIndex, newIndex));
         setGroupOrderDirty(true);
     };
 
@@ -394,31 +421,41 @@ const Interest = () => {
         if (!over || active.id === over.id) return;
         const oldIndex = items.findIndex(i => i.id === active.id);
         const newIndex = items.findIndex(i => i.id === over.id);
-        setItems(prev => arrayMove(prev, oldIndex, newIndex));
+        setItemsOrderOverride(arrayMove(items, oldIndex, newIndex));
         setItemOrderDirty(true);
     };
 
-    const handleSaveGroupOrder = async () => {
-        setSavingGroupOrder(true);
-        try {
-            const res = await reorderInterestGroups({orderedIds: groups.map(g => g.id)});
-            if (res.code !== "0000") throw new Error(res.message || `관심 그룹 순서 변경 실패 (${res.code})`);
+    const reorderGroupsMutation = useMutation({
+        mutationFn: async (req: ReorderReq) => {
+            requireOk(await reorderInterestGroups(req), '관심 그룹 순서 변경');
+        },
+        onSuccess: () => {
             setGroupOrderDirty(false);
-        } finally {
-            setSavingGroupOrder(false);
-        }
+            queryClient.invalidateQueries({queryKey: ['interestGroups']});
+        },
+        onError: (err) => console.error(err),
+    });
+
+    const reorderItemsMutation = useMutation({
+        mutationFn: async (vars: ReorderItemsMutationVars) => {
+            requireOk(await reorderInterestItems(vars.groupId, vars.req), '관심 종목 순서 변경');
+        },
+        onSuccess: (_data, vars) => {
+            setItemOrderDirty(false);
+            queryClient.invalidateQueries({queryKey: ['interestItems', vars.groupId]});
+        },
+        onError: (err) => console.error(err),
+    });
+
+    const handleSaveGroupOrder = () => {
+        const req: ReorderReq = {orderedIds: groups.map(g => g.id)};
+        reorderGroupsMutation.mutate(req);
     };
 
-    const handleSaveItemOrder = async () => {
+    const handleSaveItemOrder = () => {
         if (!selectedGroup) return;
-        setSavingItemOrder(true);
-        try {
-            const res = await reorderInterestItems(selectedGroup.id, {orderedIds: items.map(i => i.id)});
-            if (res.code !== "0000") throw new Error(res.message || `관심 종목 순서 변경 실패 (${res.code})`);
-            setItemOrderDirty(false);
-        } finally {
-            setSavingItemOrder(false);
-        }
+        const vars: ReorderItemsMutationVars = {groupId: selectedGroup.id, req: {orderedIds: items.map(i => i.id)}};
+        reorderItemsMutation.mutate(vars);
     };
 
     const handleSearchKeywordChange = (keyword: string) => {
@@ -444,35 +481,48 @@ const Interest = () => {
         }, 300);
     };
 
-    const handleAddItem = async () => {
-        if (!selectedGroup) return;
-        if (!selectedStock) {
-            setAddItemError("종목을 선택해주세요.");
-            return;
-        }
-        try {
-            const res = await addInterestItem(selectedGroup.id, {
-                stkCd: selectedStock.stkCd,
-                stkNm: selectedStock.stkNm,
-            });
-            if (res.code !== "0000") throw new Error(res.message || `관심 종목 추가 실패 (${res.code})`);
-            await loadItems(selectedGroup.id);
+    const addItemMutation = useMutation({
+        mutationFn: async (vars: AddItemMutationVars) =>
+            requireOk(await addInterestItem(vars.groupId, vars.req), '관심 종목 추가'),
+        onSuccess: (_data, vars) => {
+            queryClient.invalidateQueries({queryKey: ['interestItems', vars.groupId]});
             setAddItemOpen(false);
             setSearchKeyword("");
             setSearchResults([]);
             setSelectedStock(null);
             setAddItemError("");
-        } catch (error) {
-            console.error(error);
+        },
+        onError: (err) => {
+            console.error(err);
             setAddItemError("이미 추가된 종목이거나 오류가 발생했습니다.");
+        },
+    });
+
+    const deleteItemMutation = useMutation({
+        mutationFn: async (vars: DeleteItemMutationVars) => {
+            requireOk(await deleteInterestItem(vars.groupId, vars.itemId), '관심 종목 삭제');
+            return vars;
+        },
+        onSuccess: (vars) => {
+            queryClient.invalidateQueries({queryKey: ['interestItems', vars.groupId]});
+        },
+        onError: (err) => console.error(err),
+    });
+
+    const handleAddItem = () => {
+        if (!selectedGroup) return;
+        if (!selectedStock) {
+            setAddItemError("종목을 선택해주세요.");
+            return;
         }
+        const vars: AddItemMutationVars = {groupId: selectedGroup.id, req: {stkCd: selectedStock.stkCd, stkNm: selectedStock.stkNm}};
+        addItemMutation.mutate(vars);
     };
 
-    const handleDeleteItem = async (itemId: number) => {
+    const handleDeleteItem = (itemId: number) => {
         if (!selectedGroup) return;
-        const res = await deleteInterestItem(selectedGroup.id, itemId);
-        if (res.code !== "0000") throw new Error(res.message || `관심 종목 삭제 실패 (${res.code})`);
-        setItems(prev => prev.filter(i => i.id !== itemId));
+        const vars: DeleteItemMutationVars = {groupId: selectedGroup.id, itemId};
+        deleteItemMutation.mutate(vars);
     };
 
     const columns: GridColDef[] = [
@@ -565,9 +615,9 @@ const Interest = () => {
                                     size="small"
                                     variant="contained"
                                     color="primary"
-                                    startIcon={savingGroupOrder ? <CircularProgress size={12} color="inherit"/> : <SaveIcon sx={{fontSize: 14}}/>}
+                                    startIcon={reorderGroupsMutation.isPending ? <CircularProgress size={12} color="inherit"/> : <SaveIcon sx={{fontSize: 14}}/>}
                                     onClick={handleSaveGroupOrder}
-                                    disabled={savingGroupOrder}
+                                    disabled={reorderGroupsMutation.isPending}
                                     sx={{fontSize: 11, px: 1, py: 0.25, minWidth: 0}}
                                 >
                                     저장
@@ -642,9 +692,9 @@ const Interest = () => {
                                 <Button
                                     variant="contained"
                                     size="small"
-                                    startIcon={savingItemOrder ? <CircularProgress size={12} color="inherit"/> : <SaveIcon/>}
+                                    startIcon={reorderItemsMutation.isPending ? <CircularProgress size={12} color="inherit"/> : <SaveIcon/>}
                                     onClick={handleSaveItemOrder}
-                                    disabled={savingItemOrder}
+                                    disabled={reorderItemsMutation.isPending}
                                 >
                                     순서 저장
                                 </Button>
@@ -768,7 +818,7 @@ const Interest = () => {
                 </DialogContent>
                 <DialogActions>
                     <Button onClick={() => { setAddGroupOpen(false); setNewGroupError(""); }}>취소</Button>
-                    <Button onClick={handleAddGroup}>추가</Button>
+                    <Button onClick={handleAddGroup} disabled={createGroupMutation.isPending}>추가</Button>
                 </DialogActions>
             </Dialog>
 
@@ -788,7 +838,7 @@ const Interest = () => {
                 </DialogContent>
                 <DialogActions>
                     <Button onClick={() => { setEditGroupOpen(false); setEditGroupError(""); }}>취소</Button>
-                    <Button onClick={handleEditGroup}>저장</Button>
+                    <Button onClick={handleEditGroup} disabled={updateGroupMutation.isPending}>저장</Button>
                 </DialogActions>
             </Dialog>
 
@@ -804,7 +854,7 @@ const Interest = () => {
                 </DialogContent>
                 <DialogActions>
                     <Button onClick={() => setDeleteGroupTarget(null)}>취소</Button>
-                    <Button variant="contained" color="error" onClick={handleDeleteGroup}>삭제</Button>
+                    <Button variant="contained" color="error" onClick={handleDeleteGroup} disabled={deleteGroupMutation.isPending}>삭제</Button>
                 </DialogActions>
             </Dialog>
 
@@ -870,7 +920,7 @@ const Interest = () => {
                 </DialogContent>
                 <DialogActions>
                     <Button onClick={() => setAddItemOpen(false)}>취소</Button>
-                    <Button onClick={handleAddItem} disabled={!selectedStock}>추가</Button>
+                    <Button onClick={handleAddItem} disabled={!selectedStock || addItemMutation.isPending}>추가</Button>
                 </DialogActions>
             </Dialog>
         </Box>

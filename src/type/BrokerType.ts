@@ -64,3 +64,13 @@ export interface HoldingReorderReq {
 export interface UpdateBalanceReq {
     balance: number;
 }
+
+export interface UpdateBrokerMutationVars {
+    id: number;
+    req: CreateBrokerReq;
+}
+
+export interface UpdateManualHoldingMutationVars {
+    id: number;
+    req: UpdateManualHoldingReq;
+}

@@ -1,5 +1,5 @@
 import {useState} from 'react';
-import {useQuery, useQueryClient} from '@tanstack/react-query';
+import {useMutation, useQuery, useQueryClient} from '@tanstack/react-query';
 import {requireOk} from '../../lib/apiResponse';
 import {useNavigate} from 'react-router-dom';
 import Box from '@mui/material/Box';
@@ -133,20 +133,24 @@ export default function NotificationList() {
     const {data: priceTargetsData} = useQuery<PriceTarget[]>({
         queryKey: ['priceTargets'],
         queryFn: async ({signal}) => requireOk(await fetchPriceTargets({signal, skipGlobalError: true}), [] as PriceTarget[]),
-        // optimistic delete 와의 race condition 방지
         refetchOnWindowFocus: false,
     });
     const priceTargets = priceTargetsData ?? [];
 
-    const handleDeletePriceTarget = async (id: number) => {
-        try {
-            const res = await deletePriceTarget(id);
-            if (res.code !== "0000") throw new Error(res.message || `목표가 알림 삭제 실패 (${res.code})`);
-            // optimistic 제거
+    const deletePriceTargetMutation = useMutation({
+        mutationFn: async (id: number) => {
+            requireOk(await deletePriceTarget(id), '목표가 알림 삭제');
+            return id;
+        },
+        onSuccess: (id) => {
             queryClient.setQueryData<PriceTarget[]>(['priceTargets'], prev => (prev ?? []).filter(p => p.id !== id));
-        } catch (e) {
-            console.error(e);
-        }
+            queryClient.invalidateQueries({queryKey: ['priceTargets']});
+        },
+        onError: (e) => console.error(e),
+    });
+
+    const handleDeletePriceTarget = (id: number) => {
+        deletePriceTargetMutation.mutate(id);
     };
 
     const handleClick = async (notification: Notification) => {

@@ -31,3 +31,14 @@ export interface HoldingBuffer {
     rmndQty?: string;
     purPric?: string;
 }
+
+export type HoldingListData = {
+    holdingList: HoldingStock[];
+    totPurAmt: string;
+    totEvltAmt: string;
+    totEvltPl: string;
+    totPrftRt: string;
+    balance: string;
+} | null;
+
+export type CryptoHoldingListData = HoldingListData;

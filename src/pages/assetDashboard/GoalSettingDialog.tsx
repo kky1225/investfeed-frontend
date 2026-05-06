@@ -1,4 +1,6 @@
 import {useState} from "react";
+import {useMutation} from "@tanstack/react-query";
+import {requireOk} from "../../lib/apiResponse.ts";
 import Dialog from "@mui/material/Dialog";
 import DialogTitle from "@mui/material/DialogTitle";
 import DialogContent from "@mui/material/DialogContent";
@@ -10,7 +12,7 @@ import Box from "@mui/material/Box";
 import Typography from "@mui/material/Typography";
 import Tooltip from "@mui/material/Tooltip";
 import HelpOutlineIcon from "@mui/icons-material/HelpOutline";
-import type {GoalType, InvestmentGoalRes} from "../../type/GoalType.ts";
+import type {GoalType, InvestmentGoalCreateReq, InvestmentGoalRes, UpdateGoalMutationVars} from "../../type/GoalType.ts";
 import {goalTypeLabel} from "../../type/GoalType.ts";
 import {createGoal, updateGoal} from "../../api/goal/GoalApi.ts";
 
@@ -50,31 +52,43 @@ export default function GoalSettingDialog({open, onClose, onSaved, editGoal, exi
         onClose();
     };
 
-    const handleSubmit = async () => {
+    const onSubmitError = (err: unknown) => {
+        console.error(err);
+        const axiosErr = err as {response?: {status?: number; data?: {code?: string; result?: Record<string, string>}}};
+        if (axiosErr.response?.status === 400 && axiosErr.response?.data?.code === 'VALIDATION_4001') {
+            const result = axiosErr.response.data.result ?? {};
+            if (result.targetAmount) setTargetAmountError(result.targetAmount);
+            return;
+        }
+        setTargetAmountError(editGoal ? "목표 수정에 실패했습니다." : "이미 해당 유형의 목표가 존재합니다.");
+    };
+
+    const createMutation = useMutation({
+        mutationFn: async (req: InvestmentGoalCreateReq) =>
+            requireOk(await createGoal(req), '투자 목표 등록'),
+        onSuccess: () => { onSaved(); handleClose(); },
+        onError: onSubmitError,
+    });
+
+    const updateMutation = useMutation({
+        mutationFn: async (vars: UpdateGoalMutationVars) =>
+            requireOk(await updateGoal(vars.id, vars.req), '투자 목표 수정'),
+        onSuccess: () => { onSaved(); handleClose(); },
+        onError: onSubmitError,
+    });
+
+    const handleSubmit = () => {
         if (!targetAmount || Number(targetAmount) <= 0) {
             setTargetAmountError("목표 금액을 입력해주세요.");
             return;
         }
         setTargetAmountError("");
-        try {
-            if (editGoal) {
-                const res = await updateGoal(editGoal.id, {targetAmount: Number(targetAmount)});
-                if (res.code !== "0000") throw new Error(res.message || `투자 목표 수정 실패 (${res.code})`);
-            } else {
-                const res = await createGoal({type, targetAmount: Number(targetAmount)});
-                if (res.code !== "0000") throw new Error(res.message || `투자 목표 등록 실패 (${res.code})`);
-            }
-            onSaved();
-            handleClose();
-        } catch (err) {
-            console.error(err);
-            const axiosErr = err as {response?: {status?: number; data?: {code?: string; result?: Record<string, string>}}};
-            if (axiosErr.response?.status === 400 && axiosErr.response?.data?.code === 'VALIDATION_4001') {
-                const result = axiosErr.response.data.result ?? {};
-                if (result.targetAmount) setTargetAmountError(result.targetAmount);
-                return;
-            }
-            setTargetAmountError(editGoal ? "목표 수정에 실패했습니다." : "이미 해당 유형의 목표가 존재합니다.");
+        if (editGoal) {
+            const vars: UpdateGoalMutationVars = {id: editGoal.id, req: {targetAmount: Number(targetAmount)}};
+            updateMutation.mutate(vars);
+        } else {
+            const req: InvestmentGoalCreateReq = {type, targetAmount: Number(targetAmount)};
+            createMutation.mutate(req);
         }
     };
 
@@ -121,7 +135,7 @@ export default function GoalSettingDialog({open, onClose, onSaved, editGoal, exi
             </DialogContent>
             <DialogActions>
                 <Button onClick={handleClose}>취소</Button>
-                <Button onClick={handleSubmit}>{editGoal ? "수정" : "등록"}</Button>
+                <Button onClick={handleSubmit} disabled={createMutation.isPending || updateMutation.isPending}>{editGoal ? "수정" : "등록"}</Button>
             </DialogActions>
         </Dialog>
     );

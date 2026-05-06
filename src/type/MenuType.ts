@@ -61,3 +61,13 @@ export interface FlatMenuItem {
     depth: number;
     requiredBrokerIds: number[];
 }
+
+export interface UpdateMenuMutationVars {
+    id: number;
+    req: UpdateMenuReq;
+}
+
+export interface UpdateMenuBrokersMutationVars {
+    menuId: number;
+    req: UpdateMenuBrokersReq;
+}

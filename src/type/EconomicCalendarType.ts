@@ -71,3 +71,8 @@ export interface BulkRefreshStatus {
     finishedAt: string | null;
     errorMessage: string | null;
 }
+
+export interface UpdateCalendarEventMutationVars {
+    id: number;
+    req: ManualCalendarEventReq;
+}

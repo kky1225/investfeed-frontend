@@ -46,3 +46,8 @@ export interface BrokerRealizedPnlItem {
     ytdPnl: number;
     allTimePnl: number;
 }
+
+export interface UpdateManualPnlMutationVars {
+    id: number;
+    req: ManualRealizedPnlUpdateReq;
+}

@@ -28,3 +28,8 @@ export const goalTypeLabel: Record<GoalType, string> = {
     MONTHLY_REALIZED_PNL: '월간 실현손익 목표',
     YEARLY_REALIZED_PNL: '연간 실현손익 목표',
 };
+
+export interface UpdateGoalMutationVars {
+    id: number;
+    req: InvestmentGoalUpdateReq;
+}
