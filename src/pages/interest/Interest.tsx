@@ -49,8 +49,8 @@ import {
 } from "../../api/interest/InterestApi.ts";
 import {AddItemMutationVars, CreateGroupReq, DeleteItemMutationVars, InterestGroup, InterestItem, ReorderItemsMutationVars, ReorderReq, UpdateGroupMutationVars} from "../../type/InterestType.ts";
 import {renderChip} from "../../components/CustomRender.tsx";
-import {fetchTimeNow} from "../../api/time/TimeApi.ts";
 import {MarketType} from "../../type/timeType.ts";
+import {fetchMarketInfo} from "../../lib/serverTime.ts";
 import {fetchStockSearch} from "../../api/stock/StockApi.ts";
 
 interface StockSearchItem {
@@ -276,10 +276,10 @@ const Interest = () => {
 
         (async () => {
             try {
-                const marketInfo = await fetchTimeNow({marketType: MarketType.STOCK});
+                const marketInfo = await fetchMarketInfo(MarketType.STOCK);
                 if (cancelled) return;
-                if (marketInfo.code !== "0000") throw new Error(marketInfo.message || `시장 시간 조회 실패 (${marketInfo.code})`);
-                if (!marketInfo.result.isMarketOpen) return;
+                if (!marketInfo) throw new Error(`시장 시간 조회 실패`);
+                if (!marketInfo.isMarketOpen) return;
 
                 const streamRes = await fetchInterestItemsStream(targetGroupId);
                 if (cancelled) return;

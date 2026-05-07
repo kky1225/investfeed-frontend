@@ -1,6 +1,7 @@
 import {useState} from "react";
 import {useMutation} from "@tanstack/react-query";
 import {requireOk} from "../../lib/apiResponse.ts";
+import {getServerNow} from "../../lib/serverTime.ts";
 import Dialog from "@mui/material/Dialog";
 import DialogTitle from "@mui/material/DialogTitle";
 import DialogContent from "@mui/material/DialogContent";
@@ -22,7 +23,7 @@ interface AddManualPnlDialogProps {
 }
 
 export default function AddManualPnlDialog({open, onClose, brokers, onCreated, createFn}: AddManualPnlDialogProps) {
-    const currentDate = new Date();
+    const currentDate = new Date(getServerNow());
     const [brokerId, setBrokerId] = useState<number>(0);
     const [year, setYear] = useState(currentDate.getFullYear());
     const [month, setMonth] = useState(currentDate.getMonth() + 1);

@@ -51,6 +51,7 @@ import {renderTradeColor, renderChangeAmount} from "../../components/CustomRende
 import FavoriteBorderIcon from "@mui/icons-material/FavoriteBorder";
 import {usePollingQuery} from "../../lib/pollingQuery.ts";
 import {parseTradeStamp} from "../../lib/tradeStamp.ts";
+import {getServerNow} from "../../lib/serverTime.ts";
 import FavoriteIcon from "@mui/icons-material/Favorite";
 import IconButton from "@mui/material/IconButton";
 import Button from "@mui/material/Button";
@@ -482,7 +483,7 @@ const StockDetail = () => {
         const {stockInfo} = result;
         const dvdList = (result as {dividendList?: StockDividendItem[]}).dividendList || [];
         if (dvdList.length === 0) return null;
-        const lastYear = (new Date().getFullYear() - 1).toString();
+        const lastYear = (new Date(getServerNow()).getFullYear() - 1).toString();
         const lastYearAmt = dvdList
             .filter((d: StockDividendItem) => d.dvdnBasDt?.substring(0, 4) === lastYear)
             .reduce((sum: number, d: StockDividendItem) => sum + Number(d.stckGenrDvdnAmt || 0), 0);
@@ -657,7 +658,7 @@ const StockDetail = () => {
 
         const todayProgram = stockProgramList[0];
         const netQty = Number(todayProgram.prmNetprpsQty);
-        const now = new Date();
+        const now = new Date(getServerNow());
         const hhmm = `${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}`;
 
         setProgramChartData(prev => prev.length === 0 ? prev : [...prev, netQty]);
@@ -1324,7 +1325,7 @@ const StockDetail = () => {
                                                                         {Number(item.stckGenrDvdnAmt || 0).toLocaleString()}원
                                                                     </Typography>
                                                                     {item.cashDvdnPayDt ? (
-                                                                        item.cashDvdnPayDt > new Date().toISOString().replace(/-/g, '').substring(0, 8)
+                                                                        item.cashDvdnPayDt > new Date(getServerNow()).toISOString().replace(/-/g, '').substring(0, 8)
                                                                             ? <Typography variant="caption" color="text.secondary">(미지급)</Typography>
                                                                             : <Typography variant="caption" color="text.secondary">
                                                                                 ({item.cashDvdnPayDt.substring(4, 6)}-{item.cashDvdnPayDt.substring(6, 8)} 지급)

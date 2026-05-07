@@ -32,6 +32,7 @@ import {useMutation, useQueryClient} from '@tanstack/react-query';
 import {requireOk} from '../../lib/apiResponse';
 import {useApiKeyStatus, apiKeyStatusKeys} from '../../context/ApiKeyStatusContext';
 import {useAlert} from '../../context/AlertContext';
+import {getServerNow} from '../../lib/serverTime';
 import type {ApiKeyReq} from '../../type/AuthType';
 
 function formatDateTime(dateStr: string) {
@@ -40,7 +41,7 @@ function formatDateTime(dateStr: string) {
 }
 
 function defaultExpiresAt(): string {
-    const d = new Date();
+    const d = new Date(getServerNow());
     d.setFullYear(d.getFullYear() + 1);
     return d.toISOString().slice(0, 10);
 }
@@ -51,7 +52,7 @@ function formatDate(dateStr: string) {
 }
 
 function getDaysLeft(dateStr: string): number {
-    const now = new Date();
+    const now = new Date(getServerNow());
     now.setHours(0, 0, 0, 0);
     const expires = new Date(dateStr);
     expires.setHours(0, 0, 0, 0);

@@ -29,12 +29,13 @@ import {
 } from '../../api/calendar/EconomicCalendarApi';
 import type {BulkRefreshReq, BulkRefreshStatus, CalendarEvent, ManualCalendarEventReq, UpdateCalendarEventMutationVars} from '../../type/EconomicCalendarType';
 import {requireOk} from '../../lib/apiResponse';
+import {getServerNow} from '../../lib/serverTime';
 import {useAlert} from '../../context/AlertContext';
 
 type TabKey = 'manual' | 'bulk';
 
 export default function CalendarManagement() {
-    const now = new Date();
+    const now = new Date(getServerNow());
     const queryClient = useQueryClient();
     const showAlert = useAlert();
     const [tab, setTab] = useState<TabKey>('manual');

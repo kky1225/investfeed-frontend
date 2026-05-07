@@ -6,8 +6,8 @@ import CardContent from "@mui/material/CardContent";
 import Stack from "@mui/material/Stack";
 import Skeleton from "@mui/material/Skeleton";
 import {useEffect, useMemo, useRef, useState} from "react";
-import {fetchTimeNow} from "../../api/time/TimeApi.ts";
 import {MarketType} from "../../type/timeType.ts";
+import {fetchMarketInfo, getServerNow, getServerOffset} from "../../lib/serverTime.ts";
 import CommodityLineChart, {CommodityLineChartProps} from "../../components/CommodityLineChart.tsx";
 import {fetchCommodityList, fetchCommodityStream} from "../../api/commodity/CommodityApi.ts";
 import FreshnessIndicator from "../../components/FreshnessIndicator.tsx";
@@ -103,34 +103,14 @@ const CommodityList = () => {
     const loading = isLoading;
 
     const timeNow = async () => {
-        try {
-            const startTime = Date.now();
-            const data = await fetchTimeNow({marketType: MarketType.COMMODITY});
+        const info = await fetchMarketInfo(MarketType.COMMODITY);
+        if (!info) return;
+        if (info.marketType !== MarketType.COMMODITY) return;
 
-            if (data.code !== "0000") {
-                throw new Error(data.message);
-            }
+        chartTimer.current = getServerOffset();
+        if (!info.isMarketOpen) marketTimer.current = info.startMarketTime - getServerNow();
 
-            const {time, isMarketOpen, startMarketTime, marketType} = data.result;
-
-            if (marketType !== MarketType.COMMODITY) {
-                throw new Error(data.message);
-            }
-
-            const endTime = Date.now();
-            const delayTime = endTime - startTime;
-            const revisionServerTime = time + delayTime / 2;
-
-            chartTimer.current = revisionServerTime - endTime;
-
-            if (!isMarketOpen) {
-                marketTimer.current = startMarketTime - revisionServerTime;
-            }
-
-            return {...data.result};
-        } catch (error) {
-            console.error(error);
-        }
+        return {...info};
     };
 
     const commodityListStream = async () => {

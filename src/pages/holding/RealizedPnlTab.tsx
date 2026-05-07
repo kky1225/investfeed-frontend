@@ -42,6 +42,7 @@ import {
 import AddManualPnlDialog from "./AddManualPnlDialog.tsx";
 import EditManualPnlDialog from "./EditManualPnlDialog.tsx";
 import {requireOk} from "../../lib/apiResponse.ts";
+import {getServerNow} from "../../lib/serverTime.ts";
 
 type ViewMode = 'monthly' | 'yearly' | 'all';
 
@@ -50,7 +51,7 @@ interface RealizedPnlTabProps {
 }
 
 export default function RealizedPnlTab({myBrokers}: RealizedPnlTabProps) {
-    const currentDate = new Date();
+    const currentDate = new Date(getServerNow());
     const queryClient = useQueryClient();
     const [selectedBrokerTab, setSelectedBrokerTab] = useState(0);
     const [viewMode, setViewMode] = useState<ViewMode>('monthly');

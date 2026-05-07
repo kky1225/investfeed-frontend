@@ -22,8 +22,8 @@ import DoNotDisturbIcon from '@mui/icons-material/DoNotDisturb';
 import {useNavigate} from "react-router-dom";
 import {ChartDay, DashboardIndexListItem, DashboardRes, InvestorTradeRankList} from "../../type/DashboardType.ts";
 import {fetchDashboard, fetchDashboardStream} from "../../api/dashboard/DashboardApi.ts";
-import {fetchTimeNow} from "../../api/time/TimeApi.ts";
 import {MarketType} from "../../type/timeType.ts";
+import {fetchMarketInfo, getServerNow, getServerOffset} from "../../lib/serverTime.ts";
 import {IndexStream, IndexStreamRes} from "../../type/IndexType.ts";
 import {usePollingQuery} from "../../lib/pollingQuery.ts";
 
@@ -182,26 +182,14 @@ export default function Dashboard() {
     const loading = isLoading;
 
     const timeNow = async () => {
-        try {
-            const startTime = Date.now();
-            const data = await fetchTimeNow({marketType: MarketType.INDEX});
+        const info = await fetchMarketInfo(MarketType.INDEX);
+        if (!info) return;
+        if (info.marketType !== MarketType.INDEX) return;
 
-            if (data.code !== "0000") throw new Error(data.message);
+        chartTimer.current = getServerOffset();
+        if (!info.isMarketOpen) marketTimer.current = info.startMarketTime - getServerNow();
 
-            const {time, isMarketOpen, startMarketTime, marketType} = data.result;
-            if (marketType !== MarketType.INDEX) throw new Error(data.message);
-
-            const endTime = Date.now();
-            const delayTime = endTime - startTime;
-            const revisionServerTime = time + delayTime / 2;
-
-            chartTimer.current = revisionServerTime - endTime;
-            if (!isMarketOpen) marketTimer.current = startMarketTime - revisionServerTime;
-
-            return {...data.result};
-        } catch (error) {
-            console.error(error);
-        }
+        return {...info};
     };
 
     const indexListStream = async () => {

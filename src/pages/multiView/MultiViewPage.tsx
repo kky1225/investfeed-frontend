@@ -7,8 +7,8 @@ import MultiViewSearchDialog from "./MultiViewSearchDialog.tsx";
 import type {SelectedAsset, StreamUpdate} from "../../type/MultiViewType.ts";
 import ChartDetailDialog from "./ChartDetailDialog.tsx";
 import {fetchMultiViewStockStream, fetchMultiViewCryptoStream} from "../../api/multiView/MultiViewApi.ts";
-import {fetchTimeNow} from "../../api/time/TimeApi.ts";
 import {MarketType} from "../../type/timeType.ts";
+import {fetchMarketInfo, getServerNow} from "../../lib/serverTime.ts";
 
 const STORAGE_KEY = 'multiView_panels';
 const MAX_PANELS = 4;
@@ -50,27 +50,26 @@ export default function MultiViewPage() {
     const cryptoBufferRef = useRef<Map<string, StreamUpdate>>(new Map());
     const [reloadKey, setReloadKey] = useState(0);
 
-    // 1분마다 reloadKey 증가 → 자식 패널 데이터 재조회 트리거 (정각 기준)
     useEffect(() => {
-        const now = Date.now();
-        const waitTime = 60_000 - (now % 60_000);
+        let timer: ReturnType<typeof setTimeout> | undefined;
+        let cancelled = false;
 
-        let interval: ReturnType<typeof setInterval> | undefined;
-
-        const timeout = setTimeout(() => {
-            setReloadKey(k => k + 1);
-            interval = setInterval(() => {
+        const schedule = () => {
+            const wait = 60_000 - (getServerNow() % 60_000) + 300;
+            timer = setTimeout(() => {
+                if (cancelled) return;
                 setReloadKey(k => k + 1);
-            }, 60_000);
-        }, waitTime + 200);
+                schedule();
+            }, wait);
+        };
+        schedule();
 
         return () => {
-            clearTimeout(timeout);
-            if (interval) clearInterval(interval);
+            cancelled = true;
+            if (timer) clearTimeout(timer);
         };
     }, []);
 
-    // localStorage 에 저장 — panels 변화에 따른 외부 시스템 동기화 (정당한 useEffect 케이스)
     useEffect(() => {
         localStorage.setItem(STORAGE_KEY, JSON.stringify(panels));
     }, [panels]);
@@ -142,15 +141,15 @@ export default function MultiViewPage() {
 
         (async () => {
             try {
-                const marketInfo = await fetchTimeNow({marketType: MarketType.STOCK});
-                if (marketInfo.result?.isMarketOpen) {
+                const marketInfo = await fetchMarketInfo(MarketType.STOCK);
+                if (marketInfo?.isMarketOpen) {
                     await connectSocket();
-                } else {
-                    const waitMs = marketInfo.result?.marketOpenRemainingMs ?? 0;
+                } else if (marketInfo) {
+                    const waitMs = marketInfo.startMarketTime - getServerNow();
                     if (waitMs > 0) {
                         socketTimeout = setTimeout(async () => {
-                            const again = await fetchTimeNow({marketType: MarketType.STOCK});
-                            if (again.result?.isMarketOpen) {
+                            const again = await fetchMarketInfo(MarketType.STOCK);
+                            if (again?.isMarketOpen) {
                                 await connectSocket();
                             }
                         }, waitMs + 200);

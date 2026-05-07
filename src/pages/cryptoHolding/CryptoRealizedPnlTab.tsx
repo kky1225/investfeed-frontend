@@ -41,6 +41,7 @@ import {
 import AddManualPnlDialog from "../holding/AddManualPnlDialog.tsx";
 import EditManualPnlDialog from "../holding/EditManualPnlDialog.tsx";
 import {requireOk} from "../../lib/apiResponse.ts";
+import {getServerNow} from "../../lib/serverTime.ts";
 
 type ViewMode = 'monthly' | 'yearly' | 'all';
 
@@ -49,7 +50,7 @@ interface CryptoRealizedPnlTabProps {
 }
 
 export default function CryptoRealizedPnlTab({myBrokers}: CryptoRealizedPnlTabProps) {
-    const currentDate = new Date();
+    const currentDate = new Date(getServerNow());
     const queryClient = useQueryClient();
     const [selectedBrokerTab, setSelectedBrokerTab] = useState(0);
     const [viewMode, setViewMode] = useState<ViewMode>('monthly');

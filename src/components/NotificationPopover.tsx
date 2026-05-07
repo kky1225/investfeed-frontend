@@ -12,6 +12,7 @@ import TrendingUpIcon from '@mui/icons-material/TrendingUp';
 import TrendingDownIcon from '@mui/icons-material/TrendingDown';
 import {useNotification} from '../context/NotificationContext';
 import type {Notification} from '../type/NotificationType';
+import {getServerNow} from '../lib/serverTime';
 
 interface NotificationPopoverProps {
     anchorEl: HTMLElement | null;
@@ -21,8 +22,7 @@ interface NotificationPopoverProps {
 
 function formatTime(createdAt: string) {
     const date = new Date(createdAt);
-    const now = new Date();
-    const diff = now.getTime() - date.getTime();
+    const diff = getServerNow() - date.getTime();
     const minutes = Math.floor(diff / 60000);
     if (minutes < 1) return '방금 전';
     if (minutes < 60) return `${minutes}분 전`;

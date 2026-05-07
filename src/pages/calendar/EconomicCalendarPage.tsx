@@ -19,12 +19,13 @@ import {fetchCalendarEvents, fetchEconomicIndicators, fetchIndicatorHistory} fro
 import type {CalendarEvent, EconomicIndicator, IndicatorHistoryRes} from "../../type/EconomicCalendarType.ts";
 import {LineChart} from "@mui/x-charts/LineChart";
 import {useTheme} from "@mui/material/styles";
+import {getServerNow} from "../../lib/serverTime.ts";
 
 const WEEKDAYS = ['일', '월', '화', '수', '목', '금', '토'];
 
 export default function EconomicCalendarPage() {
     const theme = useTheme();
-    const now = new Date();
+    const now = new Date(getServerNow());
     // 지표 값 + 단위 포맷: 숫자는 toLocaleString, 단위는 short suffix
     const formatIndicatorValue = (rawValue: string | number, unit: string): string => {
         const num = typeof rawValue === 'number' ? rawValue : Number(rawValue);

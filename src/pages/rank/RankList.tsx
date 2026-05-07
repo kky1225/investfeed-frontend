@@ -7,8 +7,8 @@ import * as React from "react";
 import {useEffect, useMemo, useRef, useState} from "react";
 import {fetchRankList, fetchRankStream} from "../../api/rank/RankApi.ts";
 import {Tab, Tabs} from "@mui/material";
-import {fetchTimeNow} from "../../api/time/TimeApi.ts";
 import {MarketType} from "../../type/timeType.ts";
+import {fetchMarketInfo, getServerNow, getServerOffset} from "../../lib/serverTime.ts";
 import {
     StockGridRow,
     StockStream,
@@ -131,26 +131,14 @@ const RankList = () => {
     const loading = isLoading;
 
     const timeNow = async () => {
-        try {
-            const startTime = Date.now();
-            const data = await fetchTimeNow({marketType: MarketType.STOCK});
+        const info = await fetchMarketInfo(MarketType.STOCK);
+        if (!info) return;
+        if (info.marketType !== MarketType.STOCK) return;
 
-            if (data.code !== "0000") throw new Error(data.message);
+        chartTimer.current = getServerOffset();
+        if (!info.isMarketOpen) marketTimer.current = info.startMarketTime - getServerNow();
 
-            const {time, isMarketOpen, startMarketTime, marketType} = data.result;
-            if (marketType !== MarketType.STOCK) throw new Error(data.message);
-
-            const endTime = Date.now();
-            const delayTime = endTime - startTime;
-            const revisionServerTime = time + delayTime / 2;
-
-            chartTimer.current = revisionServerTime - endTime;
-            if (!isMarketOpen) marketTimer.current = startMarketTime - revisionServerTime;
-
-            return {...data.result};
-        } catch (error) {
-            console.error(error);
-        }
+        return {...info};
     };
 
     const openSocket = () => {

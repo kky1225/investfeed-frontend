@@ -9,8 +9,8 @@ import {useEffect, useMemo, useRef, useState} from "react";
 import {useNavigate, useParams} from "react-router-dom";
 import * as React from "react";
 import {SectListItem, SectListReq, SectListRes, SectListStream, SectListStreamReq, SectListStreamRes} from "../../type/SectType.ts";
-import {fetchTimeNow} from "../../api/time/TimeApi.ts";
 import {MarketType} from "../../type/timeType.ts";
+import {fetchMarketInfo, getServerNow, getServerOffset} from "../../lib/serverTime.ts";
 import {fetchSectList, fetchSectListStream} from "../../api/sect/SectApi.ts";
 import SectCard, {SectCardProps} from "../../components/SectCard.tsx";
 import FreshnessIndicator from "../../components/FreshnessIndicator.tsx";
@@ -67,27 +67,14 @@ const SectList = () => {
     const loading = isLoading;
 
     const timeNow = async () => {
-        try {
-            const startTime = Date.now();
-            const data = await fetchTimeNow({marketType: MarketType.INDEX});
+        const info = await fetchMarketInfo(MarketType.INDEX);
+        if (!info) return;
+        if (info.marketType !== MarketType.INDEX) return;
 
-            if (data.code !== "0000") throw new Error(data.message);
+        chartTimer.current = getServerOffset();
+        if (!info.isMarketOpen) marketTimer.current = info.startMarketTime - getServerNow();
 
-            const {time, isMarketOpen, startMarketTime, marketType} = data.result;
-
-            if (marketType !== MarketType.INDEX) throw new Error(data.message);
-
-            const endTime = Date.now();
-            const delayTime = endTime - startTime;
-            const revisionServerTime = time + delayTime / 2;
-
-            chartTimer.current = revisionServerTime - endTime;
-            if (!isMarketOpen) marketTimer.current = startMarketTime - revisionServerTime;
-
-            return {...data.result};
-        } catch (error) {
-            console.error(error);
-        }
+        return {...info};
     };
 
     const sectListStream = async (req: SectListStreamReq) => {

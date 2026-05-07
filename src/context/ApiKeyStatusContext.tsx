@@ -4,6 +4,7 @@ import { fetchApiKeys } from '../api/auth/AuthApi';
 import { fetchBrokerList, fetchMyBrokerList } from '../api/broker/BrokerApi';
 import { fetchMyCryptoBrokerList } from '../api/cryptoBroker/CryptoBrokerApi';
 import { requireOk } from '../lib/apiResponse';
+import { getServerNow } from '../lib/serverTime';
 import type { ApiKeyRes } from '../type/AuthType';
 import type { Broker, MemberBroker } from '../type/BrokerType';
 import { useAuth } from './AuthContext';
@@ -91,15 +92,13 @@ export function ApiKeyStatusProvider({ children }: { children: ReactNode }) {
     const myStockBrokers = myStockBrokersQuery.data ?? [];
     const myCryptoBrokers = myCryptoBrokersQuery.data ?? [];
 
-    /** 전체 broker 중 type='API' 만 필터 */
     const apiBrokers = useMemo(
         () => (brokersQuery.data ?? []).filter((b) => b.type === 'API'),
         [brokersQuery.data],
     );
 
-    /** 등록 API Key 중 만료되지 않은 broker id 자동 계산 */
     const validBrokerIds = useMemo(() => {
-        const now = Date.now();
+        const now = getServerNow();
         return new Set<number>(
             apiKeys
                 .filter((k) => new Date(k.expiresAt).getTime() > now)

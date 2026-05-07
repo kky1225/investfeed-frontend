@@ -40,18 +40,13 @@ export function parseTradeStamp(raw: string | undefined | null): number {
     return Number.isFinite(t) ? t : 0;
 }
 
-/**
- * 키움 시세 stamp — 폴링은 yyyyMMddHHmm (12자리) 형태이지만
- * WS values["20"] 는 HHmmss (6자리) 만 보낼 수 있다. 6자리 입력은 오늘 날짜를
- * prefix 로 붙여 epoch ms 로 정규화 → 폴링 stamp 와 같은 단위로 비교 가능.
- *
- * 8자리 이상은 parseTradeStamp 위임.
- */
+import {getServerNow} from './serverTime';
+
 export function parseKiwoomStamp(raw: string | undefined | null): number {
     if (!raw) return 0;
     const cleaned = raw.replace(/\s+/g, '');
     if (/^\d{1,6}$/.test(cleaned)) {
-        const now = new Date();
+        const now = new Date(getServerNow());
         const ymd = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}`;
         return parseTradeStamp(ymd + cleaned.padStart(6, '0'));
     }

@@ -1,6 +1,7 @@
 import {useState} from 'react';
 import {useMutation, useQuery, useQueryClient} from '@tanstack/react-query';
 import {requireOk} from '../../lib/apiResponse';
+import {getServerNow} from '../../lib/serverTime';
 import {useNavigate} from 'react-router-dom';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
@@ -53,7 +54,7 @@ function matchesTypeFilter(notificationType: string, filter: TypeFilter): boolea
 function matchesPeriod(createdAt: string, period: PeriodFilter): boolean {
     if (period === 'ALL') return true;
     const d = new Date(createdAt);
-    const now = new Date();
+    const now = new Date(getServerNow());
     if (period === 'TODAY') {
         return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth() && d.getDate() === now.getDate();
     }
@@ -72,7 +73,7 @@ function matchesPeriod(createdAt: string, period: PeriodFilter): boolean {
 
 function formatDate(dateStr: string) {
     const date = new Date(dateStr);
-    const now = new Date();
+    const now = new Date(getServerNow());
     const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
     const target = new Date(date.getFullYear(), date.getMonth(), date.getDate());
     const diff = today.getTime() - target.getTime();

@@ -1,7 +1,9 @@
+import {useEffect} from 'react';
 import {useQuery, type QueryKey, type UseQueryOptions} from '@tanstack/react-query';
 import type {AxiosRequestConfig} from 'axios';
 import type {ApiResponse} from '../type/AuthType';
 import {requireOk} from './apiResponse';
+import {getServerNow} from './serverTime';
 
 export interface PollingFetchConfig extends AxiosRequestConfig {
     skipGlobalError?: boolean;
@@ -32,10 +34,34 @@ export function usePollingQuery<T = any>(
     const query = useQuery<T | null>({
         queryKey,
         queryFn: async ({signal}) => requireOk<T | null>(await fetcher({signal, skipGlobalError: true}), fallback),
-        refetchInterval: intervalMs,
+        refetchInterval: intervalMs === 60_000 ? false : intervalMs,
         refetchIntervalInBackground: false,
         ...rest,
     });
+
+    useEffect(() => {
+        if (intervalMs !== 60_000) return;
+
+        let timer: ReturnType<typeof setTimeout> | undefined;
+        let cancelled = false;
+
+        const schedule = () => {
+            const serverNow = getServerNow();
+            const wait = 60_000 - (serverNow % 60_000) + 300;
+            timer = setTimeout(() => {
+                if (cancelled) return;
+                query.refetch();
+                schedule();
+            }, wait);
+        };
+        schedule();
+
+        return () => {
+            cancelled = true;
+            if (timer) clearTimeout(timer);
+        };
+    }, [intervalMs]);
+
     return {
         ...query,
         lastUpdated: query.data ? new Date(query.dataUpdatedAt) : null,

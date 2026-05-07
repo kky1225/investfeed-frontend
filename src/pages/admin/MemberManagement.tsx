@@ -1,6 +1,7 @@
 import {useState} from 'react';
 import {useMutation, useQuery, useQueryClient} from '@tanstack/react-query';
 import {requireOk} from '../../lib/apiResponse';
+import {getServerNow} from '../../lib/serverTime';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
 import Button from '@mui/material/Button';
@@ -43,7 +44,7 @@ function formatDateTime(dateStr: string | null) {
 function isAccountLocked(member: MemberRes): boolean {
     if (!member.lockedAt) return false;
     if (member.permanentLock) return true;
-    if (member.lockExpiresAt && new Date(member.lockExpiresAt) <= new Date()) return false;
+    if (member.lockExpiresAt && new Date(member.lockExpiresAt).getTime() <= getServerNow()) return false;
     return true;
 }
 

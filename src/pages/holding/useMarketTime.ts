@@ -1,5 +1,5 @@
 import {useCallback, useRef} from "react";
-import {fetchTimeNow} from "../../api/time/TimeApi.ts";
+import {fetchMarketInfo, getServerNow, getServerOffset} from "../../lib/serverTime.ts";
 import {MarketType} from "../../type/timeType.ts";
 
 interface MarketTimeInfo {
@@ -14,30 +14,22 @@ export function useMarketTime(marketType: MarketType) {
     const marketTimer = useRef(0);
 
     const checkMarketTime = useCallback(async (): Promise<MarketTimeInfo | undefined> => {
-        try {
-            const startTime = Date.now();
-            const data = await fetchTimeNow({marketType});
+        const info = await fetchMarketInfo(marketType);
+        if (!info) return;
+        if (info.marketType !== marketType) return;
 
-            if (data.code !== "0000") throw new Error(data.message);
+        chartTimer.current = getServerOffset();
 
-            const {time, isMarketOpen, startMarketTime, marketType: resMarketType} = data.result;
-
-            if (resMarketType !== marketType) throw new Error(data.message);
-
-            const endTime = Date.now();
-            const delayTime = endTime - startTime;
-            const revisionServerTime = time + delayTime / 2;
-
-            chartTimer.current = revisionServerTime - endTime;
-
-            if (!isMarketOpen) {
-                marketTimer.current = startMarketTime - revisionServerTime;
-            }
-
-            return data.result;
-        } catch (error) {
-            console.error(error);
+        if (!info.isMarketOpen) {
+            marketTimer.current = info.startMarketTime - getServerNow();
         }
+
+        return {
+            isMarketOpen: info.isMarketOpen,
+            time: info.time,
+            startMarketTime: info.startMarketTime,
+            marketType: info.marketType,
+        };
     }, [marketType]);
 
     return {checkMarketTime, chartTimer, marketTimer};
