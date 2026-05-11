@@ -61,8 +61,12 @@ export const updateSchedulerTimeout = async (
     return res.data;
 };
 
-export const triggerScheduler = async (name: string): Promise<ApiResponse<TriggerSchedulerRes>> => {
-    const res = await api.post<ApiResponse<TriggerSchedulerRes>>(`/admin/monitoring/scheduler-status/${encodeURIComponent(name)}/trigger`);
+export const triggerScheduler = async (name: string, force: boolean = false): Promise<ApiResponse<TriggerSchedulerRes>> => {
+    const res = await api.post<ApiResponse<TriggerSchedulerRes>>(
+        `/admin/monitoring/scheduler-status/${encodeURIComponent(name)}/trigger`,
+        null,
+        { params: { force } },
+    );
     return res.data;
 };
 

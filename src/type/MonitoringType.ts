@@ -5,6 +5,7 @@ export interface SchedulerCatalogRes {
     schedulerType: 'FAST' | 'SLOW';
     defaultTimeoutSec: number;
     label: string;
+    blockedOnHoliday: boolean;
 }
 
 export interface SchedulerStatusRes {
@@ -78,6 +79,7 @@ export interface SchedulerOverviewRes {
     statuses: SchedulerStatusRes[];
     logs: PageRes<SchedulerLogRes>;
     unackCount: UnacknowledgedCountRes;
+    isHoliday: boolean;
 }
 
 export interface ConfigLogsOverviewRes {

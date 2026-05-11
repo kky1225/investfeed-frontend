@@ -1,5 +1,6 @@
-import {Box} from "@mui/material";
+import {Box, Tooltip} from "@mui/material";
 import Typography from "@mui/material/Typography";
+import InfoOutlinedIcon from "@mui/icons-material/InfoOutlined";
 import Grid from "@mui/material/Grid";
 import Card from "@mui/material/Card";
 import CardContent from "@mui/material/CardContent";
@@ -49,36 +50,46 @@ const RecommendList = () => {
         setLiveOverlay(new Map());
     }, [result]);
 
+    // STRONG을 먼저 보여주기 위한 정렬 가중치
+    const buyOrder: Record<string, number> = { STRONG_BUY: 0, BUY: 1 };
+    const sellOrder: Record<string, number> = { STRONG_SELL: 0, SELL: 1 };
+
+    const toCardProps = (item: RecommendListItem): RecommendCardProps => {
+        const live = liveOverlay.get(item.stkCd);
+        return {
+            id: item.stkCd,
+            title: item.stkNm,
+            value: live?.value ?? Number(item.curPrc.replace(/^[+-]/, '')).toLocaleString(),
+            changeAmount: live?.changeAmount ?? (item.predPre ?? '0'),
+            fluRt: live?.fluRt ?? item.fluRt,
+            trend: live?.trend ?? trendColor(item.preSig),
+            type: item.type,
+            todayDirection: item.todayDirection,
+            isHolding: item.isHolding,
+            streakDays: item.streakDays,
+        };
+    };
+
     const recommendDataList: RecommendCardProps[] = useMemo(() => {
         if (!result) return [];
         const list: RecommendListItem[] = result.recommendList ?? [];
-        return list.map((item) => {
-            const live = liveOverlay.get(item.stkCd);
-            return {
-                id: item.stkCd,
-                title: item.stkNm,
-                value: live?.value ?? Number(item.curPrc.replace(/^[+-]/, '')).toLocaleString(),
-                changeAmount: live?.changeAmount ?? (item.predPre ?? '0'),
-                fluRt: live?.fluRt ?? item.fluRt,
-                trend: live?.trend ?? trendColor(item.preSig),
-            };
-        });
+        return [...list]
+            .sort((a, b) => (buyOrder[a.type] ?? 99) - (buyOrder[b.type] ?? 99))
+            .map(toCardProps);
     }, [result, liveOverlay]);
 
     const avoidDataList: RecommendCardProps[] = useMemo(() => {
         if (!result) return [];
         const list: RecommendListItem[] = result.avoidList ?? [];
-        return list.map((item) => {
-            const live = liveOverlay.get(item.stkCd);
-            return {
-                id: item.stkCd,
-                title: item.stkNm,
-                value: live?.value ?? Number(item.curPrc.replace(/^[+-]/, '')).toLocaleString(),
-                changeAmount: live?.changeAmount ?? (item.predPre ?? '0'),
-                fluRt: live?.fluRt ?? item.fluRt,
-                trend: live?.trend ?? trendColor(item.preSig),
-            };
-        });
+        return [...list]
+            .sort((a, b) => (sellOrder[a.type] ?? 99) - (sellOrder[b.type] ?? 99))
+            .map(toCardProps);
+    }, [result, liveOverlay]);
+
+    const holdDataList: RecommendCardProps[] = useMemo(() => {
+        if (!result) return [];
+        const list: RecommendListItem[] = result.holdList ?? [];
+        return list.map(toCardProps);
     }, [result, liveOverlay]);
 
     const loading = isLoading;
@@ -135,12 +146,13 @@ const RecommendList = () => {
         return socket;
     };
 
-    // WebSocket 라이프사이클 — recommend/avoid 종목 stkCd 들로 stream 등록.
+    // WebSocket 라이프사이클 — recommend/avoid/hold 종목 stkCd 들로 stream 등록.
     useEffect(() => {
         if (!result) return;
         const items = [
             ...(result.recommendList ?? []),
             ...(result.avoidList ?? []),
+            ...(result.holdList ?? []),
         ].map((r: RecommendListItem) => r.stkCd);
         if (items.length === 0) return;
 
@@ -178,9 +190,14 @@ const RecommendList = () => {
     return (
         <Box sx={{width: '100%', maxWidth: {sm: '100%', md: '1700px'}}}>
             <Box sx={{display: 'flex', alignItems: 'center', mb: 2, gap: 2}}>
-                <Typography component="h2" variant="h6">
-                    추천 목록
-                </Typography>
+                <Stack direction="row" alignItems="center" spacing={0.5}>
+                    <Typography component="h2" variant="h6" sx={{lineHeight: 1}}>
+                        추천 목록
+                    </Typography>
+                    <Tooltip title="이 리포트는 직전 거래일 종가 기준으로 작성되며, 매 거래일 22:00에 갱신됩니다." arrow>
+                        <InfoOutlinedIcon fontSize="small" sx={{color: 'text.secondary', display: 'block'}}/>
+                    </Tooltip>
+                </Stack>
                 <Box sx={{flex: 1}}/>
                 <FreshnessIndicator lastUpdated={lastUpdated} error={pollError}/>
             </Box>
@@ -255,6 +272,40 @@ const RecommendList = () => {
                                     <RecommendCard {...data} />
                                 </Grid>
                             )) : <p>매도 추천 종목 없음</p>
+                        }
+                    </Grid>
+                </Box>
+                <Typography component="h2" variant="h6">
+                    관망
+                </Typography>
+                <Box sx={{width: '100%'}}>
+                    <Grid
+                        container
+                        spacing={2}
+                        columns={12}
+                        sx={{mt: 1, mb: (theme) => theme.spacing(2)}}
+                    >
+                        {loading ? (
+                            Array.from({length: 4}).map((_, index) => (
+                                <Grid key={index} size={{xs: 12, md: 6}}>
+                                    <Card variant="outlined" sx={{width: '100%'}}>
+                                        <CardContent>
+                                            <Skeleton width={140} height={24}/>
+                                            <Stack direction="row" spacing={1} sx={{alignItems: 'center', mt: 1}}>
+                                                <Skeleton width={120} height={40}/>
+                                                <Skeleton width={60}/>
+                                                <Skeleton variant="rounded" width={60} height={24}/>
+                                            </Stack>
+                                        </CardContent>
+                                    </Card>
+                                </Grid>
+                            ))
+                        ) : holdDataList.length > 0 ?
+                            holdDataList.map((data: RecommendCardProps, index: number) => (
+                                <Grid key={index} size={{xs: 12, md: 6}}>
+                                    <RecommendCard {...data} />
+                                </Grid>
+                            )) : <p>관망 종목 없음</p>
                         }
                     </Grid>
                 </Box>

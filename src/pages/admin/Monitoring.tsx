@@ -1,5 +1,6 @@
 import {useState} from 'react';
-import {useMutation, useQuery, useQueryClient} from '@tanstack/react-query';
+import {useMutation, useQueryClient} from '@tanstack/react-query';
+import {usePollingQuery} from '../../lib/pollingQuery';
 import {requireOk} from '../../lib/apiResponse';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
@@ -74,6 +75,12 @@ import type {
     LogAckHistoryRes,
     UnacknowledgedCountRes,
     ApiCallStatsItemRes,
+    SchedulerOverviewRes,
+    ConfigLogsOverviewRes,
+    RedisOverviewRes,
+    ErrorLogsOverviewRes,
+    ApiCallsOverviewRes,
+    SystemOverviewRes,
 } from '../../type/MonitoringType';
 
 type TabKey = 'scheduler' | 'config' | 'redis' | 'error' | 'apicall' | 'system';
@@ -128,6 +135,7 @@ export default function Monitoring() {
     const [ackEditing, setAckEditing] = useState(false);
     const [triggerTarget, setTriggerTarget] = useState<SchedulerStatusRes | null>(null);
     const [triggering, setTriggering] = useState(false);
+    const [triggerForce, setTriggerForce] = useState(false);
     const [menuAnchorEl, setMenuAnchorEl] = useState<HTMLElement | null>(null);
     const [menuTarget, setMenuTarget] = useState<SchedulerStatusRes | null>(null);
     // 스케줄러 로그 필터 ('' = 전체)
@@ -152,16 +160,17 @@ export default function Monitoring() {
     const [bulkAckSaving, setBulkAckSaving] = useState(false);
 
     // ============================================================================
-    // 탭별 useQuery — enabled 조건으로 비활성 탭은 폴링 정지 (네비게이션 시 자동 cleanup)
+    // 탭별 usePollingQuery — enabled 조건으로 비활성 탭은 폴링 정지 (네비게이션 시 자동 cleanup)
     // 모든 탭의 응답에 unackCount 포함됨 — 활성 탭의 data에서 직접 파생.
+    // 60초 간격, 분 정각(+300ms) 정렬 — 다른 페이지(시세/추천 등)와 동기화.
     // ============================================================================
-    const schedulerQuery = useQuery({
-        queryKey: ['monitoring', 'scheduler', logsPage, logsSize,
+    const schedulerQuery = usePollingQuery<SchedulerOverviewRes>(
+        ['monitoring', 'scheduler', logsPage, logsSize,
             logsSchedulerFilter, logsStatusFilter, logsUnackOnly,
             logsFromDate ? logsFromDate.format('YYYY-MM-DD') : null,
             logsToDate ? logsToDate.format('YYYY-MM-DD') : null,
             logsMessageKeyword],
-        queryFn: async ({signal}) => requireOk(await fetchSchedulerOverview({
+        (config) => fetchSchedulerOverview({
             page: logsPage,
             size: logsSize,
             schedulerName: logsSchedulerFilter || null,
@@ -170,64 +179,52 @@ export default function Monitoring() {
             fromDate: logsFromDate ? logsFromDate.format('YYYY-MM-DD') : null,
             toDate: logsToDate ? logsToDate.format('YYYY-MM-DD') : null,
             messageKeyword: logsMessageKeyword || null,
-        }, {signal, skipGlobalError: true}), null),
-        enabled: tab === 'scheduler',
-        refetchInterval: 60_000,
-        refetchIntervalInBackground: false,
-    });
+        }, config),
+        {enabled: tab === 'scheduler'},
+    );
 
-    const configQuery = useQuery({
-        queryKey: ['monitoring', 'config', configLogsPage, configLogsSize],
-        queryFn: async ({signal}) => requireOk(await fetchConfigLogsOverview(
+    const configQuery = usePollingQuery<ConfigLogsOverviewRes>(
+        ['monitoring', 'config', configLogsPage, configLogsSize],
+        (config) => fetchConfigLogsOverview(
             {page: configLogsPage, size: configLogsSize},
-            {signal, skipGlobalError: true},
-        ), null),
-        enabled: tab === 'config',
-        refetchInterval: 60_000,
-        refetchIntervalInBackground: false,
-    });
+            config,
+        ),
+        {enabled: tab === 'config'},
+    );
 
-    const redisQuery = useQuery({
-        queryKey: ['monitoring', 'redis'],
-        queryFn: async ({signal}) => requireOk(await fetchRedisOverview({signal, skipGlobalError: true}), null),
-        enabled: tab === 'redis',
-        refetchInterval: 60_000,
-        refetchIntervalInBackground: false,
-    });
+    const redisQuery = usePollingQuery<RedisOverviewRes>(
+        ['monitoring', 'redis'],
+        (config) => fetchRedisOverview(config),
+        {enabled: tab === 'redis'},
+    );
 
-    const errorQuery = useQuery({
-        queryKey: ['monitoring', 'error', errorLogsPage, errorLogsSize, errorUnackOnly,
+    const errorQuery = usePollingQuery<ErrorLogsOverviewRes>(
+        ['monitoring', 'error', errorLogsPage, errorLogsSize, errorUnackOnly,
             errorFromDate ? errorFromDate.format('YYYY-MM-DD') : null,
             errorToDate ? errorToDate.format('YYYY-MM-DD') : null,
             errorMessageKeyword],
-        queryFn: async ({signal}) => requireOk(await fetchErrorLogsOverview({
+        (config) => fetchErrorLogsOverview({
             page: errorLogsPage,
             size: errorLogsSize,
             acknowledged: errorUnackOnly ? false : null,
             fromDate: errorFromDate ? errorFromDate.format('YYYY-MM-DD') : null,
             toDate: errorToDate ? errorToDate.format('YYYY-MM-DD') : null,
             messageKeyword: errorMessageKeyword || null,
-        }, {signal, skipGlobalError: true}), null),
-        enabled: tab === 'error',
-        refetchInterval: 60_000,
-        refetchIntervalInBackground: false,
-    });
+        }, config),
+        {enabled: tab === 'error'},
+    );
 
-    const apiCallQuery = useQuery({
-        queryKey: ['monitoring', 'apicall'],
-        queryFn: async ({signal}) => requireOk(await fetchApiCallsOverview({signal, skipGlobalError: true}), null),
-        enabled: tab === 'apicall',
-        refetchInterval: 60_000,
-        refetchIntervalInBackground: false,
-    });
+    const apiCallQuery = usePollingQuery<ApiCallsOverviewRes>(
+        ['monitoring', 'apicall'],
+        (config) => fetchApiCallsOverview(config),
+        {enabled: tab === 'apicall'},
+    );
 
-    const systemQuery = useQuery({
-        queryKey: ['monitoring', 'system'],
-        queryFn: async ({signal}) => requireOk(await fetchSystemOverview({signal, skipGlobalError: true}), null),
-        enabled: tab === 'system',
-        refetchInterval: 60_000,
-        refetchIntervalInBackground: false,
-    });
+    const systemQuery = usePollingQuery<SystemOverviewRes>(
+        ['monitoring', 'system'],
+        (config) => fetchSystemOverview(config),
+        {enabled: tab === 'system'},
+    );
 
     // 활성 탭 query (loading/lastUpdated/error 파생용)
     const activeQuery = tab === 'scheduler' ? schedulerQuery
@@ -239,6 +236,10 @@ export default function Monitoring() {
 
     // 탭별 데이터 파생
     const catalog: SchedulerCatalogRes[] = schedulerQuery.data?.catalog ?? [];
+    const isHoliday: boolean = schedulerQuery.data?.isHoliday ?? false;
+    const catalogByName: Record<string, SchedulerCatalogRes> = Object.fromEntries(catalog.map((c) => [c.schedulerName, c]));
+    const isHolidayBlocked = (schedulerName: string): boolean =>
+        isHoliday && (catalogByName[schedulerName]?.blockedOnHoliday ?? false);
     const statuses: SchedulerStatusRes[] = schedulerQuery.data?.statuses ?? [];
     const logs: SchedulerLogRes[] = schedulerQuery.data?.logs?.content ?? [];
     const logsTotal = schedulerQuery.data?.logs?.totalElements ?? 0;
@@ -281,17 +282,20 @@ export default function Monitoring() {
     };
     const openTrigger = (s: SchedulerStatusRes) => {
         setTriggerTarget(s);
+        setTriggerForce(false);
     };
     const closeTrigger = () => {
         if (triggering) return;
         setTriggerTarget(null);
+        setTriggerForce(false);
     };
     const confirmTrigger = async () => {
         if (!triggerTarget) return;
         setTriggering(true);
         try {
-            await triggerScheduler(triggerTarget.schedulerName);
+            await triggerScheduler(triggerTarget.schedulerName, triggerForce);
             setTriggerTarget(null);
+            setTriggerForce(false);
             // 약간 지연 후 refresh (백그라운드 실행 반영 위해)
             setTimeout(reloadCurrentTab, 1500);
         } catch (e) {
@@ -1215,10 +1219,24 @@ export default function Monitoring() {
                     </MenuItem>
                 )}
                 {menuTarget && menuTarget.schedulerType === 'SLOW' && (
-                    <MenuItem onClick={() => { openTrigger(menuTarget); setMenuAnchorEl(null); }}>
-                        <ListItemIcon><PlayArrowIcon fontSize="small" color="primary"/></ListItemIcon>
-                        <ListItemText>지금 실행</ListItemText>
-                    </MenuItem>
+                    (() => {
+                        const blocked = isHolidayBlocked(menuTarget.schedulerName);
+                        const item = (
+                            <MenuItem
+                                onClick={() => { openTrigger(menuTarget); setMenuAnchorEl(null); }}
+                            >
+                                <ListItemIcon>
+                                    <PlayArrowIcon fontSize="small" color={blocked ? 'warning' : 'primary'}/>
+                                </ListItemIcon>
+                                <ListItemText>지금 실행</ListItemText>
+                            </MenuItem>
+                        );
+                        return blocked ? (
+                            <Tooltip title="휴일 — 강제 실행 옵션이 표시됩니다" placement="left">
+                                <span>{item}</span>
+                            </Tooltip>
+                        ) : item;
+                    })()
                 )}
             </Menu>
 
@@ -1387,14 +1405,46 @@ export default function Monitoring() {
                 <DialogTitle>스케줄러 수동 실행</DialogTitle>
                 <DialogContent>
                     {triggerTarget && (
-                        <Typography variant="body2">
-                            <b>{triggerTarget.schedulerName}</b> 를 지금 즉시 실행합니다.
-                        </Typography>
+                        <>
+                            <Typography variant="body2">
+                                <b>{triggerTarget.schedulerName}</b> 를 지금 즉시 실행합니다.
+                            </Typography>
+                            {isHolidayBlocked(triggerTarget.schedulerName) && (
+                                <Box sx={{mt: 1.5}}>
+                                    <Typography variant="caption" color="warning.main" sx={{display: 'block'}}>
+                                        휴일에는 자동 실행이 차단된 스케줄러입니다.
+                                    </Typography>
+                                    <FormControlLabel
+                                        sx={{mt: 0.5}}
+                                        control={
+                                            <Checkbox
+                                                size="small"
+                                                checked={triggerForce}
+                                                onChange={(e) => setTriggerForce(e.target.checked)}
+                                            />
+                                        }
+                                        label={
+                                            <Typography variant="caption">
+                                                강제 실행 (직전 거래일 기준 데이터로 갱신)
+                                            </Typography>
+                                        }
+                                    />
+                                </Box>
+                            )}
+                        </>
                     )}
                 </DialogContent>
                 <DialogActions>
                     <Button onClick={closeTrigger} disabled={triggering}>취소</Button>
-                    <Button onClick={confirmTrigger} disabled={triggering} variant="contained" color="primary">실행</Button>
+                    <Button
+                        onClick={confirmTrigger}
+                        disabled={
+                            triggering ||
+                            (!!triggerTarget && isHolidayBlocked(triggerTarget.schedulerName) && !triggerForce)
+                        }
+                        variant="contained"
+                        color="primary"
+                    >실행</Button>
                 </DialogActions>
             </Dialog>
 

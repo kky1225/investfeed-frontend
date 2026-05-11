@@ -10,6 +10,8 @@ const api = axios.create({
 let isRefreshing = false;
 let failedQueue: Array<{ resolve: (value: unknown) => void; reject: (reason?: unknown) => void }> = [];
 
+let isSessionExpired = false;
+
 let isSecondaryAuthPending = false;
 let secondaryAuthQueue: Array<{ resolve: (value: unknown) => void; reject: (reason?: unknown) => void }> = [];
 
@@ -24,6 +26,11 @@ api.interceptors.response.use(
         const isSecondaryPasswordRequest = originalRequest.url?.startsWith('/auth/secondary-password/');
 
         if (error.response?.status === 401 && !originalRequest._retry && !isLoginRequest && !isReissueRequest) {
+            // 이미 세션 만료 처리가 시작된 경우 후속 401 은 reissue 재시도 없이 reject.
+            // (login 페이지 redirect 중 잔여 401 들이 또 reissue 시도해서 다이얼로그 재오픈하는 것 차단)
+            if (isSessionExpired) {
+                return Promise.reject(error);
+            }
             if (isRefreshing) {
                 return new Promise((resolve, reject) => {
                     failedQueue.push({ resolve, reject });
@@ -50,6 +57,8 @@ api.interceptors.response.use(
                 return api(originalRequest);
             } catch (refreshError) {
                 console.error(refreshError);
+                // 세션 만료 latch — 후속 401 들이 reissue 재시도하지 않도록 먼저 set.
+                isSessionExpired = true;
                 processQueue(refreshError);
                 // 세션 만료 — 기존 조용한 리다이렉트 대신 App.tsx 의 Dialog 가 확인 버튼을 띄우고
                 // 사용자가 확인하면 sessionStorage clear + /login 이동. 일반 에러 Dialog 와 분리.
