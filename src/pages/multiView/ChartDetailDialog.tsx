@@ -163,6 +163,8 @@ export default function ChartDetailDialog({open, onClose, assetType, code, name}
                 return {
                     id: stockInfo.stkCd, title: stockInfo.stkNm,
                     orderWarning: stockInfo.orderWarning ?? '',
+                    auditInfo: stockInfo.auditInfo ?? '',
+                    state: stockInfo.state ?? '',
                     value: Number(String(stockInfo.curPrc).replace(/^[+-]/, '')).toLocaleString(),
                     fluRt: stockInfo.fluRt, predPre: stockInfo.predPre || '0',
                     openPric: parseFloat(stockInfo.openPric), interval,
@@ -218,7 +220,7 @@ export default function ChartDetailDialog({open, onClose, assetType, code, name}
                     : '';
 
                 return {
-                    id: code, title: commodityInfo.stkNm, orderWarning: '',
+                    id: code, title: commodityInfo.stkNm, orderWarning: '', auditInfo: '', state: '',
                     value: Number(String(commodityInfo.curPrc).replace(/^[+-]/, '')).toLocaleString(),
                     fluRt: commodityInfo.fluRt ?? '0', predPre: commodityInfo.predPre ?? '0',
                     openPric: parseFloat(commodityInfo.openPric ?? '0'), interval,

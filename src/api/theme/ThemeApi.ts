@@ -13,6 +13,6 @@ export const fetchThemeStockList = async (themaGrpCd: string, req: ThemeStockLis
 }
 
 export const fetchThemeStockListStream = async (req: ThemeStockListStreamReq) => {
-    const res = await api.post(`/stock/themes/stocks/stream`, {params: req});
+    const res = await api.post(`/stock/themes/stocks/stream`, req);
     return res.data;
 }

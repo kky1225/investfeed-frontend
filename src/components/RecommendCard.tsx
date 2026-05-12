@@ -66,7 +66,6 @@ const RecommendCard = (
     const isBuySide = type === 'STRONG_BUY' || type === 'BUY';
     const isSellSide = type === 'STRONG_SELL' || type === 'SELL';
     const showStreak = !!streakDays && streakDays >= 2 && (isBuySide || isSellSide);
-    const streakColor = isBuySide ? '#e53935' : '#1e88e5';
     const streakLabel = `${streakDays}일연속 ${isBuySide ? 'BUY' : 'SELL'} REPORT`;
 
     return (
@@ -107,7 +106,7 @@ const RecommendCard = (
                                     ) : (
                                         <ErrorOutlineIcon
                                             fontSize="small"
-                                            sx={{ color: 'warning.main', mb: 0.5 }}
+                                            sx={{ color: 'error.main', mb: 0.5 }}
                                         />
                                     )}
                                 </Tooltip>
@@ -152,7 +151,6 @@ const RecommendCard = (
                                     size="small"
                                     variant="outlined"
                                     label={streakLabel}
-                                    sx={{ borderColor: streakColor, color: streakColor }}
                                 />
                             )}
                         </Stack>

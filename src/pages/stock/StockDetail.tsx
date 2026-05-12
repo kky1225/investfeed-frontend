@@ -109,6 +109,7 @@ interface StockInfoProps {
     eps: number;
     roe: number;
     pbr: number;
+    tradeConditions: string[];
 }
 
 interface MessageProps {
@@ -163,22 +164,50 @@ function checkInvestor(name: string, frgnr: number, orgn: number): MessageProps 
     return { message, title, icon };
 }
 
-function orderWarningMsg(type: string): string {
-    let message = "";
-    switch (type) {
-        case "1": message = "ETF 투자주의 요망"; break;
-        case "2": message = "정리매매 종목 지정"; break;
-        case "3": message = "단기과열 종목 지정"; break;
-        case "4": message = "투자위험 종목 지정"; break;
-        case "5": message = "투자경고 종목 지정"; break;
+const RISK_STATE_VALUES = new Set(["관리종목", "정리매매"]);
+
+function parseStateValues(state: string): string[] {
+    return state.split("|").map(s => s.trim()).filter(Boolean);
+}
+
+function buildRiskWarnings(orderWarning: string, auditInfo: string, state: string): string[] {
+    const warnings: string[] = [];
+    const stateValues = parseStateValues(state);
+
+    if (auditInfo === "거래정지") warnings.push("거래정지 종목");
+
+    const orderWarningMsg = (() => {
+        switch (orderWarning) {
+            case "1": return "ETF 투자주의 요망";
+            case "2": return "정리매매 종목 지정";
+            case "3": return "단기과열 종목 지정";
+            case "4": return "투자위험 종목 지정";
+            case "5": return "투자경고 종목 지정";
+            default: return "";
+        }
+    })();
+    if (orderWarningMsg && !warnings.includes(orderWarningMsg)) {
+        warnings.push(orderWarningMsg);
     }
-    return message;
+    // state 의 정리매매 (orderWarning=2 와 중복 가능, 위에서 처리되지 않은 경우만)
+    if (stateValues.includes("정리매매") && !warnings.includes("정리매매 종목 지정")) {
+        warnings.push("정리매매 종목 지정");
+    }
+    if (auditInfo === "투자주의환기종목") warnings.push("투자주의 환기종목");
+
+    return warnings;
+}
+
+function extractTradeConditions(state: string): string[] {
+    return parseStateValues(state).filter(v => !RISK_STATE_VALUES.has(v));
 }
 
 const INITIAL_CHART_DATA: CustomStockDetailLineChartProps = {
     id: '-',
     title: '-',
     orderWarning: "0",
+    auditInfo: '',
+    state: '',
     value: '-',
     fluRt: '0',
     predPre: '0',
@@ -207,6 +236,7 @@ const INITIAL_INFO: StockInfoProps = {
     mac: 0, macWght: 0, forExhRt: 0,
     _250hgst: 0, _250lwst: 0,
     per: 0, eps: 0, roe: 0, pbr: 0,
+    tradeConditions: [],
 };
 
 const INITIAL_DAY_RANGE: StockRangeProps[] = [
@@ -411,6 +441,8 @@ const StockDetail = () => {
                 id: stockInfo.stkCd,
                 title: stockInfo.stkNm,
                 orderWarning: stockInfo.orderWarning,
+                auditInfo: stockInfo.auditInfo ?? '',
+                state: stockInfo.state ?? '',
                 value: Number(stockInfo.curPrc.replace(/^[+-]/, '')).toLocaleString(),
                 fluRt: stockInfo.fluRt,
                 predPre: stockInfo.predPre || '0',
@@ -469,7 +501,8 @@ const StockDetail = () => {
             per: Number(stockInfo.per),
             eps: Number(stockInfo.eps),
             roe: Number(stockInfo.roe),
-            pbr: Number(stockInfo.pbr)
+            pbr: Number(stockInfo.pbr),
+            tradeConditions: extractTradeConditions(stockInfo.state ?? ''),
         };
     }, [result]);
 
@@ -829,11 +862,22 @@ const StockDetail = () => {
                                     {loading ? <Skeleton width={140}/> : (
                                         <>
                                             {stockChartData.title}
-                                            {stockChartData.orderWarning !== '0' &&
-                                                <Tooltip title={orderWarningMsg(stockChartData.orderWarning)} placement="right">
-                                                    <ErrorIcon color="error" sx={{ fontSize: 'inherit', verticalAlign: 'middle', ml: "1px", mb: "3px" }} />
-                                                </Tooltip>
-                                            }
+                                            {(() => {
+                                                const warnings = buildRiskWarnings(
+                                                    stockChartData.orderWarning,
+                                                    stockChartData.auditInfo,
+                                                    stockChartData.state,
+                                                );
+                                                if (warnings.length === 0) return null;
+                                                return (
+                                                    <Tooltip
+                                                        title={<Box sx={{ whiteSpace: 'pre-line' }}>{warnings.join('\n')}</Box>}
+                                                        placement="right"
+                                                    >
+                                                        <ErrorIcon color="error" sx={{ fontSize: 'inherit', verticalAlign: 'middle', ml: "1px", mb: "3px" }} />
+                                                    </Tooltip>
+                                                );
+                                            })()}
                                         </>
                                     )}
                                 </Typography>
@@ -861,6 +905,13 @@ const StockDetail = () => {
                                     </Tooltip>
                                 </Stack>
                             </Box>
+                            {!loading && info.tradeConditions.length > 0 && (
+                                <Stack direction="row" spacing={0.5} flexWrap="wrap" useFlexGap sx={{ mb: 1 }}>
+                                    {info.tradeConditions.map((cond) => (
+                                        <Chip key={cond} label={cond} size="small" variant="outlined"/>
+                                    ))}
+                                </Stack>
+                            )}
                             <Stack sx={{ justifyContent: 'space-between' }}>
                                 <Stack
                                     direction="row"

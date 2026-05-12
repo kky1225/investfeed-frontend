@@ -39,3 +39,13 @@ export interface RecommendListRes {
     avoidList: RecommendListItem[],
     holdList: RecommendListItem[],
 }
+
+export type RiskPreset = 'AGGRESSIVE' | 'NORMAL' | 'CONSERVATIVE';
+
+export interface RecommendSettingReq {
+    riskPreset: RiskPreset,
+}
+
+export interface RecommendSettingRes {
+    riskPreset: RiskPreset,
+}

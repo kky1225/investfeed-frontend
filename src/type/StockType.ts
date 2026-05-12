@@ -73,6 +73,8 @@ export interface StockInfo {
     trdePrica: string,
     nxtEnable: string,
     orderWarning: string,
+    auditInfo: string,
+    state: string,
     marketCode: string,
     marketName: string,
     upName: string,

@@ -197,7 +197,7 @@ const CryptoInterest = () => {
     const [groupOrderDirty, setGroupOrderDirty] = useState(false);
     const [itemOrderDirty, setItemOrderDirty] = useState(false);
 
-    const [prevGroupsData, setPrevGroupsData] = useState(groupsData);
+    const [prevGroupsData, setPrevGroupsData] = useState<CryptoInterestGroup[] | undefined>(undefined);
     if (groupsData !== prevGroupsData) {
         setPrevGroupsData(groupsData);
         setGroupOrderOverride(null);

@@ -1,4 +1,4 @@
-import {Box, Tooltip} from "@mui/material";
+import {Box, Chip, Tooltip} from "@mui/material";
 import Typography from "@mui/material/Typography";
 import InfoOutlinedIcon from "@mui/icons-material/InfoOutlined";
 import Grid from "@mui/material/Grid";
@@ -9,17 +9,38 @@ import Skeleton from "@mui/material/Skeleton";
 import {useEffect, useMemo, useRef, useState} from "react";
 import {MarketType} from "../../type/timeType.ts";
 import {fetchMarketInfo, getServerNow, getServerOffset} from "../../lib/serverTime.ts";
-import {fetchRecommendList, fetchRecommendListStream} from "../../api/recommend/RecommendApi.ts";
+import {
+    fetchRecommendList,
+    fetchRecommendListStream,
+    fetchRecommendSetting,
+    saveRecommendSetting,
+} from "../../api/recommend/RecommendApi.ts";
 import {
     RecommendListItem,
     RecommendListRes,
     RecommendListStream,
     RecommendListStreamReq,
-    RecommendListStreamRes
+    RecommendListStreamRes,
+    RiskPreset,
 } from "../../type/RecommendType.ts";
 import RecommendCard, {RecommendCardProps} from "../../components/RecommendCard.tsx";
 import FreshnessIndicator from "../../components/FreshnessIndicator.tsx";
 import {usePollingQuery} from "../../lib/pollingQuery.ts";
+import {useMutation, useQuery, useQueryClient} from "@tanstack/react-query";
+import {requireOk} from "../../lib/apiResponse.ts";
+import {useAlert} from "../../context/AlertContext";
+
+const RISK_PRESET_LABEL: Record<RiskPreset, string> = {
+    AGGRESSIVE: '공격적',
+    NORMAL: '보통',
+    CONSERVATIVE: '안정적',
+};
+
+const RISK_PRESET_DESC: Record<RiskPreset, string> = {
+    AGGRESSIVE: '위험 종목 필터링 없이 모든 추천 종목을 봅니다.',
+    NORMAL: '정리매매·투자위험 종목을 제외합니다.',
+    CONSERVATIVE: '관리/정리매매/단기과열/투자위험/투자경고/투자주의환기 종목을 모두 제외합니다.',
+};
 
 interface LiveRecommendUpdate {
     value: string;
@@ -38,10 +59,47 @@ const RecommendList = () => {
     const chartTimer = useRef<number>(0);
     const marketTimer = useRef<number>(0);
 
+    const queryClient = useQueryClient();
+    const {showAlert} = useAlert();
+
     const {data: result, isLoading, lastUpdated, pollError} = usePollingQuery<RecommendListRes>(
         ['recommendList'],
         (config) => fetchRecommendList(config),
     );
+
+    const {data: settingData} = useQuery({
+        queryKey: ['recommendSetting'],
+        queryFn: async () => requireOk(await fetchRecommendSetting(), {riskPreset: 'NORMAL' as RiskPreset}),
+    });
+    const riskPreset: RiskPreset = settingData?.riskPreset ?? 'NORMAL';
+
+    const saveSettingMutation = useMutation({
+        mutationFn: async (preset: RiskPreset) => {
+            requireOk(await saveRecommendSetting({riskPreset: preset}), '투자 성향 설정');
+            return preset;
+        },
+        onSuccess: (preset) => {
+            queryClient.setQueryData(['recommendSetting'], {riskPreset: preset});
+            queryClient.invalidateQueries({queryKey: ['recommendList']});
+            showAlert(`투자 성향이 '${RISK_PRESET_LABEL[preset]}'(으)로 변경되었습니다.`, 'success');
+        },
+        onError: (e) => {
+            console.error(e);
+            showAlert('투자 성향 변경에 실패했습니다.', 'error');
+        },
+    });
+
+    const handlePresetSelect = (next: RiskPreset) => {
+        if (next === riskPreset) return;
+        saveSettingMutation.mutate(next);
+    };
+
+    const PRESET_ORDER: RiskPreset[] = ['AGGRESSIVE', 'NORMAL', 'CONSERVATIVE'];
+    const PRESET_COLOR: Record<RiskPreset, 'error' | 'warning' | 'success'> = {
+        AGGRESSIVE: 'error',
+        NORMAL: 'warning',
+        CONSERVATIVE: 'success',
+    };
 
     // 키움 응답에 시각 필드가 없어 stamp 비교 불가. 폴링 도착 시 WS overlay 를
     // 비워서 stale 가격이 새 폴링 결과를 덮어쓰지 못하게 한다.
@@ -189,7 +247,7 @@ const RecommendList = () => {
 
     return (
         <Box sx={{width: '100%', maxWidth: {sm: '100%', md: '1700px'}}}>
-            <Box sx={{display: 'flex', alignItems: 'center', mb: 2, gap: 2}}>
+            <Box sx={{display: 'flex', alignItems: 'center', mb: 1, gap: 2}}>
                 <Stack direction="row" alignItems="center" spacing={0.5}>
                     <Typography component="h2" variant="h6" sx={{lineHeight: 1}}>
                         추천 목록
@@ -200,6 +258,39 @@ const RecommendList = () => {
                 </Stack>
                 <Box sx={{flex: 1}}/>
                 <FreshnessIndicator lastUpdated={lastUpdated} error={pollError}/>
+            </Box>
+            <Box sx={{display: 'flex', alignItems: 'center', flexWrap: 'wrap', mb: 2, gap: 1}}>
+                <Stack direction="row" alignItems="center" spacing={0.5} sx={{mr: 0.5}}>
+                    <Typography variant="body2" sx={{color: 'text.secondary', fontWeight: 500}}>
+                        투자 성향
+                    </Typography>
+                    <Tooltip title={RISK_PRESET_DESC[riskPreset]} arrow>
+                        <InfoOutlinedIcon fontSize="small" sx={{color: 'text.secondary', display: 'block'}}/>
+                    </Tooltip>
+                </Stack>
+                <Stack direction="row" spacing={0.5}>
+                    {PRESET_ORDER.map((p) => {
+                        const active = riskPreset === p;
+                        return (
+                            <Chip
+                                key={p}
+                                label={RISK_PRESET_LABEL[p]}
+                                size="small"
+                                clickable
+                                onClick={() => handlePresetSelect(p)}
+                                disabled={saveSettingMutation.isPending}
+                                variant={active ? 'filled' : 'outlined'}
+                                color={active ? PRESET_COLOR[p] : 'default'}
+                                sx={{
+                                    fontWeight: active ? 600 : 400,
+                                    minWidth: 64,
+                                    opacity: active ? 1 : 0.7,
+                                }}
+                            />
+                        );
+                    })}
+                </Stack>
+                {/* 추후 보정 모듈 체크박스(가격 모멘텀 / 매크로 등)가 같은 줄에 추가될 자리 */}
             </Box>
             <Grid
                 container

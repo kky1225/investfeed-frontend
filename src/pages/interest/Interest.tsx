@@ -203,7 +203,7 @@ const Interest = () => {
     const [groupOrderDirty, setGroupOrderDirty] = useState(false);
     const [itemOrderDirty, setItemOrderDirty] = useState(false);
 
-    const [prevGroupsData, setPrevGroupsData] = useState(groupsData);
+    const [prevGroupsData, setPrevGroupsData] = useState<InterestGroup[] | undefined>(undefined);
     if (groupsData !== prevGroupsData) {
         setPrevGroupsData(groupsData);
         setGroupOrderOverride(null);

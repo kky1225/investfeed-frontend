@@ -13,6 +13,8 @@ export interface CustomStockDetailLineChartProps {
     id: string,
     title: string,
     orderWarning: string,
+    auditInfo: string,
+    state: string,
     value: string,
     fluRt: string,
     predPre: string,
