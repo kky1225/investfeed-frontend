@@ -73,7 +73,7 @@ export function usePollingQuery<T = any>(
             const serverNow = getServerNow();
             const wait = 60_000 - (serverNow % 60_000) + 300;
             timer = setTimeout(() => {
-                if (cancelled) return;
+                if (cancelled || isSessionExpiredGlobal) return;
                 query.refetch();
                 schedule();
             }, wait);

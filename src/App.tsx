@@ -124,8 +124,7 @@ function App() {
     const handleSessionExpiredConfirm = () => {
         sessionStorage.removeItem('user');
         sessionStorage.removeItem('passwordChangeRequired');
-        setSessionExpired(false);
-        window.location.href = '/login';
+        window.location.replace('/login');
     };
 
     return (

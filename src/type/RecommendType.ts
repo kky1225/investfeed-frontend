@@ -44,8 +44,12 @@ export type RiskPreset = 'AGGRESSIVE' | 'NORMAL' | 'CONSERVATIVE';
 
 export interface RecommendSettingReq {
     riskPreset: RiskPreset,
+    priceVolatilityEnabled: boolean,
+    movingAverageEnabled: boolean,
 }
 
 export interface RecommendSettingRes {
     riskPreset: RiskPreset,
+    priceVolatilityEnabled: boolean,
+    movingAverageEnabled: boolean,
 }

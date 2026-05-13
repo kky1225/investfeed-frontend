@@ -1,4 +1,4 @@
-import {Box, Chip, Tooltip} from "@mui/material";
+import {Box, Chip, Switch, Tooltip} from "@mui/material";
 import Typography from "@mui/material/Typography";
 import InfoOutlinedIcon from "@mui/icons-material/InfoOutlined";
 import Grid from "@mui/material/Grid";
@@ -69,29 +69,49 @@ const RecommendList = () => {
 
     const {data: settingData} = useQuery({
         queryKey: ['recommendSetting'],
-        queryFn: async () => requireOk(await fetchRecommendSetting(), {riskPreset: 'NORMAL' as RiskPreset}),
+        queryFn: async () => requireOk(
+            await fetchRecommendSetting(),
+            {riskPreset: 'NORMAL' as RiskPreset, priceVolatilityEnabled: false, movingAverageEnabled: false},
+        ),
     });
     const riskPreset: RiskPreset = settingData?.riskPreset ?? 'NORMAL';
+    const priceVolatilityEnabled: boolean = settingData?.priceVolatilityEnabled ?? false;
+    const movingAverageEnabled: boolean = settingData?.movingAverageEnabled ?? false;
 
     const saveSettingMutation = useMutation({
-        mutationFn: async (preset: RiskPreset) => {
-            requireOk(await saveRecommendSetting({riskPreset: preset}), '투자 성향 설정');
-            return preset;
+        mutationFn: async (req: {riskPreset: RiskPreset; priceVolatilityEnabled: boolean; movingAverageEnabled: boolean}) => {
+            requireOk(await saveRecommendSetting(req), '추천 설정');
+            return req;
         },
-        onSuccess: (preset) => {
-            queryClient.setQueryData(['recommendSetting'], {riskPreset: preset});
+        onSuccess: (req) => {
+            queryClient.setQueryData(['recommendSetting'], req);
             queryClient.invalidateQueries({queryKey: ['recommendList']});
-            showAlert(`투자 성향이 '${RISK_PRESET_LABEL[preset]}'(으)로 변경되었습니다.`, 'success');
         },
         onError: (e) => {
             console.error(e);
-            showAlert('투자 성향 변경에 실패했습니다.', 'error');
+            showAlert('설정 변경에 실패했습니다.', 'error');
         },
     });
 
     const handlePresetSelect = (next: RiskPreset) => {
         if (next === riskPreset) return;
-        saveSettingMutation.mutate(next);
+        saveSettingMutation.mutate({riskPreset: next, priceVolatilityEnabled, movingAverageEnabled}, {
+            onSuccess: () => showAlert(`투자 성향이 '${RISK_PRESET_LABEL[next]}'(으)로 변경되었습니다.`, 'success'),
+        });
+    };
+
+    const handlePriceVolatilityToggle = (next: boolean) => {
+        if (next === priceVolatilityEnabled) return;
+        saveSettingMutation.mutate({riskPreset, priceVolatilityEnabled: next, movingAverageEnabled}, {
+            onSuccess: () => showAlert(`가격 변동성 보정이 ${next ? '적용' : '해제'}되었습니다.`, 'success'),
+        });
+    };
+
+    const handleMovingAverageToggle = (next: boolean) => {
+        if (next === movingAverageEnabled) return;
+        saveSettingMutation.mutate({riskPreset, priceVolatilityEnabled, movingAverageEnabled: next}, {
+            onSuccess: () => showAlert(`이동평균선 보정이 ${next ? '적용' : '해제'}되었습니다.`, 'success'),
+        });
     };
 
     const PRESET_ORDER: RiskPreset[] = ['AGGRESSIVE', 'NORMAL', 'CONSERVATIVE'];
@@ -252,46 +272,87 @@ const RecommendList = () => {
                     <Typography component="h2" variant="h6" sx={{lineHeight: 1}}>
                         추천 목록
                     </Typography>
-                    <Tooltip title="이 리포트는 직전 거래일 종가 기준으로 작성되며, 매 거래일 22:00에 갱신됩니다." arrow>
+                    <Tooltip title="이 리포트는 직전 거래일 종가 기준으로 작성되며, 매 거래일 22:00에 갱신됩니다. 당일 매매 동향은 매 30분(HH:05, HH:35)에 갱신됩니다." arrow>
                         <InfoOutlinedIcon fontSize="small" sx={{color: 'text.secondary', display: 'block'}}/>
                     </Tooltip>
                 </Stack>
                 <Box sx={{flex: 1}}/>
                 <FreshnessIndicator lastUpdated={lastUpdated} error={pollError}/>
             </Box>
-            <Box sx={{display: 'flex', alignItems: 'center', flexWrap: 'wrap', mb: 2, gap: 1}}>
-                <Stack direction="row" alignItems="center" spacing={0.5} sx={{mr: 0.5}}>
-                    <Typography variant="body2" sx={{color: 'text.secondary', fontWeight: 500}}>
-                        투자 성향
+            <Card variant="outlined" sx={{mb: 1.5}}>
+                <CardContent sx={{py: 1.5, "&:last-child": {pb: 1.5}}}>
+                    <Stack direction="row" alignItems="center" spacing={0.5} sx={{mb: 1.25}}>
+                        <Typography variant="subtitle2" sx={{color: 'text.secondary', fontWeight: 600}}>
+                            투자 성향
+                        </Typography>
+                        <Tooltip title={RISK_PRESET_DESC[riskPreset]} arrow>
+                            <InfoOutlinedIcon fontSize="small" sx={{color: 'text.secondary', display: 'block'}}/>
+                        </Tooltip>
+                    </Stack>
+                    <Stack direction="row" spacing={0.5}>
+                        {PRESET_ORDER.map((p) => {
+                            const active = riskPreset === p;
+                            return (
+                                <Chip
+                                    key={p}
+                                    label={RISK_PRESET_LABEL[p]}
+                                    size="small"
+                                    clickable
+                                    onClick={() => handlePresetSelect(p)}
+                                    disabled={saveSettingMutation.isPending}
+                                    variant={active ? 'filled' : 'outlined'}
+                                    color={active ? PRESET_COLOR[p] : 'default'}
+                                    sx={{
+                                        fontWeight: active ? 600 : 400,
+                                        minWidth: 64,
+                                        opacity: active ? 1 : 0.7,
+                                    }}
+                                />
+                            );
+                        })}
+                    </Stack>
+                </CardContent>
+            </Card>
+            <Card variant="outlined" sx={{mb: 2}}>
+                <CardContent sx={{py: 1.5, "&:last-child": {pb: 1.5}}}>
+                    <Typography
+                        variant="subtitle2"
+                        sx={{color: 'text.secondary', fontWeight: 600, mb: 1.25}}
+                    >
+                        추천 옵션
                     </Typography>
-                    <Tooltip title={RISK_PRESET_DESC[riskPreset]} arrow>
-                        <InfoOutlinedIcon fontSize="small" sx={{color: 'text.secondary', display: 'block'}}/>
-                    </Tooltip>
-                </Stack>
-                <Stack direction="row" spacing={0.5}>
-                    {PRESET_ORDER.map((p) => {
-                        const active = riskPreset === p;
-                        return (
-                            <Chip
-                                key={p}
-                                label={RISK_PRESET_LABEL[p]}
+                    <Stack spacing={1}>
+                        <Box sx={{display: 'flex', alignItems: 'center', gap: 1.5}}>
+                            <Stack direction="row" alignItems="center" spacing={0.5}>
+                                <Typography variant="body2">가격 변동성</Typography>
+                                <Tooltip title="추천과 반대로 가격이 움직일 때 등급을 한 단계 조정합니다." arrow>
+                                    <InfoOutlinedIcon fontSize="small" sx={{color: 'text.secondary', display: 'block'}}/>
+                                </Tooltip>
+                            </Stack>
+                            <Switch
                                 size="small"
-                                clickable
-                                onClick={() => handlePresetSelect(p)}
+                                checked={priceVolatilityEnabled}
+                                onChange={(e) => handlePriceVolatilityToggle(e.target.checked)}
                                 disabled={saveSettingMutation.isPending}
-                                variant={active ? 'filled' : 'outlined'}
-                                color={active ? PRESET_COLOR[p] : 'default'}
-                                sx={{
-                                    fontWeight: active ? 600 : 400,
-                                    minWidth: 64,
-                                    opacity: active ? 1 : 0.7,
-                                }}
                             />
-                        );
-                    })}
-                </Stack>
-                {/* 추후 보정 모듈 체크박스(가격 모멘텀 / 매크로 등)가 같은 줄에 추가될 자리 */}
-            </Box>
+                        </Box>
+                        <Box sx={{display: 'flex', alignItems: 'center', gap: 1.5}}>
+                            <Stack direction="row" alignItems="center" spacing={0.5}>
+                                <Typography variant="body2">이동평균선</Typography>
+                                <Tooltip title="단기 이동평균선이 골든/데드크로스 진입 시 추천과 같은 방향이면 등급을 한 단계 조정합니다." arrow>
+                                    <InfoOutlinedIcon fontSize="small" sx={{color: 'text.secondary', display: 'block'}}/>
+                                </Tooltip>
+                            </Stack>
+                            <Switch
+                                size="small"
+                                checked={movingAverageEnabled}
+                                onChange={(e) => handleMovingAverageToggle(e.target.checked)}
+                                disabled={saveSettingMutation.isPending}
+                            />
+                        </Box>
+                    </Stack>
+                </CardContent>
+            </Card>
             <Grid
                 container
                 spacing={2}
