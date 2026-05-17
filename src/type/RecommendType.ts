@@ -46,10 +46,18 @@ export interface RecommendSettingReq {
     riskPreset: RiskPreset,
     priceVolatilityEnabled: boolean,
     movingAverageEnabled: boolean,
+    marketIndexEnabled: boolean,
+    volumePriceEnabled: boolean,
+    rsiEnabled: boolean,
+    highLow52wEnabled: boolean,
 }
 
 export interface RecommendSettingRes {
     riskPreset: RiskPreset,
     priceVolatilityEnabled: boolean,
     movingAverageEnabled: boolean,
+    marketIndexEnabled: boolean,
+    volumePriceEnabled: boolean,
+    rsiEnabled: boolean,
+    highLow52wEnabled: boolean,
 }

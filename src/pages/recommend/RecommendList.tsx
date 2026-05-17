@@ -1,4 +1,4 @@
-import {Box, Chip, Switch, Tooltip} from "@mui/material";
+import {Box, Chip, Divider, Switch, Tooltip} from "@mui/material";
 import Typography from "@mui/material/Typography";
 import InfoOutlinedIcon from "@mui/icons-material/InfoOutlined";
 import Grid from "@mui/material/Grid";
@@ -71,15 +71,19 @@ const RecommendList = () => {
         queryKey: ['recommendSetting'],
         queryFn: async () => requireOk(
             await fetchRecommendSetting(),
-            {riskPreset: 'NORMAL' as RiskPreset, priceVolatilityEnabled: false, movingAverageEnabled: false},
+            {riskPreset: 'NORMAL' as RiskPreset, priceVolatilityEnabled: false, movingAverageEnabled: false, marketIndexEnabled: false, volumePriceEnabled: false, rsiEnabled: false, highLow52wEnabled: false},
         ),
     });
     const riskPreset: RiskPreset = settingData?.riskPreset ?? 'NORMAL';
     const priceVolatilityEnabled: boolean = settingData?.priceVolatilityEnabled ?? false;
     const movingAverageEnabled: boolean = settingData?.movingAverageEnabled ?? false;
+    const marketIndexEnabled: boolean = settingData?.marketIndexEnabled ?? false;
+    const volumePriceEnabled: boolean = settingData?.volumePriceEnabled ?? false;
+    const rsiEnabled: boolean = settingData?.rsiEnabled ?? false;
+    const highLow52wEnabled: boolean = settingData?.highLow52wEnabled ?? false;
 
     const saveSettingMutation = useMutation({
-        mutationFn: async (req: {riskPreset: RiskPreset; priceVolatilityEnabled: boolean; movingAverageEnabled: boolean}) => {
+        mutationFn: async (req: {riskPreset: RiskPreset; priceVolatilityEnabled: boolean; movingAverageEnabled: boolean; marketIndexEnabled: boolean; volumePriceEnabled: boolean; rsiEnabled: boolean; highLow52wEnabled: boolean}) => {
             requireOk(await saveRecommendSetting(req), '추천 설정');
             return req;
         },
@@ -95,22 +99,50 @@ const RecommendList = () => {
 
     const handlePresetSelect = (next: RiskPreset) => {
         if (next === riskPreset) return;
-        saveSettingMutation.mutate({riskPreset: next, priceVolatilityEnabled, movingAverageEnabled}, {
+        saveSettingMutation.mutate({riskPreset: next, priceVolatilityEnabled, movingAverageEnabled, marketIndexEnabled, volumePriceEnabled, rsiEnabled, highLow52wEnabled}, {
             onSuccess: () => showAlert(`투자 성향이 '${RISK_PRESET_LABEL[next]}'(으)로 변경되었습니다.`, 'success'),
         });
     };
 
     const handlePriceVolatilityToggle = (next: boolean) => {
         if (next === priceVolatilityEnabled) return;
-        saveSettingMutation.mutate({riskPreset, priceVolatilityEnabled: next, movingAverageEnabled}, {
+        saveSettingMutation.mutate({riskPreset, priceVolatilityEnabled: next, movingAverageEnabled, marketIndexEnabled, volumePriceEnabled, rsiEnabled, highLow52wEnabled}, {
             onSuccess: () => showAlert(`가격 변동성 보정이 ${next ? '적용' : '해제'}되었습니다.`, 'success'),
         });
     };
 
     const handleMovingAverageToggle = (next: boolean) => {
         if (next === movingAverageEnabled) return;
-        saveSettingMutation.mutate({riskPreset, priceVolatilityEnabled, movingAverageEnabled: next}, {
+        saveSettingMutation.mutate({riskPreset, priceVolatilityEnabled, movingAverageEnabled: next, marketIndexEnabled, volumePriceEnabled, rsiEnabled, highLow52wEnabled}, {
             onSuccess: () => showAlert(`이동평균선 보정이 ${next ? '적용' : '해제'}되었습니다.`, 'success'),
+        });
+    };
+
+    const handleMarketIndexToggle = (next: boolean) => {
+        if (next === marketIndexEnabled) return;
+        saveSettingMutation.mutate({riskPreset, priceVolatilityEnabled, movingAverageEnabled, marketIndexEnabled: next, volumePriceEnabled, rsiEnabled, highLow52wEnabled}, {
+            onSuccess: () => showAlert(`지수 매크로 보정이 ${next ? '적용' : '해제'}되었습니다.`, 'success'),
+        });
+    };
+
+    const handleVolumePriceToggle = (next: boolean) => {
+        if (next === volumePriceEnabled) return;
+        saveSettingMutation.mutate({riskPreset, priceVolatilityEnabled, movingAverageEnabled, marketIndexEnabled, volumePriceEnabled: next, rsiEnabled, highLow52wEnabled}, {
+            onSuccess: () => showAlert(`거래량 보정이 ${next ? '적용' : '해제'}되었습니다.`, 'success'),
+        });
+    };
+
+    const handleRsiToggle = (next: boolean) => {
+        if (next === rsiEnabled) return;
+        saveSettingMutation.mutate({riskPreset, priceVolatilityEnabled, movingAverageEnabled, marketIndexEnabled, volumePriceEnabled, rsiEnabled: next, highLow52wEnabled}, {
+            onSuccess: () => showAlert(`RSI 보정이 ${next ? '적용' : '해제'}되었습니다.`, 'success'),
+        });
+    };
+
+    const handleHighLow52wToggle = (next: boolean) => {
+        if (next === highLow52wEnabled) return;
+        saveSettingMutation.mutate({riskPreset, priceVolatilityEnabled, movingAverageEnabled, marketIndexEnabled, volumePriceEnabled, rsiEnabled, highLow52wEnabled: next}, {
+            onSuccess: () => showAlert(`52주 위치 보정이 ${next ? '적용' : '해제'}되었습니다.`, 'success'),
         });
     };
 
@@ -272,7 +304,7 @@ const RecommendList = () => {
                     <Typography component="h2" variant="h6" sx={{lineHeight: 1}}>
                         추천 목록
                     </Typography>
-                    <Tooltip title="이 리포트는 직전 거래일 종가 기준으로 작성되며, 매 거래일 22:00에 갱신됩니다. 당일 매매 동향은 매 30분(HH:05, HH:35)에 갱신됩니다." arrow>
+                    <Tooltip title="이 리포트는 직전 거래일 종가 기준으로 작성되며, 매 거래일 22:00에 갱신됩니다. 당일 매매 동향은 장 중 5분 간격으로 갱신됩니다." arrow>
                         <InfoOutlinedIcon fontSize="small" sx={{color: 'text.secondary', display: 'block'}}/>
                     </Tooltip>
                 </Stack>
@@ -315,17 +347,20 @@ const RecommendList = () => {
             </Card>
             <Card variant="outlined" sx={{mb: 2}}>
                 <CardContent sx={{py: 1.5, "&:last-child": {pb: 1.5}}}>
-                    <Typography
-                        variant="subtitle2"
-                        sx={{color: 'text.secondary', fontWeight: 600, mb: 1.25}}
-                    >
-                        추천 옵션
-                    </Typography>
-                    <Stack spacing={1}>
-                        <Box sx={{display: 'flex', alignItems: 'center', gap: 1.5}}>
+                    {/* 그룹 1: 종목 분석 (전일 데이터 스냅샷) */}
+                    <Box sx={{mb: 0.5}}>
+                        <Typography variant="subtitle2" sx={{fontWeight: 600}}>
+                            종목 분석
+                        </Typography>
+                        <Typography variant="caption" sx={{color: 'text.secondary', display: 'block', mb: 1.25}}>
+                            전일 장마감 이후에 저장된 종목 데이터로 리포트 등급을 조정합니다.
+                        </Typography>
+                    </Box>
+                    <Stack direction="row" spacing={3} useFlexGap sx={{flexWrap: 'wrap', alignItems: 'center'}}>
+                        <Box sx={{display: 'flex', alignItems: 'center', gap: 0.5}}>
                             <Stack direction="row" alignItems="center" spacing={0.5}>
                                 <Typography variant="body2">가격 변동성</Typography>
-                                <Tooltip title="추천과 반대로 가격이 움직일 때 등급을 한 단계 조정합니다." arrow>
+                                <Tooltip title="추천과 반대로 가격이 움직일 때 등급을 조정합니다." arrow>
                                     <InfoOutlinedIcon fontSize="small" sx={{color: 'text.secondary', display: 'block'}}/>
                                 </Tooltip>
                             </Stack>
@@ -336,10 +371,10 @@ const RecommendList = () => {
                                 disabled={saveSettingMutation.isPending}
                             />
                         </Box>
-                        <Box sx={{display: 'flex', alignItems: 'center', gap: 1.5}}>
+                        <Box sx={{display: 'flex', alignItems: 'center', gap: 0.5}}>
                             <Stack direction="row" alignItems="center" spacing={0.5}>
                                 <Typography variant="body2">이동평균선</Typography>
-                                <Tooltip title="단기 이동평균선이 골든/데드크로스 진입 시 추천과 같은 방향이면 등급을 한 단계 조정합니다." arrow>
+                                <Tooltip title="단기 이동평균선이 골든/데드크로스 진입 시 추천과 같은 방향이면 등급을 조정합니다." arrow>
                                     <InfoOutlinedIcon fontSize="small" sx={{color: 'text.secondary', display: 'block'}}/>
                                 </Tooltip>
                             </Stack>
@@ -347,6 +382,76 @@ const RecommendList = () => {
                                 size="small"
                                 checked={movingAverageEnabled}
                                 onChange={(e) => handleMovingAverageToggle(e.target.checked)}
+                                disabled={saveSettingMutation.isPending}
+                            />
+                        </Box>
+                        <Box sx={{display: 'flex', alignItems: 'center', gap: 0.5}}>
+                            <Stack direction="row" alignItems="center" spacing={0.5}>
+                                <Typography variant="body2">거래량</Typography>
+                                <Tooltip title="당일 거래량이 평소를 크게 웃돌면 가격 움직임에 따라 등급을 조정합니다." arrow>
+                                    <InfoOutlinedIcon fontSize="small" sx={{color: 'text.secondary', display: 'block'}}/>
+                                </Tooltip>
+                            </Stack>
+                            <Switch
+                                size="small"
+                                checked={volumePriceEnabled}
+                                onChange={(e) => handleVolumePriceToggle(e.target.checked)}
+                                disabled={saveSettingMutation.isPending}
+                            />
+                        </Box>
+                        <Box sx={{display: 'flex', alignItems: 'center', gap: 0.5}}>
+                            <Stack direction="row" alignItems="center" spacing={0.5}>
+                                <Typography variant="body2">RSI</Typography>
+                                <Tooltip title="RSI 지표와 모멘텀 변화에 따라 등급을 조정합니다." arrow>
+                                    <InfoOutlinedIcon fontSize="small" sx={{color: 'text.secondary', display: 'block'}}/>
+                                </Tooltip>
+                            </Stack>
+                            <Switch
+                                size="small"
+                                checked={rsiEnabled}
+                                onChange={(e) => handleRsiToggle(e.target.checked)}
+                                disabled={saveSettingMutation.isPending}
+                            />
+                        </Box>
+                        <Box sx={{display: 'flex', alignItems: 'center', gap: 0.5}}>
+                            <Stack direction="row" alignItems="center" spacing={0.5}>
+                                <Typography variant="body2">52주</Typography>
+                                <Tooltip title="52주 고저점 대비 주가의 위치에 따라 등급을 조정합니다." arrow>
+                                    <InfoOutlinedIcon fontSize="small" sx={{color: 'text.secondary', display: 'block'}}/>
+                                </Tooltip>
+                            </Stack>
+                            <Switch
+                                size="small"
+                                checked={highLow52wEnabled}
+                                onChange={(e) => handleHighLow52wToggle(e.target.checked)}
+                                disabled={saveSettingMutation.isPending}
+                            />
+                        </Box>
+                    </Stack>
+
+                    <Divider sx={{my: 1.5}} />
+
+                    {/* 그룹 2: 시장 환경 (실시간) */}
+                    <Box sx={{mb: 0.5}}>
+                        <Typography variant="subtitle2" sx={{fontWeight: 600}}>
+                            시장 환경
+                        </Typography>
+                        <Typography variant="caption" sx={{color: 'text.secondary', display: 'block', mb: 1.25}}>
+                            실시간 시장 데이터로 추천 등급을 조정합니다. 당일 시장 환경에 따라 시점별로 등급이 변할 수 있습니다.
+                        </Typography>
+                    </Box>
+                    <Stack direction="row" spacing={3} useFlexGap sx={{flexWrap: 'wrap', alignItems: 'center'}}>
+                        <Box sx={{display: 'flex', alignItems: 'center', gap: 0.5}}>
+                            <Stack direction="row" alignItems="center" spacing={0.5}>
+                                <Typography variant="body2">지수 매크로</Typography>
+                                <Tooltip title="등락율 및 투자자별 매매 동향에 따라 등급을 조정합니다." arrow>
+                                    <InfoOutlinedIcon fontSize="small" sx={{color: 'text.secondary', display: 'block'}}/>
+                                </Tooltip>
+                            </Stack>
+                            <Switch
+                                size="small"
+                                checked={marketIndexEnabled}
+                                onChange={(e) => handleMarketIndexToggle(e.target.checked)}
                                 disabled={saveSettingMutation.isPending}
                             />
                         </Box>

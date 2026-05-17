@@ -44,6 +44,7 @@ import PermissionGrantManagement from "./pages/admin/PermissionGrantManagement.t
 import BrokerManagement from "./pages/admin/BrokerManagement.tsx";
 import CalendarManagement from "./pages/admin/CalendarManagement.tsx";
 import Monitoring from "./pages/admin/Monitoring.tsx";
+import RecommendMonitoring from "./pages/admin/RecommendMonitoring.tsx";
 import Profile from "./pages/settings/Profile.tsx";
 import ProtectedRoute from "./components/ProtectedRoute.tsx";
 import ChangePassword from "./pages/settings/ChangePassword.tsx";
@@ -277,6 +278,7 @@ function App() {
                         <Route path="/admin/brokers" Component={BrokerManagement} />
                         <Route path="/admin/calendar" Component={CalendarManagement} />
                         <Route path="/admin/monitoring" Component={Monitoring} />
+                        <Route path="/admin/recommend/monitoring" Component={RecommendMonitoring} />
                     </Route>
                 </Route>
             </Routes>
