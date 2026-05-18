@@ -29,6 +29,8 @@ export interface AdminRecommendPickRes {
     maTrigger: ModuleTrigger;
     vpTrigger: ModuleTrigger;
     rsiTrigger: ModuleTrigger;
+    hl52wTrigger: ModuleTrigger;
+    breakoutTrigger: ModuleTrigger;
 
     // 후행 raw 지표
     rsi14: number | null;
@@ -40,7 +42,7 @@ export interface AdminRecommendPickRes {
     todayVolume: number | null;
     avg20dVolume: number | null;
 
-    // 52주 위치 (HighLow52wModule)
+    // 52주 위치 — 키움 ka10001 공식 250일 고저 (HighLow52w/Breakout 공용)
     high52w: number | null;
     low52w: number | null;
     distFromHigh52w: number | null;     // % (음수)

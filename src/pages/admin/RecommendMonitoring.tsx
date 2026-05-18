@@ -94,6 +94,8 @@ function SignalsPanel() {
         {field: 'maTrigger', headerName: 'MA', width: 85, renderCell: (p) => <TriggerChip v={p.value as ModuleTrigger} />},
         {field: 'vpTrigger', headerName: 'VP', width: 85, renderCell: (p) => <TriggerChip v={p.value as ModuleTrigger} />},
         {field: 'rsiTrigger', headerName: 'RSI', width: 85, renderCell: (p) => <TriggerChip v={p.value as ModuleTrigger} />},
+        {field: 'hl52wTrigger', headerName: '52주위치', width: 90, renderCell: (p) => <TriggerChip v={p.value as ModuleTrigger} />},
+        {field: 'breakoutTrigger', headerName: '신고저돌파', width: 95, renderCell: (p) => <TriggerChip v={p.value as ModuleTrigger} />},
         // Raw 지표
         {field: 'rsi14', headerName: 'RSI14', width: 80, valueFormatter: (v) => fmtNum(v as number | null, 1)},
         {field: 'flu5Pct', headerName: '5일등락%', width: 95, valueFormatter: (v) => fmtNum(v as number | null, 2)},

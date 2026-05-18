@@ -50,6 +50,7 @@ export interface RecommendSettingReq {
     volumePriceEnabled: boolean,
     rsiEnabled: boolean,
     highLow52wEnabled: boolean,
+    breakoutEnabled: boolean,
 }
 
 export interface RecommendSettingRes {
@@ -60,4 +61,5 @@ export interface RecommendSettingRes {
     volumePriceEnabled: boolean,
     rsiEnabled: boolean,
     highLow52wEnabled: boolean,
+    breakoutEnabled: boolean,
 }

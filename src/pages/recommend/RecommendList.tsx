@@ -71,7 +71,7 @@ const RecommendList = () => {
         queryKey: ['recommendSetting'],
         queryFn: async () => requireOk(
             await fetchRecommendSetting(),
-            {riskPreset: 'NORMAL' as RiskPreset, priceVolatilityEnabled: false, movingAverageEnabled: false, marketIndexEnabled: false, volumePriceEnabled: false, rsiEnabled: false, highLow52wEnabled: false},
+            {riskPreset: 'NORMAL' as RiskPreset, priceVolatilityEnabled: false, movingAverageEnabled: false, marketIndexEnabled: false, volumePriceEnabled: false, rsiEnabled: false, highLow52wEnabled: false, breakoutEnabled: false},
         ),
     });
     const riskPreset: RiskPreset = settingData?.riskPreset ?? 'NORMAL';
@@ -81,9 +81,10 @@ const RecommendList = () => {
     const volumePriceEnabled: boolean = settingData?.volumePriceEnabled ?? false;
     const rsiEnabled: boolean = settingData?.rsiEnabled ?? false;
     const highLow52wEnabled: boolean = settingData?.highLow52wEnabled ?? false;
+    const breakoutEnabled: boolean = settingData?.breakoutEnabled ?? false;
 
     const saveSettingMutation = useMutation({
-        mutationFn: async (req: {riskPreset: RiskPreset; priceVolatilityEnabled: boolean; movingAverageEnabled: boolean; marketIndexEnabled: boolean; volumePriceEnabled: boolean; rsiEnabled: boolean; highLow52wEnabled: boolean}) => {
+        mutationFn: async (req: {riskPreset: RiskPreset; priceVolatilityEnabled: boolean; movingAverageEnabled: boolean; marketIndexEnabled: boolean; volumePriceEnabled: boolean; rsiEnabled: boolean; highLow52wEnabled: boolean; breakoutEnabled: boolean}) => {
             requireOk(await saveRecommendSetting(req), '추천 설정');
             return req;
         },
@@ -99,50 +100,57 @@ const RecommendList = () => {
 
     const handlePresetSelect = (next: RiskPreset) => {
         if (next === riskPreset) return;
-        saveSettingMutation.mutate({riskPreset: next, priceVolatilityEnabled, movingAverageEnabled, marketIndexEnabled, volumePriceEnabled, rsiEnabled, highLow52wEnabled}, {
+        saveSettingMutation.mutate({riskPreset: next, priceVolatilityEnabled, movingAverageEnabled, marketIndexEnabled, volumePriceEnabled, rsiEnabled, highLow52wEnabled, breakoutEnabled}, {
             onSuccess: () => showAlert(`투자 성향이 '${RISK_PRESET_LABEL[next]}'(으)로 변경되었습니다.`, 'success'),
         });
     };
 
     const handlePriceVolatilityToggle = (next: boolean) => {
         if (next === priceVolatilityEnabled) return;
-        saveSettingMutation.mutate({riskPreset, priceVolatilityEnabled: next, movingAverageEnabled, marketIndexEnabled, volumePriceEnabled, rsiEnabled, highLow52wEnabled}, {
+        saveSettingMutation.mutate({riskPreset, priceVolatilityEnabled: next, movingAverageEnabled, marketIndexEnabled, volumePriceEnabled, rsiEnabled, highLow52wEnabled, breakoutEnabled}, {
             onSuccess: () => showAlert(`가격 변동성 보정이 ${next ? '적용' : '해제'}되었습니다.`, 'success'),
         });
     };
 
     const handleMovingAverageToggle = (next: boolean) => {
         if (next === movingAverageEnabled) return;
-        saveSettingMutation.mutate({riskPreset, priceVolatilityEnabled, movingAverageEnabled: next, marketIndexEnabled, volumePriceEnabled, rsiEnabled, highLow52wEnabled}, {
+        saveSettingMutation.mutate({riskPreset, priceVolatilityEnabled, movingAverageEnabled: next, marketIndexEnabled, volumePriceEnabled, rsiEnabled, highLow52wEnabled, breakoutEnabled}, {
             onSuccess: () => showAlert(`이동평균선 보정이 ${next ? '적용' : '해제'}되었습니다.`, 'success'),
         });
     };
 
     const handleMarketIndexToggle = (next: boolean) => {
         if (next === marketIndexEnabled) return;
-        saveSettingMutation.mutate({riskPreset, priceVolatilityEnabled, movingAverageEnabled, marketIndexEnabled: next, volumePriceEnabled, rsiEnabled, highLow52wEnabled}, {
+        saveSettingMutation.mutate({riskPreset, priceVolatilityEnabled, movingAverageEnabled, marketIndexEnabled: next, volumePriceEnabled, rsiEnabled, highLow52wEnabled, breakoutEnabled}, {
             onSuccess: () => showAlert(`지수 매크로 보정이 ${next ? '적용' : '해제'}되었습니다.`, 'success'),
         });
     };
 
     const handleVolumePriceToggle = (next: boolean) => {
         if (next === volumePriceEnabled) return;
-        saveSettingMutation.mutate({riskPreset, priceVolatilityEnabled, movingAverageEnabled, marketIndexEnabled, volumePriceEnabled: next, rsiEnabled, highLow52wEnabled}, {
+        saveSettingMutation.mutate({riskPreset, priceVolatilityEnabled, movingAverageEnabled, marketIndexEnabled, volumePriceEnabled: next, rsiEnabled, highLow52wEnabled, breakoutEnabled}, {
             onSuccess: () => showAlert(`거래량 보정이 ${next ? '적용' : '해제'}되었습니다.`, 'success'),
         });
     };
 
     const handleRsiToggle = (next: boolean) => {
         if (next === rsiEnabled) return;
-        saveSettingMutation.mutate({riskPreset, priceVolatilityEnabled, movingAverageEnabled, marketIndexEnabled, volumePriceEnabled, rsiEnabled: next, highLow52wEnabled}, {
+        saveSettingMutation.mutate({riskPreset, priceVolatilityEnabled, movingAverageEnabled, marketIndexEnabled, volumePriceEnabled, rsiEnabled: next, highLow52wEnabled, breakoutEnabled}, {
             onSuccess: () => showAlert(`RSI 보정이 ${next ? '적용' : '해제'}되었습니다.`, 'success'),
         });
     };
 
     const handleHighLow52wToggle = (next: boolean) => {
         if (next === highLow52wEnabled) return;
-        saveSettingMutation.mutate({riskPreset, priceVolatilityEnabled, movingAverageEnabled, marketIndexEnabled, volumePriceEnabled, rsiEnabled, highLow52wEnabled: next}, {
+        saveSettingMutation.mutate({riskPreset, priceVolatilityEnabled, movingAverageEnabled, marketIndexEnabled, volumePriceEnabled, rsiEnabled, highLow52wEnabled: next, breakoutEnabled}, {
             onSuccess: () => showAlert(`52주 위치 보정이 ${next ? '적용' : '해제'}되었습니다.`, 'success'),
+        });
+    };
+
+    const handleBreakoutToggle = (next: boolean) => {
+        if (next === breakoutEnabled) return;
+        saveSettingMutation.mutate({riskPreset, priceVolatilityEnabled, movingAverageEnabled, marketIndexEnabled, volumePriceEnabled, rsiEnabled, highLow52wEnabled, breakoutEnabled: next}, {
+            onSuccess: () => showAlert(`신고저 돌파 보정이 ${next ? '적용' : '해제'}되었습니다.`, 'success'),
         });
     };
 
@@ -415,7 +423,7 @@ const RecommendList = () => {
                         </Box>
                         <Box sx={{display: 'flex', alignItems: 'center', gap: 0.5}}>
                             <Stack direction="row" alignItems="center" spacing={0.5}>
-                                <Typography variant="body2">52주</Typography>
+                                <Typography variant="body2">52주 위치</Typography>
                                 <Tooltip title="52주 고저점 대비 주가의 위치에 따라 등급을 조정합니다." arrow>
                                     <InfoOutlinedIcon fontSize="small" sx={{color: 'text.secondary', display: 'block'}}/>
                                 </Tooltip>
@@ -424,6 +432,20 @@ const RecommendList = () => {
                                 size="small"
                                 checked={highLow52wEnabled}
                                 onChange={(e) => handleHighLow52wToggle(e.target.checked)}
+                                disabled={saveSettingMutation.isPending}
+                            />
+                        </Box>
+                        <Box sx={{display: 'flex', alignItems: 'center', gap: 0.5}}>
+                            <Stack direction="row" alignItems="center" spacing={0.5}>
+                                <Typography variant="body2">신고저 돌파</Typography>
+                                <Tooltip title="신고가·신저가 돌파와 거래량 동반 여부에 따라 등급을 조정합니다." arrow>
+                                    <InfoOutlinedIcon fontSize="small" sx={{color: 'text.secondary', display: 'block'}}/>
+                                </Tooltip>
+                            </Stack>
+                            <Switch
+                                size="small"
+                                checked={breakoutEnabled}
+                                onChange={(e) => handleBreakoutToggle(e.target.checked)}
                                 disabled={saveSettingMutation.isPending}
                             />
                         </Box>
