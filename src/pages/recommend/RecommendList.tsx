@@ -150,7 +150,7 @@ const RecommendList = () => {
     const handleBreakoutToggle = (next: boolean) => {
         if (next === breakoutEnabled) return;
         saveSettingMutation.mutate({riskPreset, priceVolatilityEnabled, movingAverageEnabled, marketIndexEnabled, volumePriceEnabled, rsiEnabled, highLow52wEnabled, breakoutEnabled: next}, {
-            onSuccess: () => showAlert(`신고저 돌파 보정이 ${next ? '적용' : '해제'}되었습니다.`, 'success'),
+            onSuccess: () => showAlert(`52주 신고저가 돌파 보정이 ${next ? '적용' : '해제'}되었습니다.`, 'success'),
         });
     };
 
@@ -437,8 +437,8 @@ const RecommendList = () => {
                         </Box>
                         <Box sx={{display: 'flex', alignItems: 'center', gap: 0.5}}>
                             <Stack direction="row" alignItems="center" spacing={0.5}>
-                                <Typography variant="body2">신고저 돌파</Typography>
-                                <Tooltip title="신고가·신저가 돌파와 거래량 동반 여부에 따라 등급을 조정합니다." arrow>
+                                <Typography variant="body2">52주 신고저가 돌파</Typography>
+                                <Tooltip title="52주 신고가·신저가 돌파와 거래량 동반 여부에 따라 등급을 조정합니다." arrow>
                                     <InfoOutlinedIcon fontSize="small" sx={{color: 'text.secondary', display: 'block'}}/>
                                 </Tooltip>
                             </Stack>

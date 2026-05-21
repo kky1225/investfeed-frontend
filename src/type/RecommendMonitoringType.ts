@@ -69,10 +69,8 @@ export interface AdminBacktestMetricsRes {
     metrics1d: HorizonMetrics;
     metrics5d: HorizonMetrics;
     metrics20d: HorizonMetrics;
-    byScenario: GroupMetrics[];
     byType: GroupMetrics[];
     byOriginSide: GroupMetrics[];
-    byModuleTrigger: GroupMetrics[];
 }
 
 export interface HorizonMetrics {
@@ -83,14 +81,21 @@ export interface HorizonMetrics {
     stdDev: number | null;
     maxReturn: number | null;
     minReturn: number | null;
+    // 같은 표본 같은 N영업일 시장 평균 등락률 (KOSPI/KOSDAQ 시장구분별 가중평균)
+    marketMeanReturn: number | null;
 }
 
 export interface GroupMetrics {
     groupKey: string;
     count: number;
-    evaluable5d: number;
-    meanReturn5d: number | null;
-    hitRate5d: number | null;
+    // 1d/5d/20d 각각 신호 평균 + 시장 평균
+    signalMean1dPct: number | null;
+    marketMean1dPct: number | null;
+    signalMean5dPct: number | null;
+    marketMean5dPct: number | null;
+    signalMean20dPct: number | null;
+    marketMean20dPct: number | null;
+    hitRate5d: number | null;          // 5d 적중률 (대표)
 }
 
 export interface AdminMarketSnapshotRes {

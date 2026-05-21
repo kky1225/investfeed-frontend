@@ -11,7 +11,13 @@ import Paper from '@mui/material/Paper';
 import TextField from '@mui/material/TextField';
 import ToggleButton from '@mui/material/ToggleButton';
 import ToggleButtonGroup from '@mui/material/ToggleButtonGroup';
-import {DataGrid, type GridColDef} from '@mui/x-data-grid';
+import Dialog from '@mui/material/Dialog';
+import DialogTitle from '@mui/material/DialogTitle';
+import DialogContent from '@mui/material/DialogContent';
+import DialogActions from '@mui/material/DialogActions';
+import Button from '@mui/material/Button';
+import Divider from '@mui/material/Divider';
+import {DataGrid, type GridColDef, type GridColumnGroupingModel, type GridRenderCellParams} from '@mui/x-data-grid';
 import {
     fetchAdminRecommendPicks,
     fetchAdminMarketSnapshots,
@@ -42,16 +48,13 @@ export default function RecommendMonitoring() {
 
     return (
         <Box sx={{p: 2}}>
-            <Typography variant="h5" sx={{mb: 1}}>추천 시스템 모니터링</Typography>
-            <Typography variant="body2" color="text.secondary" sx={{mb: 2}}>
-                매일 22:00 추천 + 22:30 백필 스케줄러 실행 결과. 사용자 노출 X — 관리자 전용.
-            </Typography>
+            <Typography variant="h5" sx={{mb: 2}}>추천 시스템 모니터링</Typography>
 
             <Tabs value={tab} onChange={(_, v) => setTab(v)} sx={{mb: 2}}>
-                <Tab label="1. 신호 + Performance" />
-                <Tab label="2. 매크로 스냅샷" />
-                <Tab label="3. 백필 진행도" />
-                <Tab label="4. 백테스트 집계" />
+                <Tab label="추천 종목" />
+                <Tab label="매크로 스냅샷" />
+                <Tab label="백필 진행도" />
+                <Tab label="백테스트 집계" />
             </Tabs>
 
             {tab === 0 && <SignalsPanel />}
@@ -79,52 +82,30 @@ function SignalsPanel() {
         ),
     });
 
+    // 행 클릭 → 상세 다이얼로그 (모니터링 에러 로그 패턴)
+    const [selected, setSelected] = useState<AdminRecommendPickRes | null>(null);
+
+    // 표는 핵심 컬럼만 — 세부 트리거/Raw지표/52주위치/백테스트 가격은 클릭 시 다이얼로그.
     const columns: GridColDef<AdminRecommendPickRes>[] = [
-        // Signal
         {field: 'stkCd', headerName: '종목코드', width: 100},
-        {field: 'stkNm', headerName: '종목명', width: 130},
-        {field: 'marketType', headerName: '시장', width: 75},
-        {field: 'originSide', headerName: '진영', width: 65},
+        {field: 'stkNm', headerName: '종목명', flex: 1, minWidth: 130},
+        {field: 'marketType', headerName: '시장', width: 75, align: 'center', headerAlign: 'center'},
+        {field: 'originSide', headerName: '진영', width: 65, align: 'center', headerAlign: 'center'},
         {
-            field: 'type', headerName: '등급', width: 110,
+            field: 'type', headerName: '등급', width: 130, align: 'center', headerAlign: 'center',
             renderCell: (p) => <TypeChip type={p.value as string} />,
         },
-        // Trigger (후행 모듈만 — 매크로는 동행지표라 백테스트에서 제외)
-        {field: 'pvTrigger', headerName: 'PV', width: 85, renderCell: (p) => <TriggerChip v={p.value as ModuleTrigger} />},
-        {field: 'maTrigger', headerName: 'MA', width: 85, renderCell: (p) => <TriggerChip v={p.value as ModuleTrigger} />},
-        {field: 'vpTrigger', headerName: 'VP', width: 85, renderCell: (p) => <TriggerChip v={p.value as ModuleTrigger} />},
-        {field: 'rsiTrigger', headerName: 'RSI', width: 85, renderCell: (p) => <TriggerChip v={p.value as ModuleTrigger} />},
-        {field: 'hl52wTrigger', headerName: '52주위치', width: 90, renderCell: (p) => <TriggerChip v={p.value as ModuleTrigger} />},
-        {field: 'breakoutTrigger', headerName: '신고저돌파', width: 95, renderCell: (p) => <TriggerChip v={p.value as ModuleTrigger} />},
-        // Raw 지표
-        {field: 'rsi14', headerName: 'RSI14', width: 80, valueFormatter: (v) => fmtNum(v as number | null, 1)},
-        {field: 'flu5Pct', headerName: '5일등락%', width: 95, valueFormatter: (v) => fmtNum(v as number | null, 2)},
-        {field: 'todayChangeRate', headerName: '당일%', width: 85, valueFormatter: (v) => fmtNum(v as number | null, 2)},
-        {field: 'ma5', headerName: 'MA5', width: 100, valueFormatter: (v) => fmtNum(v as number | null, 0)},
-        {field: 'ma20', headerName: 'MA20', width: 100, valueFormatter: (v) => fmtNum(v as number | null, 0)},
-        {field: 'todayVolume', headerName: '당일거래량', width: 110, valueFormatter: (v) => fmtLong(v as number | null)},
-        {field: 'avg20dVolume', headerName: '20일평균거래량', width: 130, valueFormatter: (v) => fmtLong(v as number | null)},
-        // 52주 위치 (HighLow52wModule) — Stage Analysis
-        {field: 'distFromLow52w', headerName: '저점거리%', width: 100, valueFormatter: (v) => fmtNum(v as number | null, 1)},
-        {field: 'distFromHigh52w', headerName: '고점거리%', width: 100, valueFormatter: (v) => fmtNum(v as number | null, 1)},
         {
-            field: 'closeAboveMa20', headerName: 'MA20위', width: 80,
-            renderCell: (p) => p.value == null ? <span>-</span> : <span>{(p.value as boolean) ? '↑' : '↓'}</span>,
-        },
-        // 가격 + Performance (history 만 채워짐)
-        {field: 'pickPrice', headerName: 'T일 종가', width: 95, valueFormatter: (v) => fmtLong(v as number | null)},
-        {field: 'priceOpen1d', headerName: 'T+1 시가', width: 95, valueFormatter: (v) => fmtLong(v as number | null)},
-        {
-            field: 'ret1d', headerName: '1d 수익', width: 100,
-            renderCell: (p) => <ReturnCell v={p.value as number | null} side={p.row.originSide} />,
+            field: 'ret1d', headerName: '1d 수익', width: 100, align: 'right', headerAlign: 'right',
+            renderCell: (p) => <ReturnCell v={p.value as number | null} side={p.row.originSide} type={p.row.type} />,
         },
         {
-            field: 'ret5d', headerName: '5d 수익', width: 100,
-            renderCell: (p) => <ReturnCell v={p.value as number | null} side={p.row.originSide} />,
+            field: 'ret5d', headerName: '5d 수익', width: 100, align: 'right', headerAlign: 'right',
+            renderCell: (p) => <ReturnCell v={p.value as number | null} side={p.row.originSide} type={p.row.type} />,
         },
         {
-            field: 'ret20d', headerName: '20d 수익', width: 100,
-            renderCell: (p) => <ReturnCell v={p.value as number | null} side={p.row.originSide} />,
+            field: 'ret20d', headerName: '20d 수익', width: 100, align: 'right', headerAlign: 'right',
+            renderCell: (p) => <ReturnCell v={p.value as number | null} side={p.row.originSide} type={p.row.type} />,
         },
     ];
 
@@ -144,28 +125,31 @@ function SignalsPanel() {
                         InputLabelProps={{shrink: true}}
                         sx={{width: 180}}
                     />
-                    <Typography variant="body2" color="text.secondary">
-                        {isHistorical
-                            ? `stock_pick_history 조회 (가격/수익률 포함)`
-                            : `stock_pick 현재 상태 (당일 22:00 이후 데이터, 가격 백필 X)`}
-                    </Typography>
+                    {isHistorical && (
+                        <Typography variant="body2" color="text.secondary">
+                            stock_pick_history 조회 (가격/수익률 포함). 종목 행 클릭 시 트리거·지표·백테스트 가격 상세.
+                        </Typography>
+                    )}
                     <Box sx={{flexGrow: 1}} />
                     <SummaryChips picks={data ?? []} />
                 </Stack>
             </Paper>
 
-            <Box sx={{height: 700, width: '100%'}}>
-                <DataGrid
-                    rows={data ?? []}
-                    columns={columns}
-                    getRowId={(r) => `${r.stkCd}-${r.pickDate ?? 'current'}`}
-                    loading={isLoading}
-                    density="compact"
-                    disableRowSelectionOnClick
-                    initialState={{pagination: {paginationModel: {pageSize: 50}}}}
-                    pageSizeOptions={[25, 50, 100]}
-                />
-            </Box>
+            <DataGrid
+                autoHeight
+                rows={data ?? []}
+                columns={columns}
+                getRowId={(r) => `${r.stkCd}-${r.pickDate ?? 'current'}`}
+                loading={isLoading}
+                density="compact"
+                disableRowSelectionOnClick
+                onRowClick={(p) => setSelected(p.row as AdminRecommendPickRes)}
+                initialState={{pagination: {paginationModel: {pageSize: 50}}}}
+                pageSizeOptions={[25, 50, 100]}
+                sx={{'& .MuiDataGrid-row': {cursor: 'pointer'}}}
+            />
+
+            <SignalDetailDialog pick={selected} onClose={() => setSelected(null)} />
         </Box>
     );
 }
@@ -177,11 +161,17 @@ function SummaryChips({picks}: {picks: AdminRecommendPickRes[]}) {
         return acc;
     }, {});
     const order = ['STRONG_BUY', 'BUY', 'HOLD', 'SELL', 'STRONG_SELL'];
+    // 한국 관례 — 매수 진영(BUY/STRONG_BUY) 빨강, 매도 진영(SELL/STRONG_SELL) 파랑, HOLD 중립.
+    const colorOf = (t: string): 'error' | 'info' | 'default' => {
+        if (t === 'STRONG_BUY' || t === 'BUY') return 'error';
+        if (t === 'SELL' || t === 'STRONG_SELL') return 'info';
+        return 'default';
+    };
     return (
         <Stack direction="row" spacing={1}>
             <Chip size="small" label={`총 ${picks.length}`} variant="outlined" />
             {order.map((t) => (byType[t] ? (
-                <Chip key={t} size="small" label={`${t} ${byType[t]}`} variant="outlined" />
+                <Chip key={t} size="small" color={colorOf(t)} label={`${t} ${byType[t]}`} variant="outlined" />
             ) : null))}
         </Stack>
     );
@@ -196,34 +186,59 @@ function SnapshotsPanel() {
         queryFn: async () => requireOk(await fetchAdminMarketSnapshots(30), []),
     });
 
+    const center = {headerAlign: 'center' as const, align: 'center' as const};
     const columns: GridColDef<AdminMarketSnapshotRes>[] = [
-        {field: 'capturedDate', headerName: '일자', width: 110},
-        {field: 'kospiChangeRate', headerName: 'KOSPI %', width: 95, valueFormatter: (v) => fmtNum(v as number | null, 2)},
-        {field: 'kospiForeignerSign', headerName: 'KOSPI 외인', width: 105, renderCell: (p) => <SignChip v={p.value as string | null} />},
-        {field: 'kospiInstitutionSign', headerName: 'KOSPI 기관', width: 105, renderCell: (p) => <SignChip v={p.value as string | null} />},
-        {field: 'kospiScenario', headerName: 'KOSPI 시나리오', width: 160, renderCell: (p) => <ScenarioChip v={p.value as string | null} />},
-        {field: 'kosdaqChangeRate', headerName: 'KOSDAQ %', width: 95, valueFormatter: (v) => fmtNum(v as number | null, 2)},
-        {field: 'kosdaqForeignerSign', headerName: 'KOSDAQ 외인', width: 110, renderCell: (p) => <SignChip v={p.value as string | null} />},
-        {field: 'kosdaqInstitutionSign', headerName: 'KOSDAQ 기관', width: 110, renderCell: (p) => <SignChip v={p.value as string | null} />},
-        {field: 'kosdaqScenario', headerName: 'KOSDAQ 시나리오', width: 160, renderCell: (p) => <ScenarioChip v={p.value as string | null} />},
-        {field: 'capturedAt', headerName: '저장시각', width: 180},
+        {field: 'capturedDate', headerName: '일자', width: 120, ...center},
+        {field: 'kospiChangeRate', headerName: '등락률', width: 110, ...center, renderCell: (p) => <ChangeRateCell v={p.value as number | null} />},
+        {field: 'kospiForeignerSign', headerName: '외인', width: 90, ...center, renderCell: (p) => <SignChip v={p.value as string | null} />},
+        {field: 'kospiInstitutionSign', headerName: '기관', width: 90, ...center, renderCell: (p) => <SignChip v={p.value as string | null} />},
+        {field: 'kospiScenario', headerName: '매크로', width: 120, ...center, renderCell: (p) => <MacroEffectChip v={p.value as string | null} />},
+        {field: 'kosdaqChangeRate', headerName: '등락률', width: 110, ...center, renderCell: (p) => <ChangeRateCell v={p.value as number | null} />},
+        {field: 'kosdaqForeignerSign', headerName: '외인', width: 90, ...center, renderCell: (p) => <SignChip v={p.value as string | null} />},
+        {field: 'kosdaqInstitutionSign', headerName: '기관', width: 90, ...center, renderCell: (p) => <SignChip v={p.value as string | null} />},
+        {field: 'kosdaqScenario', headerName: '매크로', width: 120, ...center, renderCell: (p) => <MacroEffectChip v={p.value as string | null} />},
+    ];
+
+    const columnGroupingModel: GridColumnGroupingModel = [
+        {
+            groupId: 'KOSPI', headerName: 'KOSPI', headerAlign: 'center',
+            children: [
+                {field: 'kospiChangeRate'}, {field: 'kospiForeignerSign'},
+                {field: 'kospiInstitutionSign'}, {field: 'kospiScenario'},
+            ],
+        },
+        {
+            groupId: 'KOSDAQ', headerName: 'KOSDAQ', headerAlign: 'center',
+            children: [
+                {field: 'kosdaqChangeRate'}, {field: 'kosdaqForeignerSign'},
+                {field: 'kosdaqInstitutionSign'}, {field: 'kosdaqScenario'},
+            ],
+        },
     ];
 
     if (isError) return <ErrorBanner text="데이터 조회 실패" />;
 
     return (
-        <Box sx={{height: 700}}>
-            <DataGrid
-                rows={data ?? []}
-                columns={columns}
-                getRowId={(r) => r.capturedDate}
-                loading={isLoading}
-                density="compact"
-                disableRowSelectionOnClick
-                initialState={{pagination: {paginationModel: {pageSize: 25}}}}
-                pageSizeOptions={[25, 50]}
-            />
-        </Box>
+        <DataGrid
+            autoHeight
+            rows={data ?? []}
+            columns={columns}
+            columnGroupingModel={columnGroupingModel}
+            getRowId={(r) => r.capturedDate}
+            loading={isLoading}
+            density="compact"
+            disableRowSelectionOnClick
+            showColumnVerticalBorder
+            showCellVerticalBorder
+            initialState={{pagination: {paginationModel: {pageSize: 25}}}}
+            pageSizeOptions={[25, 50]}
+            sx={{
+                '& .MuiDataGrid-columnHeaderTitle': {fontWeight: 700},
+                '& .MuiDataGrid-columnHeader--filledGroup .MuiDataGrid-columnHeaderTitle': {
+                    fontWeight: 800,
+                },
+            }}
+        />
     );
 }
 
@@ -256,18 +271,17 @@ function BackfillPanel() {
     if (isError) return <ErrorBanner text="데이터 조회 실패" />;
 
     return (
-        <Box sx={{height: 700}}>
-            <DataGrid
-                rows={data ?? []}
-                columns={columns}
-                getRowId={(r) => r.pickDate}
-                loading={isLoading}
-                density="compact"
-                disableRowSelectionOnClick
-                initialState={{pagination: {paginationModel: {pageSize: 25}}}}
-                pageSizeOptions={[25, 50]}
-            />
-        </Box>
+        <DataGrid
+            autoHeight
+            rows={data ?? []}
+            columns={columns}
+            getRowId={(r) => r.pickDate}
+            loading={isLoading}
+            density="compact"
+            disableRowSelectionOnClick
+            initialState={{pagination: {paginationModel: {pageSize: 25}}}}
+            pageSizeOptions={[25, 50]}
+        />
     );
 }
 
@@ -290,40 +304,94 @@ function MetricsPanel() {
 
     return (
         <Box>
-            {/* 기간 선택 */}
-            <Paper sx={{p: 2, mb: 2}} variant="outlined">
-                <Stack direction="row" spacing={2} alignItems="center">
-                    <Typography variant="body2">기간:</Typography>
-                    <ToggleButtonGroup
-                        size="small"
-                        exclusive
-                        value={periodDays}
-                        onChange={(_, v) => v && setPeriodDays(v)}
-                    >
-                        <ToggleButton value={7}>7일</ToggleButton>
-                        <ToggleButton value={30}>30일</ToggleButton>
-                        <ToggleButton value={90}>90일</ToggleButton>
-                        <ToggleButton value={365}>1년</ToggleButton>
-                    </ToggleButtonGroup>
-                    <Typography variant="body2" color="text.secondary" sx={{ml: 2}}>
-                        총 신호 수: {data.totalSignals ?? 0}
-                    </Typography>
-                </Stack>
-            </Paper>
+            {/* 기간 선택 — iOS Segmented Control 스타일 + 우측 통계 카드 */}
+            <Stack
+                direction="row"
+                alignItems="center"
+                justifyContent="space-between"
+                flexWrap="wrap"
+                gap={2}
+                sx={{mb: 2.5, px: 0.5}}
+            >
+                <ToggleButtonGroup
+                    exclusive
+                    value={periodDays}
+                    onChange={(_, v) => v && setPeriodDays(v)}
+                    sx={{
+                        p: 0.5,
+                        bgcolor: 'action.hover',
+                        borderRadius: 999,
+                        gap: 0.25,
+                        '& .MuiToggleButton-root': {
+                            border: 0,
+                            borderRadius: '999px !important',
+                            px: 2.5,
+                            py: 0.5,
+                            fontSize: '0.8125rem',
+                            fontWeight: 500,
+                            textTransform: 'none',
+                            color: 'text.secondary',
+                            transition: 'all 0.2s',
+                            '&:hover': {
+                                bgcolor: 'action.selected',
+                            },
+                            '&.Mui-selected': {
+                                bgcolor: 'background.paper',
+                                color: 'primary.main',
+                                fontWeight: 700,
+                                boxShadow: '0 1px 3px rgba(0,0,0,0.08), 0 1px 2px rgba(0,0,0,0.04)',
+                                '&:hover': {
+                                    bgcolor: 'background.paper',
+                                },
+                            },
+                        },
+                    }}
+                >
+                    <ToggleButton value={7}>7일</ToggleButton>
+                    <ToggleButton value={30}>30일</ToggleButton>
+                    <ToggleButton value={90}>90일</ToggleButton>
+                    <ToggleButton value={365}>1년</ToggleButton>
+                </ToggleButtonGroup>
 
-            {/* 백테스트 가정/한계 안내 (항상 표시) */}
-            <Paper sx={{p: 2, mb: 2, bgcolor: 'info.light'}} variant="outlined">
-                <Typography variant="body2" sx={{fontWeight: 600}}>백테스트 가정 + 한계</Typography>
-                <Typography variant="caption" component="div" color="text.secondary" sx={{mt: 0.5}}>
-                    • 신호: T일 22:00 후행지표 만장일치 적용 등급 (type)<br />
-                    • 매수: T+1일 시가 / 평가: T+1·5·20일 종가<br />
-                    • 적중률: BUY 진영 = ret &gt; 0 비율, SELL 진영 = ret &lt; 0 비율<br />
-                    • <b>매크로(동행지표) 보정은 백테스트에서 제외</b> — 사용 시점의 시장 상황 반영이 본질이라
-                    시간 lag (T일 마감 매크로 → T+1일 매수) 시 의미 변질.
-                    매크로 ON 사용자의 정확한 백테스트는 구조적으로 불가능 (장 중 페이지 열람 시점이 사용자마다 다름).
-                    매크로 환경의 영향은 아래 "매크로 시나리오별 분해" 에서 측정.
-                </Typography>
-            </Paper>
+                <Box sx={{textAlign: 'right'}}>
+                    <Typography
+                        variant="caption"
+                        sx={{
+                            display: 'block',
+                            color: 'text.secondary',
+                            fontSize: '0.6875rem',
+                            letterSpacing: '0.08em',
+                            textTransform: 'uppercase',
+                            lineHeight: 1,
+                            mb: 0.25,
+                        }}
+                    >
+                        집계 신호
+                    </Typography>
+                    <Typography
+                        sx={{
+                            fontSize: '1.25rem',
+                            fontWeight: 700,
+                            lineHeight: 1.1,
+                            color: 'text.primary',
+                            fontFeatureSettings: '"tnum"',
+                        }}
+                    >
+                        {(data.totalSignals ?? 0).toLocaleString()}
+                        <Box
+                            component="span"
+                            sx={{
+                                fontSize: '0.75rem',
+                                fontWeight: 400,
+                                color: 'text.secondary',
+                                ml: 0.5,
+                            }}
+                        >
+                            건
+                        </Box>
+                    </Typography>
+                </Box>
+            </Stack>
 
             {/* 데이터 부족 안내 */}
             {data.insufficientReason && (
@@ -341,10 +409,8 @@ function MetricsPanel() {
 
             {/* 분해 표 */}
             <Stack spacing={3}>
-                <GroupTable title="매크로 시나리오별 (환경 영향)" rows={data.byScenario} />
                 <GroupTable title="등급별 (type)" rows={data.byType} />
                 <GroupTable title="진영별 (BUY / SELL)" rows={data.byOriginSide} />
-                <GroupTable title="후행 모듈 trigger 패턴별" rows={data.byModuleTrigger} />
             </Stack>
         </Box>
     );
@@ -352,21 +418,33 @@ function MetricsPanel() {
 
 function HorizonCard({horizon, m}: {horizon: string; m: HorizonMetrics}) {
     const meanColor = m.meanReturn == null ? 'text.secondary' : m.meanReturn > 0 ? 'success.main' : 'error.main';
+    // 신호 평균 − 시장 평균 (초과수익). 양수면 신호가 시장을 이김.
+    const excess = (m.meanReturn != null && m.marketMeanReturn != null) ? (m.meanReturn - m.marketMeanReturn) : null;
+    const excessColor = excess == null ? 'text.secondary' : excess > 0 ? 'success.main' : 'error.main';
     return (
         <Paper sx={{p: 2, flexGrow: 1}} variant="outlined">
             <Typography variant="overline" color="text.secondary">{horizon} ({m.horizon})</Typography>
             <Typography variant="caption" display="block">평가 가능: {m.evaluable}건</Typography>
             <Box sx={{my: 1}}>
-                <Typography variant="body2">평균 수익률</Typography>
+                <Typography variant="body2">신호 평균 수익률</Typography>
                 <Typography variant="h6" sx={{color: meanColor}}>
-                    {fmtNum(m.meanReturn, 2)}%
+                    {fmtPct(m.meanReturn, 2)}
                 </Typography>
             </Box>
+            <Box sx={{display: 'flex', gap: 2, flexWrap: 'wrap', mb: 1}}>
+                <KV label="시장 평균" value={fmtPct(m.marketMeanReturn, 2)} />
+                <Box>
+                    <Typography variant="caption" color="text.secondary">초과수익 (신호−시장)</Typography>
+                    <Typography variant="body2" sx={{color: excessColor, fontWeight: 600}}>
+                        {fmtPctSigned(excess)}
+                    </Typography>
+                </Box>
+            </Box>
             <Box sx={{display: 'flex', gap: 2, flexWrap: 'wrap'}}>
-                <KV label="적중률" value={`${fmtNum(m.hitRate, 1)}%`} />
-                <KV label="표준편차" value={`${fmtNum(m.stdDev, 2)}%`} />
-                <KV label="최대" value={`${fmtNum(m.maxReturn, 2)}%`} />
-                <KV label="최소" value={`${fmtNum(m.minReturn, 2)}%`} />
+                <KV label="적중률" value={fmtPct(m.hitRate, 1)} />
+                <KV label="표준편차" value={fmtPct(m.stdDev, 2)} />
+                <KV label="최대" value={fmtPct(m.maxReturn, 2)} />
+                <KV label="최소" value={fmtPct(m.minReturn, 2)} />
             </Box>
         </Paper>
     );
@@ -390,32 +468,171 @@ function GroupTable({title, rows}: {title: string; rows: GroupMetrics[]}) {
             </Paper>
         );
     }
+    // 1d/5d/20d × (신호 평균 / 시장 평균) 6열 + 그룹·신호수·5d 적중률
+    // 신호 컬럼은 적중 색상(녹=성공, 빨=실패) — groupKey 에서 진영 추론해 ReturnCell 의 side 전달.
+    // 시장 컬럼은 적중과 무관한 베이스라인이라 한국식 등락 색상(빨=양수, 파=음수) 사용.
+    const signalCell = (p: GridRenderCellParams<GroupMetrics>) => (
+        <ReturnCell v={p.value as number | null} side={inferSideFromGroup(p.row.groupKey)} type={p.row.groupKey}/>
+    );
+    const marketCell = (p: GridRenderCellParams<GroupMetrics>) => <MarketPctCell v={p.value as number | null}/>;
     const columns: GridColDef<GroupMetrics>[] = [
-        {field: 'groupKey', headerName: '그룹', flex: 1, minWidth: 200},
-        {field: 'count', headerName: '신호 수', width: 90},
-        {field: 'evaluable5d', headerName: '5d 평가 가능', width: 110},
+        {field: 'groupKey', headerName: '그룹', flex: 1, minWidth: 160},
+        {field: 'count', headerName: '신호 수', width: 80, align: 'right', headerAlign: 'right'},
+        {field: 'signalMean1dPct', headerName: '신호', width: 100, align: 'right', headerAlign: 'center', renderCell: signalCell},
+        {field: 'marketMean1dPct', headerName: '시장', width: 100, align: 'right', headerAlign: 'center', renderCell: marketCell},
+        {field: 'signalMean5dPct', headerName: '신호', width: 100, align: 'right', headerAlign: 'center', renderCell: signalCell},
+        {field: 'marketMean5dPct', headerName: '시장', width: 100, align: 'right', headerAlign: 'center', renderCell: marketCell},
+        {field: 'signalMean20dPct', headerName: '신호', width: 100, align: 'right', headerAlign: 'center', renderCell: signalCell},
+        {field: 'marketMean20dPct', headerName: '시장', width: 100, align: 'right', headerAlign: 'center', renderCell: marketCell},
+        {field: 'hitRate5d', headerName: '5d 적중률', width: 110, align: 'right', headerAlign: 'right', valueFormatter: (v) => fmtPct(v as number | null, 1)},
+    ];
+    const columnGroupingModel: GridColumnGroupingModel = [
         {
-            field: 'meanReturn5d', headerName: '5d 평균 수익률', width: 130,
-            renderCell: (p) => <ReturnCell v={p.value as number | null} side={null} />,
+            groupId: 'h1d', headerName: '1일 후', headerAlign: 'center',
+            children: [{field: 'signalMean1dPct'}, {field: 'marketMean1dPct'}],
         },
-        {field: 'hitRate5d', headerName: '5d 적중률', width: 110, valueFormatter: (v) => v == null ? '-' : `${fmtNum(v as number, 1)}%`},
+        {
+            groupId: 'h5d', headerName: '5일 후', headerAlign: 'center',
+            children: [{field: 'signalMean5dPct'}, {field: 'marketMean5dPct'}],
+        },
+        {
+            groupId: 'h20d', headerName: '20일 후', headerAlign: 'center',
+            children: [{field: 'signalMean20dPct'}, {field: 'marketMean20dPct'}],
+        },
     ];
     return (
         <Paper sx={{p: 2}} variant="outlined">
             <Typography variant="subtitle2" sx={{mb: 1}}>{title}</Typography>
-            <Box sx={{height: Math.min(rows.length * 36 + 110, 400)}}>
-                <DataGrid
-                    rows={rows}
-                    columns={columns}
-                    getRowId={(r) => r.groupKey}
-                    density="compact"
-                    disableRowSelectionOnClick
-                    hideFooter={rows.length <= 10}
-                    initialState={{pagination: {paginationModel: {pageSize: 10}}}}
-                    pageSizeOptions={[10, 25, 50]}
-                />
-            </Box>
+            <DataGrid
+                autoHeight
+                rows={rows}
+                columns={columns}
+                columnGroupingModel={columnGroupingModel}
+                getRowId={(r) => r.groupKey}
+                density="compact"
+                disableRowSelectionOnClick
+                showColumnVerticalBorder
+                hideFooter={rows.length <= 10}
+                initialState={{pagination: {paginationModel: {pageSize: 10}}}}
+                pageSizeOptions={[10, 25, 50]}
+            />
         </Paper>
+    );
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// 추천 종목 상세 다이얼로그 (행 클릭 시 표출, 모니터링 에러로그 패턴)
+// ════════════════════════════════════════════════════════════════════════════
+function SignalDetailDialog({pick, onClose}: {pick: AdminRecommendPickRes | null; onClose: () => void}) {
+    return (
+        <Dialog open={!!pick} onClose={onClose} maxWidth="md" fullWidth>
+            <DialogTitle>
+                {pick && (
+                    <Stack direction="row" spacing={1.5} alignItems="center">
+                        <Typography variant="h6" sx={{fontWeight: 700}}>{pick.stkNm}</Typography>
+                        <Typography variant="body2" color="text.secondary">{pick.stkCd}</Typography>
+                        <Chip size="small" label={pick.marketType ?? '-'} variant="outlined"/>
+                        <Chip size="small" label={pick.originSide ?? '-'} variant="outlined"/>
+                        <TypeChip type={pick.type}/>
+                    </Stack>
+                )}
+            </DialogTitle>
+            <DialogContent dividers>
+                {pick && (
+                    <Stack spacing={2}>
+                        {/* 수익률 */}
+                        <DetailSection title="수익률">
+                            <Stack direction="row" spacing={4}>
+                                <DetailField label="1d">
+                                    <ReturnCell v={pick.ret1d} side={pick.originSide} type={pick.type}/>
+                                </DetailField>
+                                <DetailField label="5d">
+                                    <ReturnCell v={pick.ret5d} side={pick.originSide} type={pick.type}/>
+                                </DetailField>
+                                <DetailField label="20d">
+                                    <ReturnCell v={pick.ret20d} side={pick.originSide} type={pick.type}/>
+                                </DetailField>
+                            </Stack>
+                        </DetailSection>
+
+                        {/* 트리거 (후행 모듈) */}
+                        <DetailSection title="트리거 (모듈 격상/격하 신호)">
+                            <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+                                <TriggerBox label="PV"            v={pick.pvTrigger}        side={pick.originSide}/>
+                                <TriggerBox label="MA"            v={pick.maTrigger}        side={pick.originSide}/>
+                                <TriggerBox label="VP"            v={pick.vpTrigger}        side={pick.originSide}/>
+                                <TriggerBox label="RSI"           v={pick.rsiTrigger}       side={pick.originSide}/>
+                                <TriggerBox label="52주 위치"      v={pick.hl52wTrigger}     side={pick.originSide}/>
+                                <TriggerBox label="52주 신고저가 돌파" v={pick.breakoutTrigger} side={pick.originSide}/>
+                            </Stack>
+                        </DetailSection>
+
+                        {/* Raw 지표 */}
+                        <DetailSection title="Raw 지표">
+                            <Box sx={{display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 1.5}}>
+                                <DetailField label="RSI14" value={fmtNum(pick.rsi14, 1)}/>
+                                <DetailField label="5일등락%" value={fmtNum(pick.flu5Pct, 2)}/>
+                                <DetailField label="당일%" value={fmtNum(pick.todayChangeRate, 2)}/>
+                                <DetailField label="MA20위" value={pick.closeAboveMa20 == null ? '-' : (pick.closeAboveMa20 ? '↑' : '↓')}/>
+                                <DetailField label="MA5" value={fmtNum(pick.ma5, 0)}/>
+                                <DetailField label="MA20" value={fmtNum(pick.ma20, 0)}/>
+                                <DetailField label="당일 거래량" value={fmtLong(pick.todayVolume)}/>
+                                <DetailField label="20일 평균거래량" value={fmtLong(pick.avg20dVolume)}/>
+                            </Box>
+                        </DetailSection>
+
+                        {/* 52주 위치 */}
+                        <DetailSection title="52주 위치 (Stage Analysis)">
+                            <Box sx={{display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 1.5}}>
+                                <DetailField label="저점거리%" value={fmtNum(pick.distFromLow52w, 1)}/>
+                                <DetailField label="고점거리%" value={fmtNum(pick.distFromHigh52w, 1)}/>
+                            </Box>
+                        </DetailSection>
+
+                        {/* 백테스트 가격 */}
+                        <DetailSection title="백테스트 가격">
+                            <Box sx={{display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 1.5}}>
+                                <DetailField label="T일 종가" value={fmtLong(pick.pickPrice)}/>
+                                <DetailField label="T+1 시가" value={fmtLong(pick.priceOpen1d)}/>
+                            </Box>
+                        </DetailSection>
+                    </Stack>
+                )}
+            </DialogContent>
+            <DialogActions>
+                <Button onClick={onClose}>닫기</Button>
+            </DialogActions>
+        </Dialog>
+    );
+}
+
+function DetailSection({title, children}: {title: string; children: React.ReactNode}) {
+    return (
+        <Box>
+            <Typography variant="overline" color="text.secondary" sx={{fontWeight: 700}}>{title}</Typography>
+            <Divider sx={{mb: 1, mt: 0.5}}/>
+            {children}
+        </Box>
+    );
+}
+
+function DetailField({label, value, children}: {label: string; value?: React.ReactNode; children?: React.ReactNode}) {
+    return (
+        <Box>
+            <Typography variant="caption" color="text.secondary">{label}</Typography>
+            <Typography variant="body2" sx={{fontWeight: 600, fontFamily: 'monospace'}}>
+                {children ?? value ?? '-'}
+            </Typography>
+        </Box>
+    );
+}
+
+function TriggerBox({label, v, side}: {label: string; v: ModuleTrigger; side: string | null}) {
+    return (
+        <Box sx={{display: 'flex', alignItems: 'center', gap: 0.5, minWidth: 160}}>
+            <Typography variant="caption" color="text.secondary" sx={{minWidth: 90}}>{label}</Typography>
+            <TriggerChip v={v} side={side}/>
+        </Box>
     );
 }
 
@@ -424,35 +641,72 @@ function GroupTable({title, rows}: {title: string; rows: GroupMetrics[]}) {
 // ════════════════════════════════════════════════════════════════════════════
 function TypeChip({type}: {type: string | null}) {
     if (!type) return <span>-</span>;
-    const color: 'default' | 'success' | 'error' =
-        type === 'STRONG_BUY' || type === 'BUY' ? 'success'
-        : type === 'STRONG_SELL' || type === 'SELL' ? 'error'
+    // 사용자 페이지(RecommendCard.tsx) 색상 기준: BUY계열=error(빨강), SELL계열=info(파랑).
+    const color: 'default' | 'error' | 'info' =
+        type === 'STRONG_BUY' || type === 'BUY' ? 'error'
+        : type === 'STRONG_SELL' || type === 'SELL' ? 'info'
         : 'default';
     const variant = (type === 'STRONG_BUY' || type === 'STRONG_SELL') ? 'filled' : 'outlined';
     return <Chip size="small" label={type} color={color} variant={variant} />;
 }
 
-function TriggerChip({v}: {v: ModuleTrigger}) {
-    if (!v || v === 'NONE') return <span style={{color: '#999'}}>-</span>;
-    const color: 'success' | 'error' = v === 'PROMOTE' ? 'success' : 'error';
-    return <Chip size="small" label={v} color={color} variant="outlined" />;
+/**
+ * 모듈 트리거 칩. PROMOTE/DEMOTE 는 진영(side)에 따라 시장 의미가 정반대다
+ * (promoteOnce: BUY→STRONG_BUY, SELL→STRONG_SELL = 해당 진영 신호 *강화*).
+ * → 방향 포함 라벨 + 시장심리 색(강세=빨강 / 약세=파랑)으로 표시. MacroEffectChip 과 동일 규칙.
+ *  - BUY  + PROMOTE → BUY 격상  (강세, 빨강)
+ *  - BUY  + DEMOTE  → BUY 격하  (강세 약화, 파랑)
+ *  - SELL + PROMOTE → SELL 격상 (약세, 파랑)
+ *  - SELL + DEMOTE  → SELL 격하 (약세 약화, 빨강)
+ */
+function TriggerChip({v, side}: {v: ModuleTrigger; side: string | null}) {
+    if (!v || v === 'NONE' || (side !== 'BUY' && side !== 'SELL')) {
+        return <span style={{color: '#999'}}>-</span>;
+    }
+    const label = `${side} ${v === 'PROMOTE' ? '격상' : '격하'}`;
+    // 강세(BUY 격상 / SELL 격하)=빨강, 약세(SELL 격상 / BUY 격하)=파랑
+    const bullish = (side === 'BUY') === (v === 'PROMOTE');
+    return <Chip size="small" label={label} color={bullish ? 'error' : 'info'} variant="outlined" />;
 }
 
 function SignChip({v}: {v: string | null}) {
     if (!v) return <span>-</span>;
-    const color: 'success' | 'error' | 'default' =
-        v === 'BUY' ? 'success' : v === 'SELL' ? 'error' : 'default';
+    // 전역 색 체계: BUY=빨강(error), SELL=파랑(info).
+    const color: 'error' | 'info' | 'default' =
+        v === 'BUY' ? 'error' : v === 'SELL' ? 'info' : 'default';
     return <Chip size="small" label={v} color={color} variant="outlined" />;
 }
 
-function ScenarioChip({v}: {v: string | null}) {
-    if (!v) return <span>-</span>;
-    const promote = v === 'UP_BUY_BUY' || v === 'DOWN_SELL_SELL';
-    const demote = v === 'UP_SELL_SELL' || v === 'DOWN_BUY_BUY';
-    const color: 'success' | 'error' | 'warning' | 'default' =
-        promote ? 'success' : demote ? 'error' :
-        (v.startsWith('UP_') || v.startsWith('DOWN_')) ? 'warning' : 'default';
-    return <Chip size="small" label={v} color={color} variant="outlined" />;
+/**
+ * 매크로 시나리오를 그날 보정 효과로 환산해 표시.
+ * 격상/격하는 진영(BUY/SELL)에 따라 의미가 정반대라, 단순 PROMOTE/DEMOTE 가 아니라
+ * **방향까지 포함한 라벨**로 표시해야 오해가 없다(예: DOWN_SELL_SELL = SELL 격상).
+ * 색은 시장 심리 기준 — 강세(BUY 격상/SELL 격하)=빨강, 약세(SELL 격상/BUY 격하)=파랑.
+ *  - UP_BUY_BUY   → BUY 격상  (강세, 빨강)
+ *  - DOWN_BUY_BUY → SELL 격하 (매도신호 완화, 빨강)
+ *  - DOWN_SELL_SELL → SELL 격상 (약세, 파랑)
+ *  - UP_SELL_SELL → BUY 격하 (상승신호 약화, 파랑)
+ *  - 다이버전스(UP_BUY_SELL/DOWN_BUY_SELL)·NEUTRAL·기타 → 유지(-)
+ */
+function MacroEffectChip({v}: {v: string | null}) {
+    const map: Record<string, {label: string; color: 'error' | 'info'}> = {
+        UP_BUY_BUY:     {label: 'BUY 격상',  color: 'error'},
+        DOWN_BUY_BUY:   {label: 'SELL 격하', color: 'error'},
+        DOWN_SELL_SELL: {label: 'SELL 격상', color: 'info'},
+        UP_SELL_SELL:   {label: 'BUY 격하',  color: 'info'},
+    };
+    const e = v ? map[v] : undefined;
+    if (!e) return <span style={{color: '#999'}}>-</span>;
+    return <Chip size="small" label={e.label} color={e.color} variant="outlined" />;
+}
+
+/** 지수 등락률 셀 — 값에 % 부착, 한국장 관례 색(상승=빨강 / 하락=파랑 / 보합·없음=회색). */
+function ChangeRateCell({v}: {v: number | null}) {
+    if (v == null) return <span style={{color: '#999'}}>-</span>;
+    // 사용자 페이지 등락률 컨벤션(renderTradeColor)과 통일: 상승=빨/하락=파, 굵기·monospace 없음.
+    const color = v > 0 ? 'error.main' : v < 0 ? 'info.main' : 'text.secondary';
+    const sign = v > 0 ? '+' : '';
+    return <Box sx={{color}}>{sign}{fmtNum(v, 2)}%</Box>;
 }
 
 function FillRate({filled, total}: {filled: number; total: number}) {
@@ -463,11 +717,37 @@ function FillRate({filled, total}: {filled: number; total: number}) {
 
 /**
  * 수익률 셀. side 가 'SELL' 이면 음수가 좋은 신호 (매도 성공) → 색상 반전.
+ * type 이 'HOLD' 면 관망(포지션 없음)이라 적중 판정 무의미 → 중립색(숫자만 표시).
+ * (백테스트 집계는 별개로 HOLD 적중률도 산출 — 행별 색만 중립 처리)
  */
-function ReturnCell({v, side}: {v: number | null; side: string | null}) {
+function ReturnCell({v, side, type}: {v: number | null; side: string | null; type?: string | null}) {
     if (v == null) return <span style={{color: '#999'}}>-</span>;
+    if (type === 'HOLD') {
+        return <Box sx={{color: 'text.secondary', fontFamily: 'monospace'}}>{fmtNum(v, 2)}%</Box>;
+    }
     const success = side === 'SELL' ? v < 0 : v > 0;
     const color = success ? 'success.main' : 'error.main';
+    return <Box sx={{color, fontFamily: 'monospace'}}>{fmtNum(v, 2)}%</Box>;
+}
+
+/**
+ * byType 의 groupKey(등급) 또는 byOriginSide 의 groupKey(진영) 에서 매매 진영 추론.
+ * STRONG_BUY/BUY → BUY, SELL/STRONG_SELL → SELL, HOLD/UNKNOWN → null (중립).
+ * ReturnCell 의 side 인자에 전달해 적중 색상(녹=성공, 빨=실패) 판정에 사용.
+ */
+function inferSideFromGroup(groupKey: string): 'BUY' | 'SELL' | null {
+    if (groupKey === 'STRONG_BUY' || groupKey === 'BUY') return 'BUY';
+    if (groupKey === 'SELL' || groupKey === 'STRONG_SELL') return 'SELL';
+    return null;
+}
+
+/**
+ * 시장 평균(베이스라인) 셀. 적중 의미가 없는 단순 시장 등락률.
+ * 한국식 등락 색상 적용 — 양수=빨강(error.main), 음수=파랑(info.main), 0=중립.
+ */
+function MarketPctCell({v}: {v: number | null}) {
+    if (v == null) return <span style={{color: '#999'}}>-</span>;
+    const color = v > 0 ? 'error.main' : v < 0 ? 'info.main' : 'text.primary';
     return <Box sx={{color, fontFamily: 'monospace'}}>{fmtNum(v, 2)}%</Box>;
 }
 
@@ -483,4 +763,15 @@ function fmtNum(v: number | null | undefined, digits: number): string {
 function fmtLong(v: number | null | undefined): string {
     if (v == null) return '-';
     return v.toLocaleString();
+}
+
+function fmtPctSigned(v: number | null | undefined): string {
+    if (v == null || Number.isNaN(v)) return '-';
+    return `${v > 0 ? '+' : ''}${v.toFixed(2)}%`;
+}
+
+/** null 안전 % 포맷. null/NaN 이면 "-" (단위 없음), 아니면 `${v.toFixed(d)}%`. */
+function fmtPct(v: number | null | undefined, digits: number = 2): string {
+    if (v == null || Number.isNaN(v)) return '-';
+    return `${v.toFixed(digits)}%`;
 }

@@ -266,9 +266,8 @@ export default function Monitoring() {
     const lastUpdated = activeQuery.dataUpdatedAt ? new Date(activeQuery.dataUpdatedAt) : null;
     const pollError = !!activeQuery.error;
 
-    /** 활성 탭의 query 무효화 → 즉시 refetch 트리거. mutation 후 호출. */
     const reloadCurrentTab = () => {
-        queryClient.invalidateQueries({queryKey: ['monitoring', tab]});
+        queryClient.invalidateQueries({queryKey: ['monitoring']});
     };
 
     const openEdit = (s: SchedulerStatusRes) => {

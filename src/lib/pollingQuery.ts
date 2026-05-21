@@ -10,6 +10,9 @@ if (typeof window !== 'undefined') {
     window.addEventListener('show-session-expired', () => {
         isSessionExpiredGlobal = true;
     });
+    window.addEventListener('reset-session-expired', () => {
+        isSessionExpiredGlobal = false;
+    });
 }
 
 export interface PollingFetchConfig extends AxiosRequestConfig {
@@ -43,11 +46,15 @@ export function usePollingQuery<T = any>(
     // 세션 만료 이벤트 발생 후 polling 정지 — 컴포넌트별 re-render 트리거용 state
     const [sessionExpired, setSessionExpired] = useState(isSessionExpiredGlobal);
     useEffect(() => {
-        if (sessionExpired) return;
-        const handler = () => setSessionExpired(true);
-        window.addEventListener('show-session-expired', handler);
-        return () => window.removeEventListener('show-session-expired', handler);
-    }, [sessionExpired]);
+        const expireHandler = () => setSessionExpired(true);
+        const resetHandler = () => setSessionExpired(false);
+        window.addEventListener('show-session-expired', expireHandler);
+        window.addEventListener('reset-session-expired', resetHandler);
+        return () => {
+            window.removeEventListener('show-session-expired', expireHandler);
+            window.removeEventListener('reset-session-expired', resetHandler);
+        };
+    }, []);
 
     const effectiveEnabled = enabled && !sessionExpired;
 

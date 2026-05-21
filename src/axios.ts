@@ -16,7 +16,16 @@ let isSecondaryAuthPending = false;
 let secondaryAuthQueue: Array<{ resolve: (value: unknown) => void; reject: (reason?: unknown) => void }> = [];
 
 api.interceptors.response.use(
-    (response) => response,
+    (response) => {
+        if (response.config.url?.startsWith('/auth/login') && response.status === 200) {
+            isSessionExpired = false;
+            window.dispatchEvent(new CustomEvent('reset-session-expired'));
+        }
+        if (response.config.url?.startsWith('/auth/logout')) {
+            isSessionExpired = true;
+        }
+        return response;
+    },
     async (error) => {
         const originalRequest = error.config;
 

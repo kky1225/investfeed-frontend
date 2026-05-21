@@ -66,6 +66,8 @@ const RecommendCard = (
     const isBuySide = type === 'STRONG_BUY' || type === 'BUY';
     const isSellSide = type === 'STRONG_SELL' || type === 'SELL';
     const showStreak = !!streakDays && streakDays >= 2 && (isBuySide || isSellSide);
+    const streakColor: 'default' | 'warning' | 'error' =
+        !streakDays ? 'default' : streakDays >= 5 ? 'error' : streakDays >= 3 ? 'warning' : 'default';
     const streakLabel = `${streakDays}일연속 ${isBuySide ? 'BUY' : 'SELL'} REPORT`;
 
     return (
@@ -150,6 +152,7 @@ const RecommendCard = (
                                 <Chip
                                     size="small"
                                     variant="outlined"
+                                    color={streakColor}
                                     label={streakLabel}
                                 />
                             )}
