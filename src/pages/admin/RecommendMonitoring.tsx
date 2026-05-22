@@ -47,7 +47,7 @@ export default function RecommendMonitoring() {
     const [tab, setTab] = useState(0);
 
     return (
-        <Box sx={{p: 2}}>
+        <Box sx={{width: '100%', maxWidth: {sm: '100%', md: '1700px'}, p: 2}}>
             <Typography variant="h5" sx={{mb: 2}}>추천 시스템 모니터링</Typography>
 
             <Tabs value={tab} onChange={(_, v) => setTab(v)} sx={{mb: 2}}>

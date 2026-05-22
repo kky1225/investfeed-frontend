@@ -67,7 +67,6 @@ const MainLayout = () => {
                     component="main"
                     sx={(theme) => ({
                         flexGrow: 1,
-                        minWidth: 0,
                         backgroundColor: theme.vars
                             ? `rgba(${theme.vars.palette.background.defaultChannel} / 1)`
                             : alpha(theme.palette.background.default, 1),
@@ -77,10 +76,8 @@ const MainLayout = () => {
                     <Stack
                         spacing={2}
                         sx={{
-                            alignItems: 'stretch',
-                            width: '100%',
-                            minWidth: 0,
-                            px: 3,
+                            alignItems: 'center',
+                            mx: 3,
                             pb: 5,
                             mt: { xs: 8, md: 0 },
                         }}
