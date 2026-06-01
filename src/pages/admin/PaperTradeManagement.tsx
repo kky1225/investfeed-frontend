@@ -441,6 +441,14 @@ function PaperHoldingGradePanel() {
                 const color = v === 'BUY' ? 'error.main' : 'info.main';
                 return <Typography variant="body2" sx={{color, fontWeight: 600}}>{v}</Typography>;
             }},
+        {field: 'evaluationReason', headerName: '평가 사유', width: 110, align: 'center', headerAlign: 'center',
+            renderCell: (p) => {
+                const v = p.value as string | null;
+                if (!v) return <Typography variant="body2" color="text.secondary">-</Typography>;
+                // CONFLICT: BUY/SELL 양방향 시그널 모두 통과 → 추세 전환 신호 가능성. 경고색.
+                const label = v === 'CONFLICT' ? '충돌' : v;
+                return <Typography variant="body2" sx={{color: 'warning.main', fontWeight: 600}}>{label}</Typography>;
+            }},
         {field: 'marketType', headerName: '시장', width: 90, align: 'center', headerAlign: 'center',
             renderCell: (p) => <Typography variant="body2">{(p.value as string | null) ?? '-'}</Typography>},
         {field: 'penfndK', headerName: 'penfndK', width: 100, align: 'right', headerAlign: 'right',

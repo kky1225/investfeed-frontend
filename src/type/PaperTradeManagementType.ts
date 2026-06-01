@@ -76,6 +76,7 @@ export interface HoldingGradeItem {
     marketType: string | null;        // KOSPI / KOSDAQ
     penfndK: number | null;
     frgnrMcapRatio: number | null;
+    evaluationReason: string | null;  // CONFLICT(양방향 시그널 충돌)일 때만, 그 외 null
 }
 
 export interface PaperTradeReportRes {

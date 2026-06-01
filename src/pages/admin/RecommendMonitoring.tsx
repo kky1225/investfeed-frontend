@@ -679,25 +679,15 @@ function SignChip({v}: {v: string | null}) {
 
 /**
  * 매크로 시나리오를 그날 보정 효과로 환산해 표시.
- * 격상/격하는 진영(BUY/SELL)에 따라 의미가 정반대라, 단순 PROMOTE/DEMOTE 가 아니라
- * **방향까지 포함한 라벨**로 표시해야 오해가 없다(예: DOWN_SELL_SELL = SELL 격상).
- * 색은 시장 심리 기준 — 강세(BUY 격상/SELL 격하)=빨강, 약세(SELL 격상/BUY 격하)=파랑.
- *  - UP_BUY_BUY   → BUY 격상  (강세, 빨강)
- *  - DOWN_BUY_BUY → SELL 격하 (매도신호 완화, 빨강)
- *  - DOWN_SELL_SELL → SELL 격상 (약세, 파랑)
- *  - UP_SELL_SELL → BUY 격하 (상승신호 약화, 파랑)
- *  - 다이버전스(UP_BUY_SELL/DOWN_BUY_SELL)·NEUTRAL·기타 → 유지(-)
+ * 백엔드 MarketIndexAdjustmentModule 의 **3시그널 만장일치 룰** 과 동일하게 표시:
+ *  - 강세 만장일치(UP_BUY_BUY)   → BUY 격상 (빨강)
+ *  - 약세 만장일치(DOWN_SELL_SELL) → SELL 격상 (파랑)
+ *  - 그 외 (다이버전스 4종 / NEUTRAL / null) → **중립** (보정 X)
  */
 function MacroEffectChip({v}: {v: string | null}) {
-    const map: Record<string, {label: string; color: 'error' | 'info'}> = {
-        UP_BUY_BUY:     {label: 'BUY 격상',  color: 'error'},
-        DOWN_BUY_BUY:   {label: 'SELL 격하', color: 'error'},
-        DOWN_SELL_SELL: {label: 'SELL 격상', color: 'info'},
-        UP_SELL_SELL:   {label: 'BUY 격하',  color: 'info'},
-    };
-    const e = v ? map[v] : undefined;
-    if (!e) return <span style={{color: '#999'}}>-</span>;
-    return <Chip size="small" label={e.label} color={e.color} variant="outlined" />;
+    if (v === 'UP_BUY_BUY')     return <Chip size="small" label="BUY 격상"  color="error" variant="outlined" />;
+    if (v === 'DOWN_SELL_SELL') return <Chip size="small" label="SELL 격상" color="info"  variant="outlined" />;
+    return <Chip size="small" label="중립" color="default" variant="outlined" />;
 }
 
 /** 지수 등락률 셀 — 값에 % 부착, 한국장 관례 색(상승=빨강 / 하락=파랑 / 보합·없음=회색). */
