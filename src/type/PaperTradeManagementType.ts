@@ -76,7 +76,12 @@ export interface HoldingGradeItem {
     marketType: string | null;        // KOSPI / KOSDAQ
     penfndK: number | null;
     frgnrMcapRatio: number | null;
-    evaluationReason: string | null;  // CONFLICT(양방향 시그널 충돌)일 때만, 그 외 null
+    frgnrOppositeK: number | null;    // 외국인 반대 K (BLOCK/freeze/부분비중 강도)
+    frgnrSameDirK: number | null;     // 외국인 동조 K (하드스톱)
+    priorTrendRatio: number | null;   // B′ 추세 명확성 (STRONG)
+    foreignerAligned: boolean | null; // 옵션B 외국인 동조
+    evaluationReason: string | null;  // HARD_SELL / BLOCK_FREEZE / BLOCK_PARTIAL / CONFLICT (복수면 '|'), 없으면 null
+    targetWeightRatio: number | null; // 부분비중 0.10, 그 외 null(기본)
 }
 
 export interface PaperTradeReportRes {

@@ -22,7 +22,19 @@ export interface AdminRecommendPickRes {
     stkNm: string;
     marketType: string | null;
     originSide: string | null;
-    type: string;                          // raw classify 등급 (백테스트 신호 기준)
+    type: string;                          // raw classify 등급 (수급/백본, 모듈 보정 전)
+    effectiveType: string;                 // Stage1 모듈 보정 최종 등급 (전체 모듈 ON, 매크로 제외)
+
+    // 수급 (백본 근거) — 왜 이 등급인지
+    backboneReason: string;                // classify 근거 한 줄
+    penfndK: number | null;                // 연기금 K (≥3.0 + B′통과 → STRONG)
+    frgnrBlocked: boolean | null;          // 외국인 반대매매 BLOCK 여부
+    frgnrOppositeK: number | null;         // 외국인 반대 K (강반대 3.0↑ HOLD / 중간 1.5~3.0 방향유지)
+    frgnrMcapRatio: number | null;         // 외국인 시총비중 signed (≥0.1% STRONG / ≥0.05% 일반)
+    frgnrSameDirK: number | null;          // 외국인 동조 K (history 만)
+    priorTrendRatio: number | null;        // B′ 추세 명확성 (≥0.7 STRONG 게이트)
+    foreignerAligned: boolean | null;      // 옵션B: 외국인 12일 동조
+    marketCap: number | null;              // 시총(억) (history 만)
 
     // 후행 모듈 trigger — 매크로(동행지표) 제외
     pvTrigger: ModuleTrigger;

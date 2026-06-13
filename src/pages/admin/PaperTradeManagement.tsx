@@ -336,7 +336,10 @@ function PaperRealizedPnlPanel() {
 }
 
 function PaperTradeHistoryPanel() {
-    const today = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
+    const today = ((): string => {
+        const d = new Date();
+        return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    })();
     const [ordDt, setOrdDt] = useState<string>(today);
 
     const {data, isLoading} = useQuery<AdminPaperTradeHistoryRes>({
@@ -411,8 +414,12 @@ function PaperTradeHistoryPanel() {
 type GradeType = 'STRONG_BUY' | 'BUY' | 'HOLD' | 'SELL' | 'STRONG_SELL';
 
 function PaperHoldingGradePanel() {
-    // evalDate 미지정 시 백엔드가 최근 evalDate 자동 선택 → 응답에 실린 evalDate 로 picker 동기화.
-    const [evalDate, setEvalDate] = useState<string>("");
+    // 다른 탭과 동일하게 오늘(로컬 날짜) 기본값. toISOString() 은 UTC 라 자정 직후 하루 어긋남.
+    const today = ((): string => {
+        const d = new Date();
+        return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    })();
+    const [evalDate, setEvalDate] = useState<string>(today);
 
     const {data, isLoading} = useQuery<AdminHoldingGradeRes>({
         queryKey: ['admin-paper-holding-grade', evalDate],
@@ -441,12 +448,16 @@ function PaperHoldingGradePanel() {
                 const color = v === 'BUY' ? 'error.main' : 'info.main';
                 return <Typography variant="body2" sx={{color, fontWeight: 600}}>{v}</Typography>;
             }},
-        {field: 'evaluationReason', headerName: '평가 사유', width: 110, align: 'center', headerAlign: 'center',
+        {field: 'evaluationReason', headerName: '평가 사유', width: 160, align: 'center', headerAlign: 'center',
             renderCell: (p) => {
                 const v = p.value as string | null;
                 if (!v) return <Typography variant="body2" color="text.secondary">-</Typography>;
-                // CONFLICT: BUY/SELL 양방향 시그널 모두 통과 → 추세 전환 신호 가능성. 경고색.
-                const label = v === 'CONFLICT' ? '충돌' : v;
+                // 티어 라벨(복수면 '|' 결합) → 한글. 왜 이 등급/비중인지.
+                const KR: Record<string, string> = {
+                    HARD_SELL: '하드스톱(즉시전량)', BLOCK_FREEZE: '외인강반대(동결)',
+                    BLOCK_PARTIAL: '외인중간반대(부분)', CONFLICT: '충돌',
+                };
+                const label = v.split('|').map((t) => KR[t] ?? t).join(' · ');
                 return <Typography variant="body2" sx={{color: 'warning.main', fontWeight: 600}}>{label}</Typography>;
             }},
         {field: 'marketType', headerName: '시장', width: 90, align: 'center', headerAlign: 'center',
@@ -460,6 +471,31 @@ function PaperHoldingGradePanel() {
             renderCell: (p) => {
                 const v = p.value as number | null;
                 return <Typography variant="body2">{v != null ? `${(v * 100).toFixed(4)}%` : '-'}</Typography>;
+            }},
+        {field: 'frgnrOppositeK', headerName: '외인 반대K', width: 100, align: 'right', headerAlign: 'right',
+            renderCell: (p) => {
+                const v = p.value as number | null;
+                return <Typography variant="body2">{v != null ? v.toFixed(2) : '-'}</Typography>;
+            }},
+        {field: 'frgnrSameDirK', headerName: '외인 동조K', width: 100, align: 'right', headerAlign: 'right',
+            renderCell: (p) => {
+                const v = p.value as number | null;
+                return <Typography variant="body2">{v != null ? v.toFixed(2) : '-'}</Typography>;
+            }},
+        {field: 'priorTrendRatio', headerName: "B′(추세명확)", width: 110, align: 'right', headerAlign: 'right',
+            renderCell: (p) => {
+                const v = p.value as number | null;
+                return <Typography variant="body2">{v != null ? v.toFixed(2) : '-'}</Typography>;
+            }},
+        {field: 'foreignerAligned', headerName: '옵션B', width: 70, align: 'center', headerAlign: 'center',
+            renderCell: (p) => {
+                const v = p.value as boolean | null;
+                return <Typography variant="body2">{v == null ? '-' : (v ? 'Y' : 'N')}</Typography>;
+            }},
+        {field: 'targetWeightRatio', headerName: '목표비중', width: 90, align: 'right', headerAlign: 'right',
+            renderCell: (p) => {
+                const v = p.value as number | null;
+                return <Typography variant="body2">{v != null ? `${(v * 100).toFixed(0)}%` : '기본'}</Typography>;
             }},
     ];
 

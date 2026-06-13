@@ -8,6 +8,7 @@ import Tabs from '@mui/material/Tabs';
 import Tab from '@mui/material/Tab';
 import Chip from '@mui/material/Chip';
 import Paper from '@mui/material/Paper';
+import Alert from '@mui/material/Alert';
 import TextField from '@mui/material/TextField';
 import ToggleButton from '@mui/material/ToggleButton';
 import ToggleButtonGroup from '@mui/material/ToggleButtonGroup';
@@ -70,7 +71,11 @@ export default function RecommendMonitoring() {
 // ════════════════════════════════════════════════════════════════════════════
 function SignalsPanel() {
     // date 미지정 = 오늘 (= stock_pick). YYYY-MM-DD 선택 시 stock_pick_history 조회.
-    const today = new Date().toISOString().slice(0, 10);
+    // 로컬 타임존 기준 YYYY-MM-DD — toISOString() 은 UTC 라 자정 직후 백엔드(KST LocalDate.now())와 하루 어긋남.
+    const today = ((): string => {
+        const d = new Date();
+        return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    })();
     const [date, setDate] = useState<string>(today);
     const isHistorical = date !== today;
 
@@ -85,6 +90,10 @@ function SignalsPanel() {
     // 행 클릭 → 상세 다이얼로그 (모니터링 에러 로그 패턴)
     const [selected, setSelected] = useState<AdminRecommendPickRes | null>(null);
 
+    // 표시 데이터의 실제 기준일 (오늘 조회 시 stock_pick = 오늘 분일 때만 채워짐)
+    const asOfDate = data?.[0]?.pickDate ?? null;
+    const isEmpty = !isLoading && (data?.length ?? 0) === 0;
+
     // 표는 핵심 컬럼만 — 세부 트리거/Raw지표/52주위치/백테스트 가격은 클릭 시 다이얼로그.
     const columns: GridColDef<AdminRecommendPickRes>[] = [
         {field: 'stkCd', headerName: '종목코드', width: 100},
@@ -92,7 +101,8 @@ function SignalsPanel() {
         {field: 'marketType', headerName: '시장', width: 75, align: 'center', headerAlign: 'center'},
         {field: 'originSide', headerName: '진영', width: 65, align: 'center', headerAlign: 'center'},
         {
-            field: 'type', headerName: '등급', width: 130, align: 'center', headerAlign: 'center',
+            field: 'effectiveType', headerName: '최종 등급', width: 130, align: 'center', headerAlign: 'center',
+            description: '전체 모듈 ON 기준 Stage1 보정 최종 등급 (매크로 제외). 수급(보정 전) 등급은 행 클릭 → 상세에서 확인.',
             renderCell: (p) => <TypeChip type={p.value as string} />,
         },
         {
@@ -125,6 +135,9 @@ function SignalsPanel() {
                         InputLabelProps={{shrink: true}}
                         sx={{width: 180}}
                     />
+                    {asOfDate && (
+                        <Chip size="small" color="primary" variant="outlined" label={`기준일 ${asOfDate}`} />
+                    )}
                     {isHistorical && (
                         <Typography variant="body2" color="text.secondary">
                             stock_pick_history 조회 (가격/수익률 포함). 종목 행 클릭 시 트리거·지표·백테스트 가격 상세.
@@ -134,6 +147,12 @@ function SignalsPanel() {
                     <SummaryChips picks={data ?? []} />
                 </Stack>
             </Paper>
+
+            {isEmpty && (
+                <Alert severity="info" sx={{mb: 2}}>
+                    선택한 일자({date})에 생성된 추천 데이터가 없습니다.
+                </Alert>
+            )}
 
             <DataGrid
                 autoHeight
@@ -532,8 +551,14 @@ function SignalDetailDialog({pick, onClose}: {pick: AdminRecommendPickRes | null
                         <Typography variant="h6" sx={{fontWeight: 700}}>{pick.stkNm}</Typography>
                         <Typography variant="body2" color="text.secondary">{pick.stkCd}</Typography>
                         <Chip size="small" label={pick.marketType ?? '-'} variant="outlined"/>
-                        <Chip size="small" label={pick.originSide ?? '-'} variant="outlined"/>
-                        <TypeChip type={pick.type}/>
+                        <Chip size="small" label={`진영 ${pick.originSide ?? '-'}`} variant="outlined"/>
+                        <Stack direction="row" spacing={0.75} alignItems="center">
+                            <Typography variant="caption" color="text.secondary">수급</Typography>
+                            <TypeChip type={pick.type}/>
+                            <Typography variant="body2" color="text.secondary">→</Typography>
+                            <Typography variant="caption" color="text.secondary">최종</Typography>
+                            <TypeChip type={pick.effectiveType}/>
+                        </Stack>
                     </Stack>
                 )}
             </DialogTitle>
@@ -556,14 +581,37 @@ function SignalDetailDialog({pick, onClose}: {pick: AdminRecommendPickRes | null
                         </DetailSection>
 
                         {/* 트리거 (후행 모듈) */}
+                        {/* 수급 (백본 근거) — 왜 이 등급인지 */}
+                        <DetailSection title="수급 (백본 근거)">
+                            <Box sx={{mb: 1.5, p: 1, borderRadius: 1, bgcolor: 'action.hover'}}>
+                                <Typography variant="caption" color="text.secondary">결정 사유</Typography>
+                                <Typography variant="body2" sx={{fontWeight: 600}}>{pick.backboneReason || '-'}</Typography>
+                            </Box>
+                            <Box sx={{display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 1.5}}>
+                                <DetailField label="연기금 K (STRONG≥3.0)" value={fmtNum(pick.penfndK, 1)}/>
+                                <DetailField label="B′ 추세명확성 (≥0.7)" value={fmtNum(pick.priorTrendRatio, 2)}/>
+                                <DetailField label="외인 시총비중 (STRONG≥0.1%)"
+                                             value={pick.frgnrMcapRatio == null ? '-' : `${(pick.frgnrMcapRatio * 100).toFixed(3)}%`}/>
+                                <DetailField label="옵션B (외인 동조)"
+                                             value={pick.foreignerAligned == null ? '-' : (pick.foreignerAligned ? 'Y' : 'N')}/>
+                                <DetailField label="외인 반대K (강반대≥3.0)" value={fmtNum(pick.frgnrOppositeK, 2)}/>
+                                <DetailField label="외인 BLOCK"
+                                             value={pick.frgnrBlocked == null ? '-' : (pick.frgnrBlocked
+                                                 ? ((pick.frgnrOppositeK ?? 0) >= 3.0 ? 'Y 강반대(→HOLD)' : 'Y 중간(방향유지)')
+                                                 : 'N')}/>
+                                <DetailField label="외인 동조K" value={fmtNum(pick.frgnrSameDirK, 2)}/>
+                                <DetailField label="시총(억)" value={fmtLong(pick.marketCap)}/>
+                            </Box>
+                        </DetailSection>
+
                         <DetailSection title="트리거 (모듈 격상/격하 신호)">
                             <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
-                                <TriggerBox label="PV"            v={pick.pvTrigger}        side={pick.originSide}/>
-                                <TriggerBox label="MA"            v={pick.maTrigger}        side={pick.originSide}/>
-                                <TriggerBox label="VP"            v={pick.vpTrigger}        side={pick.originSide}/>
-                                <TriggerBox label="RSI"           v={pick.rsiTrigger}       side={pick.originSide}/>
-                                <TriggerBox label="52주 위치"      v={pick.hl52wTrigger}     side={pick.originSide}/>
-                                <TriggerBox label="52주 신고저가 돌파" v={pick.breakoutTrigger} side={pick.originSide}/>
+                                <TriggerBox label="PV"            v={pick.pvTrigger}/>
+                                <TriggerBox label="MA"            v={pick.maTrigger}/>
+                                <TriggerBox label="VP"            v={pick.vpTrigger}/>
+                                <TriggerBox label="RSI"           v={pick.rsiTrigger}/>
+                                <TriggerBox label="52주 위치"      v={pick.hl52wTrigger}/>
+                                <TriggerBox label="52주 신고저가 돌파" v={pick.breakoutTrigger}/>
                             </Stack>
                         </DetailSection>
 
@@ -627,11 +675,11 @@ function DetailField({label, value, children}: {label: string; value?: React.Rea
     );
 }
 
-function TriggerBox({label, v, side}: {label: string; v: ModuleTrigger; side: string | null}) {
+function TriggerBox({label, v}: {label: string; v: ModuleTrigger}) {
     return (
         <Box sx={{display: 'flex', alignItems: 'center', gap: 0.5, minWidth: 160}}>
             <Typography variant="caption" color="text.secondary" sx={{minWidth: 90}}>{label}</Typography>
-            <TriggerChip v={v} side={side}/>
+            <TriggerChip v={v}/>
         </Box>
     );
 }
@@ -651,22 +699,16 @@ function TypeChip({type}: {type: string | null}) {
 }
 
 /**
- * 모듈 트리거 칩. PROMOTE/DEMOTE 는 진영(side)에 따라 시장 의미가 정반대다
- * (promoteOnce: BUY→STRONG_BUY, SELL→STRONG_SELL = 해당 진영 신호 *강화*).
- * → 방향 포함 라벨 + 시장심리 색(강세=빨강 / 약세=파랑)으로 표시. MacroEffectChip 과 동일 규칙.
- *  - BUY  + PROMOTE → BUY 격상  (강세, 빨강)
- *  - BUY  + DEMOTE  → BUY 격하  (강세 약화, 파랑)
- *  - SELL + PROMOTE → SELL 격상 (약세, 파랑)
- *  - SELL + DEMOTE  → SELL 격하 (약세 약화, 빨강)
+ * 모듈 트리거 칩 — 백엔드가 **절대 방향**으로 보냄(모듈 직접 재평가). 진영 해석 불필요.
+ *  - 격상(강세, 빨강) = PROMOTE (매수쪽)
+ *  - 격하(약세, 파랑) = DEMOTE (매도쪽)
+ *  - 중립 = 미발동(NONE)
  */
-function TriggerChip({v, side}: {v: ModuleTrigger; side: string | null}) {
-    if (!v || v === 'NONE' || (side !== 'BUY' && side !== 'SELL')) {
-        return <span style={{color: '#999'}}>-</span>;
-    }
-    const label = `${side} ${v === 'PROMOTE' ? '격상' : '격하'}`;
-    // 강세(BUY 격상 / SELL 격하)=빨강, 약세(SELL 격상 / BUY 격하)=파랑
-    const bullish = (side === 'BUY') === (v === 'PROMOTE');
-    return <Chip size="small" label={label} color={bullish ? 'error' : 'info'} variant="outlined" />;
+function TriggerChip({v}: {v: ModuleTrigger}) {
+    if (!v) return <span style={{color: '#999'}}>-</span>;
+    if (v === 'NONE') return <Chip size="small" label="중립" color="default" variant="outlined" />;
+    const bullish = v === 'PROMOTE';  // 격상=매수쪽(강세)
+    return <Chip size="small" label={bullish ? '격상' : '격하'} color={bullish ? 'error' : 'info'} variant="outlined" />;
 }
 
 function SignChip({v}: {v: string | null}) {
@@ -678,15 +720,15 @@ function SignChip({v}: {v: string | null}) {
 }
 
 /**
- * 매크로 시나리오를 그날 보정 효과로 환산해 표시.
- * 백엔드 MarketIndexAdjustmentModule 의 **3시그널 만장일치 룰** 과 동일하게 표시:
- *  - 강세 만장일치(UP_BUY_BUY)   → BUY 격상 (빨강)
- *  - 약세 만장일치(DOWN_SELL_SELL) → SELL 격상 (파랑)
+ * 매크로 시나리오 → 그날 보정 효과 (절대 방향 격상/격하).
+ * 백엔드 MarketIndexAdjustmentModule 의 **3시그널 만장일치 룰**:
+ *  - 강세 만장일치(UP_BUY_BUY)   → 격상 (매수쪽, 빨강)
+ *  - 약세 만장일치(DOWN_SELL_SELL) → 격하 (매도쪽, 파랑)
  *  - 그 외 (다이버전스 4종 / NEUTRAL / null) → **중립** (보정 X)
  */
 function MacroEffectChip({v}: {v: string | null}) {
-    if (v === 'UP_BUY_BUY')     return <Chip size="small" label="BUY 격상"  color="error" variant="outlined" />;
-    if (v === 'DOWN_SELL_SELL') return <Chip size="small" label="SELL 격상" color="info"  variant="outlined" />;
+    if (v === 'UP_BUY_BUY')     return <Chip size="small" label="격상" color="error" variant="outlined" />;
+    if (v === 'DOWN_SELL_SELL') return <Chip size="small" label="격하" color="info"  variant="outlined" />;
     return <Chip size="small" label="중립" color="default" variant="outlined" />;
 }
 

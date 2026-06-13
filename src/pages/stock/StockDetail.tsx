@@ -50,7 +50,7 @@ import * as React from "react";
 import {renderTradeColor, renderChangeAmount} from "../../components/CustomRender.tsx";
 import FavoriteBorderIcon from "@mui/icons-material/FavoriteBorder";
 import {usePollingQuery} from "../../lib/pollingQuery.ts";
-import {parseTradeStamp} from "../../lib/tradeStamp.ts";
+import {parseTradeStamp, parseKiwoomStamp} from "../../lib/tradeStamp.ts";
 import {getServerNow} from "../../lib/serverTime.ts";
 import FavoriteIcon from "@mui/icons-material/Favorite";
 import IconButton from "@mui/material/IconButton";
@@ -369,7 +369,7 @@ const StockDetail = () => {
             data.data.forEach((res: StockStreamRes) => {
                 if (res.item !== stkCd) return;
                 const values = res.values;
-                const stamp = parseTradeStamp(values["20"]);
+                const stamp = parseKiwoomStamp(values["20"]);
 
                 if (res.type === "0H") {
                     updateIfNewerExp({
