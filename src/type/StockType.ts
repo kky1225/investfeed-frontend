@@ -134,6 +134,19 @@ export interface StockShortSelling {
     shrtsAvgPric: string,
 }
 
+export interface StockVi {
+    motnPric: string,           // 발동가격
+    motnTime: string,           // 발동시각 (HHmmss)
+    relisTime: string,          // 해제시각 (HHmmss)
+    viType: string,             // 적용구분 (정적/동적/동적+정적)
+    dynmDisptyRt: string,       // 동적괴리율
+    staticDisptyRt: string,     // 정적괴리율
+    openPricPreFluRt: string,   // 시가대비등락률
+    vimotnCnt: string,          // 발동횟수
+    direction: string,          // 발동방향 (상승/하락)
+    active: boolean,            // 현재 발동중 여부
+}
+
 export interface StockDetailRes {
     stockInfo: StockInfo,
     stockChartList: StockChart[],
@@ -143,4 +156,5 @@ export interface StockDetailRes {
     stockProgramChartList: unknown[],
     stockShortSellingList: StockShortSelling[],
     dividendList: StockDividendItem[],
+    viList?: StockVi[],
 }

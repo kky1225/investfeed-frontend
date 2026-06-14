@@ -28,6 +28,7 @@ import {
     StockStreamReq,
     StockStreamRes,
     StockDividendItem,
+    StockVi,
 } from "../../type/StockType.ts";
 import StockDetailLineChart, {CustomStockDetailLineChartProps} from "../../components/StockDetailLineChart.tsx";
 import {fetchStockDetail, fetchStockStream, fetchStockProgramChart} from "../../api/stock/StockApi.ts";
@@ -343,12 +344,19 @@ const StockDetail = () => {
     const updateIfNewerExp = (incoming: LiveExpected) =>
         setLiveExpected(prev => (!prev || incoming.stamp > prev.stamp) ? incoming : prev);
 
+    // VI(변동성완화장치) 실시간 — WS "1h" 가 발동/해제 이벤트로 갱신. WS 도착 순서대로 last-write.
+    // 진입 시점의 현재 상태는 폴링(result.viList)이 보강, 발동 후 2분이면 자동 해제(만료) 처리.
+    const [liveVi, setLiveVi] = useState<StockVi | null>(null);
+    const viExpireRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
     // stkCd 변경 시 reset
     const [prevStkCd, setPrevStkCd] = useState(stkCd);
     if (stkCd !== prevStkCd) {
         setPrevStkCd(stkCd);
         setLivePrice(null);
         setLiveExpected(null);
+        setLiveVi(null);
+        if (viExpireRef.current) clearTimeout(viExpireRef.current);
     }
 
     const {data: result, isLoading, lastUpdated, pollError} = usePollingQuery<StockDetailRes>(
@@ -380,6 +388,33 @@ const StockDetail = () => {
                         },
                         stamp,
                     });
+                } else if (res.type === "1h") {
+                    const releaseTime = values["1224"];
+                    const released = !!releaseTime && releaseTime !== "0" && releaseTime !== "000000";
+                    const staticRt = values["1238"] ?? '';
+                    const dynmRt = values["1239"] ?? '';
+                    const dirRate = [dynmRt, staticRt].find((r) => (Number((r ?? '').replace(/^\+/, '')) || 0) !== 0) ?? '';
+                    const direction = dirRate.trim().startsWith('-') ? '하락' : (dirRate ? '상승' : '');
+
+                    setLiveVi({
+                        motnPric: values["1221"] ?? '',
+                        motnTime: values["1223"] ?? '',
+                        relisTime: releaseTime ?? '',
+                        viType: values["1225"] ?? '',
+                        dynmDisptyRt: dynmRt,
+                        staticDisptyRt: staticRt,
+                        openPricPreFluRt: values["1489"] ?? '',
+                        vimotnCnt: values["1490"] ?? '',
+                        direction,
+                        active: !released,
+                    });
+
+                    if (viExpireRef.current) clearTimeout(viExpireRef.current);
+                    if (!released) {
+                        viExpireRef.current = setTimeout(() => {
+                            setLiveVi((prev) => prev ? { ...prev, active: false } : prev);
+                        }, 2 * 60 * 1000);
+                    }
                 } else {
                     updateIfNewerExp({value: null, stamp});
                     updateIfNewerLive({
@@ -905,6 +940,55 @@ const StockDetail = () => {
                                     </Tooltip>
                                 </Stack>
                             </Box>
+                            {!loading && (() => {
+                                const polled = result?.viList ?? [];
+                                const live = liveVi;
+                                if (polled.length === 0 && !live) return null;
+
+                                const fmtTime = (t?: string) =>
+                                    t && t.length >= 6 ? `${t.slice(0, 2)}:${t.slice(2, 4)}:${t.slice(4, 6)}` : (t ?? '');
+                                const viTooltip = (v: StockVi) => (
+                                    <Box sx={{ whiteSpace: 'pre-line' }}>
+                                        {[
+                                            `발동구분: ${[v.direction, v.viType].filter(Boolean).join(' ') || '-'}`,
+                                            v.motnPric ? `발동가격: ${Number(v.motnPric.replace(/^[+-]/, '')).toLocaleString()}` : null,
+                                            v.motnTime ? `발동시각: ${fmtTime(v.motnTime)}` : null,
+                                            !v.active && v.relisTime ? `해제시각: ${fmtTime(v.relisTime)}` : null,
+                                            v.staticDisptyRt && v.staticDisptyRt !== '0.00' ? `정적괴리율: ${v.staticDisptyRt}%` : null,
+                                            v.dynmDisptyRt && v.dynmDisptyRt !== '0.00' ? `동적괴리율: ${v.dynmDisptyRt}%` : null,
+                                            v.vimotnCnt ? `금일 발동횟수: ${v.vimotnCnt}회` : null,
+                                        ].filter(Boolean).join('\n')}
+                                    </Box>
+                                );
+
+                                const activeVi = (live?.active ? live : null) ?? polled.find((v) => v.active) ?? null;
+                                if (activeVi) {
+                                    const label = ['VI 발동 중', activeVi.direction, activeVi.viType].filter(Boolean).join(' · ');
+                                    return (
+                                        <Stack direction="row" sx={{ mb: 1 }}>
+                                            <Tooltip title={viTooltip(activeVi)} placement="right">
+                                                <Chip label={label} size="small" color="error" />
+                                            </Tooltip>
+                                        </Stack>
+                                    );
+                                }
+
+                                const count = Math.max(
+                                    polled.length,
+                                    ...polled.map((v) => Number(v.vimotnCnt) || 0),
+                                    Number(live?.vimotnCnt) || 0,
+                                );
+                                if (count <= 0) return null;
+                                const latest = polled[0] ?? live;
+                                if (!latest) return null;
+                                return (
+                                    <Stack direction="row" sx={{ mb: 1 }}>
+                                        <Tooltip title={viTooltip(latest)} placement="right">
+                                            <Chip label={`금일 VI ${count}회`} size="small" color="warning" variant="outlined" />
+                                        </Tooltip>
+                                    </Stack>
+                                );
+                            })()}
                             {!loading && info.tradeConditions.length > 0 && (
                                 <Stack direction="row" spacing={0.5} flexWrap="wrap" useFlexGap sx={{ mb: 1 }}>
                                     {info.tradeConditions.map((cond) => (
