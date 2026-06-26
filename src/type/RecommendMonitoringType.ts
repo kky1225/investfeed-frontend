@@ -54,6 +54,10 @@ export interface AdminRecommendPickRes {
     todayVolume: number | null;
     avg20dVolume: number | null;
 
+    // 사이징 (변동성 스케일 캡)
+    realizedVol: number | null;            // 20일 실현변동성(연율, ratio)
+    volCapRatio: number | null;            // 적용 종목당 캡(ratio 0.05~0.10) = volCap(realizedVol)
+
     // 52주 위치 — 키움 ka10001 공식 250일 고저 (HighLow52w/Breakout 공용)
     high52w: number | null;
     low52w: number | null;

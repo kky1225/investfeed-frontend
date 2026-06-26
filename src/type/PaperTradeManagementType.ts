@@ -82,6 +82,15 @@ export interface HoldingGradeItem {
     foreignerAligned: boolean | null; // 옵션B 외국인 동조
     evaluationReason: string | null;  // HARD_SELL / BLOCK_FREEZE / BLOCK_PARTIAL / CONFLICT (복수면 '|'), 없으면 null
     targetWeightRatio: number | null; // 부분비중 0.10, 그 외 null(기본)
+    // ─── 상세(팝업)용 — 모듈 보정 전 백본 + 백본사유 + 6개 후행 모듈 트리거 ───
+    preAdjustmentType: string | null; // 모듈 보정 전 백본 등급 (HOLD→BUY 격상 추적)
+    backboneReason: string | null;    // 백본 분류 사유 한 줄 (수급 근거)
+    pvTrigger: string | null;         // PROMOTE / DEMOTE / NONE
+    maTrigger: string | null;
+    vpTrigger: string | null;
+    rsiTrigger: string | null;
+    hl52wTrigger: string | null;
+    breakoutTrigger: string | null;
 }
 
 export interface PaperTradeReportRes {

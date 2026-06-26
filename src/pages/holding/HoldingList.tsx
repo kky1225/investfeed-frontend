@@ -18,7 +18,7 @@ import {CSS} from "@dnd-kit/utilities";
 import CustomPieChart from "../../components/CustomPieChart.tsx";
 import type {HoldingReorderReq} from "../../type/BrokerType.ts";
 import {HoldingStock, HoldingListData} from "../../type/HoldingType.ts";
-import {fetchHoldingList, reorderApiHoldings} from "../../api/holding/HoldingApi.ts";
+import {fetchHoldingList, fetchTossHoldingList, reorderApiHoldings} from "../../api/holding/HoldingApi.ts";
 import {renderChip, renderTradeColor} from "../../components/CustomRender.tsx";
 import BlindText from "../../components/BlindText.tsx";
 import HoldingSummaryCard from "./HoldingSummaryCard.tsx";
@@ -92,7 +92,7 @@ const DraggableRow = React.forwardRef<HTMLDivElement, GridRowProps>((props, _ref
 const calcDailyPl = (stocks: HoldingStock[]) =>
     stocks.reduce((sum, s) => sum + (Number(s.curPrc) - Number(s.predClosePric)) * Number(s.rmndQty), 0);
 
-const HoldingList = () => {
+const HoldingList = ({source = 'KIWOOM'}: {source?: 'KIWOOM' | 'TOSS'}) => {
     const navigate = useNavigate();
     const [showChart, setShowChart] = useState(false);
     const {isBlind} = useBlindMode();
@@ -118,8 +118,9 @@ const HoldingList = () => {
 
     // 한 번만 fetch (폴링 X). useQuery 가 mount 시 자동 호출 + cancel 처리.
     const {data: holdingData, isLoading: loading} = useQuery<HoldingListData>({
-        queryKey: ['holdingList'],
-        queryFn: async ({signal}) => requireOk<HoldingListData>(await fetchHoldingList({signal, skipGlobalError: true}), null),
+        queryKey: ['holdingList', source],
+        queryFn: async ({signal}) => requireOk<HoldingListData>(
+            await (source === 'TOSS' ? fetchTossHoldingList : fetchHoldingList)({signal, skipGlobalError: true}), null),
         refetchOnWindowFocus: false,
     });
 
@@ -186,7 +187,9 @@ const HoldingList = () => {
         });
     }, []);
 
-    useHoldingStream(stableStkCds, handleStreamUpdate, fetchHoldingStream);
+    // 토스는 실시간 스트림이 없으므로 빈 배열로 비활성화 (useHoldingStream 은 stkCds 가 비면 no-op)
+    const streamStkCds = source === 'TOSS' ? [] : stableStkCds;
+    useHoldingStream(streamStkCds, handleStreamUpdate, fetchHoldingStream);
 
     const handleDragEnd = (event: DragEndEvent) => {
         const {active, over} = event;
@@ -205,7 +208,7 @@ const HoldingList = () => {
         },
         onSuccess: () => {
             setOrderDirty(false);
-            queryClient.invalidateQueries({queryKey: ['holdingList']});
+            queryClient.invalidateQueries({queryKey: ['holdingList', source]});
         },
         onError: (err) => console.error(err),
     });

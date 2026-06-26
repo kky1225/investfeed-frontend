@@ -106,6 +106,16 @@ function SignalsPanel() {
             renderCell: (p) => <TypeChip type={p.value as string} />,
         },
         {
+            field: 'realizedVol', headerName: '변동성', width: 90, align: 'right', headerAlign: 'right',
+            description: '20일 실현변동성(연율). 클수록 종목당 캡이 작아짐.',
+            renderCell: (p) => (p.value == null ? '-' : fmtPct((p.value as number) * 100, 1)),
+        },
+        {
+            field: 'volCapRatio', headerName: '최대비중', width: 95, align: 'right', headerAlign: 'right',
+            description: '변동성으로 산정한 종목당 최대 비중(5~10%). volCap = clamp(10%×25%/변동성, 5%, 10%).',
+            renderCell: (p) => (p.value == null ? '-' : fmtPct((p.value as number) * 100, 1)),
+        },
+        {
             field: 'ret1d', headerName: '1d 수익', width: 100, align: 'right', headerAlign: 'right',
             renderCell: (p) => <ReturnCell v={p.value as number | null} side={p.row.originSide} type={p.row.type} />,
         },
@@ -626,6 +636,14 @@ function SignalDetailDialog({pick, onClose}: {pick: AdminRecommendPickRes | null
                                 <DetailField label="MA20" value={fmtNum(pick.ma20, 0)}/>
                                 <DetailField label="당일 거래량" value={fmtLong(pick.todayVolume)}/>
                                 <DetailField label="20일 평균거래량" value={fmtLong(pick.avg20dVolume)}/>
+                            </Box>
+                        </DetailSection>
+
+                        {/* 사이징 (변동성 기반 최대비중) */}
+                        <DetailSection title="사이징 (변동성 기반 비중)">
+                            <Box sx={{display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 1.5}}>
+                                <DetailField label="20일 실현변동성(연율)" value={pick.realizedVol == null ? '-' : fmtPct(pick.realizedVol * 100, 1)}/>
+                                <DetailField label="적용 최대비중" value={pick.volCapRatio == null ? '-' : fmtPct(pick.volCapRatio * 100, 1)}/>
                             </Box>
                         </DetailSection>
 

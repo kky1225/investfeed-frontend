@@ -9,6 +9,11 @@ export const fetchHoldingList = async (config?: AxiosRequestConfig): Promise<Api
     return res.data;
 }
 
+export const fetchTossHoldingList = async (config?: AxiosRequestConfig): Promise<ApiResponse<HoldingListData>> => {
+    const res = await api.get<ApiResponse<HoldingListData>>(`/stock/holdings/toss`, config);
+    return res.data;
+}
+
 export const fetchHoldingStream = async (req: HoldingStreamReq): Promise<ApiResponse<null>> => {
     const res = await api.post<ApiResponse<null>>(`/stock/holdings/stream`, req);
     return res.data;

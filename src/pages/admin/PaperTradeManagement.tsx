@@ -1,4 +1,4 @@
-import {useMemo, useState} from "react";
+import {useMemo, useState, type ReactNode} from "react";
 import {useQuery} from "@tanstack/react-query";
 import Box from "@mui/material/Box";
 import Typography from "@mui/material/Typography";
@@ -24,6 +24,11 @@ import CustomPieChart from "../../components/CustomPieChart.tsx";
 import {renderChip, renderTradeColor} from "../../components/CustomRender.tsx";
 import BlindText from "../../components/BlindText.tsx";
 import Chip from "@mui/material/Chip";
+import Dialog from "@mui/material/Dialog";
+import DialogTitle from "@mui/material/DialogTitle";
+import DialogContent from "@mui/material/DialogContent";
+import IconButton from "@mui/material/IconButton";
+import CloseIcon from "@mui/icons-material/Close";
 import FreshnessIndicator from "../../components/FreshnessIndicator.tsx";
 import {usePollingQuery} from "../../lib/pollingQuery.ts";
 import {
@@ -420,6 +425,7 @@ function PaperHoldingGradePanel() {
         return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
     })();
     const [evalDate, setEvalDate] = useState<string>(today);
+    const [detail, setDetail] = useState<HoldingGradeItem | null>(null);
 
     const {data, isLoading} = useQuery<AdminHoldingGradeRes>({
         queryKey: ['admin-paper-holding-grade', evalDate],
@@ -551,12 +557,16 @@ function PaperHoldingGradePanel() {
                 </CardContent>
             </Card>
 
+            <Typography variant="caption" color="text.secondary" sx={{display: 'block', mb: 0.5}}>
+                행을 클릭하면 백본 → 최종 등급 결정 과정과 모듈 트리거 상세가 열립니다.
+            </Typography>
             <DataGrid
                 autoHeight
                 rows={rows}
                 columns={columns}
                 density="compact"
                 disableRowSelectionOnClick
+                onRowClick={(p) => setDetail(p.row as HoldingGradeItem)}
                 loading={isLoading}
                 pageSizeOptions={[20, 50, 100]}
                 initialState={{pagination: {paginationModel: {pageSize: 20}}}}
@@ -565,9 +575,12 @@ function PaperHoldingGradePanel() {
                 }}
                 localeText={{noRowsLabel: '해당 평가일자의 보유 평가 결과가 없습니다.'}}
                 sx={{
+                    '& .MuiDataGrid-row': {cursor: 'pointer'},
                     '& .MuiDataGrid-cell': {display: 'flex', alignItems: 'center'},
                 }}
             />
+
+            <HoldingGradeDetailDialog item={detail} onClose={() => setDetail(null)}/>
         </Box>
     );
 }
@@ -587,6 +600,125 @@ function renderGradeChip(type: string, count?: number) {
     })();
     const label = count != null ? `${count}건` : type;
     return <Chip size="small" color={color} label={label} variant={count != null && count === 0 ? 'outlined' : 'filled'}/>;
+}
+
+const TRIGGER_KR: Record<string, {label: string; color: 'error' | 'info' | 'default'}> = {
+    PROMOTE: {label: '격상', color: 'error'},
+    DEMOTE: {label: '격하', color: 'info'},
+    NONE: {label: '중립', color: 'default'},
+};
+
+function TriggerChip({label, v}: {label: string; v: string | null}) {
+    const t = v ? TRIGGER_KR[v] : null;
+    return (
+        <Box sx={{textAlign: 'center', minWidth: 72}}>
+            <Typography variant="caption" color="text.secondary" display="block">{label}</Typography>
+            {t
+                ? <Chip size="small" label={t.label} color={t.color} variant="outlined"/>
+                : <Typography variant="body2" color="text.disabled">-</Typography>}
+        </Box>
+    );
+}
+
+function GField({label, value}: {label: string; value: ReactNode}) {
+    return (
+        <Box>
+            <Typography variant="caption" color="text.secondary" display="block">{label}</Typography>
+            <Typography variant="body2" sx={{fontWeight: 600}}>{value}</Typography>
+        </Box>
+    );
+}
+
+/**
+ * 보유 평가 상세 — 추천 SignalDetailDialog 와 동일 구조.
+ * 매매 경로 특성(매크로 미적용·HOLD 비흡수)을 반영해 "백본 → 최종" 등급 결정 과정 + 모듈 트리거 + 백본 사유를 표시.
+ */
+function HoldingGradeDetailDialog({item, onClose}: {item: HoldingGradeItem | null; onClose: () => void}) {
+    if (!item) return null;
+
+    const reasonKR: Record<string, string> = {
+        HARD_SELL: '하드스톱(즉시전량)', BLOCK_FREEZE: '외인강반대(동결)',
+        BLOCK_PARTIAL: '외인중간반대(부분)', CONFLICT: '양방향 충돌',
+    };
+    const reasonLabel = item.evaluationReason
+        ? item.evaluationReason.split('|').map((t) => reasonKR[t] ?? t).join(' · ')
+        : '-';
+    const promoted = item.preAdjustmentType != null && item.preAdjustmentType !== item.type;
+    const num = (v: number | null, d = 2) => (v != null ? v.toFixed(d) : '-');
+
+    return (
+        <Dialog open={!!item} onClose={onClose} maxWidth="sm" fullWidth>
+            <DialogTitle sx={{display: 'flex', alignItems: 'center', gap: 1}}>
+                <span>{item.stkNm}</span>
+                <Typography component="span" variant="caption" color="text.secondary">{item.stkCd}</Typography>
+                {item.marketType && <Chip size="small" label={item.marketType} variant="outlined"/>}
+                {item.originSide && (
+                    <Chip size="small" variant="outlined"
+                          color={item.originSide === 'BUY' ? 'error' : 'info'}
+                          label={`원방향 ${item.originSide}`}/>
+                )}
+                <Box sx={{flex: 1}}/>
+                <IconButton size="small" onClick={onClose}><CloseIcon fontSize="small"/></IconButton>
+            </DialogTitle>
+            <DialogContent dividers>
+                {/* 등급 결정: 백본 → 최종 */}
+                <Typography variant="overline" color="text.secondary">등급 결정</Typography>
+                <Stack direction="row" spacing={1.5} alignItems="center" sx={{mt: 0.5}}>
+                    <Box sx={{textAlign: 'center'}}>
+                        <Typography variant="caption" color="text.secondary" display="block">백본(수급)</Typography>
+                        {renderGradeChip(item.preAdjustmentType ?? '-')}
+                    </Box>
+                    <Typography variant="h6" color="text.disabled">→</Typography>
+                    <Box sx={{textAlign: 'center'}}>
+                        <Typography variant="caption" color="text.secondary" display="block">최종(모듈 보정)</Typography>
+                        {renderGradeChip(item.type)}
+                    </Box>
+                    {promoted && <Chip size="small" color="warning" variant="outlined" label="모듈이 등급 변경"/>}
+                </Stack>
+                <Typography variant="caption" color="text.secondary" sx={{display: 'block', mt: 1}}>
+                    ※ 모의투자(매매) 경로 — 매크로 미적용 · HOLD 비흡수(모듈이 HOLD를 격상/격하 가능)
+                </Typography>
+
+                {/* 수급 (백본 근거) */}
+                <Typography variant="overline" color="text.secondary" sx={{display: 'block', mt: 2}}>수급 (백본 근거)</Typography>
+                <Box sx={{p: 1, borderRadius: 1, bgcolor: 'action.hover', mt: 0.5, mb: 1}}>
+                    <Typography variant="body2">
+                        {item.backboneReason || '- (백본 HOLD: 수급 방향 신호 없음 → 모듈이 등급 결정)'}
+                    </Typography>
+                </Box>
+                <Box sx={{display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 1.5}}>
+                    <GField label="연기금 K (STRONG≥3.0)" value={num(item.penfndK)}/>
+                    <GField label="B′ 추세명확 (≥0.7)" value={num(item.priorTrendRatio)}/>
+                    <GField label="외인 시총비중 (STRONG≥0.1%)"
+                            value={item.frgnrMcapRatio != null ? `${(item.frgnrMcapRatio * 100).toFixed(3)}%` : '-'}/>
+                    <GField label="외인 반대K (강반대≥3.0)" value={num(item.frgnrOppositeK)}/>
+                    <GField label="외인 동조K" value={num(item.frgnrSameDirK)}/>
+                    <GField label="옵션B (외인 동조)"
+                            value={item.foreignerAligned == null ? '-' : (item.foreignerAligned ? 'Y' : 'N')}/>
+                </Box>
+
+                {/* 후행 모듈 트리거 */}
+                <Typography variant="overline" color="text.secondary" sx={{display: 'block', mt: 2}}>
+                    후행 모듈 트리거 (격상/격하 신호)
+                </Typography>
+                <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap sx={{mt: 0.5}}>
+                    <TriggerChip label="변동성(PV)" v={item.pvTrigger}/>
+                    <TriggerChip label="이동평균(MA)" v={item.maTrigger}/>
+                    <TriggerChip label="거래량(VP)" v={item.vpTrigger}/>
+                    <TriggerChip label="RSI" v={item.rsiTrigger}/>
+                    <TriggerChip label="52주 위치" v={item.hl52wTrigger}/>
+                    <TriggerChip label="신고저 돌파" v={item.breakoutTrigger}/>
+                </Stack>
+
+                {/* 사유 / 비중 */}
+                <Box sx={{display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 1.5, mt: 2}}>
+                    <GField label="평가 사유(티어)" value={reasonLabel}/>
+                    <GField label="목표비중"
+                            value={item.targetWeightRatio != null ? `${(item.targetWeightRatio * 100).toFixed(0)}%` : '기본'}/>
+                </Box>
+            </DialogContent>
+        </Dialog>
+    );
 }
 
 function ReportSection() {

@@ -72,13 +72,13 @@ export default function RealizedPnlTab({myBrokers}: RealizedPnlTabProps) {
     }
 
     const selectedBroker = myBrokers[selectedBrokerTab];
-    const isApiBroker = selectedBroker?.type === 'API';
+    const isAutoSyncBroker = selectedBroker?.name === '키움증권';
 
     // 조회 조건 / broker 변경 시 자동 재요청. invalidateQueries 로 수동 reload.
     const {data: allItems, isLoading: loading} = useQuery<RealizedPnlItem[]>({
         queryKey: ['stockRealizedPnl', selectedBroker?.brokerId, viewMode, year, month],
         queryFn: async ({signal}) => {
-            if (isApiBroker) {
+            if (isAutoSyncBroker) {
                 const syncReq = viewMode === 'monthly' ? {year, month}
                     : viewMode === 'yearly' ? {year}
                     : {};
@@ -139,7 +139,7 @@ export default function RealizedPnlTab({myBrokers}: RealizedPnlTabProps) {
                 return <BlindText><Typography variant="body2" sx={{color, fontWeight: 600}}>{val > 0 ? '+' : ''}{val.toLocaleString()}원</Typography></BlindText>;
             }
         },
-        ...(isApiBroker ? [
+        ...(isAutoSyncBroker ? [
             {field: 'totalBuyAmt', headerName: '총매수', flex: 1, minWidth: 120, align: 'right', headerAlign: 'right',
                 renderCell: (params: GridRenderCellParams) => <BlindText><Typography variant="body2">{(params.value as number)?.toLocaleString() ?? '-'}원</Typography></BlindText>},
             {field: 'totalSellAmt', headerName: '총매도', flex: 1, minWidth: 120, align: 'right', headerAlign: 'right',
@@ -149,7 +149,7 @@ export default function RealizedPnlTab({myBrokers}: RealizedPnlTabProps) {
             {field: 'tradeTax', headerName: '세금', width: 100, align: 'right', headerAlign: 'right',
                 renderCell: (params: GridRenderCellParams) => <Typography variant="body2">{(params.value as number)?.toLocaleString() ?? '-'}원</Typography>},
         ] as GridColDef[] : []),
-        ...(!isApiBroker ? [
+        ...(!isAutoSyncBroker ? [
             {field: 'actions', headerName: '관리', width: 70, sortable: false, align: 'center', headerAlign: 'center',
                 renderCell: (params: GridRenderCellParams) => (
                     <IconButton size="small" onClick={(e) => { setAnchorEl(e.currentTarget); setMenuTarget(params.row as RealizedPnlItem); }}>
@@ -222,7 +222,7 @@ export default function RealizedPnlTab({myBrokers}: RealizedPnlTabProps) {
                     </TextField>
                 )}
                 <Box sx={{flex: 1}}/>
-                {!isApiBroker && (
+                {!isAutoSyncBroker && (
                     <Button size="small" variant="contained" startIcon={<AddIcon/>} onClick={() => setAddOpen(true)}>
                         등록
                     </Button>
