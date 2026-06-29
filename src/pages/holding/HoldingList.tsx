@@ -16,7 +16,8 @@ import {DndContext, DragEndEvent, PointerSensor, TouchSensor, useSensor, useSens
 import {arrayMove, SortableContext, useSortable, verticalListSortingStrategy} from "@dnd-kit/sortable";
 import {CSS} from "@dnd-kit/utilities";
 import CustomPieChart from "../../components/CustomPieChart.tsx";
-import type {HoldingReorderReq} from "../../type/BrokerType.ts";
+import type {HoldingReorderReq, UpdateBalanceReq} from "../../type/BrokerType.ts";
+import {updateBrokerBalance} from "../../api/broker/BrokerApi.ts";
 import {HoldingStock, HoldingListData} from "../../type/HoldingType.ts";
 import {fetchHoldingList, fetchTossHoldingList, reorderApiHoldings} from "../../api/holding/HoldingApi.ts";
 import {renderChip, renderTradeColor} from "../../components/CustomRender.tsx";
@@ -89,10 +90,12 @@ const DraggableRow = React.forwardRef<HTMLDivElement, GridRowProps>((props, _ref
 
 // ─── HoldingList ─────────────────────────────────────────────────────────────
 
-const calcDailyPl = (stocks: HoldingStock[]) =>
-    stocks.reduce((sum, s) => sum + (Number(s.curPrc) - Number(s.predClosePric)) * Number(s.rmndQty), 0);
+const calcDailyPl = (stocks: HoldingStock[], source: 'KIWOOM' | 'TOSS') =>
+    source === 'TOSS'
+        ? stocks.reduce((sum, s) => sum + Number(s.dayPl ?? 0), 0)
+        : stocks.reduce((sum, s) => sum + (Number(s.curPrc) - Number(s.predClosePric)) * Number(s.rmndQty), 0);
 
-const HoldingList = ({source = 'KIWOOM'}: {source?: 'KIWOOM' | 'TOSS'}) => {
+const HoldingList = ({source = 'KIWOOM', brokerId}: {source?: 'KIWOOM' | 'TOSS', brokerId?: number}) => {
     const navigate = useNavigate();
     const [showChart, setShowChart] = useState(false);
     const {isBlind} = useBlindMode();
@@ -165,14 +168,16 @@ const HoldingList = ({source = 'KIWOOM'}: {source?: 'KIWOOM' | 'TOSS'}) => {
 
     // 요약 카드 totals (holdings 에서 derive)
     const totPurAmt = holdingData?.totPurAmt ?? "0";
-    const balance = holdingData?.balance ?? "0";
+    // 토스 예수금은 Open API 미제공 → 수동 입력값(MemberBroker.balance) 사용. 수정 직후 즉시 반영용 override.
+    const [balanceOverride, setBalanceOverride] = useState<string | null>(null);
+    const balance = balanceOverride ?? String(holdingData?.balance ?? "0");
     const totEvltAmt = useMemo(() => String(holdings.reduce((sum, s) => sum + Number(s.evltAmt), 0)), [holdings]);
     const totEvltPl = useMemo(() => String(Number(totEvltAmt) - Number(totPurAmt)), [totEvltAmt, totPurAmt]);
     const totPrftRt = useMemo(() => {
         const pur = Number(totPurAmt);
         return pur !== 0 ? (Number(totEvltPl) / pur * 100).toFixed(2) : "0";
     }, [totEvltPl, totPurAmt]);
-    const dailyPl = useMemo(() => String(calcDailyPl(holdings)), [holdings]);
+    const dailyPl = useMemo(() => String(calcDailyPl(holdings, source)), [holdings, source]);
 
     // WebSocket 구독 종목 코드 — fetchedHoldings 기준 (overlay 와 무관)
     const stkCds = useMemo(() => fetchedHoldings.map(s => s.stkCd), [fetchedHoldings]);
@@ -218,6 +223,23 @@ const HoldingList = ({source = 'KIWOOM'}: {source?: 'KIWOOM' | 'TOSS'}) => {
         reorderMutation.mutate(req);
     };
 
+    const balanceMutation = useMutation({
+        mutationFn: async (req: UpdateBalanceReq) => {
+            if (brokerId == null) throw new Error('brokerId 가 없습니다.');
+            requireOk(await updateBrokerBalance(brokerId, req), '계좌 예수금 수정');
+            return req.balance;
+        },
+        onSuccess: (newBalance) => {
+            setBalanceOverride(String(newBalance));
+            queryClient.invalidateQueries({queryKey: ['holdingList', source]});
+        },
+        onError: (err) => console.error(err),
+    });
+
+    const handleBalanceUpdate = (newBalance: number) => {
+        balanceMutation.mutate({balance: newBalance});
+    };
+
     const columns: GridColDef[] = [
         {
             field: '__drag__', headerName: '', width: 40, sortable: false, disableColumnMenu: true,
@@ -258,6 +280,8 @@ const HoldingList = ({source = 'KIWOOM'}: {source?: 'KIWOOM' | 'TOSS'}) => {
                 balance={balance}
                 dailyPl={dailyPl}
                 loading={loading}
+                editable={source === 'TOSS' && brokerId != null}
+                onBalanceUpdate={source === 'TOSS' ? handleBalanceUpdate : undefined}
             />
 
             <Box sx={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2}}>

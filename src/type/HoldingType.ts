@@ -15,6 +15,7 @@ export interface HoldingStock {
     rmndQty: string,
     possRt: string,
     predClosePric: string,
+    dayPl?: string, // 당일 손익(원). 증권사 API가 직접 제공하는 경우 사용(예: 토스)
 }
 
 export interface HoldingStreamRes {

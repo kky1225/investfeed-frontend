@@ -893,29 +893,73 @@ const StockDetail = () => {
                     <Card variant="outlined" sx={{ width: '100%' }}>
                         <CardContent>
                             <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                <Typography component="h2" variant="subtitle2" gutterBottom>
-                                    {loading ? <Skeleton width={140}/> : (
-                                        <>
-                                            {stockChartData.title}
-                                            {(() => {
-                                                const warnings = buildRiskWarnings(
-                                                    stockChartData.orderWarning,
-                                                    stockChartData.auditInfo,
-                                                    stockChartData.state,
-                                                );
-                                                if (warnings.length === 0) return null;
-                                                return (
-                                                    <Tooltip
-                                                        title={<Box sx={{ whiteSpace: 'pre-line' }}>{warnings.join('\n')}</Box>}
-                                                        placement="right"
-                                                    >
-                                                        <ErrorIcon color="error" sx={{ fontSize: 'inherit', verticalAlign: 'middle', ml: "1px", mb: "3px" }} />
-                                                    </Tooltip>
-                                                );
-                                            })()}
-                                        </>
-                                    )}
-                                </Typography>
+                                <Stack direction="row" alignItems="center" gap={0.75} sx={{ flexWrap: 'wrap', minWidth: 0 }}>
+                                    <Typography component="h2" variant="subtitle2" sx={{ mb: 0 }}>
+                                        {loading ? <Skeleton width={140}/> : (
+                                            <>
+                                                {stockChartData.title}
+                                                {(() => {
+                                                    const warnings = buildRiskWarnings(
+                                                        stockChartData.orderWarning,
+                                                        stockChartData.auditInfo,
+                                                        stockChartData.state,
+                                                    );
+                                                    if (warnings.length === 0) return null;
+                                                    return (
+                                                        <Tooltip
+                                                            title={<Box sx={{ whiteSpace: 'pre-line' }}>{warnings.join('\n')}</Box>}
+                                                            placement="right"
+                                                        >
+                                                            <ErrorIcon color="error" sx={{ fontSize: 'inherit', verticalAlign: 'middle', ml: "1px", mb: "3px" }} />
+                                                        </Tooltip>
+                                                    );
+                                                })()}
+                                            </>
+                                        )}
+                                    </Typography>
+                                    {!loading && (() => {
+                                        const polled = result?.viList ?? [];
+                                        const live = liveVi;
+                                        if (polled.length === 0 && !live) return null;
+
+                                        const fmtTime = (t?: string) =>
+                                            t && t.length >= 6 ? `${t.slice(0, 2)}:${t.slice(2, 4)}:${t.slice(4, 6)}` : (t ?? '');
+                                        const viTooltip = (v: StockVi) => (
+                                            <Box sx={{ whiteSpace: 'pre-line' }}>
+                                                {[
+                                                    `발동구분: ${[v.direction, v.viType].filter(Boolean).join(' ') || '-'}`,
+                                                    v.motnPric ? `발동가격: ${Number(v.motnPric.replace(/^[+-]/, '')).toLocaleString()}` : null,
+                                                    v.motnTime ? `발동시각: ${fmtTime(v.motnTime)}` : null,
+                                                    !v.active && v.relisTime ? `해제시각: ${fmtTime(v.relisTime)}` : null,
+                                                    v.staticDisptyRt && v.staticDisptyRt !== '0.00' ? `정적괴리율: ${v.staticDisptyRt}%` : null,
+                                                    v.dynmDisptyRt && v.dynmDisptyRt !== '0.00' ? `동적괴리율: ${v.dynmDisptyRt}%` : null,
+                                                    v.vimotnCnt ? `금일 발동횟수: ${v.vimotnCnt}회` : null,
+                                                ].filter(Boolean).join('\n')}
+                                            </Box>
+                                        );
+
+                                        const activeVi = (live?.active ? live : null) ?? polled.find((v) => v.active) ?? null;
+                                        if (activeVi) {
+                                            const label = ['VI 발동 중', activeVi.direction, activeVi.viType].filter(Boolean).join(' · ');
+                                            return (
+                                                <Tooltip title={viTooltip(activeVi)} placement="right">
+                                                    <Chip label={label} size="small" color="error" />
+                                                </Tooltip>
+                                            );
+                                        }
+
+                                        // 발동횟수는 API가 주는 vimotnCnt 그대로 사용(실시간 live 우선, 없으면 폴링 최신).
+                                        const latest = live ?? polled[0];
+                                        if (!latest) return null;
+                                        const count = Number(latest.vimotnCnt) || 0;
+                                        if (count <= 0) return null;
+                                        return (
+                                            <Tooltip title={viTooltip(latest)} placement="right">
+                                                <Chip label={`금일 VI ${count}회`} size="small" color="error" variant="outlined" />
+                                            </Tooltip>
+                                        );
+                                    })()}
+                                </Stack>
                                 <Stack direction="row" alignItems="center" gap={0.5}>
                                     {stockChartData.nxtEnable === 'Y' &&
                                         <Typography component="h2" variant="subtitle2" gutterBottom>
@@ -940,55 +984,6 @@ const StockDetail = () => {
                                     </Tooltip>
                                 </Stack>
                             </Box>
-                            {!loading && (() => {
-                                const polled = result?.viList ?? [];
-                                const live = liveVi;
-                                if (polled.length === 0 && !live) return null;
-
-                                const fmtTime = (t?: string) =>
-                                    t && t.length >= 6 ? `${t.slice(0, 2)}:${t.slice(2, 4)}:${t.slice(4, 6)}` : (t ?? '');
-                                const viTooltip = (v: StockVi) => (
-                                    <Box sx={{ whiteSpace: 'pre-line' }}>
-                                        {[
-                                            `발동구분: ${[v.direction, v.viType].filter(Boolean).join(' ') || '-'}`,
-                                            v.motnPric ? `발동가격: ${Number(v.motnPric.replace(/^[+-]/, '')).toLocaleString()}` : null,
-                                            v.motnTime ? `발동시각: ${fmtTime(v.motnTime)}` : null,
-                                            !v.active && v.relisTime ? `해제시각: ${fmtTime(v.relisTime)}` : null,
-                                            v.staticDisptyRt && v.staticDisptyRt !== '0.00' ? `정적괴리율: ${v.staticDisptyRt}%` : null,
-                                            v.dynmDisptyRt && v.dynmDisptyRt !== '0.00' ? `동적괴리율: ${v.dynmDisptyRt}%` : null,
-                                            v.vimotnCnt ? `금일 발동횟수: ${v.vimotnCnt}회` : null,
-                                        ].filter(Boolean).join('\n')}
-                                    </Box>
-                                );
-
-                                const activeVi = (live?.active ? live : null) ?? polled.find((v) => v.active) ?? null;
-                                if (activeVi) {
-                                    const label = ['VI 발동 중', activeVi.direction, activeVi.viType].filter(Boolean).join(' · ');
-                                    return (
-                                        <Stack direction="row" sx={{ mb: 1 }}>
-                                            <Tooltip title={viTooltip(activeVi)} placement="right">
-                                                <Chip label={label} size="small" color="error" />
-                                            </Tooltip>
-                                        </Stack>
-                                    );
-                                }
-
-                                const count = Math.max(
-                                    polled.length,
-                                    ...polled.map((v) => Number(v.vimotnCnt) || 0),
-                                    Number(live?.vimotnCnt) || 0,
-                                );
-                                if (count <= 0) return null;
-                                const latest = polled[0] ?? live;
-                                if (!latest) return null;
-                                return (
-                                    <Stack direction="row" sx={{ mb: 1 }}>
-                                        <Tooltip title={viTooltip(latest)} placement="right">
-                                            <Chip label={`금일 VI ${count}회`} size="small" color="warning" variant="outlined" />
-                                        </Tooltip>
-                                    </Stack>
-                                );
-                            })()}
                             {!loading && info.tradeConditions.length > 0 && (
                                 <Stack direction="row" spacing={0.5} flexWrap="wrap" useFlexGap sx={{ mb: 1 }}>
                                     {info.tradeConditions.map((cond) => (
