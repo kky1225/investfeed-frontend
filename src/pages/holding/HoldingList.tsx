@@ -192,9 +192,11 @@ const HoldingList = ({source = 'KIWOOM', brokerId}: {source?: 'KIWOOM' | 'TOSS',
         });
     }, []);
 
-    // 토스는 실시간 스트림이 없으므로 빈 배열로 비활성화 (useHoldingStream 은 stkCds 가 비면 no-op)
-    const streamStkCds = source === 'TOSS' ? [] : stableStkCds;
-    useHoldingStream(streamStkCds, handleStreamUpdate, fetchHoldingStream);
+    const streamStkCds = useMemo(
+        () => source === 'TOSS' ? stableStkCds.filter(cd => cd.endsWith('_AL')) : stableStkCds,
+        [source, stableStkCds],
+    );
+    useHoldingStream(streamStkCds, handleStreamUpdate, fetchHoldingStream, source === 'TOSS');
 
     const handleDragEnd = (event: DragEndEvent) => {
         const {active, over} = event;

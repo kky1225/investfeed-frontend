@@ -7,6 +7,7 @@ export function useHoldingStream(
     stkCds: string[],
     onUpdate: (bufferMap: Map<string, HoldingBuffer>) => void,
     fetcher: (req: HoldingStreamReq) => Promise<unknown>,
+    quotesOnly = false,
 ) {
     const {checkMarketTime, marketTimer} = useMarketTime(MarketType.STOCK);
     const bufferMapRef = useRef<Map<string, HoldingBuffer>>(new Map());
@@ -37,7 +38,7 @@ export function useHoldingStream(
                             });
                         }
 
-                        if (res.type === "04") {
+                        if (res.type === "04" && !quotesOnly) {
                             const rawCd = values["9001"];
                             if (!rawCd) return;
                             const stkCd = rawCd.replace(/^A/, '') + "_AL";
@@ -65,7 +66,12 @@ export function useHoldingStream(
         };
 
         const connectSocket = async () => {
-            await fetcher({items: stkCds});
+            try {
+                await fetcher({items: stkCds});
+            } catch (e) {
+                console.error('보유 실시간 구독 실패', e);
+                return;
+            }
             socket = openSocket();
             startDisplay();
         };
@@ -93,5 +99,5 @@ export function useHoldingStream(
             clearTimeout(socketTimeout);
             clearInterval(displayInterval);
         };
-    }, [stkCds, onUpdate, fetcher, checkMarketTime, marketTimer]);
+    }, [stkCds, onUpdate, fetcher, quotesOnly, checkMarketTime, marketTimer]);
 }

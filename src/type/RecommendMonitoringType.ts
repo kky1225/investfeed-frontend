@@ -124,7 +124,6 @@ export interface AdminMarketSnapshotRes {
     kosdaqForeignerSign: string | null;
     kosdaqInstitutionSign: string | null;
     kosdaqScenario: MacroScenario;
-    capturedAt: string;                    // ISO LocalDateTime
 }
 
 export interface AdminBackfillStatusRes {
