@@ -30,6 +30,7 @@ export function useHoldingStream(
                         const values = res.values;
 
                         if (res.type === "0B") {
+                            if (values?.["10"] == null) return;
                             const stkCd = res.item;
                             const prev = bufferMapRef.current.get(stkCd) ?? {};
                             bufferMapRef.current.set(stkCd, {
@@ -62,7 +63,7 @@ export function useHoldingStream(
                 if (bufferMapRef.current.size === 0) return;
                 onUpdate(new Map(bufferMapRef.current));
                 bufferMapRef.current.clear();
-            }, 500);
+            }, 200);
         };
 
         const connectSocket = async () => {

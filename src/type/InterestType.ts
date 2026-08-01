@@ -8,8 +8,10 @@ export interface InterestItem {
     id: number;
     stkCd: string;
     stkNm: string;
+    stexTp?: string; // 미지정: 국내, ND/NY/NA: 미국 거래소
     curPrc: string;
     fluRt: string;
+    mrktNm?: string; // 국내 시장명 (코스피/코스닥/ETF 등)
 }
 
 export interface CreateGroupReq {
@@ -23,6 +25,7 @@ export interface UpdateGroupReq {
 export interface AddItemReq {
     stkCd: string;
     stkNm: string;
+    stexTp?: string; // 미지정: 국내, ND/NY/NA: 미국 거래소
 }
 
 export interface ReorderReq {

@@ -514,7 +514,7 @@ const IndexDetail = () => {
             const data = JSON.parse(event.data);
             if (data.trnm !== "REAL" || !Array.isArray(data.data)) return;
 
-            const indexList = data.data.map((res: IndexStreamRes) => {
+            const indexList = data.data.filter((res: IndexStreamRes) => res.item === indsCd && res.values?.["10"] != null).map((res: IndexStreamRes) => {
                 const values = res.values;
                 return {
                     code: res.item,

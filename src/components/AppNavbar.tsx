@@ -22,13 +22,15 @@ import Collapse from '@mui/material/Collapse';
 import Chip from '@mui/material/Chip';
 import {fetchStockSearch} from '../api/stock/StockApi.ts';
 import {fetchCryptoSearch} from '../api/crypto/CryptoApi.ts';
+import {fetchUsStockSearch} from '../api/usStock/UsStockApi.ts';
 import {useNavigate} from 'react-router-dom';
 
 interface SearchItem {
     code: string;
     name: string;
     marketName: string;
-    category: '주식' | '코인';
+    category: '주식' | '미국' | '코인';
+    stexTp?: string; // 미국 전용 거래소구분 (ND/NY/NA)
 }
 
 const Toolbar = styled(MuiToolbar)({
@@ -73,11 +75,13 @@ export default function AppNavbar() {
         searchTimerRef.current = setTimeout(async () => {
             setSearchLoading(true);
             try {
-                const [stockData, cryptoData] = await Promise.all([
+                const [stockData, usStockData, cryptoData] = await Promise.all([
                     fetchStockSearch(keyword.trim()),
+                    fetchUsStockSearch(keyword.trim()),
                     fetchCryptoSearch(keyword.trim()),
                 ]);
                 if (stockData.code !== "0000") throw new Error(stockData.message || `주식 검색 실패 (${stockData.code})`);
+                if (usStockData.code !== "0000") throw new Error(usStockData.message || `미국주식 검색 실패 (${usStockData.code})`);
                 if (cryptoData.code !== "0000") throw new Error(cryptoData.message || `코인 검색 실패 (${cryptoData.code})`);
 
                 const stockResults: SearchItem[] = (stockData.result ?? []).map((s: { stkCd: string; stkNm: string; marketName: string }) => ({
@@ -87,6 +91,14 @@ export default function AppNavbar() {
                     category: '주식' as const,
                 }));
 
+                const usStockResults: SearchItem[] = (usStockData.result ?? []).map((s: { stkCd: string; stkNm: string; stexTp: string; marketName: string }) => ({
+                    code: s.stkCd,
+                    name: s.stkNm,
+                    marketName: s.marketName,
+                    category: '미국' as const,
+                    stexTp: s.stexTp,
+                }));
+
                 const cryptoResults: SearchItem[] = (cryptoData.result ?? []).map((c: { market: string; koreanName: string; englishName: string }) => ({
                     code: c.market,
                     name: c.koreanName,
@@ -94,7 +106,7 @@ export default function AppNavbar() {
                     category: '코인' as const,
                 }));
 
-                setSearchResults([...cryptoResults, ...stockResults]);
+                setSearchResults([...cryptoResults, ...stockResults, ...usStockResults]);
             } catch (error) {
                 console.error(error);
                 setSearchResults([]);
@@ -111,6 +123,8 @@ export default function AppNavbar() {
         setSearchOpen(false);
         if (value.category === '코인') {
             navigate(`/crypto/detail/${value.code}`);
+        } else if (value.category === '미국') {
+            navigate(`/us-stock/detail/${value.stexTp}/${value.code}`);
         } else {
             navigate(`/stock/detail/${value.code}`);
         }

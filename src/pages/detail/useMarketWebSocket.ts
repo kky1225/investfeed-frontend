@@ -15,24 +15,10 @@ interface UseMarketWebSocketOptions {
     enabled?: boolean;
 }
 
-/**
- * 종목 상세 페이지 WebSocket lifecycle 커스텀 훅.
- *
- * 책임:
- * - marketType 기준 장 시각 확인 (useMarketTime)
- * - 장 열림 → streamFn() 으로 subscribe 메시지 전송 후 WebSocket open
- * - 장 닫힘 → 다음 개장 시각까지 setTimeout 으로 대기 후 재시도
- * - subscriptionKey 변경 시 재연결, 언마운트 시 정리
- *
- * onMessage / streamFn 은 latest-ref 로 처리 → caller 가 useCallback 강제 안 됨.
- *
- * 24h 거래 (crypto) 는 useCryptoWebSocket 별도 훅 사용.
- */
 export function useMarketWebSocket(opts: UseMarketWebSocketOptions): void {
     const {marketType, subscriptionKey, enabled = true} = opts;
     const {checkMarketTime, marketTimer} = useMarketTime(marketType);
 
-    // latest-ref: caller 가 useCallback 안 써도 매 렌더 최신 콜백 호출
     const streamFnRef = useRef(opts.streamFn);
     const onMessageRef = useRef(opts.onMessage);
     streamFnRef.current = opts.streamFn;

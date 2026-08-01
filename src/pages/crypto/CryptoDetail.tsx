@@ -16,7 +16,7 @@ import {Select, SelectChangeEvent, Slider, Tooltip} from "@mui/material";
 import MenuItem from "@mui/material/MenuItem";
 import CryptoDetailLineChart, {CryptoDetailLineChartProps} from "../../components/CryptoDetailLineChart.tsx";
 import {fetchCryptoDetail, fetchCryptoStream} from "../../api/crypto/CryptoApi.ts";
-import {useCryptoWebSocket} from "../detail/useCryptoWebSocket.ts";
+import {useRealtimeWebSocket} from "../detail/useRealtimeWebSocket.ts";
 import {CryptoChart, CryptoChartType, CryptoDetailReq, CryptoDetailRes} from "../../type/CryptoType.ts";
 import {useParams} from "react-router-dom";
 import {renderChangeAmount} from "../../components/CustomRender.tsx";
@@ -343,8 +343,8 @@ const CryptoDetail = () => {
         };
     }, [baseInfo, livePrice]);
 
-    // WebSocket 라이프사이클 — 24시간 거래라 시장 시간 체크 불필요. useCryptoWebSocket 훅이 연결/정리 처리.
-    useCryptoWebSocket({
+    // WebSocket 라이프사이클 — 24시간 거래라 시장 시간 체크 불필요. useRealtimeWebSocket 훅이 연결/정리 처리.
+    useRealtimeWebSocket({
         subscriptionKey: market,
         streamFn: () => fetchCryptoStream([market]),
         onMessage: (event) => {

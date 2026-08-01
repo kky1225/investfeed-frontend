@@ -30,6 +30,10 @@ export function renderTradePricaColor(trade: string) {
 }
 
 export function renderChip (status: number) {
+    if (status === null || status === undefined || isNaN(Number(status))) {
+        return <Chip label="-" color="default" />;
+    }
+
     const colors = status == 0 ? 'default' : status > 0 ? 'error': 'info';
 
     return <Chip label={`${status}%`} color={colors} />;

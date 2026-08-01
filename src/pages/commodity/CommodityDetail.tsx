@@ -384,7 +384,7 @@ const CommodityDetail = () => {
             const data = JSON.parse(event.data);
             if (data.trnm !== "REAL" || !Array.isArray(data.data)) return;
 
-            const commodityList = data.data.map((res: CommodityStreamRes) => {
+            const commodityList = data.data.filter((res: CommodityStreamRes) => res.item === stkCd && res.values?.["10"] != null).map((res: CommodityStreamRes) => {
                 const values = res.values;
                 return {
                     code: res.item,

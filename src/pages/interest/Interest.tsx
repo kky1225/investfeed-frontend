@@ -49,14 +49,17 @@ import {
 } from "../../api/interest/InterestApi.ts";
 import {AddItemMutationVars, CreateGroupReq, DeleteItemMutationVars, InterestGroup, InterestItem, ReorderItemsMutationVars, ReorderReq, UpdateGroupMutationVars} from "../../type/InterestType.ts";
 import {renderChip} from "../../components/CustomRender.tsx";
-import {MarketType} from "../../type/timeType.ts";
-import {fetchMarketInfo} from "../../lib/serverTime.ts";
 import {fetchStockSearch} from "../../api/stock/StockApi.ts";
+import {fetchUsStockSearch} from "../../api/usStock/UsStockApi.ts";
+import {EXCHANGE_LABEL} from "../../lib/exchange.ts";
+import ToggleButton from "@mui/material/ToggleButton";
+import ToggleButtonGroup from "@mui/material/ToggleButtonGroup";
 
 interface StockSearchItem {
     stkCd: string;
     stkNm: string;
     marketName: string;
+    stexTp?: string; // 미국 검색 결과만 존재 (ND/NY/NA)
 }
 
 interface GroupMenuState {
@@ -249,6 +252,7 @@ const Interest = () => {
     const [groupMenu, setGroupMenu] = useState<GroupMenuState | null>(null);
 
     const [addItemOpen, setAddItemOpen] = useState(false);
+    const [searchMarket, setSearchMarket] = useState<"KR" | "US">("KR");
     const [searchKeyword, setSearchKeyword] = useState("");
     const [searchResults, setSearchResults] = useState<StockSearchItem[]>([]);
     const [searchLoading, setSearchLoading] = useState(false);
@@ -259,8 +263,8 @@ const Interest = () => {
     const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
     const socketRef = useRef<WebSocket | null>(null);
+    const streamBufferRef = useRef<Map<string, {curPrc: string; fluRt: string}>>(new Map());
 
-    // 클릭과 드래그를 구분하기 위해 distance: 5 적용, 모바일 터치 지원
     const sensors = useSensors(
         useSensor(PointerSensor, {activationConstraint: {distance: 5}}),
         useSensor(TouchSensor, {activationConstraint: {delay: 200, tolerance: 5}})
@@ -270,17 +274,14 @@ const Interest = () => {
         if (!selectedGroup) return;
         const targetGroupId = selectedGroup.id;
         let cancelled = false;
+        let displayInterval: ReturnType<typeof setInterval> | undefined;
 
         socketRef.current?.close();
         socketRef.current = null;
+        streamBufferRef.current.clear();
 
         (async () => {
             try {
-                const marketInfo = await fetchMarketInfo(MarketType.STOCK);
-                if (cancelled) return;
-                if (!marketInfo) throw new Error(`시장 시간 조회 실패`);
-                if (!marketInfo.isMarketOpen) return;
-
                 const streamRes = await fetchInterestItemsStream(targetGroupId);
                 if (cancelled) return;
                 if (streamRes.code !== "0000") throw new Error(streamRes.message || `관심 종목 스트림 실패 (${streamRes.code})`);
@@ -289,15 +290,11 @@ const Interest = () => {
                 socket.onmessage = (event) => {
                     const data = JSON.parse(event.data);
                     if (data.trnm === "REAL" && Array.isArray(data.data)) {
-                        // useQuery 캐시 직접 갱신 (실시간 가격 머지)
-                        queryClient.setQueryData<InterestItem[]>(['interestItems', targetGroupId], (prev) => {
-                            if (!prev) return prev;
-                            return prev.map(item => {
-                                const newData = data.data.find((entry: { item: string; values: Record<string, string> }) => entry.item === item.stkCd);
-                                if (newData) {
-                                    return {...item, curPrc: newData.values["10"], fluRt: newData.values["12"]};
-                                }
-                                return item;
+                        data.data.forEach((entry: { item: string; values: Record<string, string> }) => {
+                            if (entry.values?.["10"] == null) return;
+                            streamBufferRef.current.set(entry.item, {
+                                curPrc: entry.values["10"],
+                                fluRt: entry.values["12"],
                             });
                         });
                     }
@@ -307,6 +304,18 @@ const Interest = () => {
                     return;
                 }
                 socketRef.current = socket;
+
+                displayInterval = setInterval(() => {
+                    if (streamBufferRef.current.size === 0) return;
+                    queryClient.setQueryData<InterestItem[]>(['interestItems', targetGroupId], (prev) => {
+                        if (!prev) return prev;
+                        return prev.map(item => {
+                            const update = streamBufferRef.current.get(item.stkCd);
+                            return update ? {...item, curPrc: update.curPrc, fluRt: update.fluRt} : item;
+                        });
+                    });
+                    streamBufferRef.current.clear();
+                }, 200);
             } catch (err) {
                 console.error(err);
             }
@@ -316,6 +325,8 @@ const Interest = () => {
             cancelled = true;
             socketRef.current?.close();
             socketRef.current = null;
+            if (displayInterval) clearInterval(displayInterval);
+            streamBufferRef.current.clear();
         };
     }, [selectedGroup, queryClient]);
 
@@ -458,7 +469,7 @@ const Interest = () => {
         reorderItemsMutation.mutate(vars);
     };
 
-    const handleSearchKeywordChange = (keyword: string) => {
+    const handleSearchKeywordChange = (keyword: string, market: "KR" | "US" = searchMarket) => {
         setSearchKeyword(keyword);
         setAddItemError("");
         if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
@@ -469,7 +480,9 @@ const Interest = () => {
         searchTimerRef.current = setTimeout(async () => {
             setSearchLoading(true);
             try {
-                const data = await fetchStockSearch(keyword.trim());
+                const data = market === "US"
+                    ? await fetchUsStockSearch(keyword.trim())
+                    : await fetchStockSearch(keyword.trim());
                 if (data.code !== "0000") throw new Error(data.message || `주식 검색 실패 (${data.code})`);
                 setSearchResults(data.result ?? []);
             } catch (error) {
@@ -479,6 +492,14 @@ const Interest = () => {
                 setSearchLoading(false);
             }
         }, 300);
+    };
+
+    const handleSearchMarketChange = (market: "KR" | "US" | null) => {
+        if (!market || market === searchMarket) return;
+        setSearchMarket(market);
+        setSelectedStock(null);
+        setSearchResults([]);
+        handleSearchKeywordChange(searchKeyword, market);
     };
 
     const addItemMutation = useMutation({
@@ -515,7 +536,7 @@ const Interest = () => {
             setAddItemError("종목을 선택해주세요.");
             return;
         }
-        const vars: AddItemMutationVars = {groupId: selectedGroup.id, req: {stkCd: selectedStock.stkCd, stkNm: selectedStock.stkNm}};
+        const vars: AddItemMutationVars = {groupId: selectedGroup.id, req: {stkCd: selectedStock.stkCd, stkNm: selectedStock.stkNm, stexTp: selectedStock.stexTp}};
         addItemMutation.mutate(vars);
     };
 
@@ -536,6 +557,17 @@ const Interest = () => {
         },
         {field: "stkNm", headerName: "주식명", flex: 1.5, minWidth: 140},
         {
+            field: "stexTp",
+            headerName: "거래소",
+            renderCell: (params) => {
+                const stexTp = params.value as string | undefined;
+                if (stexTp) return EXCHANGE_LABEL[stexTp] ?? stexTp;
+                return params.row.mrktNm ?? "";
+            },
+            flex: 0.5,
+            minWidth: 80,
+        },
+        {
             field: "fluRt",
             headerName: "등락률",
             flex: 0.5,
@@ -547,8 +579,14 @@ const Interest = () => {
             headerName: "현재가",
             flex: 1,
             minWidth: 100,
-            valueFormatter: (param: string) =>
-                param ? Number(param).toLocaleString().replace(/^[+-]/, "") : "-",
+            renderCell: (params) => {
+                const value = params.value as string | undefined;
+                if (!value) return "-";
+                const num = Number(String(value).replace(/^[+-]/, ""));
+                return params.row.stexTp
+                    ? `$${num.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`
+                    : num.toLocaleString();
+            },
         },
         {
             field: "actions",
@@ -574,6 +612,8 @@ const Interest = () => {
         id: item.id,
         stkNm: item.stkNm,
         stkCd: item.stkCd,
+        stexTp: item.stexTp,
+        mrktNm: item.mrktNm,
         curPrc: item.curPrc,
         fluRt: item.fluRt,
     }));
@@ -751,7 +791,13 @@ const Interest = () => {
                                     disableColumnResize
                                     density="compact"
                                     loading={itemsLoading}
-                                    onRowClick={(params) => navigate(`/stock/detail/${params.row.stkCd}`)}
+                                    onRowClick={(params) => {
+                                        if (params.row.stexTp) {
+                                            navigate(`/us-stock/detail/${params.row.stexTp}/${params.row.stkCd}`);
+                                            return;
+                                        }
+                                        navigate(`/stock/detail/${params.row.stkCd}`);
+                                    }}
                                     slots={{row: DraggableRow}}
                                     sx={{
                                         cursor: "pointer",
@@ -863,6 +909,16 @@ const Interest = () => {
                 <DialogTitle>종목 추가</DialogTitle>
                 <DialogContent>
                     <Box sx={{mt: 1}}>
+                        <ToggleButtonGroup
+                            size="small"
+                            exclusive
+                            value={searchMarket}
+                            onChange={(_, value) => handleSearchMarketChange(value)}
+                            sx={{mb: 1.5}}
+                        >
+                            <ToggleButton value="KR">국내</ToggleButton>
+                            <ToggleButton value="US">미국</ToggleButton>
+                        </ToggleButtonGroup>
                         <Autocomplete
                             size="small"
                             options={searchResults}

@@ -133,6 +133,7 @@ const ThemeStockList = () => {
             if (data.trnm === "REAL" && Array.isArray(data.data)) {
                 data.data.forEach((entry: ThemeStockListStreamRes) => {
                     const values = entry.values as unknown as Record<string, string>;
+                    if (values?.["10"] == null) return;
                     stockBufferMap.current.set(entry.item, {
                         code: entry.item,
                         value: String(values["10"]).replace(/^[+-]/, ''),
@@ -178,7 +179,7 @@ const ThemeStockList = () => {
                     return next;
                 });
                 stockBufferMap.current.clear();
-            }, 500);
+            }, 200);
         };
 
         const connectSocket = async (req: ThemeStockListStreamReq) => {

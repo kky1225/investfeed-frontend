@@ -41,46 +41,22 @@ function loadPanelsFromStorage(): SelectedAsset[] {
 }
 
 export default function MultiViewPage() {
-    // lazy useState initializer — 첫 렌더 전에 localStorage 에서 동기적으로 로드 (useEffect 불필요)
     const [panels, setPanels] = useState<SelectedAsset[]>(loadPanelsFromStorage);
     const [searchPanelIndex, setSearchPanelIndex] = useState<number | null>(null);
     const [chartTarget, setChartTarget] = useState<{type: SelectedAsset['type']; code: string; name: string} | null>(null);
     const [streamUpdates, setStreamUpdates] = useState<Map<string, StreamUpdate>>(new Map());
     const stockBufferRef = useRef<Map<string, StreamUpdate>>(new Map());
     const cryptoBufferRef = useRef<Map<string, StreamUpdate>>(new Map());
-    const [reloadKey, setReloadKey] = useState(0);
-
-    useEffect(() => {
-        let timer: ReturnType<typeof setTimeout> | undefined;
-        let cancelled = false;
-
-        const schedule = () => {
-            const wait = 60_000 - (getServerNow() % 60_000) + 300;
-            timer = setTimeout(() => {
-                if (cancelled) return;
-                setReloadKey(k => k + 1);
-                schedule();
-            }, wait);
-        };
-        schedule();
-
-        return () => {
-            cancelled = true;
-            if (timer) clearTimeout(timer);
-        };
-    }, []);
 
     useEffect(() => {
         localStorage.setItem(STORAGE_KEY, JSON.stringify(panels));
     }, [panels]);
 
-    // 주식 종목 코드 목록
     const stockCodes = useMemo(() =>
         panels.filter(p => p.type === 'STOCK').map(p => p.code),
         [panels]
     );
 
-    // 코인 종목 코드 목록
     const cryptoCodes = useMemo(() =>
         panels.filter(p => p.type === 'CRYPTO').map(p => p.code),
         [panels]
@@ -101,13 +77,17 @@ export default function MultiViewPage() {
         let displayInterval: ReturnType<typeof setInterval>;
         let socketTimeout: ReturnType<typeof setTimeout>;
 
+        const panelCodes = new Set(stockCodes);
+
         const openSocket = () => {
             const ws = new WebSocket("ws://localhost:8080/ws");
             ws.onmessage = (event) => {
                 const data = JSON.parse(event.data);
                 if (data.trnm === "REAL" && Array.isArray(data.data)) {
                     data.data.forEach((res: {type: string; item: string; values: Record<string, string>}) => {
+                        if (!panelCodes.has(res.item)) return;
                         const values = res.values;
+                        if (values?.["10"] == null) return;
                         stockBufferRef.current.set(res.item, {
                             value: String(values["10"]).replace(/^[+-]/, ''),
                             fluRt: String(values["12"]),
@@ -129,7 +109,7 @@ export default function MultiViewPage() {
                     return next;
                 });
                 stockBufferRef.current.clear();
-            }, 500);
+            }, 200);
         };
 
         const connectSocket = async () => {
@@ -167,12 +147,13 @@ export default function MultiViewPage() {
         };
     }, [stockCodes.join(',')]);
 
-    // 코인 WebSocket (24시간 거래이므로 장시간 체크 불필요)
     useEffect(() => {
         if (cryptoCodes.length === 0) return;
 
         let socket: WebSocket;
         let displayInterval: ReturnType<typeof setInterval>;
+
+        const panelCodes = new Set(cryptoCodes);
 
         const openSocket = () => {
             const ws = new WebSocket("ws://localhost:8080/ws");
@@ -181,7 +162,7 @@ export default function MultiViewPage() {
                 if (data.type === "CRYPTO_TICKER" && data.data) {
                     const ticker = data.data;
                     const market: string = ticker.market;
-                    if (!market) return;
+                    if (!market || !panelCodes.has(market)) return;
                     const tradePrice = ticker.tradePrice != null ? String(ticker.tradePrice) : '0';
                     const changeRate = ticker.signedChangeRate != null ? Number(ticker.signedChangeRate) : 0;
                     const changePrice = ticker.signedChangePrice != null ? String(ticker.signedChangePrice) : '0';
@@ -206,7 +187,7 @@ export default function MultiViewPage() {
                     return next;
                 });
                 cryptoBufferRef.current.clear();
-            }, 500);
+            }, 200);
         };
 
         (async () => {
@@ -272,7 +253,6 @@ export default function MultiViewPage() {
                             onChartExpand={() => handleChartExpand(index)}
                             onRemove={() => handleRemove(index)}
                             streamUpdate={streamUpdates.get(asset.code) ?? null}
-                            reloadKey={reloadKey}
                         />
                     </Grid>
                 ))}

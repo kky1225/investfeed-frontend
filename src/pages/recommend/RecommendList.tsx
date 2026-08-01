@@ -232,32 +232,23 @@ const RecommendList = () => {
         }
     };
 
+    const streamBufferRef = useRef<Map<string, RecommendListStream>>(new Map());
+
     const openSocket = () => {
         const socket = new WebSocket("ws://localhost:8080/ws");
         socket.onmessage = (event) => {
             const data = JSON.parse(event.data);
             if (data.trnm === "REAL" && Array.isArray(data.data)) {
-                const updates: RecommendListStream[] = data.data.map((entry: RecommendListStreamRes) => {
+                data.data.forEach((entry: RecommendListStreamRes) => {
                     const values = entry.values;
-                    return {
+                    if (values?.["10"] == null) return;
+                    streamBufferRef.current.set(entry.item, {
                         code: entry.item,
                         value: values["10"],
                         change: values["11"],
                         fluRt: values["12"],
                         trend: values["25"],
-                    };
-                });
-                setLiveOverlay((prev) => {
-                    const next = new Map(prev);
-                    updates.forEach((u) => {
-                        next.set(u.code, {
-                            value: Number(u.value.replace(/^[+-]/, '')).toLocaleString(),
-                            changeAmount: u.change,
-                            fluRt: u.fluRt,
-                            trend: trendColor(u.trend),
-                        });
                     });
-                    return next;
                 });
             }
         };
@@ -279,7 +270,27 @@ const RecommendList = () => {
         subscribedKeyRef.current = key;
 
         let socketTimeout: ReturnType<typeof setTimeout>;
+        let displayInterval: ReturnType<typeof setInterval> | undefined;
         let socket: WebSocket | undefined;
+
+        const startDisplayLoop = () => {
+            displayInterval = setInterval(() => {
+                if (streamBufferRef.current.size === 0) return;
+                setLiveOverlay((prev) => {
+                    const next = new Map(prev);
+                    streamBufferRef.current.forEach((u, k) => {
+                        next.set(k, {
+                            value: Number(u.value.replace(/^[+-]/, '')).toLocaleString(),
+                            changeAmount: u.change,
+                            fluRt: u.fluRt,
+                            trend: trendColor(u.trend),
+                        });
+                    });
+                    return next;
+                });
+                streamBufferRef.current.clear();
+            }, 200);
+        };
 
         (async () => {
             const marketInfo = await timeNow();
@@ -287,6 +298,7 @@ const RecommendList = () => {
             if (marketInfo?.isMarketOpen) {
                 await recommendListStream({items});
                 socket = openSocket();
+                startDisplayLoop();
             } else {
                 socketTimeout = setTimeout(async () => {
                     socket?.close();
@@ -294,6 +306,7 @@ const RecommendList = () => {
                     if (again?.isMarketOpen) {
                         await recommendListStream({items});
                         socket = openSocket();
+                        startDisplayLoop();
                     }
                 }, marketTimer.current + 200);
             }
@@ -302,6 +315,8 @@ const RecommendList = () => {
         return () => {
             socket?.close();
             clearTimeout(socketTimeout);
+            if (displayInterval) clearInterval(displayInterval);
+            streamBufferRef.current.clear();
         };
     }, [result]);
 

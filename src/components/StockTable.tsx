@@ -7,14 +7,19 @@ interface StockTableProps {
     columns: GridColDef[],
     pageSize: number,
     loading?: boolean,
+    onRowClick?: (id: string) => void, // 미지정 시 국내 종목 상세로 이동
 }
 
 const StockTable = (
-    { rows, columns, pageSize, loading }: StockTableProps
+    { rows, columns, pageSize, loading, onRowClick }: StockTableProps
 ) => {
     const navigate = useNavigate();
 
     const onClick = (params: { row: { id: string } }) => {
+        if (onRowClick) {
+            onRowClick(params.row.id);
+            return;
+        }
         navigate(`/stock/detail/${params.row.id}`);
     }
 

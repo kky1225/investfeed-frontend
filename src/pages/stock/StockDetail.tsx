@@ -821,16 +821,15 @@ const StockDetail = () => {
     const loadNews = async (stkNm: string, page: number) => {
         try {
             const res = await fetchNews({query: stkNm, page});
-            if (res) {
-                if (page === 1) {
-                    setNewsItems(res.items ?? []);
-                } else {
-                    setNewsItems(prev => [...prev, ...(res.items ?? [])]);
-                }
-                setNewsTotal(res.total ?? 0);
-                setNewsPage(page);
-                setNewsLoaded(true);
+            const data = requireOk(res, {items: [], total: 0} as {items: {title: string; link: string; description: string; pubDate: string}[]; total: number});
+            if (page === 1) {
+                setNewsItems(data.items ?? []);
+            } else {
+                setNewsItems(prev => [...prev, ...(data.items ?? [])]);
             }
+            setNewsTotal(data.total ?? 0);
+            setNewsPage(page);
+            setNewsLoaded(true);
         } catch (e) {
             console.error(e);
         }

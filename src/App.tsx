@@ -22,6 +22,8 @@ import IndexList from "./pages/index/IndexList.tsx";
 import IndexDetail from "./pages/index/IndexDetail.tsx";
 import StockDetail from "./pages/stock/StockDetail.tsx";
 import RankList from "./pages/rank/RankList.tsx";
+import UsRankList from "./pages/usRank/UsRankList.tsx";
+import UsStockDetail from "./pages/usStock/UsStockDetail.tsx";
 import CommodityDetail from "./pages/commodity/CommodityDetail.tsx";
 import CommodityList from "./pages/commodity/CommodityList.tsx";
 import SectList from "./pages/sect/SectList.tsx";
@@ -62,6 +64,11 @@ import NotificationSettingPage from "./pages/notificationSetting/NotificationSet
 const StockDetailWithKey = () => {
     const { id } = useParams();
     return <StockDetail key={id} />;
+};
+
+const UsStockDetailWithKey = () => {
+    const { stexTp, stkCd } = useParams();
+    return <UsStockDetail key={`${stexTp}-${stkCd}`} />;
 };
 
 function App() {
@@ -245,6 +252,8 @@ function App() {
                         <Route path="/commodity/detail/:id" Component={CommodityDetail} />
 
                         <Route path="/stock/rank/list/:type" Component={RankList} />
+                        <Route path="/us-stock/rank/list/:type" Component={UsRankList} />
+                        <Route path="/us-stock/detail/:stexTp/:stkCd" Component={UsStockDetailWithKey} />
                         <Route path="/stock/detail/:id" Component={StockDetailWithKey} />
 
                         <Route path="/stock/sect/list/:indsCd" Component={SectList} />

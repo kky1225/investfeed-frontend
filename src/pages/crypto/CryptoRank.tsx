@@ -138,7 +138,7 @@ const CryptoRank = () => {
                     return next;
                 });
                 bufferMap.current.clear();
-            }, 500);
+            }, 200);
         })();
 
         return () => {

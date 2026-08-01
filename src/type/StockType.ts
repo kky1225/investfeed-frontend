@@ -5,6 +5,7 @@ export interface StockGridRow {
     fluRt: string;
     curPrc: string;
     trdePrica: string;
+    mrktNm?: string; // 시장명
 }
 
 export interface StockDetailReq {

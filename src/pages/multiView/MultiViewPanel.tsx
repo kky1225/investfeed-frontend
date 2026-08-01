@@ -1,6 +1,6 @@
 import {type MouseEvent, useMemo, useState} from "react";
-import {useQuery} from "@tanstack/react-query";
-import {requireOk} from "../../lib/apiResponse.ts";
+import {usePollingQuery, type PollingFetchConfig} from "../../lib/pollingQuery.ts";
+import FreshnessIndicator from "../../components/FreshnessIndicator.tsx";
 import Box from "@mui/material/Box";
 import Typography from "@mui/material/Typography";
 import Card from "@mui/material/Card";
@@ -56,7 +56,6 @@ interface MultiViewPanelProps {
     onChartExpand: () => void;
     onRemove: () => void;
     streamUpdate?: StreamUpdate | null;
-    reloadKey?: number;
 }
 
 const labelColors = {
@@ -88,14 +87,13 @@ const cryptoDateFormat = (dateTime: string, showTime: boolean): string => {
     return dateTime;
 };
 
-export default function MultiViewPanel({asset, onSearch, onChartExpand, onRemove, streamUpdate, reloadKey}: MultiViewPanelProps) {
+export default function MultiViewPanel({asset, onSearch, onChartExpand, onRemove, streamUpdate}: MultiViewPanelProps) {
     const navigate = useNavigate();
     const [toggle, setToggle] = useState('DAY');
     const [formats, setFormats] = useState('line');
     const [minuteUnit, setMinuteUnit] = useState('1');
     const chartType = toggle.startsWith('MINUTE') ? `MINUTE_${minuteUnit}` : toggle;
 
-    // WebSocket overlay (streamUpdate prop 으로부터 들어오는 실시간 가격 갱신)
     const [liveOverlay, setLiveOverlay] = useState<Partial<{
         value: string;
         fluRt: string;
@@ -105,7 +103,6 @@ export default function MultiViewPanel({asset, onSearch, onChartExpand, onRemove
         trend: 'up' | 'down' | 'neutral';
     }>>({});
 
-    // streamUpdate prop 이 바뀔 때마다 overlay 업데이트 — "reset state during render" 패턴
     const [prevStream, setPrevStream] = useState<StreamUpdate | null | undefined>(undefined);
     if (streamUpdate !== prevStream) {
         setPrevStream(streamUpdate);
@@ -128,31 +125,25 @@ export default function MultiViewPanel({asset, onSearch, onChartExpand, onRemove
         }
     }
 
-    // asset / chartType / reloadKey 변경 시 자동 fetch (queryKey 에 모두 포함)
-    const {data: queryData} = useQuery({
-        queryKey: ['multiViewPanel', asset?.type, asset?.code, chartType, reloadKey ?? 0],
-        queryFn: async ({signal}) => {
-            if (!asset) return null;
+    const {data: queryData, lastUpdated, pollError} = usePollingQuery(
+        ['multiViewPanel', asset?.type, asset?.code, chartType],
+        (config: PollingFetchConfig) => {
+            if (!asset) return Promise.reject(new Error('no asset'));
             if (asset.type === 'STOCK') {
-                const stockChartType = chartType as StockChartType;
-                return requireOk(await fetchMultiViewStockChart(asset.code, {chartType: stockChartType}, {signal, skipGlobalError: true}), null);
+                return fetchMultiViewStockChart(asset.code, {chartType: chartType as StockChartType}, config);
             }
             if (asset.type === 'CRYPTO') {
-                const cryptoChartType = chartType as CryptoChartType;
-                return requireOk(await fetchMultiViewCryptoDetail(asset.code, {chartType: cryptoChartType}, {signal, skipGlobalError: true}), null);
+                return fetchMultiViewCryptoDetail(asset.code, {chartType: chartType as CryptoChartType}, config);
             }
-            if (asset.type === 'COMMODITY') {
-                const commodityChartType = chartType as CommodityChartType;
-                return requireOk(await fetchMultiViewCommodityDetail(asset.code, {chartType: commodityChartType}, {signal, skipGlobalError: true}), null);
-            }
-            return null;
+            return fetchMultiViewCommodityDetail(asset.code, {chartType: chartType as CommodityChartType}, config);
         },
-        enabled: !!asset,
-        retry: 2,
-        retryDelay: (count) => 1000 * (count + 1),
-    });
+        {
+            enabled: !!asset,
+            retry: 2,
+            retryDelay: (count) => 1000 * (count + 1),
+        },
+    );
 
-    // queryData → 화면 prop 변환 (자산 타입별 분기)
     const baseChartData = useMemo<CustomStockDetailLineChartProps | CryptoDetailLineChartProps | CommodityDetailLineChartProps | null>(() => {
         if (!queryData || !asset) return null;
         const isMinute = chartType.startsWith('MINUTE');
@@ -250,16 +241,21 @@ export default function MultiViewPanel({asset, onSearch, onChartExpand, onRemove
         return null;
     }, [queryData, asset, chartType]);
 
-    // 최종 chartData = base + WS overlay 머지
     const chartData = useMemo<CustomStockDetailLineChartProps | CryptoDetailLineChartProps | CommodityDetailLineChartProps | null>(() => {
         if (!baseChartData) return null;
         return {...baseChartData, ...liveOverlay} as typeof baseChartData;
     }, [baseChartData, liveOverlay]);
 
+    const chartElement = useMemo(() => {
+        if (!baseChartData || !asset) return null;
+        if (asset.type === 'STOCK') return <StockDetailLineChart {...(baseChartData as CustomStockDetailLineChartProps)} />;
+        if (asset.type === 'CRYPTO') return <CryptoDetailLineChart {...(baseChartData as CryptoDetailLineChartProps)} />;
+        return <CommodityDetailLineChart {...(baseChartData as CommodityDetailLineChartProps)} />;
+    }, [baseChartData, asset]);
+
     const handleAlignment = (_event: MouseEvent<HTMLElement>, newAlignment: string) => {
         if (newAlignment !== null && asset) {
             setToggle(newAlignment);
-            // queryKey 가 chartType 포함 → 자동 재요청
         }
     };
 
@@ -343,6 +339,7 @@ export default function MultiViewPanel({asset, onSearch, onChartExpand, onRemove
                         {chartData.title}
                     </Typography>
                     <Stack direction="row" alignItems="center" gap={0.5}>
+                        <FreshnessIndicator lastUpdated={lastUpdated} error={pollError}/>
                         <IconButton size="small" onClick={onSearch} title="종목 변경"><SwapHorizIcon fontSize="small"/></IconButton>
                         <IconButton size="small" onClick={onChartExpand} title="차트 자세히 보기"><OpenInFullIcon fontSize="small"/></IconButton>
                         <IconButton size="small" onClick={handleNavigate} title="상세 페이지"><OpenInNewIcon fontSize="small"/></IconButton>
@@ -360,9 +357,7 @@ export default function MultiViewPanel({asset, onSearch, onChartExpand, onRemove
             </CardContent>
             <Box sx={{overflowX: 'auto', WebkitOverflowScrolling: 'touch'}}>
                 <Box sx={{minWidth: 600}}>
-                    {asset.type === 'STOCK' && <StockDetailLineChart {...(chartData as CustomStockDetailLineChartProps)} />}
-                    {asset.type === 'CRYPTO' && <CryptoDetailLineChart {...(chartData as CryptoDetailLineChartProps)} />}
-                    {asset.type === 'COMMODITY' && <CommodityDetailLineChart {...(chartData as CommodityDetailLineChartProps)} />}
+                    {chartElement}
                 </Box>
             </Box>
             <Box display="flex" justifyContent="space-between" alignItems="center" flexWrap="wrap">

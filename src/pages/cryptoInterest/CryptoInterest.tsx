@@ -253,6 +253,7 @@ const CryptoInterest = () => {
     const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
     const socketRef = useRef<WebSocket | null>(null);
+    const streamBufferRef = useRef<Map<string, {tradePrice: number; signedChangeRate: number; change: string}>>(new Map());
 
     const sensors = useSensors(
         useSensor(PointerSensor, {activationConstraint: {distance: 5}}),
@@ -263,9 +264,11 @@ const CryptoInterest = () => {
         if (!selectedGroup) return;
         const targetGroupId = selectedGroup.id;
         let cancelled = false;
+        let displayInterval: ReturnType<typeof setInterval> | undefined;
 
         socketRef.current?.close();
         socketRef.current = null;
+        streamBufferRef.current.clear();
 
         (async () => {
             try {
@@ -278,19 +281,11 @@ const CryptoInterest = () => {
                     const data = JSON.parse(event.data);
                     if (data.type === "CRYPTO_TICKER" && data.data) {
                         const ticker = data.data;
-                        queryClient.setQueryData<CryptoInterestItem[]>(['cryptoInterestItems', targetGroupId], (prev) => {
-                            if (!prev) return prev;
-                            return prev.map(item => {
-                                if (item.market === ticker.market) {
-                                    return {
-                                        ...item,
-                                        tradePrice: ticker.tradePrice,
-                                        signedChangeRate: ticker.signedChangeRate,
-                                        change: ticker.change,
-                                    };
-                                }
-                                return item;
-                            });
+                        if (!ticker.market) return;
+                        streamBufferRef.current.set(ticker.market, {
+                            tradePrice: ticker.tradePrice,
+                            signedChangeRate: ticker.signedChangeRate,
+                            change: ticker.change,
                         });
                     }
                 };
@@ -299,6 +294,19 @@ const CryptoInterest = () => {
                     return;
                 }
                 socketRef.current = socket;
+
+                // useQuery 캐시 직접 갱신 (실시간 가격 머지) — 버퍼 최신값을 200ms 간격으로 반영
+                displayInterval = setInterval(() => {
+                    if (streamBufferRef.current.size === 0) return;
+                    queryClient.setQueryData<CryptoInterestItem[]>(['cryptoInterestItems', targetGroupId], (prev) => {
+                        if (!prev) return prev;
+                        return prev.map(item => {
+                            const update = streamBufferRef.current.get(item.market);
+                            return update ? {...item, ...update} : item;
+                        });
+                    });
+                    streamBufferRef.current.clear();
+                }, 200);
             } catch (err) {
                 console.error(err);
             }
@@ -308,6 +316,8 @@ const CryptoInterest = () => {
             cancelled = true;
             socketRef.current?.close();
             socketRef.current = null;
+            if (displayInterval) clearInterval(displayInterval);
+            streamBufferRef.current.clear();
         };
     }, [selectedGroup, queryClient]);
 

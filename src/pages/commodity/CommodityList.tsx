@@ -124,6 +124,8 @@ const CommodityList = () => {
         }
     };
 
+    const streamBufferRef = useRef<Map<string, {value: string; change: string; fluRt: string; trend: string; tradeTime?: string}>>(new Map());
+
     const openSocket = () => {
         const socket = new WebSocket("ws://localhost:8080/ws");
 
@@ -131,31 +133,35 @@ const CommodityList = () => {
             const data = JSON.parse(event.data);
 
             if (data.trnm === "REAL" && Array.isArray(data.data)) {
-                const updates = data.data.map((entry: CommodityStreamRes) => {
+                data.data.forEach((entry: CommodityStreamRes) => {
                     const values = entry.values;
-                    return {
-                        code: entry.item,
+                    if (values?.["10"] == null) return;
+                    streamBufferRef.current.set(entry.item, {
                         value: values["10"],
                         change: values["11"],
                         fluRt: values["12"],
                         trend: values["25"],
                         tradeTime: values["20"],
-                    };
-                });
-
-                updates.forEach((u: CommodityStream & {tradeTime?: string}) => {
-                    updateIfNewer(u.code, {
-                        value: Number(u.value.replace(/^[+-]/, '')).toLocaleString(),
-                        fluRt: u.fluRt,
-                        predPre: u.change || '0',
-                        trend: trendColor(u.trend),
-                        stamp: parseKiwoomStamp(u.tradeTime),
                     });
                 });
             }
         };
 
         return socket;
+    };
+
+    const flushStreamBuffer = () => {
+        if (streamBufferRef.current.size === 0) return;
+        streamBufferRef.current.forEach((u, code) => {
+            updateIfNewer(code, {
+                value: Number(u.value.replace(/^[+-]/, '')).toLocaleString(),
+                fluRt: u.fluRt,
+                predPre: u.change || '0',
+                trend: trendColor(u.trend),
+                stamp: parseKiwoomStamp(u.tradeTime),
+            });
+        });
+        streamBufferRef.current.clear();
     };
 
     // 폴링 결과 → 각 자산별 updateIfNewer (stamp 비교)
@@ -174,7 +180,12 @@ const CommodityList = () => {
 
     useEffect(() => {
         let socketTimeout: ReturnType<typeof setTimeout>;
+        let displayInterval: ReturnType<typeof setInterval> | undefined;
         let socket: WebSocket | undefined;
+
+        const startDisplayLoop = () => {
+            displayInterval = setInterval(flushStreamBuffer, 200);
+        };
 
         (async () => {
             const marketInfo = await timeNow();
@@ -182,6 +193,7 @@ const CommodityList = () => {
             if (marketInfo?.isMarketOpen) {
                 await commodityListStream();
                 socket = openSocket();
+                startDisplayLoop();
             } else {
                 socketTimeout = setTimeout(async () => {
                     socket?.close();
@@ -189,6 +201,7 @@ const CommodityList = () => {
                     if (again?.isMarketOpen) {
                         await commodityListStream();
                         socket = openSocket();
+                        startDisplayLoop();
                     }
                 }, marketTimer.current + 200);
             }
@@ -197,6 +210,8 @@ const CommodityList = () => {
         return () => {
             socket?.close();
             clearTimeout(socketTimeout);
+            if (displayInterval) clearInterval(displayInterval);
+            streamBufferRef.current.clear();
         };
     }, []);
 

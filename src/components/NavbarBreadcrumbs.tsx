@@ -17,7 +17,6 @@ const StyledBreadcrumbs = styled(Breadcrumbs)(({ theme }) => ({
     },
 }));
 
-// 메뉴 트리에서 url 과 일치하는 노드까지의 부모 체인을 [상위, ..., 현재] 순서로 반환
 const findMenuPath = (menus: MenuRes[], pathname: string, parents: MenuRes[] = []): MenuRes[] => {
     for (const menu of menus) {
         const trail = [...parents, menu];
@@ -28,7 +27,6 @@ const findMenuPath = (menus: MenuRes[], pathname: string, parents: MenuRes[] = [
     return [];
 };
 
-// 메뉴에 정의되지 않은 동적/설정 페이지의 폴백 매핑
 const fallbackBreadcrumb = (pathname: string): string[] | null => {
     // 주식
     if (pathname.startsWith('/stock/detail/')) return ['국내 주식', '종목 상세'];
@@ -40,6 +38,10 @@ const fallbackBreadcrumb = (pathname: string): string[] | null => {
     if (pathname.startsWith('/stock/investor/')) return ['국내 주식', '투자자별'];
     if (pathname.startsWith('/stock/holding/list/')) return ['국내 주식', '주식 계좌'];
     if (pathname === '/stock/interest' || pathname.startsWith('/stock/interest/list/')) return ['국내 주식', '관심 종목'];
+
+    // 미국 주식
+    if (pathname.startsWith('/us-stock/detail/')) return ['해외 주식', '종목 상세'];
+    if (pathname.startsWith('/us-stock/rank/list/')) return ['해외 주식', '순위'];
 
     // 암호화폐
     if (pathname.startsWith('/crypto/detail/')) return ['암호화폐', '종목 상세'];

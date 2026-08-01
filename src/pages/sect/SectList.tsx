@@ -86,31 +86,23 @@ const SectList = () => {
         }
     };
 
+    const streamBufferRef = useRef<Map<string, SectListStream>>(new Map());
+
     const openSocket = () => {
         const socket = new WebSocket("ws://localhost:8080/ws");
         socket.onmessage = (event) => {
             const data = JSON.parse(event.data);
             if (data.trnm === "REAL" && Array.isArray(data.data)) {
-                const updates = data.data.map((entry: SectListStreamRes): SectListStream => {
+                data.data.forEach((entry: SectListStreamRes) => {
                     const values = entry.values;
-                    return {
+                    if (values?.["10"] == null) return;
+                    streamBufferRef.current.set(entry.item, {
                         code: entry.item,
                         value: values["10"],
                         change: values["11"],
                         fluRt: values["12"],
                         trend: values["25"],
-                    };
-                });
-                setLiveOverlay((prev) => {
-                    const next = new Map(prev);
-                    updates.forEach((u: SectListStream) => {
-                        next.set(u.code, {
-                            value: u.value.replace(/^[+-]/, ''),
-                            fluRt: u.fluRt,
-                            trend: trendColor(u.trend),
-                        });
                     });
-                    return next;
                 });
             }
         };
@@ -131,7 +123,26 @@ const SectList = () => {
         setLiveOverlay(new Map());
 
         let socketTimeout: ReturnType<typeof setTimeout>;
+        let displayInterval: ReturnType<typeof setInterval> | undefined;
         let socket: WebSocket | undefined;
+
+        const startDisplayLoop = () => {
+            displayInterval = setInterval(() => {
+                if (streamBufferRef.current.size === 0) return;
+                setLiveOverlay((prev) => {
+                    const next = new Map(prev);
+                    streamBufferRef.current.forEach((u, k) => {
+                        next.set(k, {
+                            value: u.value.replace(/^[+-]/, ''),
+                            fluRt: u.fluRt,
+                            trend: trendColor(u.trend),
+                        });
+                    });
+                    return next;
+                });
+                streamBufferRef.current.clear();
+            }, 200);
+        };
 
         (async () => {
             const marketInfo = await timeNow();
@@ -139,6 +150,7 @@ const SectList = () => {
             if (marketInfo?.isMarketOpen) {
                 await sectListStream({items});
                 socket = openSocket();
+                startDisplayLoop();
             } else {
                 socketTimeout = setTimeout(async () => {
                     socket?.close();
@@ -146,6 +158,7 @@ const SectList = () => {
                     if (again?.isMarketOpen) {
                         await sectListStream({items});
                         socket = openSocket();
+                        startDisplayLoop();
                     }
                 }, marketTimer.current + 200);
             }
@@ -154,6 +167,8 @@ const SectList = () => {
         return () => {
             socket?.close();
             clearTimeout(socketTimeout);
+            if (displayInterval) clearInterval(displayInterval);
+            streamBufferRef.current.clear();
         };
     }, [result, req.indsCd]);
 

@@ -40,7 +40,7 @@ export function useCryptoHoldingStream(
                 if (bufferMapRef.current.size === 0) return;
                 onUpdate(new Map(bufferMapRef.current));
                 bufferMapRef.current.clear();
-            }, 500);
+            }, 200);
         };
 
         const connectSocket = async () => {
@@ -50,7 +50,6 @@ export function useCryptoHoldingStream(
             startDisplay();
         };
 
-        // 코인은 24시간 거래이므로 장시간 체크 없이 바로 연결
         connectSocket();
 
         return () => {

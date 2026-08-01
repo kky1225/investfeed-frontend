@@ -5,23 +5,17 @@ import {GridColDef} from "@mui/x-data-grid";
 import StockTable from "../../components/StockTable.tsx";
 import * as React from "react";
 import {useEffect, useMemo, useRef, useState} from "react";
-import {fetchRankList, fetchRankStream} from "../../api/rank/RankApi.ts";
+import {fetchUsRankList, fetchUsRankStream} from "../../api/usRank/UsRankApi.ts";
 import {Tab, Tabs} from "@mui/material";
-import {MarketType} from "../../type/timeType.ts";
-import {fetchMarketInfo, getServerNow, getServerOffset} from "../../lib/serverTime.ts";
-import {
-    StockGridRow,
-    StockStream,
-    StockStreamReq,
-    StockStreamRes
-} from "../../type/StockType.ts";
-import {RankListItem, RankListReq, RankListRes} from "../../type/RankType.ts";
+import {UsRankGridRow, UsRankListItem, UsRankListReq, UsRankListRes} from "../../type/UsRankType.ts";
 import {useNavigate, useParams} from "react-router-dom";
 import {renderChip} from "../../components/CustomRender.tsx";
 import FreshnessIndicator from "../../components/FreshnessIndicator.tsx";
 import {usePollingQuery} from "../../lib/pollingQuery.ts";
+import {StockStream, StockStreamRes} from "../../type/StockType.ts";
+import {EXCHANGE_LABEL} from "../../lib/exchange.ts";
 
-interface LiveRankUpdate {
+interface LiveUsRankUpdate {
     curPrc: string;
     fluRt: string;
     trend: string;
@@ -32,11 +26,11 @@ const buildColumns = (type: string): GridColDef[] => {
         {field: 'rank', headerName: '순위', flex: 1, minWidth: 80, maxWidth: 80},
         {field: 'stkNm', headerName: '주식 이름', flex: 1.5, minWidth: 180},
         {
-            field: 'mrktNm',
-            headerName: '시장',
+            field: 'stexTp',
+            headerName: '거래소',
             flex: 0.5,
             minWidth: 90,
-            valueFormatter: (param: string) => param ?? '-',
+            valueFormatter: (param: string) => EXCHANGE_LABEL[param] ?? param,
         },
         {
             field: 'fluRt',
@@ -49,8 +43,8 @@ const buildColumns = (type: string): GridColDef[] => {
             field: 'curPrc',
             headerName: '현재가',
             flex: 1,
-            minWidth: 100,
-            valueFormatter: (param: number) => Number(param).toLocaleString().replace(/^[+-]/, ''),
+            minWidth: 110,
+            valueFormatter: (param: string) => `$${Number(String(param).replace(/^[+-]/, '')).toLocaleString()}`,
         },
     ];
 
@@ -60,10 +54,10 @@ const buildColumns = (type: string): GridColDef[] => {
                 ...base,
                 {
                     field: 'trdePrica',
-                    headerName: '거래대금 (백만)',
+                    headerName: '거래대금 (천 USD)',
                     flex: 1,
                     minWidth: 150,
-                    valueFormatter: (param: number) => Number(param).toLocaleString().replace(/^[+-]/, ''),
+                    valueFormatter: (param: string) => Number(String(param).replace(/^[+-]/, '')).toLocaleString(),
                 },
             ];
         case "1":
@@ -74,7 +68,7 @@ const buildColumns = (type: string): GridColDef[] => {
                     headerName: '거래량',
                     flex: 1,
                     minWidth: 120,
-                    valueFormatter: (param: number) => Number(param).toLocaleString().replace(/^[+-]/, ''),
+                    valueFormatter: (param: string) => Number(String(param).replace(/^[+-]/, '')).toLocaleString(),
                 },
             ];
         default:
@@ -85,29 +79,26 @@ const buildColumns = (type: string): GridColDef[] => {
                     headerName: '거래량 급증률',
                     flex: 1,
                     minWidth: 140,
-                    valueFormatter: (param: string) => `${Number(param.replace(/^[+-]/, '')).toLocaleString()}%`,
+                    valueFormatter: (param: string) => `${Number(String(param).replace(/^[+-]/, '')).toLocaleString()}%`,
                 },
             ];
     }
 };
 
-const RankList = () => {
+const UsRankList = () => {
     const navigate = useNavigate();
     const {type} = useParams();
 
-    const [req, setReq] = useState<RankListReq>({type: type || "0"});
+    const [req, setReq] = useState<UsRankListReq>({type: type || "0"});
     const [value, setValue] = useState(Number(type) || 0);
 
-    const [liveOverlay, setLiveOverlay] = useState<Map<string, LiveRankUpdate>>(new Map());
+    const [liveOverlay, setLiveOverlay] = useState<Map<string, LiveUsRankUpdate>>(new Map());
     const stockBufferMap = useRef<Map<string, StockStream>>(new Map());
     const subscribedKeyRef = useRef<string>('');
 
-    const chartTimer = useRef<number>(0);
-    const marketTimer = useRef<number>(0);
-
-    const {data: result, isLoading, lastUpdated, pollError} = usePollingQuery<RankListRes>(
-        ['rankList', req.type],
-        (config) => fetchRankList(req, config),
+    const {data: result, isLoading, lastUpdated, pollError} = usePollingQuery<UsRankListRes>(
+        ['usRankList', req.type],
+        (config) => fetchUsRankList(req, config),
     );
 
     // 키움 응답에 시각 필드가 없어 stamp 비교 불가. 폴링 도착 시 WS overlay 를
@@ -117,37 +108,25 @@ const RankList = () => {
         setLiveOverlay(new Map());
     }, [result]);
 
-    const row: StockGridRow[] = useMemo(() => {
+    const row: UsRankGridRow[] = useMemo(() => {
         if (!result) return [];
-        const list: RankListItem[] = result.rankList ?? [];
+        const list: UsRankListItem[] = result.rankList ?? [];
         return list.map((stock) => {
             const live = liveOverlay.get(stock.stkCd);
             return {
                 id: stock.stkCd,
+                stexTp: stock.stexTp,
                 rank: stock.rank,
                 stkNm: stock.stkNm,
-                mrktNm: stock.mrktNm,
                 fluRt: live?.fluRt ?? stock.fluRt,
                 curPrc: live?.curPrc ?? stock.curPrc,
                 trdePrica: stock.trdePrica,
                 trend: live?.trend,
-            } as StockGridRow;
+            } as UsRankGridRow;
         });
     }, [result, liveOverlay]);
 
     const columns: GridColDef[] = useMemo(() => buildColumns(req.type), [req.type]);
-    const loading = isLoading;
-
-    const timeNow = async () => {
-        const info = await fetchMarketInfo(MarketType.STOCK);
-        if (!info) return;
-        if (info.marketType !== MarketType.STOCK) return;
-
-        chartTimer.current = getServerOffset();
-        if (!info.isMarketOpen) marketTimer.current = info.startMarketTime - getServerNow();
-
-        return {...info};
-    };
 
     const openSocket = () => {
         const socket = new WebSocket("ws://localhost:8080/ws");
@@ -170,20 +149,20 @@ const RankList = () => {
         return socket;
     };
 
-    // WebSocket 라이프사이클 — query 결과 stkCd 들로 stream 등록.
+    // WebSocket 라이프사이클 — query 결과 종목들로 stream 등록.
+    // 미국 장 시간 게이팅은 백엔드(isUsOpen)에서 처리하므로 여기서는 바로 등록한다.
     useEffect(() => {
         if (!result) return;
-        const items = (result.rankList ?? []).map((s: RankListItem) => s.stkCd);
+        const items = (result.rankList ?? []).map((s: UsRankListItem) => ({stkCd: s.stkCd, stexTp: s.stexTp}));
         if (items.length === 0) return;
 
-        const key = `${req.type}|${items.join(',')}`;
+        const key = `${req.type}|${items.map((i) => i.stkCd).join(',')}`;
         if (subscribedKeyRef.current === key) return;
         subscribedKeyRef.current = key;
 
         // type 변경 시 overlay reset
         setLiveOverlay(new Map());
 
-        let socketTimeout: ReturnType<typeof setTimeout>;
         let displayInterval: ReturnType<typeof setInterval>;
         let socket: WebSocket | undefined;
 
@@ -205,30 +184,14 @@ const RankList = () => {
             }, 200);
         };
 
-        const connectSocket = async (req: StockStreamReq) => {
-            await fetchRankStream(req);
+        (async () => {
+            await fetchUsRankStream({items});
             socket = openSocket();
             startDisplayLoop();
-        };
-
-        (async () => {
-            const marketInfo = await timeNow();
-            if (marketInfo?.isMarketOpen) {
-                await connectSocket({items});
-            } else {
-                socketTimeout = setTimeout(async () => {
-                    socket?.close();
-                    const again = await timeNow();
-                    if (again?.isMarketOpen) {
-                        await connectSocket({items});
-                    }
-                }, marketTimer.current + 200);
-            }
         })();
 
         return () => {
             socket?.close();
-            clearTimeout(socketTimeout);
             clearInterval(displayInterval);
         };
     }, [result, req.type]);
@@ -236,7 +199,7 @@ const RankList = () => {
     const handleChange = (_event: React.SyntheticEvent, newValue: number) => {
         setValue(newValue);
         setReq({type: String(newValue)});
-        navigate(`/stock/rank/list/${newValue}`);
+        navigate(`/us-stock/rank/list/${newValue}`);
     };
 
     function a11yProps(index: number) {
@@ -250,7 +213,7 @@ const RankList = () => {
         <Box sx={{width: '100%', maxWidth: {sm: '100%', md: '1700px'}}}>
             <Box sx={{display: 'flex', alignItems: 'center', mb: 2, gap: 2}}>
                 <Typography component="h2" variant="h6">
-                    순위 목록
+                    미국 주식 순위 목록
                 </Typography>
                 <Box sx={{flex: 1}}/>
                 <FreshnessIndicator lastUpdated={lastUpdated} error={pollError}/>
@@ -269,11 +232,20 @@ const RankList = () => {
                             <Tab label="거래량 급증률 상위" {...a11yProps(2)} />
                         </Tabs>
                     </Box>
-                    <StockTable rows={row} columns={columns} pageSize={100} loading={loading}/>
+                    <StockTable
+                        rows={row}
+                        columns={columns}
+                        pageSize={100}
+                        loading={isLoading}
+                        onRowClick={(id) => {
+                            const clicked = row.find((r) => r.id === id);
+                            if (clicked?.stexTp) navigate(`/us-stock/detail/${clicked.stexTp}/${id}`);
+                        }}
+                    />
                 </Box>
             </Grid>
         </Box>
     );
 };
 
-export default RankList;
+export default UsRankList;

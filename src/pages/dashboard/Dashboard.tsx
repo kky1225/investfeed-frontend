@@ -201,44 +201,47 @@ export default function Dashboard() {
         }
     };
 
+    const streamBufferRef = useRef<Map<string, LiveIndexUpdate>>(new Map());
+
     const openSocket = () => {
         const socket = new WebSocket("ws://localhost:8080/ws");
         socket.onmessage = (event) => {
             const data = JSON.parse(event.data);
             if (data.trnm === "REAL" && Array.isArray(data.data)) {
-                const updates: IndexStream[] = data.data.map((entry: IndexStreamRes) => {
+                data.data.forEach((entry: IndexStreamRes) => {
                     const values = entry.values;
-                    return {
-                        code: entry.item,
-                        value: values["10"],
-                        change: values["11"],
+                    if (values?.["10"] == null) return;
+                    const sig = values["25"];
+                    const trend: 'up' | 'down' | 'neutral' | undefined =
+                        ["1", "2"].includes(sig) ? 'up' :
+                            ["4", "5"].includes(sig) ? 'down' : undefined;
+                    streamBufferRef.current.set(entry.item, {
+                        value: String(values["10"]).replace(/^[+-]/, ''),
                         fluRt: values["12"],
-                        trend: values["25"],
-                    };
-                });
-                setLiveOverlay((prev) => {
-                    const next = new Map(prev);
-                    updates.forEach((u) => {
-                        const trend: 'up' | 'down' | 'neutral' | undefined =
-                            ["1", "2"].includes(u.trend) ? 'up' :
-                                ["4", "5"].includes(u.trend) ? 'down' : undefined;
-                        next.set(u.code, {
-                            value: u.value.replace(/^[+-]/, ''),
-                            fluRt: u.fluRt,
-                            trend,
-                        });
+                        trend,
                     });
-                    return next;
                 });
             }
         };
         return socket;
     };
 
-    // WebSocket 라이프사이클 — 폴링과 독립.
     useEffect(() => {
         let socketTimeout: ReturnType<typeof setTimeout>;
+        let displayInterval: ReturnType<typeof setInterval> | undefined;
         let socket: WebSocket | undefined;
+
+        const startDisplayLoop = () => {
+            displayInterval = setInterval(() => {
+                if (streamBufferRef.current.size === 0) return;
+                setLiveOverlay((prev) => {
+                    const next = new Map(prev);
+                    streamBufferRef.current.forEach((v, k) => next.set(k, v));
+                    return next;
+                });
+                streamBufferRef.current.clear();
+            }, 200);
+        };
 
         (async () => {
             const marketInfo = await timeNow();
@@ -246,6 +249,7 @@ export default function Dashboard() {
             if (marketInfo?.isMarketOpen) {
                 await indexListStream();
                 socket = openSocket();
+                startDisplayLoop();
             } else {
                 socketTimeout = setTimeout(async () => {
                     socket?.close();
@@ -253,6 +257,7 @@ export default function Dashboard() {
                     if (again?.isMarketOpen) {
                         await indexListStream();
                         socket = openSocket();
+                        startDisplayLoop();
                     }
                 }, marketTimer.current + 200);
             }
@@ -261,6 +266,8 @@ export default function Dashboard() {
         return () => {
             socket?.close();
             clearTimeout(socketTimeout);
+            if (displayInterval) clearInterval(displayInterval);
+            streamBufferRef.current.clear();
         };
     }, []);
 

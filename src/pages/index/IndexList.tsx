@@ -128,6 +128,8 @@ const IndexList = () => {
         }
     };
 
+    const streamBufferRef = useRef<Map<string, IndexStream>>(new Map());
+
     const openSocket = () => {
         const socket = new WebSocket("ws://localhost:8080/ws");
 
@@ -135,28 +137,16 @@ const IndexList = () => {
             const data = JSON.parse(event.data);
 
             if (data.trnm === "REAL" && Array.isArray(data.data)) {
-                const updates = data.data.map((entry: IndexStreamRes): IndexStream => {
+                data.data.forEach((entry: IndexStreamRes) => {
                     const values = entry.values;
-                    return {
+                    if (values?.["10"] == null) return;
+                    streamBufferRef.current.set(entry.item, {
                         code: entry.item,
                         value: values["10"],
                         change: values["11"],
                         fluRt: values["12"],
                         trend: values["25"],
-                    };
-                });
-
-                setLiveOverlay((prev) => {
-                    const next = new Map(prev);
-                    updates.forEach((u: IndexStream) => {
-                        next.set(u.code, {
-                            value: u.value.replace(/^[+-]/, ''),
-                            fluRt: u.fluRt,
-                            predPre: u.change || '0',
-                            trend: trendColor(u.trend),
-                        });
                     });
-                    return next;
                 });
             }
         };
@@ -167,7 +157,27 @@ const IndexList = () => {
     // WebSocket 라이프사이클 — 폴링과 독립. 시장 개장 여부 체크 후 socket 연결.
     useEffect(() => {
         let socketTimeout: ReturnType<typeof setTimeout>;
+        let displayInterval: ReturnType<typeof setInterval> | undefined;
         let socket: WebSocket | undefined;
+
+        const startDisplayLoop = () => {
+            displayInterval = setInterval(() => {
+                if (streamBufferRef.current.size === 0) return;
+                setLiveOverlay((prev) => {
+                    const next = new Map(prev);
+                    streamBufferRef.current.forEach((u, k) => {
+                        next.set(k, {
+                            value: u.value.replace(/^[+-]/, ''),
+                            fluRt: u.fluRt,
+                            predPre: u.change || '0',
+                            trend: trendColor(u.trend),
+                        });
+                    });
+                    return next;
+                });
+                streamBufferRef.current.clear();
+            }, 200);
+        };
 
         (async () => {
             const marketInfo = await timeNow();
@@ -175,6 +185,7 @@ const IndexList = () => {
             if (marketInfo?.isMarketOpen) {
                 await indexListStream();
                 socket = openSocket();
+                startDisplayLoop();
             } else {
                 socketTimeout = setTimeout(async () => {
                     socket?.close();
@@ -182,6 +193,7 @@ const IndexList = () => {
                     if (again?.isMarketOpen) {
                         await indexListStream();
                         socket = openSocket();
+                        startDisplayLoop();
                     }
                 }, marketTimer.current + 200);
             }
@@ -190,6 +202,8 @@ const IndexList = () => {
         return () => {
             socket?.close();
             clearTimeout(socketTimeout);
+            if (displayInterval) clearInterval(displayInterval);
+            streamBufferRef.current.clear();
         };
     }, []);
 
