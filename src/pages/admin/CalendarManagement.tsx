@@ -209,7 +209,7 @@ export default function CalendarManagement() {
             case 'US_RATE_DECISION': return '미국 기준금리 결정';
             case 'GDP_RELEASE': return 'GDP 발표';
             case 'CUSTOM': return '수동 입력';
-            case 'HOLIDAY': return '공휴일';
+            case 'HOLIDAY': return '휴장일';
             default: return type;
         }
     };
@@ -380,6 +380,7 @@ export default function CalendarManagement() {
                         <MenuItem value="US_RATE_DECISION">미국 기준금리 결정</MenuItem>
                         <MenuItem value="GDP_RELEASE">GDP 발표</MenuItem>
                         <MenuItem value="CUSTOM">수동 입력</MenuItem>
+                        <MenuItem value="HOLIDAY">휴장일</MenuItem>
                     </TextField>
                     <TextField label="값 (선택)" size="small" fullWidth value={formValue} onChange={e => setFormValue(e.target.value)}/>
                 </DialogContent>
