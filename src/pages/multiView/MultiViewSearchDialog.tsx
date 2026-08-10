@@ -15,6 +15,7 @@ import List from "@mui/material/List";
 import ListItemButton from "@mui/material/ListItemButton";
 import ListItemText from "@mui/material/ListItemText";
 import {fetchStockSearch} from "../../api/stock/StockApi.ts";
+import {fetchUsStockSearch} from "../../api/usStock/UsStockApi.ts";
 import {fetchCryptoSearch} from "../../api/crypto/CryptoApi.ts";
 import {fetchCommodityList} from "../../api/commodity/CommodityApi.ts";
 import type {MultiViewAssetType, SelectedAsset} from "../../type/MultiViewType.ts";
@@ -30,6 +31,7 @@ interface SearchItem {
     stkCd: string;
     stkNm: string;
     marketName?: string;
+    stexTp?: string; // 미국 주식 전용 — 거래소구분
 }
 
 export default function MultiViewSearchDialog({open, onClose, onSelect}: MultiViewSearchDialogProps) {
@@ -39,7 +41,7 @@ export default function MultiViewSearchDialog({open, onClose, onSelect}: MultiVi
     const [searchLoading, setSearchLoading] = useState(false);
     const searchTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
 
-    // 원자재 목록 — open && tab === 2 일 때만 fetch (lazy load)
+    // 원자재 목록 — open && tab === 3 일 때만 fetch (lazy load)
     const {data: commodityListData} = useQuery<SearchItem[]>({
         queryKey: ['multiView', 'commodityList'],
         queryFn: async ({signal}) => {
@@ -49,7 +51,7 @@ export default function MultiViewSearchDialog({open, onClose, onSelect}: MultiVi
                 stkNm: item.stkNm,
             }));
         },
-        enabled: open && tab === 2,
+        enabled: open && tab === 3,
         staleTime: Infinity,  // 한 번 로드한 뒤 재요청 X (정적 데이터)
     });
     const commodityList = commodityListData ?? [];
@@ -74,6 +76,10 @@ export default function MultiViewSearchDialog({open, onClose, onSelect}: MultiVi
                     const data = await fetchStockSearch(keyword.trim());
                     if (data.code !== "0000") throw new Error(data.message || `주식 검색 실패 (${data.code})`);
                     setSearchResults(data.result ?? []);
+                } else if (tab === 1) {
+                    const data = await fetchUsStockSearch(keyword.trim());
+                    if (data.code !== "0000") throw new Error(data.message || `미국 주식 검색 실패 (${data.code})`);
+                    setSearchResults(data.result ?? []);
                 } else {
                     // 코인: backend {market, koreanName, englishName} → SearchItem 으로 매핑
                     const data = await fetchCryptoSearch(keyword.trim());
@@ -95,8 +101,8 @@ export default function MultiViewSearchDialog({open, onClose, onSelect}: MultiVi
     };
 
     const handleSelect = (item: SearchItem) => {
-        const typeMap: MultiViewAssetType[] = ['STOCK', 'CRYPTO', 'COMMODITY'];
-        onSelect({type: typeMap[tab], code: item.stkCd, name: item.stkNm});
+        const typeMap: MultiViewAssetType[] = ['STOCK', 'US_STOCK', 'CRYPTO', 'COMMODITY'];
+        onSelect({type: typeMap[tab], code: item.stkCd, name: item.stkNm, stexTp: item.stexTp});
         handleClose();
     };
 
@@ -112,11 +118,12 @@ export default function MultiViewSearchDialog({open, onClose, onSelect}: MultiVi
             <DialogContent>
                 <Tabs value={tab} onChange={handleTabChange} sx={{mb: 2}}>
                     <Tab label="주식"/>
+                    <Tab label="미국 주식"/>
                     <Tab label="코인"/>
                     <Tab label="원자재"/>
                 </Tabs>
 
-                {tab !== 2 ? (
+                {tab !== 3 ? (
                     <Autocomplete
                         size="small"
                         options={searchResults}

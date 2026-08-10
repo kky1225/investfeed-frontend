@@ -15,7 +15,8 @@ import {styled} from "@mui/material/styles";
 import {Select, SelectChangeEvent, Slider, Tabs, Tab} from "@mui/material";
 import MenuItem from "@mui/material/MenuItem";
 import Button from "@mui/material/Button";
-import {DataGrid, GridColDef} from "@mui/x-data-grid";
+import {GridColDef} from "@mui/x-data-grid";
+import CustomDataTable from "../../components/CustomDataTable.tsx";
 import CryptoDetailLineChart, {CryptoDetailLineChartProps} from "../../components/CryptoDetailLineChart.tsx";
 import {fetchUsStockDetail, fetchUsStockDetailStream} from "../../api/usStock/UsStockApi.ts";
 import {fetchNews} from "../../api/news/NewsApi.ts";
@@ -281,33 +282,30 @@ const UsStockDetail = () => {
     }, [info]);
 
     const dailyColumns: GridColDef[] = useMemo(() => [
-        {field: 'dt', headerName: '날짜', flex: 1, minWidth: 100},
-        {field: 'curPrc', headerName: '종가', flex: 1, minWidth: 90, align: 'right', headerAlign: 'right'},
+        {field: 'dt', headerName: '날짜', flex: 1, minWidth: 110, maxWidth: 120},
+        {field: 'curPrc', headerName: '종가', flex: 1, minWidth: 100},
         {
-            field: 'fluRt', headerName: '등락률', flex: 1, minWidth: 80, align: 'right', headerAlign: 'right',
+            field: 'fluRt', headerName: '등락률', flex: 1, minWidth: 90,
             renderCell: (params) => {
                 const v = String(params.value ?? '');
-                const color = v.startsWith('-') ? 'info.main' : (num(v) > 0 ? 'error.main' : 'text.primary');
-                return <Typography variant="body2" sx={{color}} component="span">{v ? `${v}%` : '-'}</Typography>;
+                const color = v.startsWith('-') ? '#0288d1' : num(v) > 0 ? '#d32f2f' : '';
+                return <span style={{color}}>{v ? `${v}%` : '-'}</span>;
             }
         },
-        {field: 'openPric', headerName: '시가', flex: 1, minWidth: 90, align: 'right', headerAlign: 'right'},
-        {field: 'highPric', headerName: '고가', flex: 1, minWidth: 90, align: 'right', headerAlign: 'right'},
-        {field: 'lowPric', headerName: '저가', flex: 1, minWidth: 90, align: 'right', headerAlign: 'right'},
-        {field: 'accTrdeQty', headerName: '거래량', flex: 1, minWidth: 110, align: 'right', headerAlign: 'right'},
+        {field: 'accTrdeQty', headerName: '거래량', flex: 1, minWidth: 110},
     ], []);
 
     const dailyRows = useMemo(() => {
-        return (result?.dailyPriceList ?? []).map((d, idx) => ({
-            id: d.dt ?? String(idx),
-            dt: usDateFormat(d.dt, false),
-            curPrc: usdText(d.curPrc),
-            fluRt: (d.fluRt ?? '').replace(/^\+/, '+'),
-            openPric: usdText(d.openPric),
-            highPric: usdText(d.highPric),
-            lowPric: usdText(d.lowPric),
-            accTrdeQty: num(d.accTrdeQty).toLocaleString(),
-        }));
+        return (result?.dailyPriceList ?? []).map((d, idx) => {
+            const dt = (d.dt ?? '').replace(/\s+/g, '');
+            return {
+                id: d.dt ?? String(idx),
+                dt: dt.length >= 8 ? `${dt.substring(0, 4)}-${dt.substring(4, 6)}-${dt.substring(6, 8)}` : dt,
+                curPrc: usdText(d.curPrc),
+                fluRt: (d.fluRt ?? '').replace(/^\+/, '+'),
+                accTrdeQty: num(d.accTrdeQty).toLocaleString(),
+            };
+        });
     }, [result]);
 
     const [tabValue, setTabValue] = useState<'daily' | 'news'>('daily');
@@ -444,7 +442,7 @@ const UsStockDetail = () => {
                                     <Typography variant="h4" component="p">
                                         {loading ? <Skeleton width={160}/> : `$${chartData.value}`}
                                     </Typography>
-                                    {loading ? <Skeleton width={80}/> : renderChangeAmount(chartData.changePrice)}
+                                    {loading ? <Skeleton width={80}/> : renderChangeAmount(chartData.changePrice, '달러')}
                                     {loading
                                         ? <Skeleton variant="rounded" width={60} height={24}/>
                                         : <Chip size="small" color={color} label={trendValues[chartData.trend]} />}
@@ -630,27 +628,7 @@ const UsStockDetail = () => {
                         </Tabs>
                     </Box>
                     {tabValue === 'daily' ? (
-                        <DataGrid
-                            rows={dailyRows}
-                            columns={dailyColumns}
-                            getRowClassName={(params) =>
-                                params.indexRelativeToCurrentPage % 2 === 0 ? 'even' : 'odd'
-                            }
-                            initialState={{
-                                pagination: { paginationModel: { pageSize: 20 } },
-                            }}
-                            pageSizeOptions={[10, 20, 50, 100]}
-                            disableColumnResize
-                            density="compact"
-                            autoHeight
-                            loading={loading}
-                            slotProps={{
-                                loadingOverlay: {
-                                    variant: 'skeleton',
-                                    noRowsVariant: 'skeleton',
-                                },
-                            }}
-                        />
+                        <CustomDataTable rows={dailyRows} columns={dailyColumns} pageSize={20} loading={loading} />
                     ) : (
                         <Box sx={{mt: 2}}>
                             {newsItems.length > 0 ? (

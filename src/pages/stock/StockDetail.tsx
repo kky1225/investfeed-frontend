@@ -123,6 +123,7 @@ interface TabDataShape {
     investor: { col: GridColDef[]; row: any[] };
     program: { col: GridColDef[]; row: any[] };
     shortSelling: { col: GridColDef[]; row: any[] };
+    daily: { col: GridColDef[]; row: any[] };
 }
 
 interface ExpectedPriceShape {
@@ -298,10 +299,25 @@ const SHORT_SELLING_COLUMNS: GridColDef[] = [
     {field: 'shrtsAvgPric', headerName: '공매도 평균가', flex: 1, minWidth: 140, valueFormatter: (value: string) => Number(value).toLocaleString()},
 ];
 
+const DAILY_COLUMNS: GridColDef[] = [
+    {field: 'dt', headerName: '날짜', flex: 1, minWidth: 110, maxWidth: 120},
+    {field: 'curPrc', headerName: '종가', flex: 1, minWidth: 100, valueFormatter: (value: string) => Number(String(value).replace(/^[+-]/, '')).toLocaleString()},
+    {
+        field: 'fluRt', headerName: '등락률', flex: 1, minWidth: 90,
+        renderCell: (params) => {
+            const v = String(params.value ?? '');
+            const color = v.startsWith('-') ? '#0288d1' : Number(v) > 0 ? '#d32f2f' : '';
+            return <span style={{color}}>{v ? `${v}%` : '-'}</span>;
+        }
+    },
+    {field: 'accTrdeQty', headerName: '거래량', flex: 1, minWidth: 110, valueFormatter: (value: string) => Number(value).toLocaleString()},
+];
+
 const INITIAL_TAB_DATA: TabDataShape = {
     investor: { col: [], row: [] },
     program: { col: [], row: [] },
     shortSelling: { col: [], row: [] },
+    daily: { col: [], row: [] },
 };
 
 const StockDetail = () => {
@@ -622,7 +638,7 @@ const StockDetail = () => {
 
     const tabData = useMemo<TabDataShape>(() => {
         if (!result) return INITIAL_TAB_DATA;
-        const {stockInvestorList, stockProgramList, stockShortSellingList} = result;
+        const {stockInvestorList, stockProgramList, stockShortSellingList, dailyPriceList} = result;
         const investorRow = stockInvestorList.map((item: {
             dt: string; indInvsr: string; frgnrInvsr: string; orgn: string; fnncInvt: string; insrnc: string; etcFnnc: string; invtrt: string; samoFund: string; penfndEtc: string; bank: string; natn: string; etcCorp: string; natfor: string;
         }) => ({
@@ -663,10 +679,20 @@ const StockDetail = () => {
             trdeWght: Number(item.trdeWght),
             shrtsAvgPric: Number(item.shrtsAvgPric),
         }));
+        const dailyRow = (dailyPriceList ?? []).map((item: {
+            dt: string; curPrc: string; fluRt: string; accTrdeQty: string;
+        }) => ({
+            id: item.dt,
+            dt: `${item.dt.substring(0, 4)}-${item.dt.substring(4, 6)}-${item.dt.substring(6, 8)}`,
+            curPrc: item.curPrc,
+            fluRt: item.fluRt,
+            accTrdeQty: item.accTrdeQty,
+        }));
         return {
             investor: { col: INVESTOR_COLUMNS, row: investorRow },
             program: { col: PROGRAM_COLUMNS, row: programRow },
             shortSelling: { col: SHORT_SELLING_COLUMNS, row: shortSellingRow },
+            daily: { col: DAILY_COLUMNS, row: dailyRow },
         };
     }, [result]);
 
@@ -753,7 +779,7 @@ const StockDetail = () => {
 
 
 
-    const [tabValue, setTabValue] = useState<'investor' | 'program' | 'shortSelling' | 'news'>('investor');
+    const [tabValue, setTabValue] = useState<'investor' | 'program' | 'shortSelling' | 'daily' | 'news'>('investor');
     const [newsItems, setNewsItems] = useState<{title: string; link: string; description: string; pubDate: string}[]>([]);
     const [newsPage, setNewsPage] = useState(1);
     const [newsTotal, setNewsTotal] = useState(0);
@@ -810,7 +836,7 @@ const StockDetail = () => {
 
 
     const handleChange = (_event: React.SyntheticEvent, newValue: string) => {
-        if (newValue === 'investor' || newValue === 'program' || newValue === 'shortSelling' || newValue === 'news') {
+        if (newValue === 'investor' || newValue === 'program' || newValue === 'shortSelling' || newValue === 'daily' || newValue === 'news') {
             setTabValue(newValue);
             if (newValue === 'news' && !newsLoaded && stockChartData.title) {
                 loadNews(stockChartData.title, 1);
@@ -1488,6 +1514,7 @@ const StockDetail = () => {
                             <Tab label="투자자별" value='investor' />
                             <Tab label="프로그램" value='program' />
                             <Tab label="공매도" value='shortSelling' />
+                            <Tab label="일별 시세" value='daily' />
                             <Tab label="뉴스" value='news' />
                         </Tabs>
                     </Box>

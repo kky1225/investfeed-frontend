@@ -135,6 +135,15 @@ export interface StockShortSelling {
     shrtsAvgPric: string,
 }
 
+export interface StockDailyPrice {
+    dt: string,
+    curPrc: string,
+    predPreSig: string,
+    predPre: string,
+    fluRt: string,
+    accTrdeQty: string,
+}
+
 export interface StockVi {
     motnPric: string,           // 발동가격
     motnTime: string,           // 발동시각 (HHmmss)
@@ -156,6 +165,7 @@ export interface StockDetailRes {
     stockProgramList: StockProgram[],
     stockProgramChartList: unknown[],
     stockShortSellingList: StockShortSelling[],
+    dailyPriceList: StockDailyPrice[],
     dividendList: StockDividendItem[],
     viList?: StockVi[],
 }

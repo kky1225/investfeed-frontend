@@ -19,9 +19,11 @@ import StockDetailLineChart, {type CustomStockDetailLineChartProps} from "../../
 import CryptoDetailLineChart, {type CryptoDetailLineChartProps} from "../../components/CryptoDetailLineChart.tsx";
 import CommodityDetailLineChart, {type CommodityDetailLineChartProps} from "../../components/CommodityDetailLineChart.tsx";
 import {fetchStockChart} from "../../api/stock/StockApi.ts";
+import {fetchMultiViewUsStockChart} from "../../api/multiView/MultiViewApi.ts";
 import {fetchCryptoDetail} from "../../api/crypto/CryptoApi.ts";
 import {fetchCommodityDetail} from "../../api/commodity/CommodityApi.ts";
 import {StockChartType} from "../../type/StockType.ts";
+import {UsStockChartType} from "../../type/UsStockType.ts";
 import {CryptoChartType} from "../../type/CryptoType.ts";
 import {CommodityChartType} from "../../type/CommodityType.ts";
 import {renderChangeAmount} from "../../components/CustomRender.tsx";
@@ -49,7 +51,6 @@ const labelColors = {
 
 const CHART_HEIGHT = 550;
 
-// 순수 헬퍼들 — 모듈 레벨 (useMemo TDZ 회피).
 const trendColor = (preSig: string): 'up' | 'down' | 'neutral' => {
     const sig = Number(preSig);
     if (sig === 2 || sig === 1) return 'up';
@@ -57,7 +58,19 @@ const trendColor = (preSig: string): 'up' | 'down' | 'neutral' => {
     return 'neutral';
 };
 
-// CryptoDetail 와 동일: dt 가 ISO(`2026-03-17T14:30:00`) 또는 compact(`20260318143000`) 둘 다 가능
+const usdFormat = (n: number) =>
+    n.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 4});
+
+const usDateFormat = (raw: string | null | undefined, showTime: boolean) => {
+    if (!raw) return '';
+    const cleaned = raw.replace(/\s+/g, '');
+    if (cleaned.length < 8) return raw;
+    if (showTime && cleaned.length >= 12) {
+        return `${cleaned.substring(4, 6)}.${cleaned.substring(6, 8)} ${cleaned.substring(8, 10)}:${cleaned.substring(10, 12)}`;
+    }
+    return `${cleaned.substring(0, 4)}.${cleaned.substring(4, 6)}.${cleaned.substring(6, 8)}`;
+};
+
 const cryptoDateFormat = (dateTime: string, showTime: boolean): string => {
     if (!dateTime) return '';
     if (dateTime.includes('T')) {
@@ -79,13 +92,13 @@ interface ChartDetailDialogProps {
     assetType: MultiViewAssetType | null;
     code: string;
     name: string;
+    stexTp?: string;
 }
 
-export default function ChartDetailDialog({open, onClose, assetType, code, name}: ChartDetailDialogProps) {
+export default function ChartDetailDialog({open, onClose, assetType, code, name, stexTp}: ChartDetailDialogProps) {
     const [chartType, setChartType] = useState("DAY");
     const [minuteUnit, setMinuteUnit] = useState("1");
 
-    // 다이얼로그 새로 열거나 다른 자산으로 바뀔 때 차트 타입 초기화 — render 중 비교 패턴
     const resetKey = `${open}|${code}|${assetType ?? 'none'}`;
     const [prevResetKey, setPrevResetKey] = useState('');
     if (resetKey !== prevResetKey) {
@@ -96,8 +109,6 @@ export default function ChartDetailDialog({open, onClose, assetType, code, name}
         }
     }
 
-    // 자산 타입별 fetch — useQuery 가 호출/캐시/취소(unmount 시 signal abort) 자동 관리.
-    // chartType / minuteUnit 변경 시 queryKey 가 바뀌어 자동 재요청. handler 에서 직접 fetch 호출 불필요.
     const {data: queryData} = useQuery({
         queryKey: ['chartDetailDialog', assetType, code, chartType, minuteUnit],
         queryFn: async ({signal}) => {
@@ -110,6 +121,16 @@ export default function ChartDetailDialog({open, onClose, assetType, code, name}
                     YEAR: StockChartType.YEAR,
                 };
                 return requireOk(await fetchStockChart(code, {chartType: chartTypeMap[chartType] ?? StockChartType.DAY}, {signal, skipGlobalError: true}), null);
+            }
+            if (assetType === 'US_STOCK') {
+                const chartTypeMap: Record<string, UsStockChartType> = {
+                    MINUTE: `MINUTE_${minuteUnit}` as UsStockChartType,
+                    DAY: UsStockChartType.DAY,
+                    WEEK: UsStockChartType.WEEK,
+                    MONTH: UsStockChartType.MONTH,
+                    YEAR: UsStockChartType.YEAR,
+                };
+                return requireOk(await fetchMultiViewUsStockChart(code, {stexTp: stexTp ?? '', chartType: chartTypeMap[chartType] ?? UsStockChartType.DAY}, {signal, skipGlobalError: true}), null);
             }
             if (assetType === 'CRYPTO') {
                 const chartTypeMap: Record<string, CryptoChartType> = {
@@ -172,6 +193,29 @@ export default function ChartDetailDialog({open, onClose, assetType, code, name}
                     seriesData: [{id: code, showMark: false, curve: 'linear', area: true, stackOrder: 'ascending', color: 'grey', data: lineData}],
                     barDataList, dateList,
                 } as CustomStockDetailLineChartProps;
+            }
+
+            if (assetType === 'US_STOCK') {
+                const {usStockInfo, chartList} = (queryData as any) ?? {};
+                if (!usStockInfo || !chartList) return null;
+
+                const dateList: string[] = chartList.map((item: {dt: string}) => usDateFormat(item.dt, isMinute));
+                const lineData = chartList.map((item: {curPrc: string}) => Number(String(item.curPrc ?? '0').replace(/^[+-]/, '')));
+                const barDataList: number[] = chartList.map((item: {trdeQty: string}) => Number(String(item.trdeQty ?? '0').replace(/^[+-]/, '')));
+
+                const trend = trendColor(String(usStockInfo.predPreSig ?? '3'));
+                const predPre = Number(String(usStockInfo.predPre ?? '0'));
+
+                return {
+                    id: code,
+                    title: `${usStockInfo.stkNm ?? usStockInfo.stkEnm ?? name} (${code})`,
+                    value: usdFormat(Number(String(usStockInfo.curPrc ?? '0').replace(/^[+-]/, ''))),
+                    changeRate: String(usStockInfo.fluRt ?? '0').replace(/^\+/, ''),
+                    changePrice: Number.isFinite(predPre) ? predPre : 0,
+                    interval: '', trend,
+                    seriesData: [{id: code, showMark: false, curve: 'linear', area: true, stackOrder: 'ascending', color: trend === 'up' ? 'red' : trend === 'down' ? 'blue' : 'grey', data: lineData}],
+                    barDataList, dateList,
+                } as CryptoDetailLineChartProps;
             }
 
             if (assetType === 'CRYPTO') {
@@ -285,7 +329,7 @@ export default function ChartDetailDialog({open, onClose, assetType, code, name}
                     <Stack sx={{justifyContent: 'space-between', mb: 2}}>
                         <Stack direction="row" sx={{alignItems: 'center', gap: 1}}>
                             <Typography variant="h4" component="p">{chartData.value}</Typography>
-                            {renderChangeAmount(predPre)}
+                            {renderChangeAmount(predPre, assetType === 'US_STOCK' ? '달러' : '원')}
                             <Chip size="small" color={color} label={`${fluRt}%`}/>
                         </Stack>
                         <Typography variant="caption" sx={{color: 'text.secondary'}}>{chartData.interval}</Typography>
@@ -309,7 +353,7 @@ export default function ChartDetailDialog({open, onClose, assetType, code, name}
                             {assetType === 'STOCK' && (
                                 <StockDetailLineChart {...(chartData as CustomStockDetailLineChartProps)} height={CHART_HEIGHT}/>
                             )}
-                            {assetType === 'CRYPTO' && (
+                            {(assetType === 'US_STOCK' || assetType === 'CRYPTO') && (
                                 <CryptoDetailLineChart {...(chartData as CryptoDetailLineChartProps)} height={CHART_HEIGHT}/>
                             )}
                             {assetType === 'COMMODITY' && (

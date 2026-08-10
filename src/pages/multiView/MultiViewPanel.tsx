@@ -26,10 +26,12 @@ import CryptoDetailLineChart, {type CryptoDetailLineChartProps} from "../../comp
 import CommodityDetailLineChart, {type CommodityDetailLineChartProps} from "../../components/CommodityDetailLineChart.tsx";
 import {
     fetchMultiViewStockChart,
+    fetchMultiViewUsStockChart,
     fetchMultiViewCryptoDetail,
     fetchMultiViewCommodityDetail,
 } from "../../api/multiView/MultiViewApi.ts";
 import {StockChartType} from "../../type/StockType.ts";
+import {UsStockChartType} from "../../type/UsStockType.ts";
 import {CryptoChartType} from "../../type/CryptoType.ts";
 import {CommodityChartType} from "../../type/CommodityType.ts";
 import {renderChangeAmount} from "../../components/CustomRender.tsx";
@@ -71,7 +73,19 @@ const trendColor = (preSig: string): 'up' | 'down' | 'neutral' => {
     return 'neutral';
 };
 
-// CryptoDetail 와 동일: dt 가 ISO(`2026-03-17T14:30:00`) 또는 compact(`20260318143000`) 둘 다 가능
+const usdFormat = (n: number) =>
+    n.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 4});
+
+const usDateFormat = (raw: string | null | undefined, showTime: boolean) => {
+    if (!raw) return '';
+    const cleaned = raw.replace(/\s+/g, '');
+    if (cleaned.length < 8) return raw;
+    if (showTime && cleaned.length >= 12) {
+        return `${cleaned.substring(4, 6)}.${cleaned.substring(6, 8)} ${cleaned.substring(8, 10)}:${cleaned.substring(10, 12)}`;
+    }
+    return `${cleaned.substring(0, 4)}.${cleaned.substring(4, 6)}.${cleaned.substring(6, 8)}`;
+};
+
 const cryptoDateFormat = (dateTime: string, showTime: boolean): string => {
     if (!dateTime) return '';
     if (dateTime.includes('T')) {
@@ -114,6 +128,13 @@ export default function MultiViewPanel({asset, onSearch, onChartExpand, onRemove
                     predPre: streamUpdate.predPre,
                     trend: streamUpdate.trend,
                 });
+            } else if (asset.type === 'US_STOCK') {
+                setLiveOverlay({
+                    value: usdFormat(Number(streamUpdate.value)),
+                    changeRate: streamUpdate.fluRt.replace(/^\+/, ''),
+                    changePrice: Number(streamUpdate.predPre),
+                    trend: streamUpdate.trend,
+                });
             } else if (asset.type === 'CRYPTO') {
                 setLiveOverlay({
                     value: Number(streamUpdate.value).toLocaleString(),
@@ -131,6 +152,9 @@ export default function MultiViewPanel({asset, onSearch, onChartExpand, onRemove
             if (!asset) return Promise.reject(new Error('no asset'));
             if (asset.type === 'STOCK') {
                 return fetchMultiViewStockChart(asset.code, {chartType: chartType as StockChartType}, config);
+            }
+            if (asset.type === 'US_STOCK') {
+                return fetchMultiViewUsStockChart(asset.code, {stexTp: asset.stexTp ?? '', chartType: chartType as UsStockChartType}, config);
             }
             if (asset.type === 'CRYPTO') {
                 return fetchMultiViewCryptoDetail(asset.code, {chartType: chartType as CryptoChartType}, config);
@@ -185,6 +209,28 @@ export default function MultiViewPanel({asset, onSearch, onChartExpand, onRemove
                     seriesData: [{id: asset.code, showMark: false, curve: 'linear', area: true, stackOrder: 'ascending', color: 'grey', data: lineData}],
                     barDataList, dateList,
                 } as CustomStockDetailLineChartProps;
+            }
+            if (asset.type === 'US_STOCK') {
+                const {usStockInfo, chartList} = (queryData as any) ?? {};
+                if (!usStockInfo || !chartList) return null;
+
+                const dateList = chartList.map((item: {dt: string}) => usDateFormat(item.dt, isMinute));
+                const lineData = chartList.map((item: {curPrc: string}) => Number(String(item.curPrc ?? '0').replace(/^[+-]/, '')));
+                const barDataList = chartList.map((item: {trdeQty: string}) => Number(String(item.trdeQty ?? '0').replace(/^[+-]/, '')));
+
+                const trend = trendColor(String(usStockInfo.predPreSig ?? '3'));
+                const predPre = Number(String(usStockInfo.predPre ?? '0'));
+
+                return {
+                    id: asset.code,
+                    title: `${usStockInfo.stkNm ?? usStockInfo.stkEnm ?? asset.name} (${asset.code})`,
+                    value: usdFormat(Number(String(usStockInfo.curPrc ?? '0').replace(/^[+-]/, ''))),
+                    changeRate: String(usStockInfo.fluRt ?? '0').replace(/^\+/, ''),
+                    changePrice: Number.isFinite(predPre) ? predPre : 0,
+                    interval: '', trend,
+                    seriesData: [{id: asset.code, showMark: false, curve: 'linear', area: true, stackOrder: 'ascending', color: trend === 'up' ? 'red' : trend === 'down' ? 'blue' : 'grey', data: lineData}],
+                    barDataList, dateList,
+                } as CryptoDetailLineChartProps;
             }
             if (asset.type === 'CRYPTO') {
                 const r = queryData as any;
@@ -249,7 +295,7 @@ export default function MultiViewPanel({asset, onSearch, onChartExpand, onRemove
     const chartElement = useMemo(() => {
         if (!baseChartData || !asset) return null;
         if (asset.type === 'STOCK') return <StockDetailLineChart {...(baseChartData as CustomStockDetailLineChartProps)} />;
-        if (asset.type === 'CRYPTO') return <CryptoDetailLineChart {...(baseChartData as CryptoDetailLineChartProps)} />;
+        if (asset.type === 'US_STOCK' || asset.type === 'CRYPTO') return <CryptoDetailLineChart {...(baseChartData as CryptoDetailLineChartProps)} />;
         return <CommodityDetailLineChart {...(baseChartData as CommodityDetailLineChartProps)} />;
     }, [baseChartData, asset]);
 
@@ -273,6 +319,7 @@ export default function MultiViewPanel({asset, onSearch, onChartExpand, onRemove
         if (!asset) return;
         const pathMap: Record<MultiViewAssetType, string> = {
             STOCK: `/stock/detail/${asset.code}`,
+            US_STOCK: `/us-stock/detail/${asset.stexTp}/${asset.code}`,
             CRYPTO: `/crypto/detail/${asset.code}`,
             COMMODITY: `/commodity/detail/${asset.code}`,
         };
@@ -349,7 +396,7 @@ export default function MultiViewPanel({asset, onSearch, onChartExpand, onRemove
                 <Stack sx={{justifyContent: 'space-between'}}>
                     <Stack direction="row" sx={{alignContent: {xs: 'center', sm: 'flex-start'}, alignItems: 'center', gap: 1}}>
                         <Typography variant="h4" component="p">{chartData.value}</Typography>
-                        {renderChangeAmount(predPre)}
+                        {renderChangeAmount(predPre, asset.type === 'US_STOCK' ? '달러' : '원')}
                         <Chip size="small" color={color} label={trendValues[trend]}/>
                     </Stack>
                     <Typography variant="caption" sx={{color: 'text.secondary'}}>{chartData.interval}</Typography>
