@@ -1,5 +1,8 @@
 export type SchedulerState = 'SUCCESS' | 'WARNING' | 'FAILED' | 'STUCK' | 'PENDING';
 
+/** 이번 사이클(직전 22:00~) 발화 여부. state(마지막 실행 결과)와는 별개 축. */
+export type SchedulerFireStatus = 'FIRED' | 'MISSED' | 'NONE';
+
 export interface SchedulerCatalogRes {
     schedulerName: string;
     schedulerType: 'FAST' | 'SLOW';
@@ -13,6 +16,8 @@ export interface SchedulerStatusRes {
     schedulerType: 'FAST' | 'SLOW';
     timeoutSec: number;
     state: SchedulerState;
+    fireStatus: SchedulerFireStatus;
+    lastFiredAt: string | null;
     lastStartedAt: string | null;
     lastFinishedAt: string | null;
     lastSuccessAt: string | null;

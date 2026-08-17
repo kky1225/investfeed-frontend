@@ -61,6 +61,7 @@ export interface PaperTradeHistoryItem {
     ordQty: number;
     ordUv: number;
     ordNo: string | null;
+    tradeReason: string | null;       // 매매 사유 (paper_fill.note 주문번호 매칭) — 등급/사이징가/회차, 현금회수·2차 발행 등. 시스템 외 주문은 null
 }
 
 export interface AdminHoldingGradeRes {
@@ -80,7 +81,7 @@ export interface HoldingGradeItem {
     frgnrSameDirK: number | null;     // 외국인 동조 K (하드스톱)
     priorTrendRatio: number | null;   // B′ 추세 명확성 (STRONG)
     foreignerAligned: boolean | null; // 옵션B 외국인 동조
-    evaluationReason: string | null;  // HARD_SELL / BLOCK_FREEZE / BLOCK_PARTIAL / CONFLICT (복수면 '|'), 없으면 null
+    evaluationReason: string | null;  // HARD_SELL / BLOCK_FREEZE / BLOCK_PARTIAL / MODULE_HALF / CONFLICT (복수면 '|'), 없으면 null
     targetWeightRatio: number | null; // 부분비중 0.10, 그 외 null(기본)
     // ─── 상세(팝업)용 — 모듈 보정 전 백본 + 백본사유 + 6개 후행 모듈 트리거 ───
     preAdjustmentType: string | null; // 모듈 보정 전 백본 등급 (HOLD→BUY 격상 추적)

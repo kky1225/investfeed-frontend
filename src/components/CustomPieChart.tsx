@@ -90,14 +90,17 @@ function PieCenterLabel({ primaryText, secondaryText, small }: PieCenterLabelPro
     );
 }
 
-const colors = [
+const SERIES_LIGHT = [
     'hsl(220, 100%, 70%)',
     'hsl(220, 80%, 70%)',
     'hsl(220, 60%, 70%)',
     'hsl(220, 45%, 70%)',
     'hsl(220, 30%, 70%)',
-    'hsl(220, 15%, 70%)'
 ];
+const SERIES_DARK = SERIES_LIGHT;
+const OTHER_LIGHT = 'hsl(220, 15%, 70%)';
+const OTHER_DARK = OTHER_LIGHT;
+const TOP_SLICES = 5;
 
 export default function CustomPieChart({ holdings, totalEvltAmt }: CustomPieChartProps) {
     const theme = useTheme();
@@ -111,18 +114,36 @@ export default function CustomPieChart({ holdings, totalEvltAmt }: CustomPieChar
         ? { left: 30, right: 30, top: 40, bottom: 40 }
         : { left: 50, right: 80, top: 80, bottom: 80 };
 
+    const isDark = theme.palette.mode === 'dark';
+    const series = isDark ? SERIES_DARK : SERIES_LIGHT;
+    const otherColor = isDark ? OTHER_DARK : OTHER_LIGHT;
+
     const sorted = [...holdings].sort((a, b) => Math.abs(Number(b.evltAmt)) - Math.abs(Number(a.evltAmt)));
 
-    const pieData = sorted.map((stock) => ({
-        label: stock.stkNm,
-        value: Math.abs(Number(stock.evltAmt)),
-    }));
+    // 종목별 색: 상위 TOP_SLICES 만 고유색, 나머지는 "기타" 회색 — 아래 목록의 점과 도넛 조각이 같은 색으로 대응된다.
+    const colorOf = (index: number) => (index < TOP_SLICES ? series[index] : otherColor);
+
+    const head = sorted.slice(0, TOP_SLICES);
+    const tail = sorted.slice(TOP_SLICES);
+    const tailSum = tail.reduce((acc, s) => acc + Math.abs(Number(s.evltAmt)), 0);
+
+    const pieData = [
+        ...head.map((stock, i) => ({
+            label: stock.stkNm,
+            value: Math.abs(Number(stock.evltAmt)),
+            color: series[i],
+        })),
+        ...(tail.length > 0
+            ? [{label: `기타 ${tail.length}종목`, value: tailSum, color: otherColor}]
+            : []),
+    ];
 
     const progressData = sorted.map((stock, index) => ({
         name: stock.stkNm,
         value: Math.abs(Number(stock.possRt)),
-        color: colors[index % colors.length],
+        color: colorOf(index),
     }));
+    const maxRatio = Math.max(...progressData.map(d => d.value), 1);
 
     if (pieData.length === 0 || pieData.every(d => d.value === 0)) {
         return (
@@ -155,14 +176,15 @@ export default function CustomPieChart({ holdings, totalEvltAmt }: CustomPieChar
                 </Typography>
                 <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                     <PieChart
-                        colors={colors}
                         margin={chartMargin}
+                        hideLegend
                         series={[
                             {
                                 data: pieData,
                                 innerRadius,
                                 outerRadius,
-                                paddingAngle: 0,
+                                paddingAngle: 2,
+                                cornerRadius: 2,
                                 highlightScope: { fade: 'global', highlight: 'item' },
                                 valueFormatter: (item) => item.value.toLocaleString(),
                             },
@@ -176,41 +198,50 @@ export default function CustomPieChart({ holdings, totalEvltAmt }: CustomPieChar
                         <PieCenterLabel primaryText={Number(totalEvltAmt).toLocaleString()} secondaryText="Total" small={isSmallScreen} />
                     </PieChart>
                 </Box>
-                {progressData.map((item, index) => (
-                    <Stack
-                        key={index}
-                        direction="row"
-                        sx={{ alignItems: 'center', gap: 2, pb: 2 }}
-                    >
-                        <Stack sx={{ gap: 1, flexGrow: 1 }}>
-                            <Stack
-                                direction="row"
+                <Stack sx={{ mt: 1 }}>
+                    {progressData.map((item, index) => (
+                        <Stack
+                            key={index}
+                            direction="row"
+                            sx={{ alignItems: 'center', gap: 1.5, py: 0.75 }}
+                        >
+                            <Box
                                 sx={{
-                                    justifyContent: 'space-between',
-                                    alignItems: 'center',
-                                    gap: 2,
+                                    width: 8, height: 8, borderRadius: '50%',
+                                    backgroundColor: item.color, flexShrink: 0,
                                 }}
+                            />
+                            <Typography
+                                variant="body2"
+                                sx={{
+                                    fontWeight: 500, width: 130, flexShrink: 0,
+                                    overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                                }}
+                                title={item.name}
                             >
-                                <Typography variant="body2" sx={{ fontWeight: '500' }}>
-                                    {item.name}
-                                </Typography>
-                                <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-                                    {item.value}%
-                                </Typography>
-                            </Stack>
+                                {item.name}
+                            </Typography>
                             <LinearProgress
                                 variant="determinate"
-                                aria-label="Number of users by country"
-                                value={item.value}
+                                aria-label={`${item.name} 비중 ${item.value}%`}
+                                value={Math.min((item.value / maxRatio) * 100, 100)}
                                 sx={{
+                                    flexGrow: 1, height: 6, borderRadius: 3,
                                     [`& .${linearProgressClasses.bar}`]: {
                                         backgroundColor: item.color,
+                                        borderRadius: 3,
                                     },
                                 }}
                             />
+                            <Typography
+                                variant="body2"
+                                sx={{ color: 'text.secondary', width: 48, textAlign: 'right', flexShrink: 0 }}
+                            >
+                                {item.value}%
+                            </Typography>
                         </Stack>
-                    </Stack>
-                ))}
+                    ))}
+                </Stack>
             </CardContent>
         </Card>
     );

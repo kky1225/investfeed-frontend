@@ -25,6 +25,7 @@ import {renderChip, renderTradeColor} from "../../components/CustomRender.tsx";
 import BlindText from "../../components/BlindText.tsx";
 import Chip from "@mui/material/Chip";
 import Dialog from "@mui/material/Dialog";
+import Tooltip from "@mui/material/Tooltip";
 import DialogTitle from "@mui/material/DialogTitle";
 import DialogContent from "@mui/material/DialogContent";
 import IconButton from "@mui/material/IconButton";
@@ -374,6 +375,8 @@ function PaperTradeHistoryPanel() {
             renderCell: (p) => <Typography variant="body2">{Number(p.value).toLocaleString()}</Typography>},
         {field: 'ordUv', headerName: '주문단가', width: 100, align: 'right', headerAlign: 'right',
             renderCell: (p) => <Typography variant="body2">{Number(p.value).toLocaleString()}</Typography>},
+        {field: 'tradeReason', headerName: '매매 사유', width: 170, align: 'center', headerAlign: 'center',
+            renderCell: (p) => renderTradeReason(p.value as string | null)},
         {field: 'ordNo', headerName: '주문번호', width: 100},
     ];
 
@@ -412,14 +415,71 @@ function PaperTradeHistoryPanel() {
     );
 }
 
-// ════════════════════════════════════════════════════════════════════════════
-// 보유 평가 — 22:10 HoldingGradeScheduler 산출 결과 (evalDate 단위)
-// 계좌(현 시점 보유) 와 시점이 달라 별도 탭. 다음 거래일 09:00 매매 결정용 등급.
-// ════════════════════════════════════════════════════════════════════════════
+const MODULE_LABELS: Array<[keyof HoldingGradeItem, string]> = [
+    ['pvTrigger', '변동성'], ['maTrigger', '이동평균'], ['vpTrigger', '거래량'],
+    ['rsiTrigger', 'RSI'], ['hl52wTrigger', '52주'], ['breakoutTrigger', '돌파'],
+];
+
+const GRADE_KR: Record<string, string> = {
+    STRONG_BUY: '강력매수', BUY: '매수', HOLD: '중립', SELL: '매도',
+    STRONG_SELL: '강력매도', HARD_SELL: '즉시전량매도',
+};
+const gradeKr = (g: string | null | undefined) => (g ? GRADE_KR[g] ?? g : '-');
+
+const TIER_KR: Record<string, string> = {
+    HARD_SELL: '하드스톱(즉시전량)', BLOCK_FREEZE: '외인강반대(동결)',
+    BLOCK_PARTIAL: '외인중간반대(부분비중)', MODULE_HALF: '모듈승급(반비중)', CONFLICT: '양방향 충돌',
+};
+
+function buildEvalReason(row: HoldingGradeItem): string {
+    const parts: string[] = [];
+
+    if (row.backboneReason && row.backboneReason !== '-') {
+        parts.push(`[수급] ${row.backboneReason}`);
+    } else {
+        parts.push(row.evaluationReason?.includes('CONFLICT')
+            ? '[수급] 매수·매도 신호 동시 발생(충돌) → 방향 미확정 → HOLD'
+            : '[수급] 연기금 강도 1차 필터 미달 → 수급 신호 없음 → HOLD');
+    }
+
+    const promoted = MODULE_LABELS.filter(([k]) => row[k] === 'PROMOTE').map(([, l]) => l);
+    const demoted = MODULE_LABELS.filter(([k]) => row[k] === 'DEMOTE').map(([, l]) => l);
+    const votes = [
+        promoted.length > 0 ? `격상 ${promoted.join('·')}` : null,
+        demoted.length > 0 ? `격하 ${demoted.join('·')}` : null,
+    ].filter(Boolean).join(' / ');
+    const changed = row.preAdjustmentType != null && row.preAdjustmentType !== row.type;
+    if (changed) {
+        parts.push(`[모듈] ${votes || '보정'} → ${gradeKr(row.preAdjustmentType)}에서 ${gradeKr(row.type)}로 조정`);
+    } else if (votes) {
+        parts.push(`[모듈] ${votes} (문턱 미달 → 등급 유지)`);
+    }
+
+    const tiers = (row.evaluationReason ?? '').split('|').filter(Boolean).map(t => TIER_KR[t] ?? t);
+    if (tiers.length > 0) parts.push(`[적용] ${tiers.join(' · ')}`);
+
+    return parts.join('  ');
+}
+
+function renderTradeReason(reason: string | null) {
+    if (!reason) return <Typography variant="body2" color="text.disabled">-</Typography>;
+    let chip: ReactNode;
+    if (reason.includes('현금회수')) {
+        const tier = reason.match(/현금회수 매도\(([^,)]+)/)?.[1] ?? '';
+        chip = <Chip size="small" color="warning" variant="outlined" label={`현금확보${tier ? ` · ${tier}` : ''}`}/>;
+    } else if (reason.includes('2차 발행')) {
+        chip = <Chip size="small" color="secondary" variant="outlined" label="2차 매수"/>;
+    } else if (reason.includes('동시호가')) {
+        chip = <Typography variant="body2" color="text.secondary">정규 발행</Typography>;
+    } else {
+        chip = <Typography variant="body2" color="text.secondary">{reason.slice(0, 12)}…</Typography>;
+    }
+    return <Tooltip title={reason} arrow>{<Box component="span">{chip}</Box>}</Tooltip>;
+}
+
 type GradeType = 'STRONG_BUY' | 'BUY' | 'HOLD' | 'SELL' | 'STRONG_SELL';
 
 function PaperHoldingGradePanel() {
-    // 다른 탭과 동일하게 오늘(로컬 날짜) 기본값. toISOString() 은 UTC 라 자정 직후 하루 어긋남.
     const today = ((): string => {
         const d = new Date();
         return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
@@ -436,78 +496,61 @@ function PaperHoldingGradePanel() {
         refetchOnWindowFocus: false,
     });
 
-    // 첫 로드(빈 evalDate)로 받아온 응답의 evalDate 를 picker 초기값으로 반영.
     const effectiveEvalDate = data?.evalDate ?? "";
     const displayEvalDate = evalDate || effectiveEvalDate;
 
     const items = data?.items ?? [];
 
     const columns: GridColDef<HoldingGradeItem & {id: number}>[] = [
-        {field: 'stkCd', headerName: '종목코드', width: 110},
-        {field: 'stkNm', headerName: '종목명', flex: 1.2, minWidth: 150},
-        {field: 'type', headerName: '등급', width: 130, align: 'center', headerAlign: 'center',
+        {field: 'stkCd', headerName: '종목코드', width: 100},
+        {field: 'stkNm', headerName: '종목명', width: 150},
+        {field: 'originSide', headerName: '수급 방향', width: 100, align: 'center', headerAlign: 'center',
+            renderCell: (p) => {
+                const v = p.value as string | null;
+                if (!v) return <Typography variant="body2" color="text.disabled">방향없음</Typography>;
+                const buy = v === 'BUY';
+                return (
+                    <Typography variant="body2" sx={{color: buy ? 'error.main' : 'info.main', fontWeight: 600}}>
+                        {buy ? '매수 후보' : '매도 후보'}
+                    </Typography>
+                );
+            }},
+        {field: 'preAdjustmentType', headerName: '수급 등급', width: 110, align: 'center', headerAlign: 'center',
+            renderCell: (p) => {
+                const v = p.value as string | null;
+                if (!v) return <Typography variant="body2" color="text.disabled">-</Typography>;
+                return renderGradeChip(v, undefined, 'outlined');
+            }},
+        {field: 'type', headerName: '최종 등급', width: 110, align: 'center', headerAlign: 'center',
             renderCell: (p) => renderGradeChip(p.value as string)},
-        {field: 'originSide', headerName: '원래 방향', width: 100, align: 'center', headerAlign: 'center',
-            renderCell: (p) => {
-                const v = p.value as string | null;
-                if (!v) return <Typography variant="body2" color="text.secondary">-</Typography>;
-                const color = v === 'BUY' ? 'error.main' : 'info.main';
-                return <Typography variant="body2" sx={{color, fontWeight: 600}}>{v}</Typography>;
-            }},
-        {field: 'evaluationReason', headerName: '평가 사유', width: 160, align: 'center', headerAlign: 'center',
-            renderCell: (p) => {
-                const v = p.value as string | null;
-                if (!v) return <Typography variant="body2" color="text.secondary">-</Typography>;
-                // 티어 라벨(복수면 '|' 결합) → 한글. 왜 이 등급/비중인지.
-                const KR: Record<string, string> = {
-                    HARD_SELL: '하드스톱(즉시전량)', BLOCK_FREEZE: '외인강반대(동결)',
-                    BLOCK_PARTIAL: '외인중간반대(부분)', CONFLICT: '충돌',
-                };
-                const label = v.split('|').map((t) => KR[t] ?? t).join(' · ');
-                return <Typography variant="body2" sx={{color: 'warning.main', fontWeight: 600}}>{label}</Typography>;
-            }},
-        {field: 'marketType', headerName: '시장', width: 90, align: 'center', headerAlign: 'center',
-            renderCell: (p) => <Typography variant="body2">{(p.value as string | null) ?? '-'}</Typography>},
-        {field: 'penfndK', headerName: 'penfndK', width: 100, align: 'right', headerAlign: 'right',
-            renderCell: (p) => {
-                const v = p.value as number | null;
-                return <Typography variant="body2">{v != null ? v.toFixed(2) : '-'}</Typography>;
-            }},
-        {field: 'frgnrMcapRatio', headerName: '외인 시총비(%)', width: 140, align: 'right', headerAlign: 'right',
-            renderCell: (p) => {
-                const v = p.value as number | null;
-                return <Typography variant="body2">{v != null ? `${(v * 100).toFixed(4)}%` : '-'}</Typography>;
-            }},
-        {field: 'frgnrOppositeK', headerName: '외인 반대K', width: 100, align: 'right', headerAlign: 'right',
-            renderCell: (p) => {
-                const v = p.value as number | null;
-                return <Typography variant="body2">{v != null ? v.toFixed(2) : '-'}</Typography>;
-            }},
-        {field: 'frgnrSameDirK', headerName: '외인 동조K', width: 100, align: 'right', headerAlign: 'right',
-            renderCell: (p) => {
-                const v = p.value as number | null;
-                return <Typography variant="body2">{v != null ? v.toFixed(2) : '-'}</Typography>;
-            }},
-        {field: 'priorTrendRatio', headerName: "B′(추세명확)", width: 110, align: 'right', headerAlign: 'right',
-            renderCell: (p) => {
-                const v = p.value as number | null;
-                return <Typography variant="body2">{v != null ? v.toFixed(2) : '-'}</Typography>;
-            }},
-        {field: 'foreignerAligned', headerName: '옵션B', width: 70, align: 'center', headerAlign: 'center',
-            renderCell: (p) => {
-                const v = p.value as boolean | null;
-                return <Typography variant="body2">{v == null ? '-' : (v ? 'Y' : 'N')}</Typography>;
-            }},
         {field: 'targetWeightRatio', headerName: '목표비중', width: 90, align: 'right', headerAlign: 'right',
-            renderCell: (p) => {
-                const v = p.value as number | null;
-                return <Typography variant="body2">{v != null ? `${(v * 100).toFixed(0)}%` : '기본'}</Typography>;
-            }},
+            renderCell: (p) => (
+                <Typography variant="body2">
+                    {fmtTargetWeight(p.value as number | null, p.row.type)}
+                </Typography>
+            )},
+        {field: 'marketType', headerName: '시장', width: 80, align: 'center', headerAlign: 'center',
+            renderCell: (p) => <Typography variant="body2">{(p.value as string | null) ?? '-'}</Typography>},
+        {field: 'evalReason', headerName: '평가 사유', flex: 1, minWidth: 420, sortable: false,
+            valueGetter: (_v, row) => buildEvalReason(row),
+            renderCell: (p) => (
+                <Tooltip title={p.value as string} arrow>
+                    <Typography
+                        variant="caption"
+                        sx={{
+                            color: 'text.secondary', lineHeight: 1.4, width: '100%',
+                            display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical',
+                            overflow: 'hidden', whiteSpace: 'normal',
+                        }}
+                    >
+                        {p.value as string}
+                    </Typography>
+                </Tooltip>
+            )},
     ];
 
     const rows = items.map((x, i) => ({id: i + 1, ...x}));
 
-    // 등급별 카운트 (요약 표시용)
     const gradeCounts = useMemo(() => {
         const c: Record<string, number> = {};
         for (const it of items) c[it.type] = (c[it.type] ?? 0) + 1;
@@ -549,7 +592,7 @@ function PaperHoldingGradePanel() {
                         <Divider orientation="vertical" flexItem/>
                         {(['STRONG_BUY', 'BUY', 'HOLD', 'SELL', 'STRONG_SELL'] as GradeType[]).map(g => (
                             <Box key={g}>
-                                <Typography variant="caption" color="text.secondary">{g}</Typography>
+                                <Typography variant="caption" color="text.secondary">{gradeKr(g)}</Typography>
                                 <Box>{renderGradeChip(g, gradeCounts[g] ?? 0)}</Box>
                             </Box>
                         ))}
@@ -557,9 +600,6 @@ function PaperHoldingGradePanel() {
                 </CardContent>
             </Card>
 
-            <Typography variant="caption" color="text.secondary" sx={{display: 'block', mb: 0.5}}>
-                행을 클릭하면 백본 → 최종 등급 결정 과정과 모듈 트리거 상세가 열립니다.
-            </Typography>
             <DataGrid
                 autoHeight
                 rows={rows}
@@ -585,7 +625,18 @@ function PaperHoldingGradePanel() {
     );
 }
 
-function renderGradeChip(type: string, count?: number) {
+function fmtWeightPct(v: number): string {
+    const pct = v * 100;
+    return `${Number.isInteger(pct) ? pct.toFixed(0) : pct.toFixed(1)}%`;
+}
+
+function fmtTargetWeight(v: number | null, type: string): string {
+    if (v != null) return fmtWeightPct(v);
+    const sellSide = type === 'SELL' || type === 'STRONG_SELL' || type === 'HARD_SELL';
+    return sellSide ? '0%' : '기본';
+}
+
+function renderGradeChip(type: string, count?: number, variant?: 'filled' | 'outlined') {
     const color: 'error' | 'default' | 'info' = (() => {
         switch (type) {
             case 'STRONG_BUY':
@@ -598,8 +649,10 @@ function renderGradeChip(type: string, count?: number) {
                 return 'default';
         }
     })();
-    const label = count != null ? `${count}건` : type;
-    return <Chip size="small" color={color} label={label} variant={count != null && count === 0 ? 'outlined' : 'filled'}/>;
+    const label = count != null ? `${count}건` : gradeKr(type);
+    // variant 미지정 시 기존 동작 유지 (0건 요약만 outlined). 수급 등급은 중간 단계라 outlined 로 약하게.
+    const v = variant ?? (count != null && count === 0 ? 'outlined' : 'filled');
+    return <Chip size="small" color={color} label={label} variant={v}/>;
 }
 
 const TRIGGER_KR: Record<string, {label: string; color: 'error' | 'info' | 'default'}> = {
@@ -629,16 +682,12 @@ function GField({label, value}: {label: string; value: ReactNode}) {
     );
 }
 
-/**
- * 보유 평가 상세 — 추천 SignalDetailDialog 와 동일 구조.
- * 매매 경로 특성(매크로 미적용·HOLD 비흡수)을 반영해 "백본 → 최종" 등급 결정 과정 + 모듈 트리거 + 백본 사유를 표시.
- */
 function HoldingGradeDetailDialog({item, onClose}: {item: HoldingGradeItem | null; onClose: () => void}) {
     if (!item) return null;
 
     const reasonKR: Record<string, string> = {
         HARD_SELL: '하드스톱(즉시전량)', BLOCK_FREEZE: '외인강반대(동결)',
-        BLOCK_PARTIAL: '외인중간반대(부분)', CONFLICT: '양방향 충돌',
+        BLOCK_PARTIAL: '외인중간반대(부분)', MODULE_HALF: '모듈승급(반비중)', CONFLICT: '양방향 충돌',
     };
     const reasonLabel = item.evaluationReason
         ? item.evaluationReason.split('|').map((t) => reasonKR[t] ?? t).join(' · ')
@@ -661,7 +710,6 @@ function HoldingGradeDetailDialog({item, onClose}: {item: HoldingGradeItem | nul
                 <IconButton size="small" onClick={onClose}><CloseIcon fontSize="small"/></IconButton>
             </DialogTitle>
             <DialogContent dividers>
-                {/* 등급 결정: 백본 → 최종 */}
                 <Typography variant="overline" color="text.secondary">등급 결정</Typography>
                 <Stack direction="row" spacing={1.5} alignItems="center" sx={{mt: 0.5}}>
                     <Box sx={{textAlign: 'center'}}>
@@ -679,7 +727,6 @@ function HoldingGradeDetailDialog({item, onClose}: {item: HoldingGradeItem | nul
                     ※ 모의투자(매매) 경로 — 매크로 미적용 · HOLD 비흡수(모듈이 HOLD를 격상/격하 가능)
                 </Typography>
 
-                {/* 수급 (백본 근거) */}
                 <Typography variant="overline" color="text.secondary" sx={{display: 'block', mt: 2}}>수급 (백본 근거)</Typography>
                 <Box sx={{p: 1, borderRadius: 1, bgcolor: 'action.hover', mt: 0.5, mb: 1}}>
                     <Typography variant="body2">
@@ -697,7 +744,6 @@ function HoldingGradeDetailDialog({item, onClose}: {item: HoldingGradeItem | nul
                             value={item.foreignerAligned == null ? '-' : (item.foreignerAligned ? 'Y' : 'N')}/>
                 </Box>
 
-                {/* 후행 모듈 트리거 */}
                 <Typography variant="overline" color="text.secondary" sx={{display: 'block', mt: 2}}>
                     후행 모듈 트리거 (격상/격하 신호)
                 </Typography>
@@ -710,11 +756,10 @@ function HoldingGradeDetailDialog({item, onClose}: {item: HoldingGradeItem | nul
                     <TriggerChip label="신고저 돌파" v={item.breakoutTrigger}/>
                 </Stack>
 
-                {/* 사유 / 비중 */}
                 <Box sx={{display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 1.5, mt: 2}}>
                     <GField label="평가 사유(티어)" value={reasonLabel}/>
                     <GField label="목표비중"
-                            value={item.targetWeightRatio != null ? `${(item.targetWeightRatio * 100).toFixed(0)}%` : '기본'}/>
+                            value={fmtTargetWeight(item.targetWeightRatio, item.type)}/>
                 </Box>
             </DialogContent>
         </Dialog>
