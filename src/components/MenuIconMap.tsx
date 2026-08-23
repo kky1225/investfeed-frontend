@@ -21,6 +21,7 @@ import MonitorIcon from '@mui/icons-material/Monitor';
 import ManageAccountsIcon from '@mui/icons-material/ManageAccounts';
 import AssignmentIndIcon from '@mui/icons-material/AssignmentInd';
 import RequestPageIcon from '@mui/icons-material/RequestPage';
+import CurrencyExchangeIcon from '@mui/icons-material/CurrencyExchange';
 import type {ReactElement} from 'react';
 
 const iconMap: Record<string, ReactElement> = {
@@ -46,7 +47,8 @@ const iconMap: Record<string, ReactElement> = {
     MonitorIcon: <MonitorIcon />,
     ManageAccountsIcon: <ManageAccountsIcon />,
     AssignmentIndIcon: <AssignmentIndIcon />,
-    RequestPageIcon: <RequestPageIcon />
+    RequestPageIcon: <RequestPageIcon />,
+    CurrencyExchangeIcon: <CurrencyExchangeIcon />
 };
 
 export const getMenuIcon = (iconName: string | null): ReactElement => {

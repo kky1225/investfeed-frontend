@@ -101,15 +101,9 @@ function formatUptime(sec: number): string {
     return `${m}분`;
 }
 
-/**
- * 이번 사이클(직전 22:00~) 발화 표시.
- * 좌측 색상 점(state)이 "마지막 실행이 어땠나"라면, 이건 "이번 사이클에 돌긴 했나"다.
- * 서버를 24시간 켜두지 않으면 전자만으로는 미실행을 알 수 없어서 축을 나눴다.
- * 미도래·휴장은 표시하지 않는다 — 안 도는 게 정상이라 표시하면 노이즈가 된다.
- */
 const FIRE_META: Record<Exclude<SchedulerFireStatus, 'NONE'>, {color: string; label: string}> = {
-    FIRED:  {color: 'success.main', label: '이번 사이클에 실행됨'},
-    MISSED: {color: 'error.main',   label: '예정 시각이 지났는데 실행되지 않음'},
+    FIRED:  {color: 'success.main', label: '이번 사이클 완주'},
+    MISSED: {color: 'error.main',   label: '이번 사이클 미완주 (미발화 또는 중단)'},
 };
 
 const STATE_META: Record<SchedulerState, {color: string; label: string}> = {
@@ -665,9 +659,12 @@ export default function Monitoring() {
                                                     if (!fire || fire === 'NONE') return null;
                                                     const fireMeta = FIRE_META[fire];
                                                     const FireIcon = fire === 'FIRED' ? CheckCircleIcon : CancelIcon;
-                                                    const firedAt = s?.lastFiredAt ? ` (${formatDateTime(s.lastFiredAt)})` : '';
+                                                    const completedTimes = [s?.lastSuccessAt, s?.lastFailureAt].filter((v): v is string => !!v).sort();
+                                                    const detail = fire === 'FIRED'
+                                                        ? (completedTimes.length ? ` (${formatDateTime(completedTimes[completedTimes.length - 1])})` : '')
+                                                        : (s?.lastFiredAt ? ` — 최근 발화: ${formatDateTime(s.lastFiredAt)}` : '');
                                                     return (
-                                                        <Tooltip title={`${fireMeta.label}${firedAt}`} placement="top" arrow>
+                                                        <Tooltip title={`${fireMeta.label}${detail}`} placement="top" arrow>
                                                             <FireIcon sx={{fontSize: 16, color: fireMeta.color, flexShrink: 0}}/>
                                                         </Tooltip>
                                                     );

@@ -1,9 +1,29 @@
 import Chip from "@mui/material/Chip";
+import ArrowDropUpIcon from "@mui/icons-material/ArrowDropUp";
+import ArrowDropDownIcon from "@mui/icons-material/ArrowDropDown";
+import RemoveIcon from "@mui/icons-material/Remove";
 
 const COLORS = {
     up: '#d32f2f',   // MUI error.main
     down: '#0288d1', // MUI info.main
 };
+
+export const TREND_COLORS = {up: COLORS.up, down: COLORS.down, neutral: 'inherit'};
+
+export type Trend = 'up' | 'down' | 'neutral';
+
+export function getTrend(changeRate: string | null | undefined): Trend {
+    if (!changeRate) return 'neutral';
+    if (changeRate.startsWith('+')) return 'up';
+    if (changeRate.startsWith('-')) return 'down';
+    return 'neutral';
+}
+
+export function TrendIcon({trend}: {trend: Trend}) {
+    if (trend === 'up') return <ArrowDropUpIcon sx={{color: TREND_COLORS.up, fontSize: 20}}/>;
+    if (trend === 'down') return <ArrowDropDownIcon sx={{color: TREND_COLORS.down, fontSize: 20}}/>;
+    return <RemoveIcon sx={{color: 'text.disabled', fontSize: 14}}/>;
+}
 
 export function renderTradeColor(trade: number) {
     const text = trade.toLocaleString()

@@ -24,6 +24,7 @@ import StockDetail from "./pages/stock/StockDetail.tsx";
 import RankList from "./pages/rank/RankList.tsx";
 import UsRankList from "./pages/usRank/UsRankList.tsx";
 import UsSectList from "./pages/usSect/UsSectList.tsx";
+import UsExchangePage from "./pages/usExchange/UsExchangePage.tsx";
 import UsSectStockList from "./pages/usSect/UsSectStockList.tsx";
 import UsStockDetail from "./pages/usStock/UsStockDetail.tsx";
 import CommodityDetail from "./pages/commodity/CommodityDetail.tsx";
@@ -260,6 +261,7 @@ function App() {
 
                         <Route path="/stock/sect/list/:indsCd" Component={SectList} />
                         <Route path="/stock/sect/:indsCd/list" Component={SectStockList} />
+                        <Route path="/us-stock/exchange" Component={UsExchangePage} />
                         <Route path="/us-stock/sect/list" Component={UsSectList} />
                         <Route path="/us-stock/sect/:indsCd/list" Component={UsSectStockList} />
 
