@@ -397,7 +397,7 @@ const RecommendList = () => {
                         <Box sx={{display: 'flex', alignItems: 'center', gap: 0.5}}>
                             <Stack direction="row" alignItems="center" spacing={0.5}>
                                 <Typography variant="body2">이동평균선</Typography>
-                                <Tooltip title="단기 이동평균선이 골든/데드크로스 진입 시 추천과 같은 방향이면 등급을 조정합니다." arrow>
+                                <Tooltip title="골든/데드크로스가 발생한 지 5거래일 이내이고 추천과 같은 방향이면 등급을 조정합니다. 오래된 교차 상태는 반영하지 않습니다." arrow>
                                     <InfoOutlinedIcon fontSize="small" sx={{color: 'text.secondary', display: 'block'}}/>
                                 </Tooltip>
                             </Stack>

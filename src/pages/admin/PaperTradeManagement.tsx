@@ -749,7 +749,7 @@ function HoldingGradeDetailDialog({item, onClose}: {item: HoldingGradeItem | nul
                 </Typography>
                 <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap sx={{mt: 0.5}}>
                     <TriggerChip label="변동성(PV)" v={item.pvTrigger}/>
-                    <TriggerChip label="이동평균(MA)" v={item.maTrigger}/>
+                    <TriggerChip label={item.maCrossAge != null ? `이동평균(MA·교차 ${item.maCrossAge}일)` : '이동평균(MA·교차 없음)'} v={item.maTrigger}/>
                     <TriggerChip label="거래량(VP)" v={item.vpTrigger}/>
                     <TriggerChip label="RSI" v={item.rsiTrigger}/>
                     <TriggerChip label="52주 위치" v={item.hl52wTrigger}/>

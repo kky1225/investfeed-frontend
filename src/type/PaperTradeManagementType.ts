@@ -92,6 +92,7 @@ export interface HoldingGradeItem {
     rsiTrigger: string | null;
     hl52wTrigger: string | null;
     breakoutTrigger: string | null;
+    maCrossAge: number | null;        // MA 교차 나이(거래일, 당일=1). null=교차 미관측 — 5일 이내만 MA 표 유효
 }
 
 export interface PaperTradeReportRes {

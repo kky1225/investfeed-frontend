@@ -617,7 +617,7 @@ function SignalDetailDialog({pick, onClose}: {pick: AdminRecommendPickRes | null
                         <DetailSection title="트리거 (모듈 격상/격하 신호)">
                             <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
                                 <TriggerBox label="PV"            v={pick.pvTrigger}/>
-                                <TriggerBox label="MA"            v={pick.maTrigger}/>
+                                <TriggerBox label={pick.maCrossAge != null ? `MA (교차 ${pick.maCrossAge}일)` : 'MA (교차 없음)'} v={pick.maTrigger}/>
                                 <TriggerBox label="VP"            v={pick.vpTrigger}/>
                                 <TriggerBox label="RSI"           v={pick.rsiTrigger}/>
                                 <TriggerBox label="52주 위치"      v={pick.hl52wTrigger}/>

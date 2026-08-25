@@ -49,6 +49,7 @@ export interface AdminRecommendPickRes {
     rsi14Breakdown70: boolean | null;
     ma5: number | null;
     ma20: number | null;
+    maCrossAge: number | null;             // MA 교차 나이(거래일, 당일=1). null=교차 미관측 — 5일 이내만 MA 표 유효
     flu5Pct: number | null;
     todayChangeRate: number | null;
     todayVolume: number | null;
