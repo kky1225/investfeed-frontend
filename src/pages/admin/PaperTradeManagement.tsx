@@ -431,6 +431,19 @@ const TIER_KR: Record<string, string> = {
     BLOCK_PARTIAL: '외인중간반대(부분비중)', MODULE_HALF: '모듈승급(반비중)', CONFLICT: '양방향 충돌',
 };
 
+const GATE_FORCE_TIERS = ['HARD_SELL', 'BLOCK_FREEZE'];
+const GATE_CLAMP_TIERS = ['BLOCK_PARTIAL'];
+
+type GradeChangeSource = 'NONE' | 'GATE' | 'GATE_CLAMP' | 'MODULE';
+
+function gradeChangeSource(row: HoldingGradeItem): GradeChangeSource {
+    if (row.preAdjustmentType == null || row.preAdjustmentType === row.type) return 'NONE';
+    const tiers = (row.evaluationReason ?? '').split('|').filter(Boolean);
+    if (tiers.some((t) => GATE_FORCE_TIERS.includes(t))) return 'GATE';
+    if (tiers.some((t) => GATE_CLAMP_TIERS.includes(t))) return 'GATE_CLAMP';
+    return 'MODULE';
+}
+
 function buildEvalReason(row: HoldingGradeItem): string {
     const parts: string[] = [];
 
@@ -448,9 +461,15 @@ function buildEvalReason(row: HoldingGradeItem): string {
         promoted.length > 0 ? `격상 ${promoted.join('·')}` : null,
         demoted.length > 0 ? `격하 ${demoted.join('·')}` : null,
     ].filter(Boolean).join(' / ');
-    const changed = row.preAdjustmentType != null && row.preAdjustmentType !== row.type;
-    if (changed) {
-        parts.push(`[모듈] ${votes || '보정'} → ${gradeKr(row.preAdjustmentType)}에서 ${gradeKr(row.type)}로 조정`);
+    const source = gradeChangeSource(row);
+    const shift = `${gradeKr(row.preAdjustmentType)}에서 ${gradeKr(row.type)}로`;
+    if (source === 'GATE') {
+        parts.push(`[게이트] ${shift} 강제`);
+        if (votes) parts.push(`[모듈] ${votes} (게이트 우선 → 미적용)`);
+    } else if (source === 'GATE_CLAMP') {
+        parts.push(`[모듈] ${votes || '보정'} → ${shift} 조정 (게이트 등급 범위 제한 내)`);
+    } else if (source === 'MODULE') {
+        parts.push(`[모듈] ${votes || '보정'} → ${shift} 조정`);
     } else if (votes) {
         parts.push(`[모듈] ${votes} (문턱 미달 → 등급 유지)`);
     }
@@ -632,6 +651,8 @@ function fmtWeightPct(v: number): string {
 
 function fmtTargetWeight(v: number | null, type: string): string {
     if (v != null) return fmtWeightPct(v);
+    // 중립은 트랜치 계산에서 매수/매도 어느 쪽도 타지 않아 목표비중을 읽지 않는다 → 값 없음으로 표기.
+    if (type === 'HOLD') return '-';
     const sellSide = type === 'SELL' || type === 'STRONG_SELL' || type === 'HARD_SELL';
     return sellSide ? '0%' : '기본';
 }
@@ -692,7 +713,12 @@ function HoldingGradeDetailDialog({item, onClose}: {item: HoldingGradeItem | nul
     const reasonLabel = item.evaluationReason
         ? item.evaluationReason.split('|').map((t) => reasonKR[t] ?? t).join(' · ')
         : '-';
-    const promoted = item.preAdjustmentType != null && item.preAdjustmentType !== item.type;
+    const changeSource = gradeChangeSource(item);
+    const changeLabel: Record<Exclude<GradeChangeSource, 'NONE'>, string> = {
+        GATE: '수급 게이트가 등급 강제(모듈 미적용)',
+        GATE_CLAMP: '게이트 범위 제한 + 모듈 보정',
+        MODULE: '모듈이 등급 변경',
+    };
     const num = (v: number | null, d = 2) => (v != null ? v.toFixed(d) : '-');
 
     return (
@@ -718,10 +744,12 @@ function HoldingGradeDetailDialog({item, onClose}: {item: HoldingGradeItem | nul
                     </Box>
                     <Typography variant="h6" color="text.disabled">→</Typography>
                     <Box sx={{textAlign: 'center'}}>
-                        <Typography variant="caption" color="text.secondary" display="block">최종(모듈 보정)</Typography>
+                        <Typography variant="caption" color="text.secondary" display="block">최종(보정 후)</Typography>
                         {renderGradeChip(item.type)}
                     </Box>
-                    {promoted && <Chip size="small" color="warning" variant="outlined" label="모듈이 등급 변경"/>}
+                    {changeSource !== 'NONE' && (
+                        <Chip size="small" color="warning" variant="outlined" label={changeLabel[changeSource]}/>
+                    )}
                 </Stack>
                 <Typography variant="caption" color="text.secondary" sx={{display: 'block', mt: 1}}>
                     ※ 모의투자(매매) 경로 — 매크로 미적용 · HOLD 비흡수(모듈이 HOLD를 격상/격하 가능)
