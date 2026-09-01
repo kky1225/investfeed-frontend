@@ -1,5 +1,5 @@
-import {useState} from 'react';
-import {useMutation, useQueryClient} from '@tanstack/react-query';
+import {useMemo, useRef, useState} from 'react';
+import {keepPreviousData, useMutation, useQueryClient} from '@tanstack/react-query';
 import {usePollingQuery} from '../../lib/pollingQuery';
 import {requireOk} from '../../lib/apiResponse';
 import Box from '@mui/material/Box';
@@ -114,6 +114,22 @@ const STATE_META: Record<SchedulerState, {color: string; label: string}> = {
     PENDING:  {color: 'grey.400',     label: '대기 (실행 기록 없음)'},
 };
 
+/**
+ * 서버 페이징 DataGrid 의 rowCount 안정화 (MUI 권장 패턴).
+ * 로딩 중 rowCount 가 undefined/0 이 되면 그리드가 "그 페이지는 존재하지 않는다"고 보고
+ * 페이지를 0 으로 되돌린다. 값이 확정된 마지막 총건수를 ref 에 유지해 그 리셋을 막는다.
+ * https://mui.com/x/react-data-grid/pagination/
+ */
+function useStableRowCount(totalElements: number | undefined): number {
+    const rowCountRef = useRef(totalElements ?? 0);
+    return useMemo(() => {
+        if (totalElements !== undefined) {
+            rowCountRef.current = totalElements;
+        }
+        return rowCountRef.current;
+    }, [totalElements]);
+}
+
 export default function Monitoring() {
     const queryClient = useQueryClient();
     const [tab, setTab] = useState<TabKey>('scheduler');
@@ -186,7 +202,7 @@ export default function Monitoring() {
             toDate: logsToDate ? logsToDate.format('YYYY-MM-DD') : null,
             messageKeyword: logsMessageKeyword || null,
         }, config),
-        {enabled: tab === 'scheduler'},
+        {enabled: tab === 'scheduler', placeholderData: keepPreviousData},
     );
 
     const configQuery = usePollingQuery<ConfigLogsOverviewRes>(
@@ -195,7 +211,7 @@ export default function Monitoring() {
             {page: configLogsPage, size: configLogsSize},
             config,
         ),
-        {enabled: tab === 'config'},
+        {enabled: tab === 'config', placeholderData: keepPreviousData},
     );
 
     const redisQuery = usePollingQuery<RedisOverviewRes>(
@@ -217,7 +233,7 @@ export default function Monitoring() {
             toDate: errorToDate ? errorToDate.format('YYYY-MM-DD') : null,
             messageKeyword: errorMessageKeyword || null,
         }, config),
-        {enabled: tab === 'error'},
+        {enabled: tab === 'error', placeholderData: keepPreviousData},
     );
 
     const apiCallQuery = usePollingQuery<ApiCallsOverviewRes>(
@@ -248,12 +264,12 @@ export default function Monitoring() {
         isHoliday && (catalogByName[schedulerName]?.blockedOnHoliday ?? false);
     const statuses: SchedulerStatusRes[] = schedulerQuery.data?.statuses ?? [];
     const logs: SchedulerLogRes[] = schedulerQuery.data?.logs?.content ?? [];
-    const logsTotal = schedulerQuery.data?.logs?.totalElements ?? 0;
+    const logsTotal = useStableRowCount(schedulerQuery.data?.logs?.totalElements);
     const configLogs: SchedulerConfigLogRes[] = configQuery.data?.logs?.content ?? [];
-    const configLogsTotal = configQuery.data?.logs?.totalElements ?? 0;
+    const configLogsTotal = useStableRowCount(configQuery.data?.logs?.totalElements);
     const redisPrefixes: RedisPrefixRes[] = redisQuery.data?.redis?.prefixes ?? [];
     const errorLogs: ErrorLogRes[] = errorQuery.data?.logs?.content ?? [];
-    const errorLogsTotal = errorQuery.data?.logs?.totalElements ?? 0;
+    const errorLogsTotal = useStableRowCount(errorQuery.data?.logs?.totalElements);
     const apiCallStats: ApiCallStatsItemRes[] = apiCallQuery.data?.stats?.items ?? [];
     const systemStatus: SystemStatusRes | null = systemQuery.data?.system ?? null;
 

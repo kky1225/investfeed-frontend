@@ -31,12 +31,10 @@ api.interceptors.response.use(
 
         const isLoginRequest = originalRequest.url?.startsWith('/auth/login');
         const isReissueRequest = originalRequest.url?.startsWith('/auth/reissue');
-        // 2차 비밀번호 관련 요청은 모든 에러(403/400/500/네트워크)를 SecondaryAuthDialog 내부에서 처리.
+        const isTotpRequest = originalRequest.url?.startsWith('/auth/totp/');
         const isSecondaryPasswordRequest = originalRequest.url?.startsWith('/auth/secondary-password/');
 
-        if (error.response?.status === 401 && !originalRequest._retry && !isLoginRequest && !isReissueRequest) {
-            // 이미 세션 만료 처리가 시작된 경우 후속 401 은 reissue 재시도 없이 reject.
-            // (login 페이지 redirect 중 잔여 401 들이 또 reissue 시도해서 다이얼로그 재오픈하는 것 차단)
+        if (error.response?.status === 401 && !originalRequest._retry && !isLoginRequest && !isReissueRequest && !isTotpRequest) {
             if (isSessionExpired) {
                 return Promise.reject(error);
             }
@@ -106,6 +104,7 @@ api.interceptors.response.use(
         const shouldSkip =
             originalRequest.skipGlobalError === true ||        // 폴링 등 명시적 skip
             isLoginRequest ||                                   // 로그인 API 는 Login.tsx 에서 직접 처리
+            isTotpRequest ||                                    // TOTP 도 Login.tsx 에서 코드별로 직접 처리
             isReissueRequest ||                                 // refresh 는 401 분기에서 이미 처리
             isSecondaryPasswordRequest ||                       // 2차 비번 관련은 SecondaryAuthDialog 에서 자체 처리
             (error.response?.status === 400 &&

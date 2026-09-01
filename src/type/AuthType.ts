@@ -105,6 +105,7 @@ export interface MemberRes {
     phone: string;
     role: string;
     failedLoginAttempts: number;
+    failedTotpAttempts: number;
     lockedAt: string | null;
     lockExpiresAt: string | null;
     permanentLock: boolean;

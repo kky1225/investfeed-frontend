@@ -6,6 +6,7 @@ import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
 import Button from '@mui/material/Button';
 import Chip from '@mui/material/Chip';
+import Tooltip from '@mui/material/Tooltip';
 import Alert from '@mui/material/Alert';
 import Dialog from '@mui/material/Dialog';
 import DialogTitle from '@mui/material/DialogTitle';
@@ -258,7 +259,21 @@ export default function MemberManagement() {
             }
         },
         {
-            field: 'failedLoginAttempts', headerName: '실패 횟수', minWidth: 110, align: 'center', headerAlign: 'center',
+            field: 'failedLoginAttempts', headerName: '실패 횟수 (PW/TOTP)', minWidth: 150, align: 'center', headerAlign: 'center',
+            sortable: false,
+            renderCell: (params) => {
+                const pw = params.row.failedLoginAttempts ?? 0;
+                const totp = params.row.failedTotpAttempts ?? 0;
+                return (
+                    <Tooltip title={`비밀번호 실패 ${pw}회 · TOTP 실패 ${totp}회`} arrow>
+                        <Typography variant="body2">
+                            <Box component="span" sx={{color: pw > 0 ? 'error.main' : 'text.primary'}}>{pw}</Box>
+                            <Box component="span" sx={{color: 'text.disabled'}}> / </Box>
+                            <Box component="span" sx={{color: totp > 0 ? 'error.main' : 'text.primary'}}>{totp}</Box>
+                        </Typography>
+                    </Tooltip>
+                );
+            },
         },
         {
             field: 'lockedAt', headerName: '잠금 시각', flex: 1, minWidth: 140,

@@ -227,16 +227,53 @@ export default function Login(props: { disableCustomTheme?: boolean }) {
         },
         onError: (err: unknown) => {
             console.error(err);
-            const axiosErr = err as { response?: { status?: number } };
-            if (axiosErr.response?.status === 401) {
+            const axiosErr = err as {
+                response?: {
+                    data?: {
+                        code?: string;
+                        message?: string;
+                        result?: { lockRemainingSeconds?: number; remainingAttempts?: number };
+                    };
+                };
+            };
+            const code = axiosErr.response?.data?.code;
+            const backToCredentials = (message: string) => {
                 clearTimer();
                 setStep('credentials');
                 setTotpCode('');
                 setQrCodeImage('');
-                setErrorMessage('인증 시간이 만료되었습니다. 다시 로그인해주세요.');
-            } else {
-                setErrorMessage('TOTP 인증 코드가 올바르지 않습니다.');
-                setTotpCode('');
+                setErrorMessage(message);
+            };
+
+            switch (code) {
+                case 'AUTH_4031': {
+                    const remaining = axiosErr.response?.data?.result?.remainingAttempts;
+                    setErrorMessage(remaining != null
+                        ? `인증 코드가 올바르지 않습니다. (계정 잠금까지 ${remaining}회 남음)`
+                        : '인증 코드가 올바르지 않습니다.');
+                    setTotpCode('');
+                    break;
+                }
+                case 'AUTH_4032':
+                    backToCredentials('인증 시간이 만료되었습니다. 다시 로그인해주세요.');
+                    break;
+                case 'AUTH_4012':
+                case 'AUTH_4013': {
+                    const lockSeconds = axiosErr.response?.data?.result?.lockRemainingSeconds;
+                    backToCredentials('');
+                    if (lockSeconds && lockSeconds > 0) {
+                        startLockTimer(lockSeconds);
+                    } else {
+                        setErrorMessage(axiosErr.response?.data?.message ?? '계정이 잠금된 상태입니다.');
+                    }
+                    break;
+                }
+                case 'AUTH_4014':
+                    backToCredentials('계정이 영구 잠금되었습니다. 관리자에게 문의하세요.');
+                    break;
+                default:
+                    setErrorMessage('TOTP 인증에 실패했습니다.');
+                    setTotpCode('');
             }
         },
     });
