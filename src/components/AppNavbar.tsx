@@ -190,7 +190,7 @@ export default function AppNavbar() {
                 <Collapse in={searchOpen} sx={{width: '100%'}}>
                     <Autocomplete
                         options={searchResults}
-                        getOptionLabel={(option) => `${option.name} (${option.code})`}
+                        getOptionLabel={(option) => option.name === option.code ? option.code : `${option.name} (${option.code})`}
                         filterOptions={(x) => x}
                         loading={searchLoading}
                         inputValue={searchKeyword}
@@ -215,7 +215,9 @@ export default function AppNavbar() {
                                         />
                                         <Box>
                                             <Typography variant="body2">{option.name}</Typography>
-                                            <Typography variant="caption" color="text.secondary">{option.code}</Typography>
+                                            {option.name !== option.code && (
+                                                <Typography variant="caption" color="text.secondary">{option.code}</Typography>
+                                            )}
                                         </Box>
                                     </Stack>
                                     <Typography variant="caption" color="text.secondary" sx={{flexShrink: 0}}>

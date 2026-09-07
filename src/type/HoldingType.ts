@@ -16,6 +16,8 @@ export interface HoldingStock {
     possRt: string,
     predClosePric: string,
     dayPl?: string, // 당일 손익(원). 증권사 API가 직접 제공하는 경우 사용(예: 토스)
+    stexTp?: string, // 거래소구분 ND:NASDAQ, NY:NYSE, NA:AMEX. 미국 종목만 값 존재
+    usStkCd?: string, // 미국 상세 조회용 티커(stkCd 의 _US 접미사 제외). 미국 종목만 값 존재
 }
 
 export interface HoldingStreamRes {

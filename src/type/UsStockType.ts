@@ -20,6 +20,7 @@ export interface UsStockInfo {
     stkCd: string | null;
     stkNm: string | null;
     stkEnm: string | null;
+    isEtf?: boolean;
     curPrc: string | null;
     predPreSig: string | null;
     predPre: string | null;

@@ -206,7 +206,9 @@ const UsStockDetail = () => {
 
             return {
                 id: usStockInfo.stkCd ?? '-',
-                title: `${usStockInfo.stkNm ?? usStockInfo.stkEnm ?? ''} (${usStockInfo.stkCd ?? ''})`,
+                title: usStockInfo.isEtf
+                    ? `${usStockInfo.stkCd ?? ''} (${usStockInfo.stkNm ?? usStockInfo.stkEnm ?? ''})`
+                    : `${usStockInfo.stkNm ?? usStockInfo.stkEnm ?? ''} (${usStockInfo.stkCd ?? ''})`,
                 value: usdFormat(num(usStockInfo.curPrc)),
                 changeRate: (usStockInfo.fluRt ?? '0').replace(/^\+/, ''),
                 changePrice: Number.isFinite(predPre) ? predPre : 0,
@@ -314,7 +316,8 @@ const UsStockDetail = () => {
     const [newsTotal, setNewsTotal] = useState(0);
     const [newsLoaded, setNewsLoaded] = useState(false);
 
-    const newsQuery = info?.stkNm || info?.stkEnm || stkCd;
+    // ETF 는 티커가 사실상 고유명사이고 한글명은 키움에서 잘려 오기도 해서, 티커로 검색해야 결과가 맞는다
+    const newsQuery = info?.isEtf ? stkCd : (info?.stkNm || info?.stkEnm || stkCd);
 
     const loadNews = async (query: string, page: number) => {
         try {

@@ -270,6 +270,8 @@ const HoldingList = ({source = 'KIWOOM', brokerId}: {source?: 'KIWOOM' | 'TOSS',
         evltvPrft: stock.evltvPrft,
         prftRt: stock.prftRt,
         possRt: stock.possRt,
+        stexTp: stock.stexTp,
+        usStkCd: stock.usStkCd,
     }));
 
     return (
@@ -332,9 +334,13 @@ const HoldingList = ({source = 'KIWOOM', brokerId}: {source?: 'KIWOOM' | 'TOSS',
                         rows={rows}
                         columns={columns}
                         onCellClick={(params) => {
-                            if (params.field !== '__drag__') {
-                                navigate(`/stock/detail/${params.row.stkCd}`);
+                            if (params.field === '__drag__') return;
+
+                            if (params.row.stexTp) {
+                                navigate(`/us-stock/detail/${params.row.stexTp}/${params.row.usStkCd}`);
+                                return;
                             }
+                            navigate(`/stock/detail/${params.row.stkCd}`);
                         }}
                         getRowClassName={(params) =>
                             params.indexRelativeToCurrentPage % 2 === 0 ? 'even' : 'odd'
