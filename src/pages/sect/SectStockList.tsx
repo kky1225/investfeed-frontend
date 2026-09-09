@@ -1,8 +1,8 @@
 import Typography from "@mui/material/Typography";
+import {renderChip} from "../../components/CustomRender.tsx";
 import Box from "@mui/material/Box";
 import Grid from "@mui/material/Grid";
 import {GridColDef} from "@mui/x-data-grid";
-import Chip from "@mui/material/Chip";
 import {useMemo} from "react";
 import {useParams} from "react-router-dom";
 import {SectStockGridRow, SectStockListItem, SectStockListReq, SectStockListRes,} from "../../type/SectType.ts";
@@ -58,7 +58,7 @@ const SectStockList = () => {
             headerName: '등락률',
             flex: 0.5,
             minWidth: 100,
-            renderCell: (params) => renderStatus(params.value as number),
+            renderCell: (params) => renderChip(params.value as number),
         },
         {
             field: 'curPrc',
@@ -80,10 +80,6 @@ const SectStockList = () => {
         }
     ];
 
-    function renderStatus(status: number) {
-        const colors = status == 0 ? 'default' : status > 0 ? 'error' : 'info';
-        return <Chip label={status > 0 ? `${status}%` : `${status}%`} color={colors}/>;
-    }
 
     return (
         <Box sx={{width: '100%', maxWidth: {sm: '100%', md: '1700px'}}}>

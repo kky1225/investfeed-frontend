@@ -1,3 +1,4 @@
+import {mergeLive} from "../../lib/streamOverlay.ts";
 import Typography from "@mui/material/Typography";
 import Box from "@mui/material/Box";
 import Grid from "@mui/material/Grid";
@@ -169,17 +170,11 @@ const UsRankList = () => {
         const startDisplayLoop = () => {
             displayInterval = setInterval(() => {
                 if (stockBufferMap.current.size === 0) return;
-                setLiveOverlay((prev) => {
-                    const next = new Map(prev);
-                    stockBufferMap.current.forEach((v, k) => {
-                        next.set(k, {
-                            curPrc: v.value,
-                            fluRt: v.fluRt,
-                            trend: v.trend,
-                        });
-                    });
-                    return next;
-                });
+                setLiveOverlay((prev) => mergeLive(prev, stockBufferMap.current, (v) => ({
+                    curPrc: v.value,
+                    fluRt: v.fluRt,
+                    trend: v.trend,
+                })));
                 stockBufferMap.current.clear();
             }, 200);
         };

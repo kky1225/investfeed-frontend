@@ -64,8 +64,8 @@ const CommodityList = () => {
         const year = list[0].chartMinuteList[0]?.cntrTm?.substring(0, 4) ?? '';
         const month = list[0].chartMinuteList[0]?.cntrTm?.substring(4, 6) ?? '';
         const day = list[0].chartMinuteList[0]?.cntrTm?.substring(6, 8) ?? '';
-        const hour = list[0].tmN?.substring(0, 2) ?? '';
-        const minute = list[0].tmN?.substring(2, 4) ?? '';
+        const hour = list[0].tm?.substring(8, 10) ?? '';
+        const minute = list[0].tm?.substring(10, 12) ?? '';
 
         const today = (Number(hour) >= 20 || Number(hour) < 8)
             ? `${year}.${month}.${day} 장마감`
@@ -173,7 +173,7 @@ const CommodityList = () => {
                 fluRt: item.fluRt,
                 predPre: item.predPre || '0',
                 trend: trendColor(item.predPreSig),
-                stamp: parseKiwoomStamp(item.tmN),
+                stamp: parseKiwoomStamp(item.tm),
             });
         });
     }, [result]);

@@ -87,7 +87,8 @@ export default function AssetDashboard() {
                 totalPurAmt={data?.totalPurAmt ?? 0}
                 totalEvltPl={data?.totalEvltPl ?? 0}
                 totalPrftRt={data?.totalPrftRt ?? '0'}
-                totalCash={data?.totalCash ?? 0}
+                totalCashKrw={data?.totalCashKrw ?? 0}
+                totalCashUsd={data?.totalCashUsd}
                 loading={loading}
             />
 

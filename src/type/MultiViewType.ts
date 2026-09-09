@@ -16,8 +16,9 @@ export interface MultiViewUsStreamItem {
     stexTp: string;
 }
 
-export interface MultiViewUsStreamReq {
-    items: MultiViewUsStreamItem[];
+export interface MultiViewStockStreamReq {
+    items: string[];
+    usItems: MultiViewUsStreamItem[];
 }
 
 export interface StreamUpdate {

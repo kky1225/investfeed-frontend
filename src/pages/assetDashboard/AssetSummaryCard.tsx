@@ -13,11 +13,12 @@ interface AssetSummaryCardProps {
     totalPurAmt: number;
     totalEvltPl: number;
     totalPrftRt: string;
-    totalCash: number;
+    totalCashKrw: number;
+    totalCashUsd?: string | null;
     loading?: boolean;
 }
 
-export default function AssetSummaryCard({totalAsset, totalEvltAmt, totalPurAmt, totalEvltPl, totalPrftRt, totalCash, loading}: AssetSummaryCardProps) {
+export default function AssetSummaryCard({totalAsset, totalEvltAmt, totalPurAmt, totalEvltPl, totalPrftRt, totalCashKrw, totalCashUsd, loading}: AssetSummaryCardProps) {
     const profitColor = totalEvltPl > 0 ? 'error.main' : totalEvltPl < 0 ? 'info.main' : 'text.primary';
 
     return (
@@ -55,12 +56,22 @@ export default function AssetSummaryCard({totalAsset, totalEvltAmt, totalPurAmt,
 
                 <Divider sx={{mb: 2}}/>
 
-                <Box>
-                    <Typography variant="body2" sx={{color: 'text.secondary'}}>현금 (예수금)</Typography>
-                    <Typography variant="body1" sx={{fontWeight: 600}}>
-                        {loading ? <Skeleton width={120}/> : <BlindText>{totalCash.toLocaleString()}원</BlindText>}
-                    </Typography>
-                </Box>
+                <Stack direction="row" spacing={4} divider={<Divider orientation="vertical" flexItem/>}>
+                    <Box>
+                        <Typography variant="body2" sx={{color: 'text.secondary'}}>원화</Typography>
+                        <Typography variant="body1" sx={{fontWeight: 600}}>
+                            {loading ? <Skeleton width={120}/> : <BlindText>{totalCashKrw.toLocaleString()}원</BlindText>}
+                        </Typography>
+                    </Box>
+                    {!loading && totalCashUsd != null && (
+                        <Box>
+                            <Typography variant="body2" sx={{color: 'text.secondary'}}>달러</Typography>
+                            <Typography variant="body1" sx={{fontWeight: 600}}>
+                                <BlindText>{`$${Number(totalCashUsd).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`}</BlindText>
+                            </Typography>
+                        </Box>
+                    )}
+                </Stack>
             </CardContent>
         </Card>
     );

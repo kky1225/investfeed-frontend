@@ -1,4 +1,6 @@
-import React, {createContext, useContext, useEffect, useRef, useState} from "react";
+import React, {createContext, useContext, useEffect, useMemo, useRef, useState} from "react";
+import {signedRate} from "../../components/CustomRender.tsx";
+import {mergeLive} from "../../lib/streamOverlay.ts";
 import {useMutation, useQuery, useQueryClient} from "@tanstack/react-query";
 import {requireOk} from "../../lib/apiResponse.ts";
 import Box from "@mui/material/Box";
@@ -222,13 +224,15 @@ const CryptoInterest = () => {
         enabled: selectedGroup !== null,
     });
     const [itemsOrderOverride, setItemsOrderOverride] = useState<CryptoInterestItem[] | null>(null);
-    const items = itemsOrderOverride ?? itemsData ?? [];
+    const items = useMemo(() => itemsOrderOverride ?? itemsData ?? [], [itemsOrderOverride, itemsData]);
+    const [liveOverlay, setLiveOverlay] = useState<Map<string, {tradePrice: number; signedChangeRate: number; change: string}>>(new Map());
 
     const [prevSelectedGroupId, setPrevSelectedGroupId] = useState(selectedGroup?.id);
     if (selectedGroup?.id !== prevSelectedGroupId) {
         setPrevSelectedGroupId(selectedGroup?.id);
         setItemsOrderOverride(null);
         setItemOrderDirty(false);
+        setLiveOverlay(new Map());
     }
 
     const [addGroupOpen, setAddGroupOpen] = useState(false);
@@ -298,13 +302,7 @@ const CryptoInterest = () => {
                 // useQuery 캐시 직접 갱신 (실시간 가격 머지) — 버퍼 최신값을 200ms 간격으로 반영
                 displayInterval = setInterval(() => {
                     if (streamBufferRef.current.size === 0) return;
-                    queryClient.setQueryData<CryptoInterestItem[]>(['cryptoInterestItems', targetGroupId], (prev) => {
-                        if (!prev) return prev;
-                        return prev.map(item => {
-                            const update = streamBufferRef.current.get(item.market);
-                            return update ? {...item, ...update} : item;
-                        });
-                    });
+                    setLiveOverlay((prev) => mergeLive(prev, streamBufferRef.current, (v) => v));
                     streamBufferRef.current.clear();
                 }, 200);
             } catch (err) {
@@ -319,7 +317,7 @@ const CryptoInterest = () => {
             if (displayInterval) clearInterval(displayInterval);
             streamBufferRef.current.clear();
         };
-    }, [selectedGroup, queryClient]);
+    }, [selectedGroup]);
 
     const handleSelectGroup = (group: CryptoInterestGroup) => {
         setSelectedGroup(group);
@@ -553,7 +551,7 @@ const CryptoInterest = () => {
                 const rate = params.row.signedChangeRate;
                 const change = params.row.change;
                 if (rate == null) return "-";
-                const formatted = `${(rate * 100).toFixed(2)}%`;
+                const formatted = signedRate((rate * 100).toFixed(2));
                 return <Chip label={formatted} size="small" color={trendColor(change)} sx={{fontWeight: 600}}/>;
             },
         },
@@ -585,14 +583,17 @@ const CryptoInterest = () => {
         },
     ];
 
-    const rows = items.map(item => ({
-        id: item.id,
-        market: item.market,
-        koreanName: item.koreanName,
-        tradePrice: item.tradePrice,
-        signedChangeRate: item.signedChangeRate,
-        change: item.change,
-    }));
+    const rows = useMemo(() => items.map(item => {
+        const live = liveOverlay.get(item.market);
+        return {
+            id: item.id,
+            market: item.market,
+            koreanName: item.koreanName,
+            tradePrice: live?.tradePrice ?? item.tradePrice,
+            signedChangeRate: live?.signedChangeRate ?? item.signedChangeRate,
+            change: live?.change ?? item.change,
+        };
+    }), [items, liveOverlay]);
 
     return (
         <Box sx={{width: "100%", maxWidth: {sm: "100%", md: "1700px"}}}>

@@ -39,6 +39,16 @@ export function useHoldingStream(
                             });
                         }
 
+                        if (res.type === "FE") {
+                            if (values?.["10"] == null) return;
+                            const stkCd = `${res.item}_US`;
+                            const prev = bufferMapRef.current.get(stkCd) ?? {};
+                            bufferMapRef.current.set(stkCd, {
+                                ...prev,
+                                curPrcUsd: String(values["10"]).replace(/^[+-]/, ''),
+                            });
+                        }
+
                         if (res.type === "04" && !quotesOnly) {
                             const rawCd = values["9001"];
                             if (!rawCd) return;

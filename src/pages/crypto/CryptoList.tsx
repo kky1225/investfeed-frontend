@@ -142,6 +142,8 @@ const CryptoList = () => {
         }
     };
 
+    const streamBufferRef = useRef<Map<string, CryptoTickerData>>(new Map());
+
     const openSocket = () => {
         const socket = new WebSocket("ws://localhost:8080/ws");
 
@@ -150,22 +152,29 @@ const CryptoList = () => {
 
             if (data.type === "CRYPTO_TICKER" && data.data) {
                 const ticker: CryptoTickerData = data.data;
-                updateIfNewer(ticker.market, {
-                    value: ticker.tradePrice.toLocaleString(),
-                    changeRate: (ticker.signedChangeRate * 100).toFixed(2),
-                    changePrice: ticker.signedChangePrice,
-                    trend: trendColor(ticker.change),
-                    interval: cryptoDateFormat(ticker.tradeDateTimeKst),
-                    accTradePrice24h: formatTradePrice(ticker.accTradePrice24h),
-                    stamp: parseTradeStamp(ticker.tradeDateTimeKst),
-                });
+                streamBufferRef.current.set(ticker.market, ticker);
             }
         };
 
         return socket;
     };
 
-    // 폴링 결과 → 각 자산별 updateIfNewer (stamp 비교)
+    const flushStreamBuffer = () => {
+        if (streamBufferRef.current.size === 0) return;
+        streamBufferRef.current.forEach((ticker, market) => {
+            updateIfNewer(market, {
+                value: ticker.tradePrice.toLocaleString(),
+                changeRate: (ticker.signedChangeRate * 100).toFixed(2),
+                changePrice: ticker.signedChangePrice,
+                trend: trendColor(ticker.change),
+                interval: cryptoDateFormat(ticker.tradeDateTimeKst),
+                accTradePrice24h: formatTradePrice(ticker.accTradePrice24h),
+                stamp: parseTradeStamp(ticker.tradeDateTimeKst),
+            });
+        });
+        streamBufferRef.current.clear();
+    };
+
     useEffect(() => {
         if (!result?.cryptoList) return;
         (result.cryptoList as CryptoListItem[]).forEach((item) => {
@@ -181,26 +190,27 @@ const CryptoList = () => {
         });
     }, [result]);
 
-    // 폴링 결과로 markets 가 도출되면 그 시점에 stream 등록 + WebSocket 연결.
-    // 24시간 거래라 시장 시간 체크 불필요.
     useEffect(() => {
         if (!result?.cryptoList) return;
         const markets = (result.cryptoList as CryptoListItem[]).map((c) => c.market);
         if (markets.length === 0) return;
 
         const key = markets.join(',');
-        // 같은 마켓 셋에 이미 구독돼 있으면 재구독 skip
         if (subscribedMarketsRef.current === key) return;
         subscribedMarketsRef.current = key;
 
         let socket: WebSocket | undefined;
+        let displayInterval: ReturnType<typeof setInterval> | undefined;
         (async () => {
             await cryptoListStream(markets);
             socket = openSocket();
+            displayInterval = setInterval(flushStreamBuffer, 200);
         })();
 
         return () => {
             socket?.close();
+            if (displayInterval) clearInterval(displayInterval);
+            streamBufferRef.current.clear();
         };
     }, [result]);
 

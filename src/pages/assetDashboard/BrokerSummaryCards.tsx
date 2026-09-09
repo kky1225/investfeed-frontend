@@ -63,6 +63,8 @@ export default function BrokerSummaryCards({brokerSummaries, brokerPnlList}: Bro
     const updateBrokerStates = useCallback((curPrcMap: Map<string, string>) => {
         setBrokerStates(prev => {
             const next = new Map(prev);
+            let anyUpdate = false;
+
             brokerSummaries.forEach(broker => {
                 const state = next.get(broker.brokerName);
                 if (!state) return;
@@ -70,7 +72,7 @@ export default function BrokerSummaryCards({brokerSummaries, brokerPnlList}: Bro
                 let hasUpdate = false;
                 const updatedHoldings = state.holdings.map(h => {
                     const newPrc = curPrcMap.get(h.stkCd);
-                    if (newPrc) {
+                    if (newPrc !== undefined && newPrc !== h.curPrc) {
                         hasUpdate = true;
                         return {...h, curPrc: newPrc};
                     }
@@ -78,6 +80,7 @@ export default function BrokerSummaryCards({brokerSummaries, brokerPnlList}: Bro
                 });
 
                 if (!hasUpdate) return;
+                anyUpdate = true;
 
                 let newEvltAmt = 0;
                 updatedHoldings.forEach(h => {
@@ -94,7 +97,8 @@ export default function BrokerSummaryCards({brokerSummaries, brokerPnlList}: Bro
                     prftRt: newPrftRt.toFixed(2),
                 });
             });
-            return next;
+
+            return anyUpdate ? next : prev;
         });
     }, [brokerSummaries]);
 
@@ -158,19 +162,27 @@ export default function BrokerSummaryCards({brokerSummaries, brokerPnlList}: Bro
 
                                     <Divider sx={{mb: 1.5}}/>
 
+                                    <Box sx={{mb: 1}}>
+                                        <Typography variant="caption" sx={{color: 'text.secondary'}}>평가금액</Typography>
+                                        <Typography variant="body2" sx={{fontWeight: 600}}>
+                                            <BlindText>{evltAmt.toLocaleString()}원</BlindText>
+                                        </Typography>
+                                    </Box>
+                                    <Box sx={{display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1, mb: 1}}>
+                                        <Box>
+                                            <Typography variant="caption" sx={{color: 'text.secondary'}}>원화</Typography>
+                                            <Typography variant="body2" sx={{fontWeight: 600}}>
+                                                <BlindText>{broker.cashKrw.toLocaleString()}원</BlindText>
+                                            </Typography>
+                                        </Box>
+                                        <Box>
+                                            <Typography variant="caption" sx={{color: 'text.secondary'}}>달러</Typography>
+                                            <Typography variant="body2" sx={{fontWeight: 600}}>
+                                                <BlindText>{`$${Number(broker.cashUsd ?? 0).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`}</BlindText>
+                                            </Typography>
+                                        </Box>
+                                    </Box>
                                     <Box sx={{display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1}}>
-                                        <Box>
-                                            <Typography variant="caption" sx={{color: 'text.secondary'}}>평가금액</Typography>
-                                            <Typography variant="body2" sx={{fontWeight: 600}}>
-                                                <BlindText>{evltAmt.toLocaleString()}원</BlindText>
-                                            </Typography>
-                                        </Box>
-                                        <Box>
-                                            <Typography variant="caption" sx={{color: 'text.secondary'}}>예수금</Typography>
-                                            <Typography variant="body2" sx={{fontWeight: 600}}>
-                                                <BlindText>{broker.cash.toLocaleString()}원</BlindText>
-                                            </Typography>
-                                        </Box>
                                         <Box>
                                             <Typography variant="caption" sx={{color: 'text.secondary'}}>수익</Typography>
                                             <Typography variant="body2" sx={{fontWeight: 600, color: profitColor}}>

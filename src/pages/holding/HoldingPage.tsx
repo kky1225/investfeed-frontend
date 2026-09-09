@@ -94,7 +94,7 @@ export default function HoldingPage() {
             if (!isBrokerValid(broker.brokerId)) {
                 return <ApiKeyRequiredEmptyState brokerName={broker.name}/>;
             }
-            return <HoldingList key={broker.id} source={broker.name === "토스증권" ? "TOSS" : "KIWOOM"} brokerId={broker.id}/>;
+            return <HoldingList key={broker.id} source={broker.name === "토스증권" ? "TOSS" : "KIWOOM"}/>;
         }
 
         return <ManualHoldingTab broker={broker}/>;

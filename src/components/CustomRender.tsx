@@ -25,12 +25,15 @@ export function TrendIcon({trend}: {trend: Trend}) {
     return <RemoveIcon sx={{color: 'text.disabled', fontSize: 14}}/>;
 }
 
-export function renderTradeColor(trade: number) {
-    const text = trade.toLocaleString()
+export function renderTradeColor(trade: number, currency: 'KRW' | 'USD' = 'KRW') {
+    const sign = trade > 0 ? '+' : trade < 0 ? '-' : '';
+    const text = currency === 'USD'
+        ? `$${Math.abs(trade).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`
+        : Math.abs(trade).toLocaleString();
 
     return (
         <span style={{color: trade == 0 ? '' : trade > 0 ? COLORS.up : COLORS.down}}>
-            {trade > 0 ? `+${text}` : `${text}`}
+            {`${sign}${text}`}
         </span>
     )
 }
@@ -49,14 +52,29 @@ export function renderTradePricaColor(trade: string) {
     )
 }
 
-export function renderChip (status: number) {
+/**
+ * 등락률 표기용 부호 정규화.
+ *
+ * 키움 flu_rt 는 "+3.51" 처럼 부호가 붙어 오지만, 서버가 계산한 prftRt 나
+ * 미국·코인의 changeRate 는 "3.51" 로 부호가 없다. 하락은 숫자 자체에 - 가 있어 보이므로
+ * 상승에도 + 를 붙여 좌우 표기를 맞춘다.
+ */
+export function signedRate(value: number | string | null | undefined): string {
+    if (value === null || value === undefined || isNaN(Number(value))) return '-';
+
+    const text = String(value);
+    return `${Number(value) > 0 && !text.startsWith('+') ? `+${text}` : text}%`;
+}
+
+export function renderChip (status: number | string) {
     if (status === null || status === undefined || isNaN(Number(status))) {
         return <Chip label="-" color="default" />;
     }
 
-    const colors = status == 0 ? 'default' : status > 0 ? 'error': 'info';
+    const value = Number(status);
+    const colors = value === 0 ? 'default' : value > 0 ? 'error' : 'info';
 
-    return <Chip label={`${status}%`} color={colors} />;
+    return <Chip label={signedRate(status)} color={colors} />;
 }
 
 export function renderChangeAmount(value: string | number, unit: string = '원') {

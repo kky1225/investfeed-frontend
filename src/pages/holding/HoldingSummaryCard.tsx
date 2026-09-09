@@ -22,12 +22,16 @@ interface HoldingSummaryCardProps {
     totPrftRt: string;
     dailyPl?: string;
     balance?: string;
+    balanceLabel?: string;
+    balanceUsd?: string | null;
+    balanceUsdLabel?: string;
+    balanceUsdKrw?: string | null;
     editable?: boolean;
     loading?: boolean;
     onBalanceUpdate?: (balance: number) => void;
 }
 
-export default function HoldingSummaryCard({totPurAmt, totEvltAmt, totEvltPl, totPrftRt, dailyPl, balance, editable, loading, onBalanceUpdate}: HoldingSummaryCardProps) {
+export default function HoldingSummaryCard({totPurAmt, totEvltAmt, totEvltPl, totPrftRt, dailyPl, balance, balanceLabel = '예수금', balanceUsd, balanceUsdLabel = '외화', balanceUsdKrw, editable, loading, onBalanceUpdate}: HoldingSummaryCardProps) {
     const profitColor = Number(totEvltPl) > 0 ? 'error.main' : Number(totEvltPl) < 0 ? 'info.main' : 'text.primary';
     const dailyPlColor = dailyPl ? (Number(dailyPl) > 0 ? 'error.main' : Number(dailyPl) < 0 ? 'info.main' : 'text.primary') : undefined;
     const [dialogOpen, setDialogOpen] = useState(false);
@@ -46,7 +50,11 @@ export default function HoldingSummaryCard({totPurAmt, totEvltAmt, totEvltPl, to
         setDialogOpen(false);
     };
 
-    const totalAsset = balance !== undefined ? Number(totEvltAmt) + Number(balance) : null;
+    // 총자산 = 주식 평가금액(미국분 원화 환산 포함) + 원화 현금 + 달러 현금(원화 환산).
+    // 주식만 환산해 더하고 현금을 빼면 총자산이 실제보다 작아진다.
+    const totalAsset = balance !== undefined
+        ? Number(totEvltAmt) + Number(balance) + Number(balanceUsdKrw ?? 0)
+        : null;
 
     return (
         <>
@@ -90,9 +98,11 @@ export default function HoldingSummaryCard({totPurAmt, totEvltAmt, totEvltPl, to
                     {balance !== undefined && (
                         <>
                             <Divider sx={{mb: 2}}/>
-                            <Box sx={{display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 2}}>
+                            {/* 중단(투자 원금 | 총 수익 | 일간 수익)과 같은 세로 구분선 배치.
+                                원화·달러는 통화가 달라 한 칸에 섞지 않고 각각의 칸으로 나눈다. */}
+                            <Stack direction="row" spacing={4} divider={<Divider orientation="vertical" flexItem/>}>
                                 <Box>
-                                    <Typography variant="body2" sx={{color: 'text.secondary'}}>예수금</Typography>
+                                    <Typography variant="body2" sx={{color: 'text.secondary'}}>{balanceLabel}</Typography>
                                     <Box sx={{display: 'flex', alignItems: 'center', gap: 0.5}}>
                                         <Typography variant="body1" sx={{fontWeight: 600}}>
                                             {loading ? <Skeleton width={120}/> : <BlindText>{Number(balance).toLocaleString()}원</BlindText>}
@@ -105,6 +115,19 @@ export default function HoldingSummaryCard({totPurAmt, totEvltAmt, totEvltPl, to
                                         )}
                                     </Box>
                                 </Box>
+                                {/* 달러 현금. 자산 합계에는 포함하지 않는다. */}
+                                {balanceUsd != null && (
+                                    <Box>
+                                        <Typography variant="body2" sx={{color: 'text.secondary'}}>{balanceUsdLabel}</Typography>
+                                        <Typography variant="body1" sx={{fontWeight: 600}}>
+                                            {loading ? <Skeleton width={100}/> : (
+                                                <BlindText>
+                                                    {`$${Number(balanceUsd).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`}
+                                                </BlindText>
+                                            )}
+                                        </Typography>
+                                    </Box>
+                                )}
                                 {totalAsset !== null && (
                                     <Box>
                                         <Typography variant="body2" sx={{color: 'text.secondary'}}>총 자산</Typography>
@@ -113,7 +136,7 @@ export default function HoldingSummaryCard({totPurAmt, totEvltAmt, totEvltPl, to
                                         </Typography>
                                     </Box>
                                 )}
-                            </Box>
+                            </Stack>
                         </>
                     )}
                 </CardContent>

@@ -23,7 +23,7 @@ export interface CommodityListItem {
     trdeQty: string,
     trdePrica: string,
     openPric: string,
-    tmN: string,
+    tm: string,
     chartMinuteList: Array<ChartMinute>
 }
 

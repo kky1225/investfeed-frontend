@@ -1,4 +1,5 @@
 import React, {createContext, useCallback, useContext, useMemo, useState} from "react";
+import {mergeLive} from "../../lib/streamOverlay.ts";
 import {useMutation, useQuery, useQueryClient} from "@tanstack/react-query";
 import {requireOk} from "../../lib/apiResponse.ts";
 import {useNavigate} from "react-router-dom";
@@ -251,11 +252,7 @@ export default function CryptoManualHoldingTab({broker}: CryptoManualHoldingTabP
     const stableMarkets = useMemo(() => markets, [markets.join(',')]);
 
     const handleStreamUpdate = useCallback((bufferMap: Map<string, CryptoHoldingBuffer>) => {
-        setLiveOverlay(prev => {
-            const next = new Map(prev);
-            bufferMap.forEach((v, k) => next.set(k, {...next.get(k), ...v}));
-            return next;
-        });
+        setLiveOverlay(prev => mergeLive(prev, bufferMap, (v, prevValue) => ({...prevValue, ...v})));
     }, []);
 
     useCryptoHoldingStream(stableMarkets, handleStreamUpdate, fetchCryptoHoldingStream);

@@ -1,3 +1,4 @@
+import {mergeLive} from "../../lib/streamOverlay.ts";
 import {Box, Tab, Tabs} from "@mui/material";
 import Typography from "@mui/material/Typography";
 import Grid from "@mui/material/Grid";
@@ -129,17 +130,11 @@ const SectList = () => {
         const startDisplayLoop = () => {
             displayInterval = setInterval(() => {
                 if (streamBufferRef.current.size === 0) return;
-                setLiveOverlay((prev) => {
-                    const next = new Map(prev);
-                    streamBufferRef.current.forEach((u, k) => {
-                        next.set(k, {
-                            value: u.value.replace(/^[+-]/, ''),
-                            fluRt: u.fluRt,
-                            trend: trendColor(u.trend),
-                        });
-                    });
-                    return next;
-                });
+                setLiveOverlay((prev) => mergeLive(prev, streamBufferRef.current, (u) => ({
+                    value: u.value.replace(/^[+-]/, ''),
+                    fluRt: u.fluRt,
+                    trend: trendColor(u.trend),
+                })));
                 streamBufferRef.current.clear();
             }, 200);
         };

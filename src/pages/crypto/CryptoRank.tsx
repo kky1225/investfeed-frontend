@@ -1,3 +1,4 @@
+import {mergeLive} from "../../lib/streamOverlay.ts";
 import {useEffect, useMemo, useRef, useState} from "react";
 import {useQuery} from "@tanstack/react-query";
 import Typography from "@mui/material/Typography";
@@ -118,25 +119,22 @@ const CryptoRank = () => {
             socket = new WebSocket("ws://localhost:8080/ws");
             socket.onmessage = (event) => {
                 const data = JSON.parse(event.data);
-                if (data.type === "CRYPTO_TICKER") {
-                    bufferMap.current.set(data.market, {
-                        market: data.market,
-                        tradePrice: data.tradePrice,
-                        signedChangeRate: data.signedChangeRate,
-                        change: data.change,
-                        accTradePrice24h: data.accTradePrice24h,
+                if (data.type === "CRYPTO_TICKER" && data.data) {
+                    const ticker = data.data;
+                    if (!ticker.market) return;
+                    bufferMap.current.set(ticker.market, {
+                        market: ticker.market,
+                        tradePrice: ticker.tradePrice,
+                        signedChangeRate: ticker.signedChangeRate,
+                        change: ticker.change,
+                        accTradePrice24h: ticker.accTradePrice24h,
                     });
                 }
             };
 
-            // 500ms 단위로 buffer flush → liveOverlay 갱신 (렌더 빈도 조절)
             displayInterval = setInterval(() => {
                 if (bufferMap.current.size === 0) return;
-                setLiveOverlay((prev) => {
-                    const next = new Map(prev);
-                    bufferMap.current.forEach((v, k) => next.set(k, v));
-                    return next;
-                });
+                setLiveOverlay((prev) => mergeLive(prev, bufferMap.current, (v) => v));
                 bufferMap.current.clear();
             }, 200);
         })();

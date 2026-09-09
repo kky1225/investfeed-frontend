@@ -1,3 +1,5 @@
+import {mergeLive} from "../../lib/streamOverlay.ts";
+import {renderChip} from "../../components/CustomRender.tsx";
 import Box from '@mui/material/Box';
 import {useTheme} from "@mui/material/styles";
 import Stack from "@mui/material/Stack";
@@ -8,7 +10,6 @@ import Card from "@mui/material/Card";
 import CardContent from "@mui/material/CardContent";
 import Skeleton from "@mui/material/Skeleton";
 import {useMediaQuery} from "@mui/material";
-import Chip from "@mui/material/Chip";
 import {JSX, useEffect, useMemo, useRef, useState} from "react";
 import {GridColDef, GridRowsProp} from '@mui/x-data-grid';
 import CustomDataTable from "../../components/CustomDataTable.tsx";
@@ -234,11 +235,7 @@ export default function Dashboard() {
         const startDisplayLoop = () => {
             displayInterval = setInterval(() => {
                 if (streamBufferRef.current.size === 0) return;
-                setLiveOverlay((prev) => {
-                    const next = new Map(prev);
-                    streamBufferRef.current.forEach((v, k) => next.set(k, v));
-                    return next;
-                });
+                setLiveOverlay((prev) => mergeLive(prev, streamBufferRef.current, (v) => v));
                 streamBufferRef.current.clear();
             }, 200);
         };
@@ -331,10 +328,6 @@ export default function Dashboard() {
         return {message, title, icon};
     }
 
-    function renderStatus(status: number) {
-        const colors = status == 0 ? 'default' : status > 0 ? 'error' : 'info';
-        return <Chip label={status > 0 ? `${status}%` : `${status}%`} color={colors}/>;
-    }
 
     const onClick = () => navigate('/stock/index/list');
     void onClick;
@@ -348,7 +341,7 @@ export default function Dashboard() {
             headerName: '상승률',
             flex: 1,
             minWidth: 100,
-            renderCell: (params) => renderStatus(params.value as number),
+            renderCell: (params) => renderChip(params.value as number),
         },
         {
             field: 'nettrdeAmt',

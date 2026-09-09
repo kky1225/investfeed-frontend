@@ -4,7 +4,7 @@ import {StockDetailReq} from "../../type/StockType.ts";
 import {CryptoDetailReq} from "../../type/CryptoType.ts";
 import {CommodityDetailReq} from "../../type/CommodityType.ts";
 import type {UsStockDetailReq} from "../../type/UsStockType.ts";
-import type {MultiViewStreamReq, MultiViewUsStreamReq} from "../../type/MultiViewType.ts";
+import type {MultiViewStockStreamReq, MultiViewStreamReq} from "../../type/MultiViewType.ts";
 
 export const fetchMultiViewStockChart = async (stkCd: string, req: StockDetailReq, config?: AxiosRequestConfig) => {
     const res = await api.get(`/multi-view/charts/stock/${stkCd}`, {...config, params: req});
@@ -26,13 +26,8 @@ export const fetchMultiViewCommodityDetail = async (stkCd: string, req: Commodit
     return res.data;
 }
 
-export const fetchMultiViewStockStream = async (req: MultiViewStreamReq) => {
+export const fetchMultiViewStockStream = async (req: MultiViewStockStreamReq) => {
     const res = await api.post(`/multi-view/stocks/stream`, req);
-    return res.data;
-}
-
-export const fetchMultiViewUsStockStream = async (req: MultiViewUsStreamReq) => {
-    const res = await api.post(`/multi-view/us-stocks/stream`, req);
     return res.data;
 }
 

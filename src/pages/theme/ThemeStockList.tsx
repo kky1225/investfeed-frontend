@@ -1,8 +1,9 @@
+import {mergeLive} from "../../lib/streamOverlay.ts";
+import {renderChip} from "../../components/CustomRender.tsx";
 import Typography from "@mui/material/Typography";
 import Box from "@mui/material/Box";
 import Grid from "@mui/material/Grid";
 import {GridColDef} from "@mui/x-data-grid";
-import Chip from "@mui/material/Chip";
 import {useEffect, useMemo, useRef, useState} from "react";
 import {MarketType} from "../../type/timeType.ts";
 import {fetchMarketInfo, getServerNow, getServerOffset} from "../../lib/serverTime.ts";
@@ -95,7 +96,7 @@ const ThemeStockList = () => {
             headerName: '등락률',
             flex: 0.5,
             minWidth: 100,
-            renderCell: (params) => renderStatus(params.value as number),
+            renderCell: (params) => renderChip(params.value as number),
         },
         {
             field: 'curPrc',
@@ -111,7 +112,7 @@ const ThemeStockList = () => {
             headerName: '기간 수익률',
             flex: 1,
             minWidth: 120,
-            renderCell: (params) => renderStatus(params.value as number),
+            renderCell: (params) => renderChip(params.value as number),
         }
     ];
 
@@ -164,20 +165,13 @@ const ThemeStockList = () => {
         let socket: WebSocket | undefined;
 
         const startDisplayLoop = () => {
-            // 500ms 단위로 buffer flush → liveOverlay 갱신 (렌더 빈도 조절)
             displayInterval = setInterval(() => {
                 if (stockBufferMap.current.size === 0) return;
-                setLiveOverlay((prev) => {
-                    const next = new Map(prev);
-                    stockBufferMap.current.forEach((v, k) => {
-                        next.set(k, {
-                            curPrc: v.value,
-                            fluRt: v.fluRt,
-                            trend: trendColor(v.trend),
-                        });
-                    });
-                    return next;
-                });
+                setLiveOverlay((prev) => mergeLive(prev, stockBufferMap.current, (v) => ({
+                    curPrc: v.value,
+                    fluRt: v.fluRt,
+                    trend: trendColor(v.trend),
+                })));
                 stockBufferMap.current.clear();
             }, 200);
         };
@@ -211,10 +205,6 @@ const ThemeStockList = () => {
         };
     }, [result, themeGrpCdParam]);
 
-    function renderStatus(status: number) {
-        const colors = status == 0 ? 'default' : status > 0 ? 'error' : 'info';
-        return <Chip label={status > 0 ? `${status}%` : `${status}%`} color={colors}/>;
-    }
 
     return (
         <Box sx={{width: '100%', maxWidth: {sm: '100%', md: '1700px'}}}>

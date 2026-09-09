@@ -57,6 +57,12 @@ export default function AssetGroupDetail({group, summary}: AssetGroupDetailProps
 
     const updateHoldings = useCallback((curPrcMap: Map<string, string>) => {
         setHoldings(prev => {
+            const changed = prev.some(item => {
+                const newCurPrc = curPrcMap.get(item.stkCd);
+                return newCurPrc !== undefined && newCurPrc !== item.curPrc;
+            });
+            if (!changed) return prev;
+
             const updated = prev.map(item => {
                 const newCurPrc = curPrcMap.get(item.stkCd);
                 if (!newCurPrc) return item;
@@ -173,11 +179,19 @@ export default function AssetGroupDetail({group, summary}: AssetGroupDetailProps
                             </Typography>
                         </Box>
                         <Box>
-                            <Typography variant="body2" sx={{color: 'text.secondary'}}>예수금</Typography>
+                            <Typography variant="body2" sx={{color: 'text.secondary'}}>원화</Typography>
                             <Typography variant="body1" sx={{fontWeight: 600}}>
-                                <BlindText>{groupSummary.cash.toLocaleString()}원</BlindText>
+                                <BlindText>{groupSummary.cashKrw.toLocaleString()}원</BlindText>
                             </Typography>
                         </Box>
+                        {groupSummary.cashUsd != null && (
+                            <Box>
+                                <Typography variant="body2" sx={{color: 'text.secondary'}}>달러</Typography>
+                                <Typography variant="body1" sx={{fontWeight: 600}}>
+                                    <BlindText>{`$${Number(groupSummary.cashUsd).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`}</BlindText>
+                                </Typography>
+                            </Box>
+                        )}
                     </Stack>
 
                     {holdingStocks.length > 0 && (

@@ -1,4 +1,5 @@
-import React, {createContext, useContext, useEffect, useRef, useState} from "react";
+import React, {createContext, useContext, useEffect, useMemo, useRef, useState} from "react";
+import {mergeLive} from "../../lib/streamOverlay.ts";
 import {useMutation, useQuery, useQueryClient} from "@tanstack/react-query";
 import {requireOk} from "../../lib/apiResponse.ts";
 import Box from "@mui/material/Box";
@@ -231,13 +232,19 @@ const Interest = () => {
         enabled: selectedGroup !== null,
     });
     const [itemsOrderOverride, setItemsOrderOverride] = useState<InterestItem[] | null>(null);
-    const items = itemsOrderOverride ?? itemsData ?? [];
+    // 매 렌더마다 새 배열이 되면 아래 rows 의 useMemo 가 무력화된다.
+    const items = useMemo(() => itemsOrderOverride ?? itemsData ?? [], [itemsOrderOverride, itemsData]);
+
+    // 실시간 값은 서버 응답과 분리해 별도 Map 에만 담고, 행을 만들 때 덮어쓴다.
+    // useQuery 캐시를 직접 고치면 1분 폴링 결과와 실시간 값이 섞인다.
+    const [liveOverlay, setLiveOverlay] = useState<Map<string, {curPrc: string; fluRt: string}>>(new Map());
 
     const [prevSelectedGroupId, setPrevSelectedGroupId] = useState(selectedGroup?.id);
     if (selectedGroup?.id !== prevSelectedGroupId) {
         setPrevSelectedGroupId(selectedGroup?.id);
         setItemsOrderOverride(null);
         setItemOrderDirty(false);
+        setLiveOverlay(new Map());
     }
 
     const [addGroupOpen, setAddGroupOpen] = useState(false);
@@ -307,13 +314,7 @@ const Interest = () => {
 
                 displayInterval = setInterval(() => {
                     if (streamBufferRef.current.size === 0) return;
-                    queryClient.setQueryData<InterestItem[]>(['interestItems', targetGroupId], (prev) => {
-                        if (!prev) return prev;
-                        return prev.map(item => {
-                            const update = streamBufferRef.current.get(item.stkCd);
-                            return update ? {...item, curPrc: update.curPrc, fluRt: update.fluRt} : item;
-                        });
-                    });
+                    setLiveOverlay((prev) => mergeLive(prev, streamBufferRef.current, (v) => v));
                     streamBufferRef.current.clear();
                 }, 200);
             } catch (err) {
@@ -328,7 +329,7 @@ const Interest = () => {
             if (displayInterval) clearInterval(displayInterval);
             streamBufferRef.current.clear();
         };
-    }, [selectedGroup, queryClient]);
+    }, [selectedGroup]);
 
     const handleSelectGroup = (group: InterestGroup) => {
         setSelectedGroup(group);
@@ -608,15 +609,18 @@ const Interest = () => {
         },
     ];
 
-    const rows = items.map(item => ({
-        id: item.id,
-        stkNm: item.stkNm,
-        stkCd: item.stkCd,
-        stexTp: item.stexTp,
-        mrktNm: item.mrktNm,
-        curPrc: item.curPrc,
-        fluRt: item.fluRt,
-    }));
+    const rows = useMemo(() => items.map(item => {
+        const live = liveOverlay.get(item.stkCd);
+        return {
+            id: item.id,
+            stkNm: item.stkNm,
+            stkCd: item.stkCd,
+            stexTp: item.stexTp,
+            mrktNm: item.mrktNm,
+            curPrc: live?.curPrc ?? item.curPrc,
+            fluRt: live?.fluRt ?? item.fluRt,
+        };
+    }), [items, liveOverlay]);
 
     return (
         <Box sx={{width: "100%", maxWidth: {sm: "100%", md: "1700px"}}}>

@@ -34,7 +34,7 @@ import {StockChartType} from "../../type/StockType.ts";
 import {UsStockChartType} from "../../type/UsStockType.ts";
 import {CryptoChartType} from "../../type/CryptoType.ts";
 import {CommodityChartType} from "../../type/CommodityType.ts";
-import {renderChangeAmount} from "../../components/CustomRender.tsx";
+import {renderChangeAmount, signedRate} from "../../components/CustomRender.tsx";
 import type {MultiViewAssetType, SelectedAsset, StreamUpdate} from "../../type/MultiViewType.ts";
 import {useNavigate} from "react-router-dom";
 
@@ -376,7 +376,8 @@ export default function MultiViewPanel({asset, onSearch, onChartExpand, onRemove
     const color = labelColors[trend];
     const fluRt = 'fluRt' in chartData ? chartData.fluRt : ('changeRate' in chartData ? chartData.changeRate : '0');
     const predPre = 'predPre' in chartData ? chartData.predPre : String('changePrice' in chartData ? chartData.changePrice : '0');
-    const trendValues = {up: `${fluRt}%`, down: `${fluRt}%`, neutral: `${fluRt}%`};
+    const rate = signedRate(fluRt);
+    const trendValues = {up: rate, down: rate, neutral: rate};
 
     return (
         <Card variant="outlined" sx={{width: '100%'}}>

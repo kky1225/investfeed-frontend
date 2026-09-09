@@ -1,3 +1,4 @@
+import {mergeLive} from "../../lib/streamOverlay.ts";
 import {useEffect, useMemo, useRef, useState} from "react";
 import Box from "@mui/material/Box";
 import Typography from "@mui/material/Typography";
@@ -6,7 +7,7 @@ import MultiViewPanel from "./MultiViewPanel.tsx";
 import MultiViewSearchDialog from "./MultiViewSearchDialog.tsx";
 import type {SelectedAsset, StreamUpdate} from "../../type/MultiViewType.ts";
 import ChartDetailDialog from "./ChartDetailDialog.tsx";
-import {fetchMultiViewStockStream, fetchMultiViewUsStockStream, fetchMultiViewCryptoStream} from "../../api/multiView/MultiViewApi.ts";
+import {fetchMultiViewStockStream, fetchMultiViewCryptoStream} from "../../api/multiView/MultiViewApi.ts";
 import {MarketType} from "../../type/timeType.ts";
 import {fetchMarketInfo, getServerNow} from "../../lib/serverTime.ts";
 
@@ -46,7 +47,6 @@ export default function MultiViewPage() {
     const [chartTarget, setChartTarget] = useState<{type: SelectedAsset['type']; code: string; name: string; stexTp?: string} | null>(null);
     const [streamUpdates, setStreamUpdates] = useState<Map<string, StreamUpdate>>(new Map());
     const stockBufferRef = useRef<Map<string, StreamUpdate>>(new Map());
-    const usStockBufferRef = useRef<Map<string, StreamUpdate>>(new Map());
     const cryptoBufferRef = useRef<Map<string, StreamUpdate>>(new Map());
 
     useEffect(() => {
@@ -75,15 +75,14 @@ export default function MultiViewPage() {
         return 'neutral';
     };
 
-    // 주식 WebSocket
     useEffect(() => {
-        if (stockCodes.length === 0) return;
+        if (stockCodes.length === 0 && usStockItems.length === 0) return;
 
         let socket: WebSocket;
         let displayInterval: ReturnType<typeof setInterval>;
         let socketTimeout: ReturnType<typeof setTimeout>;
 
-        const panelCodes = new Set(stockCodes);
+        const panelCodes = new Set([...stockCodes, ...usStockItems.map(i => i.stkCd)]);
 
         const openSocket = () => {
             const ws = new WebSocket("ws://localhost:8080/ws");
@@ -98,83 +97,6 @@ export default function MultiViewPage() {
                             value: String(values["10"]).replace(/^[+-]/, ''),
                             fluRt: String(values["12"]),
                             predPre: String(values["11"]),
-                            trend: trendColor(String(values["25"])),
-                        });
-                    });
-                }
-            };
-            return ws;
-        };
-
-        const startDisplay = () => {
-            displayInterval = setInterval(() => {
-                if (stockBufferRef.current.size === 0) return;
-                setStreamUpdates(prev => {
-                    const next = new Map(prev);
-                    stockBufferRef.current.forEach((val, key) => next.set(key, val));
-                    return next;
-                });
-                stockBufferRef.current.clear();
-            }, 200);
-        };
-
-        const connectSocket = async () => {
-            const data = await fetchMultiViewStockStream({items: stockCodes});
-            if (data.code !== "0000") throw new Error(data.message || `멀티뷰 주식 스트림 실패 (${data.code})`);
-            socket = openSocket();
-            startDisplay();
-        };
-
-        (async () => {
-            try {
-                const marketInfo = await fetchMarketInfo(MarketType.STOCK);
-                if (marketInfo?.isMarketOpen) {
-                    await connectSocket();
-                } else if (marketInfo) {
-                    const waitMs = marketInfo.startMarketTime - getServerNow();
-                    if (waitMs > 0) {
-                        socketTimeout = setTimeout(async () => {
-                            const again = await fetchMarketInfo(MarketType.STOCK);
-                            if (again?.isMarketOpen) {
-                                await connectSocket();
-                            }
-                        }, waitMs + 200);
-                    }
-                }
-            } catch (err) {
-                console.error('Stock socket error:', err);
-            }
-        })();
-
-        return () => {
-            socket?.close();
-            clearInterval(displayInterval);
-            clearTimeout(socketTimeout);
-        };
-    }, [stockCodes.join(',')]);
-
-    // 미국 주식 WebSocket — 미국은 주간거래 포함 상시 체결이 존재하므로 장 시간 게이팅 없이 바로 등록 (usRank와 동일)
-    useEffect(() => {
-        if (usStockItems.length === 0) return;
-
-        let socket: WebSocket;
-        let displayInterval: ReturnType<typeof setInterval>;
-
-        const panelCodes = new Set(usStockItems.map(i => i.stkCd));
-
-        const openSocket = () => {
-            const ws = new WebSocket("ws://localhost:8080/ws");
-            ws.onmessage = (event) => {
-                const data = JSON.parse(event.data);
-                if (data.trnm === "REAL" && Array.isArray(data.data)) {
-                    data.data.forEach((res: {type: string; item: string; values: Record<string, string>}) => {
-                        if (!panelCodes.has(res.item)) return;
-                        const values = res.values;
-                        if (values?.["10"] == null) return;
-                        usStockBufferRef.current.set(res.item, {
-                            value: String(values["10"]).replace(/^[+-]/, ''),
-                            fluRt: String(values["12"]),
-                            predPre: String(values["11"]),
                             trend: trendColor(String(values["25"]).replace(/^[+-]/, '')),
                         });
                     });
@@ -185,32 +107,46 @@ export default function MultiViewPage() {
 
         const startDisplay = () => {
             displayInterval = setInterval(() => {
-                if (usStockBufferRef.current.size === 0) return;
-                setStreamUpdates(prev => {
-                    const next = new Map(prev);
-                    usStockBufferRef.current.forEach((val, key) => next.set(key, val));
-                    return next;
-                });
-                usStockBufferRef.current.clear();
+                if (stockBufferRef.current.size === 0) return;
+                setStreamUpdates(prev => mergeLive(prev, stockBufferRef.current, (val) => val));
+                stockBufferRef.current.clear();
             }, 200);
+        };
+
+        const register = async () => {
+            const data = await fetchMultiViewStockStream({items: stockCodes, usItems: usStockItems});
+            if (data.code !== "0000") throw new Error(data.message || `멀티뷰 주식 스트림 실패 (${data.code})`);
         };
 
         (async () => {
             try {
-                const data = await fetchMultiViewUsStockStream({items: usStockItems});
-                if (data.code !== "0000") throw new Error(data.message || `멀티뷰 미국 주식 스트림 실패 (${data.code})`);
+                await register();
                 socket = openSocket();
                 startDisplay();
+
+                if (stockCodes.length === 0) return;
+
+                const marketInfo = await fetchMarketInfo(MarketType.STOCK);
+                if (!marketInfo || marketInfo.isMarketOpen) return;
+
+                const waitMs = marketInfo.startMarketTime - getServerNow();
+                if (waitMs <= 0) return;
+
+                socketTimeout = setTimeout(async () => {
+                    const again = await fetchMarketInfo(MarketType.STOCK);
+                    if (again?.isMarketOpen) await register();
+                }, waitMs + 200);
             } catch (err) {
-                console.error('US stock socket error:', err);
+                console.error('Stock socket error:', err);
             }
         })();
 
         return () => {
             socket?.close();
             clearInterval(displayInterval);
+            clearTimeout(socketTimeout);
         };
-    }, [usStockItems.map(i => `${i.stkCd}|${i.stexTp}`).join(',')]);
+    }, [stockCodes.join(','), usStockItems.map(i => `${i.stkCd}|${i.stexTp}`).join(',')]);
 
     useEffect(() => {
         if (cryptoCodes.length === 0) return;
@@ -246,11 +182,7 @@ export default function MultiViewPage() {
         const startDisplay = () => {
             displayInterval = setInterval(() => {
                 if (cryptoBufferRef.current.size === 0) return;
-                setStreamUpdates(prev => {
-                    const next = new Map(prev);
-                    cryptoBufferRef.current.forEach((val, key) => next.set(key, val));
-                    return next;
-                });
+                setStreamUpdates(prev => mergeLive(prev, cryptoBufferRef.current, (val) => val));
                 cryptoBufferRef.current.clear();
             }, 200);
         };

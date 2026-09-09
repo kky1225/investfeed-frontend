@@ -1,4 +1,5 @@
 import {Box, InputLabel, Select, SelectChangeEvent} from "@mui/material";
+import {renderChip} from "../../components/CustomRender.tsx";
 import Typography from "@mui/material/Typography";
 import Grid from "@mui/material/Grid";
 import {useState} from "react";
@@ -7,7 +8,6 @@ import {fetchThemeList} from "../../api/theme/ThemeApi.ts";
 import FreshnessIndicator from "../../components/FreshnessIndicator.tsx";
 import ThemeTable from "../../components/ThemeTable.tsx";
 import {GridColDef} from "@mui/x-data-grid";
-import Chip from "@mui/material/Chip";
 import NumberSpinner from "../../components/NumberSpinner.tsx";
 import FormControl from "@mui/material/FormControl";
 import MenuItem from "@mui/material/MenuItem";
@@ -54,22 +54,17 @@ const ThemeList = () => {
             headerName: '등락률',
             flex: 0.5,
             minWidth: 100,
-            renderCell: (params) => renderStatus(params.value as number),
+            renderCell: (params) => renderChip(params.value as number),
         },
         {
             field: 'dtPrftRt',
             headerName: '기간 수익률',
             flex: 1,
             minWidth: 120,
-            renderCell: (params) => renderStatus(params.value as number),
+            renderCell: (params) => renderChip(params.value as number),
         }
     ];
 
-    function renderStatus(status: number) {
-        const colors = status == 0 ? 'default' : status > 0 ? 'error': 'info';
-
-        return <Chip label={status > 0 ? `${status}%` : `${status}%`} color={colors} />;
-    }
 
     function onChangeSelected(value: number | null) {
         if(value) {

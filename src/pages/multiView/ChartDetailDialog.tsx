@@ -26,7 +26,7 @@ import {StockChartType} from "../../type/StockType.ts";
 import {UsStockChartType} from "../../type/UsStockType.ts";
 import {CryptoChartType} from "../../type/CryptoType.ts";
 import {CommodityChartType} from "../../type/CommodityType.ts";
-import {renderChangeAmount} from "../../components/CustomRender.tsx";
+import {renderChangeAmount, signedRate} from "../../components/CustomRender.tsx";
 import type {MultiViewAssetType} from "../../type/MultiViewType.ts";
 
 const StyledToggleButtonGroup = styled(ToggleButtonGroup)(({theme}) => ({
@@ -330,7 +330,7 @@ export default function ChartDetailDialog({open, onClose, assetType, code, name,
                         <Stack direction="row" sx={{alignItems: 'center', gap: 1}}>
                             <Typography variant="h4" component="p">{chartData.value}</Typography>
                             {renderChangeAmount(predPre, assetType === 'US_STOCK' ? '달러' : '원')}
-                            <Chip size="small" color={color} label={`${fluRt}%`}/>
+                            <Chip size="small" color={color} label={signedRate(fluRt)}/>
                         </Stack>
                         <Typography variant="caption" sx={{color: 'text.secondary'}}>{chartData.interval}</Typography>
                     </Stack>

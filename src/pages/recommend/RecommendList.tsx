@@ -1,3 +1,4 @@
+import {mergeLive} from "../../lib/streamOverlay.ts";
 import {Box, Chip, Divider, Switch, Tooltip} from "@mui/material";
 import Typography from "@mui/material/Typography";
 import InfoOutlinedIcon from "@mui/icons-material/InfoOutlined";
@@ -276,18 +277,12 @@ const RecommendList = () => {
         const startDisplayLoop = () => {
             displayInterval = setInterval(() => {
                 if (streamBufferRef.current.size === 0) return;
-                setLiveOverlay((prev) => {
-                    const next = new Map(prev);
-                    streamBufferRef.current.forEach((u, k) => {
-                        next.set(k, {
-                            value: Number(u.value.replace(/^[+-]/, '')).toLocaleString(),
-                            changeAmount: u.change,
-                            fluRt: u.fluRt,
-                            trend: trendColor(u.trend),
-                        });
-                    });
-                    return next;
-                });
+                setLiveOverlay((prev) => mergeLive(prev, streamBufferRef.current, (u) => ({
+                    value: Number(u.value.replace(/^[+-]/, '')).toLocaleString(),
+                    changeAmount: u.change,
+                    fluRt: u.fluRt,
+                    trend: trendColor(u.trend),
+                })));
                 streamBufferRef.current.clear();
             }, 200);
         };
