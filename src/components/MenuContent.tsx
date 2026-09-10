@@ -70,6 +70,53 @@ const toMenuItemData = (menu: MenuRes, ctx: MenuConversionContext): MenuItemData
     };
 };
 
+const toSegments = (path: string): string[] => path.split('/').filter(Boolean);
+
+const commonSegmentCount = (a: string[], b: string[]): number => {
+    let count = 0;
+    while (count < a.length && count < b.length && a[count] === b[count]) count++;
+    return count;
+};
+
+const flattenWithTrail = (items: MenuItemData[], parents: number[] = []): {item: MenuItemData; trail: number[]}[] =>
+    items.flatMap((item) => {
+        const trail = [...parents, item.id];
+        return [{item, trail}, ...flattenWithTrail(item.children ?? [], trail)];
+    });
+
+const findActiveTrail = (items: MenuItemData[], pathname: string): number[] => {
+    const pathSegments = toSegments(pathname);
+    let bestScore = 0;
+    let bestCount = 0;
+    let bestTrail: number[] = [];
+
+    flattenWithTrail(items).forEach(({item, trail}) => {
+        if (!item.url) return;
+
+        if (item.url === '/') {
+            if (pathname === '/') {
+                bestScore = Number.MAX_SAFE_INTEGER;
+                bestCount = 1;
+                bestTrail = trail;
+            }
+            return;
+        }
+
+        const score = commonSegmentCount(pathSegments, toSegments(item.url));
+        if (score === 0) return;
+
+        if (score > bestScore) {
+            bestScore = score;
+            bestCount = 1;
+            bestTrail = trail;
+        } else if (score === bestScore) {
+            bestCount++;
+        }
+    });
+
+    return bestCount === 1 ? bestTrail : [];
+};
+
 interface MenuContentProps {
     collapsed?: boolean;
 }
@@ -86,16 +133,33 @@ export default function MenuContent({collapsed = false}: MenuContentProps) {
         [menuTree, user, isSatisfied, getBrokerNames]
     );
 
-    const [openMenus, setOpenMenus] = useState<Set<string>>(new Set());
-    const [popoverMenu, setPopoverMenu] = useState<string | null>(null);
-    const anchorRefs = useRef<Record<string, HTMLElement | null>>({});
+    const [openMenus, setOpenMenus] = useState<Set<number>>(new Set());
+    const [popoverMenu, setPopoverMenu] = useState<number | null>(null);
+    const anchorRefs = useRef<Record<number, HTMLElement | null>>({});
     const popoverTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+    const activeTrail = useMemo(
+        () => findActiveTrail(menuItems, location.pathname),
+        [menuItems, location.pathname]
+    );
+    const activeMenuId = activeTrail.length > 0 ? activeTrail[activeTrail.length - 1] : null;
 
     // collapsed 변경 시 openMenus 리셋 — render 중 비교 패턴
     const [prevCollapsed, setPrevCollapsed] = useState(collapsed);
     if (collapsed !== prevCollapsed) {
         setPrevCollapsed(collapsed);
         if (collapsed) setOpenMenus(new Set());
+    }
+
+    // 현재 경로의 상위 그룹 자동 펼침 (직접 진입/새로고침 대응) — render 중 비교 패턴
+    const ancestorKey = activeTrail.slice(0, -1).join(',');
+    const [prevAncestorKey, setPrevAncestorKey] = useState<string | null>(null);
+    if (!collapsed && ancestorKey !== prevAncestorKey) {
+        setPrevAncestorKey(ancestorKey);
+        if (ancestorKey) {
+            const ancestorIds = activeTrail.slice(0, -1);
+            setOpenMenus(prev => new Set([...prev, ...ancestorIds]));
+        }
     }
 
     const handleMainMenuClick = (item: MenuItemData) => {
@@ -106,10 +170,10 @@ export default function MenuContent({collapsed = false}: MenuContentProps) {
         if (item.children) {
             setOpenMenus(prev => {
                 const next = new Set(prev);
-                if (next.has(item.text)) {
-                    next.delete(item.text);
+                if (next.has(item.id)) {
+                    next.delete(item.id);
                 } else {
-                    next.add(item.text);
+                    next.add(item.id);
                 }
                 return next;
             });
@@ -118,12 +182,12 @@ export default function MenuContent({collapsed = false}: MenuContentProps) {
         }
     };
 
-    const handlePopoverOpen = (text: string) => {
+    const handlePopoverOpen = (id: number) => {
         if (popoverTimeout.current) {
             clearTimeout(popoverTimeout.current);
             popoverTimeout.current = null;
         }
-        setPopoverMenu(text);
+        setPopoverMenu(id);
     };
 
     const handlePopoverClose = () => {
@@ -153,7 +217,7 @@ export default function MenuContent({collapsed = false}: MenuContentProps) {
     const renderMenuItem = (item: MenuItemData, depth: number) => {
         const button = (
             <ListItemButton
-                selected={location.pathname === item.url}
+                selected={item.id === activeMenuId}
                 onClick={() => handleMainMenuClick(item)}
                 sx={{
                     pl: 2 + depth * 2,
@@ -166,7 +230,7 @@ export default function MenuContent({collapsed = false}: MenuContentProps) {
             >
                 <ListItemIcon>{item.icon}</ListItemIcon>
                 <ListItemText primary={item.text} />
-                {item.children ? (openMenus.has(item.text) ? <ExpandLess /> : <ExpandMore />) : null}
+                {item.children ? (openMenus.has(item.id) ? <ExpandLess /> : <ExpandMore />) : null}
             </ListItemButton>
         );
 
@@ -178,7 +242,7 @@ export default function MenuContent({collapsed = false}: MenuContentProps) {
                         : button}
                 </ListItem>
                 {item.children && !item.disabled && (
-                    <Collapse in={openMenus.has(item.text)} timeout="auto" unmountOnExit>
+                    <Collapse in={openMenus.has(item.id)} timeout="auto" unmountOnExit>
                         <List component="div" disablePadding>
                             {item.children.map(child => renderMenuItem(child, depth + 1))}
                         </List>
@@ -211,7 +275,7 @@ export default function MenuContent({collapsed = false}: MenuContentProps) {
         if (!item.children) {
             const button = (
                 <ListItemButton
-                    selected={location.pathname === item.url}
+                    selected={item.id === activeMenuId}
                     onClick={() => {
                         if (item.disabled) handleDisabledChildClick();
                         else if (item.url) handleChildClick(item.url);
@@ -308,8 +372,8 @@ export default function MenuContent({collapsed = false}: MenuContentProps) {
                                             </Tooltip>
                                         ) : (
                                             <ListItemButton
-                                                ref={(el) => { anchorRefs.current[item.text] = el; }}
-                                                onMouseEnter={() => handlePopoverOpen(item.text)}
+                                                ref={(el) => { anchorRefs.current[item.id] = el; }}
+                                                onMouseEnter={() => handlePopoverOpen(item.id)}
                                                 onMouseLeave={handlePopoverClose}
                                                 sx={{justifyContent: 'center', px: 1.5}}
                                             >
@@ -325,7 +389,7 @@ export default function MenuContent({collapsed = false}: MenuContentProps) {
                                             arrow
                                         >
                                             <ListItemButton
-                                                selected={location.pathname === item.url}
+                                                selected={item.id === activeMenuId}
                                                 onClick={() => handleMainMenuClick(item)}
                                                 sx={{
                                                     justifyContent: 'center', px: 1.5,
@@ -344,8 +408,8 @@ export default function MenuContent({collapsed = false}: MenuContentProps) {
                                 </ListItem>
                                 {item.children && !item.disabled && (
                                     <Popper
-                                        open={popoverMenu === item.text}
-                                        anchorEl={anchorRefs.current[item.text]}
+                                        open={popoverMenu === item.id}
+                                        anchorEl={anchorRefs.current[item.id]}
                                         placement="right-start"
                                         sx={{zIndex: 1300}}
                                     >

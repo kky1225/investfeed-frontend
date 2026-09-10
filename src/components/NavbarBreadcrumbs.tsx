@@ -28,20 +28,25 @@ const findMenuPath = (menus: MenuRes[], pathname: string, parents: MenuRes[] = [
 };
 
 const fallbackBreadcrumb = (pathname: string): string[] | null => {
-    // 주식
-    if (pathname.startsWith('/stock/detail/')) return ['국내 주식', '종목 상세'];
-    if (pathname.startsWith('/stock/index/detail/')) return ['국내 주식', '지수 상세'];
-    if (pathname.startsWith('/stock/rank/list/')) return ['국내 주식', '순위'];
-    if (pathname.startsWith('/stock/sect/list/')) return ['국내 주식', '업종'];
-    if (/^\/stock\/sect\/[^/]+\/list$/.test(pathname)) return ['국내 주식', '업종 종목'];
-    if (/^\/stock\/theme\/[^/]+\/list$/.test(pathname)) return ['국내 주식', '테마 종목'];
-    if (pathname.startsWith('/stock/investor/')) return ['국내 주식', '투자자별'];
-    if (pathname.startsWith('/stock/holding/list/')) return ['국내 주식', '주식 계좌'];
-    if (pathname === '/stock/interest' || pathname.startsWith('/stock/interest/list/')) return ['국내 주식', '관심 종목'];
+    // 주식 > 국내 주식
+    if (pathname.startsWith('/stock/detail/')) return ['주식', '국내 주식', '종목 상세'];
+    if (pathname.startsWith('/stock/index/detail/')) return ['주식', '국내 주식', '지수 상세'];
+    if (pathname.startsWith('/stock/rank/list/')) return ['주식', '국내 주식', '순위'];
+    if (pathname.startsWith('/stock/sect/list/')) return ['주식', '국내 주식', '업종'];
+    if (/^\/stock\/sect\/[^/]+\/list$/.test(pathname)) return ['주식', '국내 주식', '업종 종목'];
+    if (/^\/stock\/theme\/[^/]+\/list$/.test(pathname)) return ['주식', '국내 주식', '테마 종목'];
+    if (pathname.startsWith('/stock/investor/')) return ['주식', '국내 주식', '투자자별'];
 
-    // 미국 주식
-    if (pathname.startsWith('/us-stock/detail/')) return ['해외 주식', '종목 상세'];
-    if (pathname.startsWith('/us-stock/rank/list/')) return ['해외 주식', '순위'];
+    // 주식 (국내+해외 통합)
+    if (pathname.startsWith('/stock/holding/list/')) return ['주식', '주식 계좌'];
+
+    // 관심 종목 (최상위 - 국내+미국 통합)
+    if (pathname === '/stock/interest' || pathname.startsWith('/stock/interest/list/')) return ['관심 종목'];
+
+    // 주식 > 해외 주식
+    if (pathname.startsWith('/us-stock/detail/')) return ['주식', '해외 주식', '종목 상세'];
+    if (pathname.startsWith('/us-stock/rank/list/')) return ['주식', '해외 주식', '순위'];
+    if (/^\/us-stock\/sect\/[^/]+\/list$/.test(pathname)) return ['주식', '해외 주식', '업종 종목'];
 
     // 암호화폐
     if (pathname.startsWith('/crypto/detail/')) return ['암호화폐', '종목 상세'];

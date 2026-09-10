@@ -14,6 +14,7 @@ import Divider from "@mui/material/Divider";
 import Button from "@mui/material/Button";
 import Collapse from "@mui/material/Collapse";
 import Skeleton from "@mui/material/Skeleton";
+import Alert from "@mui/material/Alert";
 import PieChartRoundedIcon from "@mui/icons-material/PieChartRounded";
 import KeyboardArrowDownIcon from "@mui/icons-material/KeyboardArrowDown";
 import KeyboardArrowUpIcon from "@mui/icons-material/KeyboardArrowUp";
@@ -803,18 +804,30 @@ function ReportSection() {
 
     if (isError) return <Paper sx={{p: 2, bgcolor: 'error.light'}}>성과 리포트 조회 실패</Paper>;
 
+    // 키움 모의계좌 조회 실패 — 시드값으로 대체하지 않고 실패를 그대로 표시한다
+    const navFailed = !!data && data.currentNav == null;
+
     return (
         <Stack spacing={2}>
             <Box sx={{display: 'flex', justifyContent: 'flex-end'}}>
                 {!isLoading && <FreshnessIndicator lastUpdated={lastUpdated} error={pollError}/>}
             </Box>
+            {navFailed && (
+                <Alert severity="error">
+                    현재 NAV 조회 실패 — 키움 모의계좌 응답 오류입니다. 총수익률을 계산할 수 없습니다. (벤치마크 지표는 정상)
+                </Alert>
+            )}
             <Card variant="outlined">
                 <CardContent>
                     <Stack direction="row" spacing={3} sx={{alignItems: 'center', flexWrap: 'wrap'}}>
                         <Item label="시작일" value={data?.startDate ?? '미시작'} loading={isLoading}/>
                         <Item label="시작 NAV" value={data ? fmtLong(data.startNav) : null} loading={isLoading}/>
-                        <Item label="현재 NAV" value={data ? fmtLong(data.currentNav) : null} bold loading={isLoading}/>
-                        <Item label="총수익률" value={data ? <PctValue value={data.totalReturnPct}/> : null} loading={isLoading}/>
+                        <Item label="현재 NAV"
+                              value={navFailed ? <FailValue/> : (data ? fmtLong(data.currentNav) : null)}
+                              bold loading={isLoading}/>
+                        <Item label="총수익률"
+                              value={navFailed ? <FailValue/> : (data ? <PctValue value={data.totalReturnPct}/> : null)}
+                              loading={isLoading}/>
                         <Divider orientation="vertical" flexItem/>
                         <Item label="KOSPI %" value={data ? <PctValue value={data.kospiReturnPct}/> : null} loading={isLoading}/>
                         <Item label="KOSDAQ %" value={data ? <PctValue value={data.kosdaqReturnPct}/> : null} loading={isLoading}/>
@@ -840,6 +853,14 @@ function Item({label, value, bold, loading}: {label: string; value: React.ReactN
 function fmtLong(v: number | null): string {
     if (v == null) return '-';
     return v.toLocaleString();
+}
+
+function FailValue() {
+    return (
+        <Typography component="span" sx={{color: 'error.main', fontWeight: 700}}>
+            조회 실패
+        </Typography>
+    );
 }
 
 function PctValue({value}: {value: number | null}) {

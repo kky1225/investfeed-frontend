@@ -98,8 +98,8 @@ export interface HoldingGradeItem {
 export interface PaperTradeReportRes {
     startDate: string | null;
     startNav: number;
-    currentNav: number;
-    totalReturnPct: number;
+    currentNav: number | null;
+    totalReturnPct: number | null;
     kospiReturnPct: number | null;
     kosdaqReturnPct: number | null;
     blendedBenchmarkPct: number;

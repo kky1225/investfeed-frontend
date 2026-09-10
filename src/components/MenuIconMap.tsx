@@ -22,6 +22,8 @@ import ManageAccountsIcon from '@mui/icons-material/ManageAccounts';
 import AssignmentIndIcon from '@mui/icons-material/AssignmentInd';
 import RequestPageIcon from '@mui/icons-material/RequestPage';
 import CurrencyExchangeIcon from '@mui/icons-material/CurrencyExchange';
+import CategoryIcon from '@mui/icons-material/Category';
+import VerifiedUserIcon from '@mui/icons-material/VerifiedUser';
 import type {ReactElement} from 'react';
 
 const iconMap: Record<string, ReactElement> = {
@@ -48,7 +50,9 @@ const iconMap: Record<string, ReactElement> = {
     ManageAccountsIcon: <ManageAccountsIcon />,
     AssignmentIndIcon: <AssignmentIndIcon />,
     RequestPageIcon: <RequestPageIcon />,
-    CurrencyExchangeIcon: <CurrencyExchangeIcon />
+    CurrencyExchangeIcon: <CurrencyExchangeIcon />,
+    CategoryIcon: <CategoryIcon />,
+    VerifiedUserIcon: <VerifiedUserIcon />
 };
 
 export const getMenuIcon = (iconName: string | null): ReactElement => {
