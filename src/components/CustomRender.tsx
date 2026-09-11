@@ -79,15 +79,21 @@ export function renderChip (status: number | string) {
 
 export function renderChangeAmount(value: string | number, unit: string = '원') {
     const num = typeof value === 'string' ? Number(value) : value;
-    if (isNaN(num) || num === 0) return <span style={{ fontSize: '0.85em' }}>{`0${unit}`}</span>;
+    const isUsd = unit === '달러';
 
-    const formatted = Math.abs(num).toLocaleString();
+    if (isNaN(num) || num === 0) {
+        return <span style={{ fontSize: '0.85em' }}>{isUsd ? '$0.00' : `0${unit}`}</span>;
+    }
+
+    const formatted = isUsd
+        ? Math.abs(num).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 4})
+        : Math.abs(num).toLocaleString();
     const color = num > 0 ? COLORS.up : COLORS.down;
     const sign = num > 0 ? '+' : '-';
 
     return (
         <span style={{ color, fontSize: '0.85em' }}>
-            {`${sign}${formatted}${unit}`}
+            {isUsd ? `${sign}$${formatted}` : `${sign}${formatted}${unit}`}
         </span>
     );
 }
