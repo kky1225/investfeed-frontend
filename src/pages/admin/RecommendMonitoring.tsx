@@ -276,8 +276,8 @@ function SnapshotsPanel() {
 // ════════════════════════════════════════════════════════════════════════════
 function BackfillPanel() {
     const {data, isLoading, isError} = useQuery<AdminBackfillStatusRes[]>({
-        queryKey: ['admin-backfill-status', 25],
-        queryFn: async () => requireOk(await fetchAdminBackfillStatus(25), []),
+        queryKey: ['admin-backfill-status'],
+        queryFn: async () => requireOk(await fetchAdminBackfillStatus(), []),
     });
 
     const columns: GridColDef<AdminBackfillStatusRes>[] = [
@@ -318,12 +318,13 @@ function BackfillPanel() {
 // 탭 4: Aggregate Metrics (백테스트 집계)
 // ════════════════════════════════════════════════════════════════════════════
 function MetricsPanel() {
-    const [periodDays, setPeriodDays] = useState<number>(30);
+    // 0 = 전체 기간
+    const [periodDays, setPeriodDays] = useState<number>(0);
 
     const {data, isLoading, isError} = useQuery<AdminBacktestMetricsRes>({
         queryKey: ['admin-backtest-metrics', periodDays],
         queryFn: async () => requireOk(
-            await fetchAdminBacktestMetrics(periodDays),
+            await fetchAdminBacktestMetrics(periodDays || undefined),
             {} as AdminBacktestMetricsRes,
         ),
     });
@@ -345,7 +346,7 @@ function MetricsPanel() {
                 <ToggleButtonGroup
                     exclusive
                     value={periodDays}
-                    onChange={(_, v) => v && setPeriodDays(v)}
+                    onChange={(_, v) => v != null && setPeriodDays(v)}
                     sx={{
                         p: 0.5,
                         bgcolor: 'action.hover',
@@ -380,6 +381,7 @@ function MetricsPanel() {
                     <ToggleButton value={30}>30일</ToggleButton>
                     <ToggleButton value={90}>90일</ToggleButton>
                     <ToggleButton value={365}>1년</ToggleButton>
+                    <ToggleButton value={0}>전체</ToggleButton>
                 </ToggleButtonGroup>
 
                 <Box sx={{textAlign: 'right'}}>

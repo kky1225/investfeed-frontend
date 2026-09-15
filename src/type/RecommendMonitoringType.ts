@@ -80,7 +80,7 @@ export interface AdminRecommendPickRes {
 
 // ── Aggregate Metrics ───────────────────────────────────────────────────────
 export interface AdminBacktestMetricsRes {
-    periodDays: number;
+    periodDays: number | null; // null = 전체 기간
     totalSignals: number;
     insufficientReason: string | null;
     metrics1d: HorizonMetrics;

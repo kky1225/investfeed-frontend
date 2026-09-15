@@ -24,16 +24,15 @@ export const fetchAdminMarketSnapshots = async (days: number = 30): Promise<ApiR
     return res.data;
 };
 
-export const fetchAdminBackfillStatus = async (days: number = 25): Promise<ApiResponse<AdminBackfillStatusRes[]>> => {
-    const res = await api.get<ApiResponse<AdminBackfillStatusRes[]>>('/admin/recommend/monitoring/backfill-status', {
-        params: {days},
-    });
+export const fetchAdminBackfillStatus = async (): Promise<ApiResponse<AdminBackfillStatusRes[]>> => {
+    const res = await api.get<ApiResponse<AdminBackfillStatusRes[]>>('/admin/recommend/monitoring/backfill-status');
     return res.data;
 };
 
-export const fetchAdminBacktestMetrics = async (periodDays: number = 30): Promise<ApiResponse<AdminBacktestMetricsRes>> => {
+/** periodDays 미지정 = 전체 기간 */
+export const fetchAdminBacktestMetrics = async (periodDays?: number): Promise<ApiResponse<AdminBacktestMetricsRes>> => {
     const res = await api.get<ApiResponse<AdminBacktestMetricsRes>>('/admin/recommend/monitoring/metrics', {
-        params: {periodDays},
+        params: periodDays ? {periodDays} : undefined,
     });
     return res.data;
 };

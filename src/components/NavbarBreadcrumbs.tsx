@@ -39,9 +39,7 @@ const fallbackBreadcrumb = (pathname: string): string[] | null => {
 
     // 주식 (국내+해외 통합)
     if (pathname.startsWith('/stock/holding/list/')) return ['주식', '주식 계좌'];
-
-    // 관심 종목 (최상위 - 국내+미국 통합)
-    if (pathname === '/stock/interest' || pathname.startsWith('/stock/interest/list/')) return ['관심 종목'];
+    if (pathname === '/stock/interest' || pathname.startsWith('/stock/interest/list/')) return ['주식', '관심 종목'];
 
     // 주식 > 해외 주식
     if (pathname.startsWith('/us-stock/detail/')) return ['주식', '해외 주식', '종목 상세'];
