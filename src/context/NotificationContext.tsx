@@ -118,6 +118,7 @@ export function NotificationProvider({children}: { children: ReactNode }) {
     useEffect(() => {
         if (!isAuthenticated) return;
 
+        const STABLE_CONNECTION_MS = 10_000;   // 이 시간 이상 유지돼야 정상 연결로 간주
         let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
         let reconnectAttempt = 0;
         let isCancelled = false;
@@ -129,9 +130,10 @@ export function NotificationProvider({children}: { children: ReactNode }) {
             const wsUrl = `${protocol}//${window.location.host}/ws/notification`;
             const ws = new WebSocket(wsUrl);
             wsRef.current = ws;
+            let openedAt: number | null = null;
 
             ws.onopen = () => {
-                reconnectAttempt = 0;
+                openedAt = Date.now();
             };
 
             ws.onmessage = (event) => {
@@ -156,6 +158,11 @@ export function NotificationProvider({children}: { children: ReactNode }) {
 
             ws.onclose = () => {
                 wsRef.current = null;
+                // 인증 실패는 연결 직후 끊기므로 onopen 만으로 초기화하면 백오프가 늘지 않는다.
+                // 일정 시간 유지된 연결만 정상으로 보고 재시도 간격을 초기화한다.
+                if (openedAt != null && Date.now() - openedAt >= STABLE_CONNECTION_MS) {
+                    reconnectAttempt = 0;
+                }
                 if (!isCancelled) {
                     const delay = Math.min(3000 * Math.pow(2, reconnectAttempt), 60_000);
                     reconnectAttempt++;

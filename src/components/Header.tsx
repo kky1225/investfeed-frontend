@@ -18,6 +18,8 @@ import {fetchUsStockSearch} from '../api/usStock/UsStockApi.ts';
 import {useNavigate} from 'react-router-dom';
 import {useNotification} from '../context/NotificationContext';
 import NotificationPopover from './NotificationPopover';
+import SmartToyOutlinedIcon from '@mui/icons-material/SmartToyOutlined';
+import {useAssistant} from '../context/AssistantContext';
 
 interface SearchItem {
     code: string;
@@ -30,6 +32,7 @@ interface SearchItem {
 export default function Header() {
     const navigate = useNavigate();
     const {unreadCount, refreshAll} = useNotification();
+    const {openDrawer, unreadCount: assistantUnread} = useAssistant();
     const [searchKeyword, setSearchKeyword] = useState('');
     const [searchResults, setSearchResults] = useState<SearchItem[]>([]);
     const [searchLoading, setSearchLoading] = useState(false);
@@ -178,6 +181,13 @@ export default function Header() {
                 )}
             />
             <Stack direction="row" sx={{gap: 1}}>
+                <MenuButton
+                    badgeContent={assistantUnread}
+                    aria-label="AI 비서"
+                    onClick={openDrawer}
+                >
+                    <SmartToyOutlinedIcon/>
+                </MenuButton>
                 <MenuButton
                     showBadge={unreadCount > 0}
                     aria-label="Open notifications"

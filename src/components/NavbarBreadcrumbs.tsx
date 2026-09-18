@@ -60,6 +60,7 @@ const fallbackBreadcrumb = (pathname: string): string[] | null => {
     if (pathname === '/settings/api-keys') return ['설정', 'API Key 관리'];
     if (pathname.startsWith('/settings/')) return ['설정'];
     if (pathname === '/notification/settings') return ['알림', '알림 설정'];
+    if (pathname === '/assistant') return ['AI 비서'];
 
     return null;
 };

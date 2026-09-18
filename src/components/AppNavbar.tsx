@@ -15,6 +15,8 @@ import MenuButton from './MenuButton';
 import ColorModeIconDropdown from './ColorModeSelect.tsx';
 import NotificationPopover from './NotificationPopover';
 import {useNotification} from '../context/NotificationContext';
+import SmartToyOutlinedIcon from '@mui/icons-material/SmartToyOutlined';
+import {useAssistant} from '../context/AssistantContext';
 import Autocomplete from '@mui/material/Autocomplete';
 import TextField from '@mui/material/TextField';
 import CircularProgress from '@mui/material/CircularProgress';
@@ -52,6 +54,7 @@ const Toolbar = styled(MuiToolbar)({
 export default function AppNavbar() {
     const navigate = useNavigate();
     const {unreadCount, refreshAll} = useNotification();
+    const {unreadCount: assistantUnread} = useAssistant();
     const [open, setOpen] = useState(false);
     const [searchOpen, setSearchOpen] = useState(false);
     const [notificationAnchorEl, setNotificationAnchorEl] = useState<HTMLElement | null>(null);
@@ -165,6 +168,9 @@ export default function AppNavbar() {
                     </Stack>
                     <MenuButton aria-label="search" onClick={() => setSearchOpen(prev => !prev)}>
                         <SearchRoundedIcon />
+                    </MenuButton>
+                    <MenuButton badgeContent={assistantUnread} aria-label="AI 비서" onClick={() => navigate('/assistant')}>
+                        <SmartToyOutlinedIcon />
                     </MenuButton>
                     <MenuButton
                         showBadge={unreadCount > 0}

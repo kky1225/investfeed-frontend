@@ -15,6 +15,7 @@ import {useEffect} from "react";
 import {useApiKeyStatus} from "../context/ApiKeyStatusContext.tsx";
 import {useMenuTree} from "../context/MenuContext.tsx";
 import type {MenuRes} from "../type/MenuType";
+import AssistantDrawer from "../components/assistant/AssistantDrawer.tsx";
 
 const xThemeComponents = {
     ...dataGridCustomizations,
@@ -63,6 +64,7 @@ const MainLayout = () => {
             <Box sx={{ display: 'flex' }}>
                 <SideMenu />
                 <AppNavbar />
+                <AssistantDrawer />
                 <Box
                     component="main"
                     sx={(theme) => ({

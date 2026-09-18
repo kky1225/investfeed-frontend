@@ -25,6 +25,15 @@ export default defineConfig(({ mode }) => ({
         ws: true,
         changeOrigin: true,
       },
+      // AI 비서 Python 서비스 (FastAPI). /api 와 분리된 별도 프로세스.
+      // /assistant 는 React 페이지 경로이기도 하므로 브라우저 페이지 이동(Accept: text/html)은 index.html 로 돌리고 API 호출만 프록시한다
+      '/assistant': {
+        target: 'http://localhost:8000',
+        changeOrigin: true,
+        bypass(req) {
+          if (req.headers.accept?.includes('text/html')) return '/index.html';
+        },
+      },
     },
   },
 }))

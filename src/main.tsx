@@ -7,6 +7,7 @@ import { queryClient } from './lib/queryClient.ts';
 import { AuthProvider } from './context/AuthContext.tsx';
 import { ApiKeyStatusProvider } from './context/ApiKeyStatusContext.tsx';
 import { NotificationProvider } from './context/NotificationContext.tsx';
+import { AssistantProvider } from './context/AssistantContext.tsx';
 import { BlindModeProvider } from './context/BlindModeContext.tsx';
 import { MenuProvider } from './context/MenuContext.tsx';
 import { AlertProvider } from './context/AlertContext.tsx';
@@ -18,6 +19,7 @@ createRoot(document.getElementById('root')!).render(
             <AuthProvider>
                 <ApiKeyStatusProvider>
                     <NotificationProvider>
+                      <AssistantProvider>
                         <BlindModeProvider>
                             <MenuProvider>
                                 <AlertProvider>
@@ -26,6 +28,7 @@ createRoot(document.getElementById('root')!).render(
                                 </AlertProvider>
                             </MenuProvider>
                         </BlindModeProvider>
+                      </AssistantProvider>
                     </NotificationProvider>
                 </ApiKeyStatusProvider>
             </AuthProvider>

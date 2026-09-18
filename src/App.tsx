@@ -63,6 +63,7 @@ import RebalancingPage from "./pages/rebalancing/RebalancingPage.tsx";
 import EconomicCalendarPage from "./pages/calendar/EconomicCalendarPage.tsx";
 import GoalPage from "./pages/goal/GoalPage.tsx";
 import NotificationSettingPage from "./pages/notificationSetting/NotificationSettingPage.tsx";
+import AssistantPage from "./pages/assistant/AssistantPage.tsx";
 
 const StockDetailWithKey = () => {
     const { id } = useParams();
@@ -79,7 +80,8 @@ function App() {
     const [forbidden, setForbidden] = useState<{ open: boolean; message: string }>({
         open: false, message: ''
     });
-    const [secondaryAuth, setSecondaryAuth] = useState<{ open: boolean; mode: 'setup' | 'verify' }>({
+    // source: 요청 출처. 'assistant' 면 취소해도 화면 이동하지 않는다 (드로어 유지)
+    const [secondaryAuth, setSecondaryAuth] = useState<{ open: boolean; mode: 'setup' | 'verify'; source?: string }>({
         open: false, mode: 'verify'
     });
     // 일반 에러 Dialog (500/네트워크 등). 이미 열려있으면 새 에러 무시.
@@ -93,9 +95,9 @@ function App() {
     }, []);
 
     const handleSecondaryAuth = useCallback((e: Event) => {
-        const { code } = (e as CustomEvent).detail;
+        const { code, source } = (e as CustomEvent).detail;
         const mode = code === 'AUTH_4041' ? 'setup' : 'verify';
-        setSecondaryAuth({ open: true, mode });
+        setSecondaryAuth({ open: true, mode, source });
     }, []);
 
     const handleGlobalError = useCallback((e: Event) => {
@@ -227,8 +229,10 @@ function App() {
                     processSecondaryAuthQueue(null);
                 }}
                 onClose={() => {
+                    const fromAssistant = secondaryAuth.source === 'assistant';
                     setSecondaryAuth({open: false, mode: 'verify'});
                     processSecondaryAuthQueue(new Error('cancelled'));
+                    if (fromAssistant) return;
                     if (window.history.length > 1) {
                         navigate(-1);
                     } else {
@@ -243,6 +247,7 @@ function App() {
                     <Route path="/settings/change-password" Component={ChangePassword} />
                     <Route path="/settings/profile" Component={Profile} />
                     <Route path="/settings/api-keys" Component={ApiKeyManagement} />
+                    <Route path="/assistant" Component={AssistantPage} />
                     <Route element={<MainLayout />}>
                         <Route path="/" Component={MarketIndexList} />
                         <Route path="/stock/dashboard" Component={Dashboard} />

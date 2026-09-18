@@ -82,6 +82,10 @@ api.interceptors.response.use(
                 return Promise.reject(error);
             }
             if (code === 'AUTH_4040' || code === 'AUTH_4041' || code === 'AUTH_4044') {
+                // 자동 재조회(비서 타임라인 등)는 다이얼로그 없이 호출부가 공개 데이터로 되돌리게 한다
+                if (originalRequest.secondaryAuthSilent === true) {
+                    return Promise.reject(error);
+                }
                 if (isSecondaryAuthPending) {
                     return new Promise((resolve, reject) => {
                         secondaryAuthQueue.push({ resolve, reject });
@@ -89,7 +93,7 @@ api.interceptors.response.use(
                 }
 
                 isSecondaryAuthPending = true;
-                window.dispatchEvent(new CustomEvent('show-secondary-auth', { detail: { code } }));
+                window.dispatchEvent(new CustomEvent('show-secondary-auth', { detail: { code, source: originalRequest.secondaryAuthSource } }));
 
                 return new Promise((resolve, reject) => {
                     secondaryAuthQueue.push({ resolve, reject });
