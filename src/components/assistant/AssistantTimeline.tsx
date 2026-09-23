@@ -36,10 +36,18 @@ function groupByDate(items: TimelineMessage[]): Map<string, TimelineMessage[]> {
     return groups;
 }
 
+/** 미확인 배지 대상 (서버 TimelineService.UNREAD_TYPES 와 같은 기준) */
+const UNREAD_TYPES = ['BRIEFING', 'ALERT'];
+
 /** 서버 타임라인(최신순 페이지) + 로컬 안내 항목. 열릴 때 최신 id 로 읽음 처리 */
 export default function AssistantTimeline({localItems}: { localItems: TimelineMessage[] }) {
     const {personalUnlocked, setPersonalUnlocked, requestPersonalUnlock, consumeUnlockPrompt, markRead} = useAssistant();
     const markedRef = useRef<number>(0);
+    // 열린 시점의 미확인 수. 첫 페이지 응답은 읽음 처리 전에 계산된 값이라 여기서만 붙잡아 둔다
+    const unreadAtOpenRef = useRef<number | null>(null);
+    const didScrollRef = useRef(false);
+    const unreadMarkRef = useRef<HTMLDivElement | null>(null);
+    const bottomRef = useRef<HTMLDivElement | null>(null);
 
     const query = useInfiniteQuery({
         queryKey: [...ASSISTANT_TIMELINE_KEY, personalUnlocked],
@@ -78,6 +86,28 @@ export default function AssistantTimeline({localItems}: { localItems: TimelineMe
     const ordered = useMemo(() => [...items].reverse().concat(localItems), [items, localItems]);
     const groups = useMemo(() => groupByDate(ordered), [ordered]);
 
+    if (unreadAtOpenRef.current === null && query.data?.pages[0]) {
+        unreadAtOpenRef.current = query.data.pages[0].unreadCount;
+    }
+
+    /** 안 읽은 것 중 가장 오래된 메시지 id. 없으면 null (→ 맨 아래로) */
+    const firstUnreadId = useMemo(() => {
+        const unread = unreadAtOpenRef.current ?? 0;
+        if (unread <= 0) return null;
+        const targets = items.filter((m) => UNREAD_TYPES.includes(m.body.type));   // items 는 최신순
+        return targets.slice(0, unread).at(-1)?.id ?? null;                        // 불러온 것보다 많으면 가장 오래된 것
+    }, [items]);
+
+    // 열 때 한 번만: 안 읽은 첫 메시지로, 없으면 최신으로. 이후 스크롤은 건드리지 않는다
+    useEffect(() => {
+        if (didScrollRef.current || query.isLoading || ordered.length === 0) return;
+        didScrollRef.current = true;
+        requestAnimationFrame(() => {
+            const target = unreadMarkRef.current ?? bottomRef.current;
+            target?.scrollIntoView({block: unreadMarkRef.current ? 'start' : 'end'});
+        });
+    }, [ordered.length, query.isLoading]);
+
     if (query.isLoading) {
         return <Box display="flex" justifyContent="center" py={4}><CircularProgress size={24}/></Box>;
     }
@@ -100,9 +130,19 @@ export default function AssistantTimeline({localItems}: { localItems: TimelineMe
             {Array.from(groups.entries()).map(([date, msgs]) => (
                 <Stack key={date} spacing={1}>
                     <Divider><Typography variant="caption" color="text.secondary">{date}</Typography></Divider>
-                    {msgs.map((m) => <AssistantMessageView key={m.id} message={m} onUnlock={personalUnlocked ? undefined : requestPersonalUnlock}/>)}
+                    {msgs.map((m) => (
+                        <Box key={m.id}>
+                            {m.id === firstUnreadId && (
+                                <Box ref={unreadMarkRef} sx={{scrollMarginTop: 8, pb: 1}}>
+                                    <Divider><Typography variant="caption" color="primary">여기까지 읽음</Typography></Divider>
+                                </Box>
+                            )}
+                            <AssistantMessageView message={m} onUnlock={personalUnlocked ? undefined : requestPersonalUnlock}/>
+                        </Box>
+                    ))}
                 </Stack>
             ))}
+            <Box ref={bottomRef}/>
         </Stack>
     );
 }

@@ -19,6 +19,13 @@ const BRIEFING_TOGGLES: { key: keyof Omit<AssistantSettingRes, 'sectionsOff'>; l
     {key: 'coinEnabled', label: '코인', description: '업비트 일봉 마감 09:05 (매일)'},
 ];
 
+/** 장중 알림. ±3%·±5% 는 고정 임계이고 회원은 켜고 끄기만 한다. 서킷브레이커는 설정과 관계없이 항상 게시 (2026-09-21) */
+const ALERT_TOGGLES: { key: keyof Omit<AssistantSettingRes, 'sectionsOff'>; label: string; description: string }[] = [
+    {key: 'krWarnEnabled', label: '국내 지수 급변 알림', description: '코스피·코스닥 장중 ±3% · ±5% 도달 (09:00~15:30)'},
+    {key: 'usWarnEnabled', label: '미국 지수 급변 알림', description: '나스닥·S&P500 장중 ±3% · ±5% 도달'},
+    {key: 'releaseAlertEnabled', label: '지표 발표 알림', description: 'CPI·고용·GDP·기준금리 등 발표 확인 시'},
+];
+
 /** 토글마다 즉시 PUT (알림 설정 화면과 같은 방식). 저장 버튼 없음 */
 export default function AssistantSettings() {
     const queryClient = useQueryClient();
@@ -67,6 +74,21 @@ export default function AssistantSettings() {
                         <Switch size="small" checked={setting[t.key]} onChange={() => toggleBriefing(t.key)}/>
                     </Box>
                 ))}
+            </Box>
+            <Box>
+                <Typography variant="subtitle2" sx={{mb: 1}}>알림 수신</Typography>
+                {ALERT_TOGGLES.map((t) => (
+                    <Box key={t.key} sx={{display: 'flex', alignItems: 'center', justifyContent: 'space-between', py: 0.75, borderBottom: '1px solid', borderColor: 'divider'}}>
+                        <Box>
+                            <Typography variant="body2">{t.label}</Typography>
+                            <Typography variant="caption" color="text.secondary">{t.description}</Typography>
+                        </Box>
+                        <Switch size="small" checked={setting[t.key]} onChange={() => toggleBriefing(t.key)}/>
+                    </Box>
+                ))}
+                <Typography variant="caption" color="text.secondary" display="block" sx={{mt: 1}}>
+                    서킷브레이커 발동은 설정과 관계없이 항상 알립니다.
+                </Typography>
             </Box>
             <Box>
                 <Typography variant="subtitle2" sx={{mb: 0.5}}>섹션 표시</Typography>

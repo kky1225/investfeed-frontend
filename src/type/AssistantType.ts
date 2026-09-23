@@ -81,6 +81,12 @@ export interface AssistantSettingRes {
     usEnabled: boolean;
     /** 코인: 09:05 코인 마감. 행이 없으면 코인 계좌가 있을 때만 기본 on */
     coinEnabled: boolean;
+    /** 국내 지수(코스피·코스닥) 장중 ±3%·±5% 급변 알림 */
+    krWarnEnabled: boolean;
+    /** 미국 지수(나스닥·S&P500) 장중 ±3%·±5% 급변 알림 */
+    usWarnEnabled: boolean;
+    /** 지표 발표 알림. 서킷브레이커는 설정과 관계없이 항상 */
+    releaseAlertEnabled: boolean;
     sectionsOff: string[];
 }
 
