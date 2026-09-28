@@ -229,3 +229,8 @@ export interface AckMutationVars {
     id: number;
     note: string | null;
 }
+
+export interface TelegramSendRes {
+    configured: boolean;
+    blocked: boolean;
+}

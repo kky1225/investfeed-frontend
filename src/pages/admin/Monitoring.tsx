@@ -42,6 +42,7 @@ import {AdapterDayjs} from '@mui/x-date-pickers/AdapterDayjs';
 import type {Dayjs} from 'dayjs';
 import {SparkLineChart} from '@mui/x-charts/SparkLineChart';
 import LinearProgress from '@mui/material/LinearProgress';
+import Switch from '@mui/material/Switch';
 import {
     fetchSchedulerOverview,
     fetchConfigLogsOverview,
@@ -60,6 +61,8 @@ import {
     fetchErrorLogAckHistory,
     bulkAcknowledgeSchedulerLogs,
     bulkAcknowledgeErrorLogs,
+    fetchTelegramSend,
+    updateTelegramSend,
 } from '../../api/admin/MonitoringApi';
 import FreshnessIndicator from '../../components/FreshnessIndicator';
 import type {
@@ -82,6 +85,7 @@ import type {
     ErrorLogsOverviewRes,
     ApiCallsOverviewRes,
     SystemOverviewRes,
+    TelegramSendRes,
 } from '../../type/MonitoringType';
 
 type TabKey = 'scheduler' | 'config' | 'redis' | 'error' | 'apicall' | 'system';
@@ -247,6 +251,16 @@ export default function Monitoring() {
         (config) => fetchSystemOverview(config),
         {enabled: tab === 'system'},
     );
+
+    const telegramSendQuery = usePollingQuery<TelegramSendRes>(
+        ['monitoring', 'telegram-send'],
+        (config) => fetchTelegramSend(config),
+        {enabled: tab === 'system'},
+    );
+    const telegramSendMutation = useMutation({
+        mutationFn: async (blocked: boolean) => requireOk(await updateTelegramSend(blocked), '텔레그램 발송 상태 변경'),
+        onSuccess: () => queryClient.invalidateQueries({queryKey: ['monitoring', 'telegram-send']}),
+    });
 
     // 활성 탭 query (loading/lastUpdated/error 파생용)
     const activeQuery = tab === 'scheduler' ? schedulerQuery
@@ -1237,6 +1251,29 @@ export default function Monitoring() {
                                     {loading ? <Skeleton width={120}/> :
                                         `사용 중 ${systemStatus?.slowSchedulerActive ?? 0} / 최대 ${systemStatus?.slowSchedulerMax ?? 0}`}
                                 </Typography>
+                            </CardContent>
+                        </Card>
+                    </Grid>
+                    <Grid size={{xs: 12, sm: 6, md: 3}}>
+                        <Card variant="outlined">
+                            <CardContent>
+                                <Typography variant="body2" color="text.secondary">텔레그램 발송 (비서 알림)</Typography>
+                                {telegramSendQuery.isLoading ? <Skeleton width={120} sx={{mt: 1}}/> : (
+                                    <Box sx={{display: 'flex', alignItems: 'center', justifyContent: 'space-between', mt: 0.5}}>
+                                        <Typography variant="h6"
+                                            color={telegramSendQuery.data?.blocked ? 'error.main' : 'text.primary'}>
+                                            {!telegramSendQuery.data?.configured ? '봇 미설정'
+                                                : telegramSendQuery.data?.blocked ? '전체 차단 중' : '발송 중'}
+                                        </Typography>
+                                        <Tooltip title="오알림 시 비상 차단. 모든 회원의 텔레그램 발송을 즉시 멈춤 (타임라인 게시는 유지)">
+                                            <Switch
+                                                size="small"
+                                                checked={!telegramSendQuery.data?.blocked}
+                                                onChange={(_, checked) => telegramSendMutation.mutate(!checked)}
+                                            />
+                                        </Tooltip>
+                                    </Box>
+                                )}
                             </CardContent>
                         </Card>
                     </Grid>

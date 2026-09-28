@@ -10,6 +10,7 @@ import Alert from '@mui/material/Alert';
 import {requireOk} from '../../lib/apiResponse';
 import {fetchAssistantSetting, saveAssistantSetting} from '../../api/assistant/AssistantApi';
 import {BRIEFING_SECTIONS, type AssistantSettingReq, type AssistantSettingRes} from '../../type/AssistantType';
+import TelegramSettings from './TelegramSettings';
 
 const KEY = ['assistant', 'setting'] as const;
 
@@ -87,9 +88,10 @@ export default function AssistantSettings() {
                     </Box>
                 ))}
                 <Typography variant="caption" color="text.secondary" display="block" sx={{mt: 1}}>
-                    서킷브레이커 발동은 설정과 관계없이 항상 알립니다.
+                    서킷브레이커 발동은 설정과 관계없이 항상 알립니다. 보유 종목 급등락(5·10·15·20%·상하한가·52주)은 알림함 설정을 따릅니다.
                 </Typography>
             </Box>
+            <TelegramSettings/>
             <Box>
                 <Typography variant="subtitle2" sx={{mb: 0.5}}>섹션 표시</Typography>
                 <Typography variant="caption" color="text.secondary" display="block" sx={{mb: 1}}>

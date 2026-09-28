@@ -144,3 +144,26 @@ export const BRIEFING_SECTIONS: { group: string; items: { id: string; label: str
         ],
     },
 ];
+
+export type TelegramStatus = 'NONE' | 'ACTIVE' | 'PAUSED' | 'BLOCKED';
+
+export interface TelegramStatusRes {
+    /** 서버에 봇 토큰이 있는지. false 면 연결 불가 안내 */
+    configured: boolean;
+    status: TelegramStatus;
+    linkedAt: string | null;
+    botUsername: string;
+    /** 관리자 전체 발송 차단 중 */
+    sendBlocked: boolean;
+}
+
+export interface TelegramLinkCodeRes {
+    code: string;
+    expiresAt: string;
+    /** https://t.me/{bot}?start={code} — 누르면 텔레그램에 /start {code} 자동 입력 */
+    deepLink: string;
+}
+
+export interface TelegramStatusReq {
+    status: 'ACTIVE' | 'PAUSED';
+}

@@ -1,7 +1,7 @@
 import type {AxiosRequestConfig} from "axios";
 import api from "../../axios.ts";
 import type {ApiResponse} from "../../type/AuthType";
-import type {AssistantSettingReq, AssistantSettingRes, AssistantTokenRes, ReadMarkerReq, TimelinePage} from "../../type/AssistantType.ts";
+import type {AssistantSettingReq, AssistantSettingRes, AssistantTokenRes, ReadMarkerReq, TelegramLinkCodeRes, TelegramStatusReq, TelegramStatusRes, TimelinePage} from "../../type/AssistantType.ts";
 
 export interface TimelineQuery {
     before?: number;
@@ -48,5 +48,27 @@ export const fetchAssistantSetting = async (config?: AxiosRequestConfig): Promis
 
 export const saveAssistantSetting = async (req: AssistantSettingReq): Promise<ApiResponse<AssistantSettingRes>> => {
     const res = await api.put<ApiResponse<AssistantSettingRes>>("/assistant/settings", req);
+    return res.data;
+};
+
+// ── 텔레그램 (3단계). 연결·해제·스위치는 웹에서만 ──
+
+export const fetchTelegramStatus = async (config?: AxiosRequestConfig): Promise<ApiResponse<TelegramStatusRes>> => {
+    const res = await api.get<ApiResponse<TelegramStatusRes>>("/assistant/telegram", config);
+    return res.data;
+};
+
+export const issueTelegramLinkCode = async (): Promise<ApiResponse<TelegramLinkCodeRes>> => {
+    const res = await api.post<ApiResponse<TelegramLinkCodeRes>>("/assistant/telegram/link-code");
+    return res.data;
+};
+
+export const updateTelegramStatus = async (req: TelegramStatusReq): Promise<ApiResponse<TelegramStatusRes>> => {
+    const res = await api.patch<ApiResponse<TelegramStatusRes>>("/assistant/telegram", req);
+    return res.data;
+};
+
+export const unlinkTelegram = async (): Promise<ApiResponse<TelegramStatusRes>> => {
+    const res = await api.delete<ApiResponse<TelegramStatusRes>>("/assistant/telegram");
     return res.data;
 };

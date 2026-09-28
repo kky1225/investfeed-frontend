@@ -21,6 +21,7 @@ import type {
     ErrorLogsOverviewRes,
     ApiCallsOverviewRes,
     SystemOverviewRes,
+    TelegramSendRes,
 } from '../../type/MonitoringType';
 
 export const fetchSchedulerOverview = async (req: SchedulerLogsReq, config?: AxiosRequestConfig): Promise<ApiResponse<SchedulerOverviewRes>> => {
@@ -118,5 +119,15 @@ export const bulkAcknowledgeErrorLogs = async (req: BulkAcknowledgeReq): Promise
 
 export const invalidateRedisPrefix = async (prefix: string): Promise<ApiResponse<RedisInvalidateRes>> => {
     const res = await api.delete<ApiResponse<RedisInvalidateRes>>('/admin/monitoring/redis/cache', { params: { prefix } });
+    return res.data;
+};
+
+export const fetchTelegramSend = async (config?: AxiosRequestConfig): Promise<ApiResponse<TelegramSendRes>> => {
+    const res = await api.get<ApiResponse<TelegramSendRes>>('/admin/monitoring/telegram-send', config);
+    return res.data;
+};
+
+export const updateTelegramSend = async (blocked: boolean): Promise<ApiResponse<TelegramSendRes>> => {
+    const res = await api.patch<ApiResponse<TelegramSendRes>>('/admin/monitoring/telegram-send', {blocked});
     return res.data;
 };
