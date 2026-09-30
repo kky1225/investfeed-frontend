@@ -72,3 +72,8 @@ export const unlinkTelegram = async (): Promise<ApiResponse<TelegramStatusRes>> 
     const res = await api.delete<ApiResponse<TelegramStatusRes>>("/assistant/telegram");
     return res.data;
 };
+
+export const fetchAssistantCard = async (ref: string): Promise<ApiResponse<unknown>> => {
+    const res = await api.get<ApiResponse<unknown>>(`/assistant/secure/cards/${encodeURIComponent(ref)}`, {secondaryAuthSource: 'assistant'});
+    return res.data;
+};

@@ -1,4 +1,4 @@
-export type SchedulerState = 'SUCCESS' | 'WARNING' | 'FAILED' | 'STUCK' | 'PENDING';
+export type SchedulerState = 'RUNNING' | 'SUCCESS' | 'WARNING' | 'FAILED' | 'STUCK' | 'PENDING';
 
 /** 이번 사이클(직전 22:00~) 발화 여부. state(마지막 실행 결과)와는 별개 축. */
 export type SchedulerFireStatus = 'FIRED' | 'MISSED' | 'NONE';

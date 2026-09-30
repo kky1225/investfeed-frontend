@@ -110,7 +110,11 @@ const FIRE_META: Record<Exclude<SchedulerFireStatus, 'NONE'>, {color: string; la
     MISSED: {color: 'error.main',   label: '이번 사이클 미완주 (미발화 또는 중단)'},
 };
 
+const SCHEDULER_RUNNING_POLL_MS = 3_000;
+const TRIGGER_WATCH_MARGIN_MS = 10_000;
+
 const STATE_META: Record<SchedulerState, {color: string; label: string}> = {
+    RUNNING:  {color: 'info.main',    label: '실행 중'},
     SUCCESS:  {color: 'success.main', label: '정상'},
     WARNING:  {color: 'warning.main', label: '최근 이상 발생'},
     FAILED:   {color: 'error.main',   label: '실패'},
@@ -118,12 +122,6 @@ const STATE_META: Record<SchedulerState, {color: string; label: string}> = {
     PENDING:  {color: 'grey.400',     label: '대기 (실행 기록 없음)'},
 };
 
-/**
- * 서버 페이징 DataGrid 의 rowCount 안정화 (MUI 권장 패턴).
- * 로딩 중 rowCount 가 undefined/0 이 되면 그리드가 "그 페이지는 존재하지 않는다"고 보고
- * 페이지를 0 으로 되돌린다. 값이 확정된 마지막 총건수를 ref 에 유지해 그 리셋을 막는다.
- * https://mui.com/x/react-data-grid/pagination/
- */
 function useStableRowCount(totalElements: number | undefined): number {
     const rowCountRef = useRef(totalElements ?? 0);
     return useMemo(() => {
@@ -162,34 +160,25 @@ export default function Monitoring() {
     const [triggerTarget, setTriggerTarget] = useState<SchedulerStatusRes | null>(null);
     const [triggering, setTriggering] = useState(false);
     const [triggerForce, setTriggerForce] = useState(false);
+    const [triggerWatch, setTriggerWatch] = useState<{schedulerName: string; prevStartedAt: string | null; until: number} | null>(null);
     const [menuAnchorEl, setMenuAnchorEl] = useState<HTMLElement | null>(null);
     const [menuTarget, setMenuTarget] = useState<SchedulerStatusRes | null>(null);
-    // 스케줄러 로그 필터 ('' = 전체)
     const [logsSchedulerFilter, setLogsSchedulerFilter] = useState<string>('');
     const [logsStatusFilter, setLogsStatusFilter] = useState<string>('');
     const [logsFromDate, setLogsFromDate] = useState<Dayjs | null>(null);
     const [logsToDate, setLogsToDate] = useState<Dayjs | null>(null);
-    // 키워드 입력 — input 은 자유 편집, commit 은 fetch 트리거 (Enter/blur)
     const [logsMessageInput, setLogsMessageInput] = useState<string>('');
     const [logsMessageKeyword, setLogsMessageKeyword] = useState<string>('');
-    // 미확인 필터 (탭별)
     const [logsUnackOnly, setLogsUnackOnly] = useState(false);
     const [errorUnackOnly, setErrorUnackOnly] = useState(false);
-    // 에러 로그 필터
     const [errorFromDate, setErrorFromDate] = useState<Dayjs | null>(null);
     const [errorToDate, setErrorToDate] = useState<Dayjs | null>(null);
     const [errorMessageInput, setErrorMessageInput] = useState<string>('');
     const [errorMessageKeyword, setErrorMessageKeyword] = useState<string>('');
-    // 일괄 확인 처리 다이얼로그
     const [bulkAckTarget, setBulkAckTarget] = useState<'scheduler' | 'error' | null>(null);
     const [bulkAckNote, setBulkAckNote] = useState('');
     const [bulkAckSaving, setBulkAckSaving] = useState(false);
 
-    // ============================================================================
-    // 탭별 usePollingQuery — enabled 조건으로 비활성 탭은 폴링 정지 (네비게이션 시 자동 cleanup)
-    // 모든 탭의 응답에 unackCount 포함됨 — 활성 탭의 data에서 직접 파생.
-    // 60초 간격, 분 정각(+300ms) 정렬 — 다른 페이지(시세/추천 등)와 동기화.
-    // ============================================================================
     const schedulerQuery = usePollingQuery<SchedulerOverviewRes>(
         ['monitoring', 'scheduler', logsPage, logsSize,
             logsSchedulerFilter, logsStatusFilter, logsUnackOnly,
@@ -206,7 +195,18 @@ export default function Monitoring() {
             toDate: logsToDate ? logsToDate.format('YYYY-MM-DD') : null,
             messageKeyword: logsMessageKeyword || null,
         }, config),
-        {enabled: tab === 'scheduler', placeholderData: keepPreviousData},
+        {
+            enabled: tab === 'scheduler',
+            placeholderData: keepPreviousData,
+            // 실행 중인 스케줄러가 있거나 수동 실행 시작을 기다리는 동안만 3초 폴링
+            refetchInterval: (query) => {
+                const current = query.state.data?.statuses ?? [];
+                const hasRunning = current.some((s) => s.state === 'RUNNING');
+                const waitingStart = !!triggerWatch && Date.now() < triggerWatch.until &&
+                    (current.find((s) => s.schedulerName === triggerWatch.schedulerName)?.lastStartedAt ?? null) === triggerWatch.prevStartedAt;
+                return hasRunning || waitingStart ? SCHEDULER_RUNNING_POLL_MS : false;
+            },
+        },
     );
 
     const configQuery = usePollingQuery<ConfigLogsOverviewRes>(
@@ -287,7 +287,6 @@ export default function Monitoring() {
     const apiCallStats: ApiCallStatsItemRes[] = apiCallQuery.data?.stats?.items ?? [];
     const systemStatus: SystemStatusRes | null = systemQuery.data?.system ?? null;
 
-    // unackCount — 가장 최근 응답한 query 결과에서 (모든 탭 응답에 포함)
     const unackCount: UnacknowledgedCountRes =
         activeQuery.data?.unackCount
         ?? schedulerQuery.data?.unackCount
@@ -329,10 +328,15 @@ export default function Monitoring() {
         setTriggering(true);
         try {
             await triggerScheduler(triggerTarget.schedulerName, triggerForce);
+            // 백그라운드 실행이 시작될 때까지 3초 폴링으로 감시 → 시작 후에는 RUNNING 상태가 폴링을 이어받음
+            setTriggerWatch({
+                schedulerName: triggerTarget.schedulerName,
+                prevStartedAt: triggerTarget.lastStartedAt ?? null,
+                until: Date.now() + triggerTarget.timeoutSec * 1000 + TRIGGER_WATCH_MARGIN_MS,
+            });
             setTriggerTarget(null);
             setTriggerForce(false);
-            // 약간 지연 후 refresh (백그라운드 실행 반영 위해)
-            setTimeout(reloadCurrentTab, 1500);
+            reloadCurrentTab();
         } catch (e) {
             console.error('수동 실행 실패', e);
         } finally {
@@ -709,10 +713,17 @@ export default function Monitoring() {
                                             <Box sx={{flex: 1}}>
                                                 {s ? (
                                                     <>
-                                                        <Typography variant="caption" color="text.secondary" display="block">
-                                                            최근 성공: {formatDateTime(s.lastSuccessAt)}
-                                                            {s.lastSuccessDurationMs != null && ` (${s.lastSuccessDurationMs}ms)`}
-                                                        </Typography>
+                                                        {/* 실행 중에는 같은 줄에 시작 시각을 표시 — 종료되면 최근 성공으로 돌아옴 (카드 높이 유지) */}
+                                                        {state === 'RUNNING' ? (
+                                                            <Typography variant="caption" color={meta.color} display="block" sx={{fontWeight: 600}}>
+                                                                실행 중: {formatDateTime(s.lastStartedAt)} 시작
+                                                            </Typography>
+                                                        ) : (
+                                                            <Typography variant="caption" color="text.secondary" display="block">
+                                                                최근 성공: {formatDateTime(s.lastSuccessAt)}
+                                                                {s.lastSuccessDurationMs != null && ` (${s.lastSuccessDurationMs}ms)`}
+                                                            </Typography>
+                                                        )}
                                                         {/* 실패 줄은 항상 공간 차지 — 카드 높이 통일. 없으면 빈 라인 */}
                                                         <Typography
                                                             variant="caption"
@@ -804,6 +815,7 @@ export default function Monitoring() {
                                             <Typography variant="body2" sx={{fontWeight: 600}}>
                                                 전체 {total}
                                             </Typography>
+                                            <StateDot state="RUNNING" count={countByState('RUNNING')}/>
                                             <StateDot state="SUCCESS" count={countByState('SUCCESS')}/>
                                             <StateDot state="WARNING" count={countByState('WARNING')}/>
                                             <StateDot state="STUCK"   count={countByState('STUCK')}/>
