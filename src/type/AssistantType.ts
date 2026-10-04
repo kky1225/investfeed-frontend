@@ -59,13 +59,118 @@ export interface MessageBody {
     sections: Section[];
     cards: string[];
     refs: Record<string, number>;
+    turnCards?: TurnCard[];
 }
+
+export interface TurnCard {
+    kind: string;
+    personal?: boolean;
+    status?: SectionStatus;
+    ref?: string | null;
+    asOf?: string | null;
+    source?: string | null;
+    error?: string | null;
+    payload?: unknown;
+    /** 조회 조건 (공개 데이터 카드의 도구 인자). 예: get_calendar {from, to, type, country} */
+    args?: Record<string, unknown> | null;
+}
+
+export type StockMarket = 'KR' | 'US' | 'CRYPTO';
+
+export interface StockCandidate { code: string; name: string; market: StockMarket; }
+export interface StockChoicePayload { query: string; candidates: StockCandidate[]; }
+
+export interface IndexSnapshot { name: string; close: number; changeRate: number | null; changeAmount: number | null; high: number | null; low: number | null; }
+export interface MarketSummaryPayload {
+    market: 'KOSPI' | 'KOSDAQ';
+    index: IndexSnapshot;
+    secondary: IndexSnapshot | null;
+    flow: { foreignEok: number | null; institutionEok: number | null; individualEok: number | null } | null;
+    tradingDay: string;
+}
+
+export interface FlowStock { code: string; name: string; netAmountEok: number; periodChangeRate: number | null; streakDays: number | null; }
+export interface MarketInvestorFlowPayload {
+    investor: 'FOREIGN' | 'INSTITUTION' | 'PENSION' | 'INDIVIDUAL';
+    market: 'KOSPI' | 'KOSDAQ';
+    days: number;
+    side: 'BUY' | 'SELL';
+    minStreakDays: number | null;
+    stocks: FlowStock[];
+}
+
+export interface StockQuotePayload {
+    code: string; name: string; market: StockMarket; link: string; currency: string;
+    price: number; changeRate: number | null; changeAmount: number | null; volume: number | null;
+    high: number | null; low: number | null; high52w: number | null; low52w: number | null;
+}
+
+export interface StockFlowDay { date: string; foreignEok: number | null; institutionEok: number | null; individualEok: number | null; close: number | null; changeRate: number | null; }
+export interface StockInvestorFlowPayload { code: string; name: string; link: string; days: StockFlowDay[]; foreignStreak: number; institutionStreak: number; }
+
+/** 보유 종목 급등락 알림 1종목 (2026-10-02~, 잠금 없음). 시세 카드 모양으로 그린다 */
+export interface HoldingAlertPayload { name: string; link: string; price: number | null; currency: string; label: string; up: boolean; }
+
+/** 시장 카드 (2026-10-01~): 브리핑과 같은 지수 타일(summary) + 섹션. get_market_summary·get_global_indexes */
+export interface MarketBriefPayload { title: string; asOf: string; summary: string; sections: Section[]; }
+
+export interface GlobalIndexPayload { type: string; name: string; price: string; changeAmount: string; changeRate: string; delayStatus: string; updatedAt: string; }
+
+export interface CalendarItemPayload { date: string; name: string; country: string; type: string; value: string | null; }
+
+export interface RecommendListPayload { label: string; pickDate: string | null; items: { code: string; name: string; grade: string }[]; }
+
+export interface NewsRowPayload { title: string; link: string; pubDate: string; }
+
+export interface BriefingPointerPayload { messageId: number; headline: string; createdAt: string; type: string; }
+
+export interface HoldingRowPayload {
+    code: string; name: string; link: string | null; broker: string; currency: string;
+    eval: number | null; dayRate: number | null; dayChange: number | null; totalRate: number | null; evalProfit: number | null;
+}
+export interface ClassSummaryPayload {
+    assetClass: StockMarket; currency: string; eval: number; dayChange: number | null; dayRate: number | null; totalRate: number | null;
+    brokers: string[]; failedBrokers: string[];
+}
+export interface PortfolioPayload {
+    asOf: string; totalEvalKrw: number | null; usdKrw: number | null;
+    classes: ClassSummaryPayload[]; topGainers: HoldingRowPayload[]; topLosers: HoldingRowPayload[];
+    filter: { dayRateLt: number | null; dayRateGt: number | null; totalRateLt: number | null; totalRateGt: number | null } | null;
+    filtered: HoldingRowPayload[] | null;
+    realizedMonthWon: number | null;
+    /** 브리핑과 같은 계좌 섹션 (2026-10-01~). 없으면 이전 형식 */
+    sections?: Section[];
+}
+
+export interface HoldingPayload {
+    asOf: string; code: string; name: string; market: StockMarket; link: string; currency: string;
+    curPrc: number | null; dayRate: number | null; dayChange: number | null;
+    brokers: { broker: string; qty: number | null; purPrice: number | null; eval: number | null; evalProfit: number | null; totalRate: number | null }[];
+}
+
+export interface PnlPayload {
+    period: 'THIS_MONTH' | 'LAST_MONTH' | 'THIS_YEAR'; year: number; month: number | null; totalWon: number;
+    byClass: Record<string, number>;
+    rows: { broker: string; market: 'STOCK' | 'CRYPTO'; year: number; month: number; realizedPnl: number }[];
+}
+
+export interface PriceAlertPreviewPayload {
+    asOf: string; code: string; name: string; market: StockMarket; assetCode: string;
+    price: number; direction: 'ABOVE' | 'BELOW'; currency: string;
+}
+
+export interface StoredCard { ref: string; memberId: number; kind: string; createdAt: string; payload: unknown; }
+
+export interface ChatPick { code: string; market: StockMarket; name: string; }
 
 export interface TimelineMessage {
     id: number;
     createdAt: string;
     body: MessageBody;
 }
+
+/** 타임라인 보기 필터 (Kotlin TimelineView). BRIEFING = 브리핑·알림, CHAT = 질문·답변 */
+export type TimelineView = 'ALL' | 'BRIEFING' | 'CHAT';
 
 export interface TimelinePage {
     items: TimelineMessage[];
@@ -166,4 +271,49 @@ export interface TelegramLinkCodeRes {
 
 export interface TelegramStatusReq {
     status: 'ACTIVE' | 'PAUSED';
+}
+
+// ── 관리자 (별칭 사전 · 사용량) ──
+
+export interface AssistantAliasRes { id: number; alias: string; market: StockMarket; stkCd: string; createdAt: string; }
+export interface AssistantAliasCreateReq { alias: string; market: StockMarket; stkCd: string; }
+
+export interface AssistantUsageSum {
+    turns: number;
+    llmCalls: number;
+    inputTokens: number;
+    outputTokens: number;
+    cacheReadTokens: number;
+    costUsd: number;
+    rejectCount: number;
+    askCount: number;
+    /** ERROR + BLOCKED */
+    errorCount: number;
+    /** 턴 평균 응답 시간 */
+    avgLatencyMs: number;
+}
+
+/** 관리자 — 회원 처리 기록 1건 (질문 원문 없음) */
+export interface AssistantChatLogRes {
+    id: number;
+    createdAt: string;
+    /** TOOL / PICK / REJECT / ASK_USER / BLOCKED / ERROR */
+    route: string;
+    reason: string | null;
+    tools: string[];
+    /** 화면 문구 — 서버(ChatLogLabel)가 코드에서 만든다 */
+    routeLabel: string;
+    requestLabel: string | null;
+    reasonLabel: string | null;
+    toolErrorCount: number;
+    llmCalls: number;
+    costUsd: number;
+    latencyMs: number;
+}
+
+export interface AssistantUsageRes {
+    month: string;
+    total: AssistantUsageSum;
+    daily: { date: string; usage: AssistantUsageSum }[];
+    members: { memberId: number; loginId: string | null; usage: AssistantUsageSum }[];
 }

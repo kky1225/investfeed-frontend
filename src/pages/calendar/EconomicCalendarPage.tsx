@@ -452,7 +452,7 @@ export default function EconomicCalendarPage() {
                 </Typography>
                 <Typography variant="caption" color="text.secondary" component="div" sx={{lineHeight: 1.8}}>
                     🇰🇷 한국: 기준금리, 소비자물가지수, GDP 성장률, 원/달러 환율<br/>
-                    🇺🇸 미국: 기준금리, CPI, GDP, 실업률, 비농업고용지수(NFP), 신규 실업수당 청구건수, PCE 물가지수, 장단기 금리차<br/>
+                    🇺🇸 미국: 기준금리, CPI, GDP, 실업률, 비농업고용지수(NFP), 신규 실업수당 청구건수, 근원 PCE 물가지수, 장단기 금리차<br/>
                     <Box component="span" sx={{display: 'inline-block', width: 10, height: 10, borderRadius: 0.5, bgcolor: 'warning.light', mr: 0.5, verticalAlign: 'middle'}}/> 미래 발표 예정 일정
                 </Typography>
             </Box>

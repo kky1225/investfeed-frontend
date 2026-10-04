@@ -37,6 +37,7 @@ import {useNotification} from '../../context/NotificationContext';
 import {fetchPriceTargets, deletePriceTarget} from '../../api/notification/NotificationApi';
 import type {Notification, AssetType, PriceTarget} from '../../type/NotificationType';
 import FreshnessIndicator from '../../components/FreshnessIndicator';
+import {formatAlertPrice} from '../../components/CustomRender';
 
 type TabFilter = 'ALL' | AssetType;
 type TypeFilter = 'ALL' | '가격' | '목표' | '리밸런싱' | 'API_KEY';
@@ -404,13 +405,13 @@ export default function NotificationList() {
                                                     {notification.direction === 'REBALANCING_ASSET' ? `비중 초과 (현재 ${notification.fluRt}%)` :
                                                      notification.direction === 'REBALANCING_STOCK' ? `비중 초과 (현재 ${notification.fluRt}%)` :
                                                      notification.direction === 'GOAL_ACHIEVED' ? `목표 달성 (${notification.threshold.toLocaleString()}원)` :
-                                                     notification.direction === 'HIGH_52W' ? `52주 신고가 달성 (${notification.fluRt.toLocaleString()}원)` :
-                                                     notification.direction === 'LOW_52W' ? `52주 신저가 달성 (${notification.fluRt.toLocaleString()}원)` :
+                                                     notification.direction === 'HIGH_52W' ? `52주 신고가 달성 (${formatAlertPrice(notification.fluRt, notification.assetCode)})` :
+                                                     notification.direction === 'LOW_52W' ? `52주 신저가 달성 (${formatAlertPrice(notification.fluRt, notification.assetCode)})` :
                                                      notification.direction === 'UPPER_LIMIT' ? '상한가 도달' :
                                                      notification.direction === 'LOWER_LIMIT' ? '하한가 도달' :
-                                                     notification.direction === 'TARGET_ABOVE' ? `목표가 ${notification.threshold.toLocaleString()}원 이상 도달 (현재 ${notification.fluRt.toLocaleString()}원)` :
-                                                     notification.direction === 'TARGET_BELOW' ? `목표가 ${notification.threshold.toLocaleString()}원 이하 도달 (현재 ${notification.fluRt.toLocaleString()}원)` :
-                                                     `${notification.direction === 'UP' ? '+' : '-'}${notification.threshold}% 도달 (${notification.fluRt > 0 ? '+' : ''}${notification.fluRt.toFixed(2)}%)`}
+                                                     notification.direction === 'TARGET_ABOVE' ? `목표가 ${formatAlertPrice(notification.threshold, notification.assetCode)} 이상 도달 (현재 ${formatAlertPrice(notification.fluRt, notification.assetCode)})` :
+                                                     notification.direction === 'TARGET_BELOW' ? `목표가 ${formatAlertPrice(notification.threshold, notification.assetCode)} 이하 도달 (현재 ${formatAlertPrice(notification.fluRt, notification.assetCode)})` :
+                                                     `${notification.direction === 'UP' ? '+' : '-'}${notification.threshold}% 도달${notification.price != null ? ` (${formatAlertPrice(notification.price, notification.assetCode)})` : ''}`}
                                                 </Typography>
                                                 <Typography variant="caption" component="span" color="text.disabled">
                                                     {formatTime(notification.createdAt)}

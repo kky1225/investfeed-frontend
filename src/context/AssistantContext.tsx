@@ -13,7 +13,12 @@ interface AssistantContextType {
     personalUnlocked: boolean;
     setPersonalUnlocked: (v: boolean) => void;
     /** "개인 파트 보기" 버튼: 이때만 2차 인증 다이얼로그를 띄운다. 이후 자동 재조회는 조용히 실패 → 공개 타임라인 */
-    requestPersonalUnlock: () => void;
+    /** 잠긴 메시지의 "보기": 2차 인증 후 그 메시지(messageId)만 펼치고 나머지 이전 개인 내용은 접힌 채로 둔다 */
+    requestPersonalUnlock: (messageId?: number) => void;
+    /** 마지막으로 "보기"를 누른 메시지 id */
+    unlockTarget: number | null;
+    /** 비서를 새로 열 때 이전 "보기" 기록을 지운다 */
+    clearUnlockTarget: () => void;
     /** 다음 secure 조회 1회에 다이얼로그를 허용할지. 읽으면 소모된다 */
     consumeUnlockPrompt: () => boolean;
     markRead: (lastSeenId: number) => void;
@@ -30,17 +35,20 @@ export function AssistantProvider({children}: { children: ReactNode }) {
     const [drawerOpen, setDrawerOpen] = useState(false);
     const [personalUnlocked, setPersonalUnlocked] = useState(false);
     const unlockPromptRef = useRef(false);
-    const requestPersonalUnlock = useCallback(() => {
+    const [unlockTarget, setUnlockTarget] = useState<number | null>(null);
+    const clearUnlockTarget = useCallback(() => setUnlockTarget(null), []);
+    const requestPersonalUnlock = useCallback((messageId?: number) => {
+        setUnlockTarget(messageId ?? null);
+        queryClient.removeQueries({queryKey: [...ASSISTANT_TIMELINE_KEY, true], predicate: (q) => q.state.status === 'error'});
         unlockPromptRef.current = true;
         setPersonalUnlocked(true);
-    }, []);
+    }, [queryClient]);
     const consumeUnlockPrompt = useCallback(() => {
         const v = unlockPromptRef.current;
         unlockPromptRef.current = false;
         return v;
     }, []);
 
-    // 미확인 수 — 인증된 경우에만 1분 폴링 (WebSocket 은 2단계에서 검토)
     const unreadQuery = usePollingQuery<number>(
         ASSISTANT_UNREAD_KEY,
         (config) => fetchAssistantUnreadCount(config),
@@ -71,6 +79,8 @@ export function AssistantProvider({children}: { children: ReactNode }) {
             personalUnlocked,
             setPersonalUnlocked,
             requestPersonalUnlock,
+            unlockTarget,
+            clearUnlockTarget,
             consumeUnlockPrompt,
             markRead,
         }}>

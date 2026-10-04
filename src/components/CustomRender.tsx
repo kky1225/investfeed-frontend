@@ -77,6 +77,12 @@ export function renderChip (status: number | string) {
     return <Chip label={signedRate(status)} color={colors} />;
 }
 
+export function formatAlertPrice(value: number, assetCode: string): string {
+    return assetCode.endsWith('_US')
+        ? `$${value.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 4})}`
+        : `${value.toLocaleString()}원`;
+}
+
 export function renderChangeAmount(value: string | number, unit: string = '원') {
     const num = typeof value === 'string' ? Number(value) : value;
     const isUsd = unit === '달러';

@@ -12,6 +12,7 @@ export interface Notification {
     threshold: number;
     direction: Direction;
     fluRt: number;
+    price: number | null;     // 등락률 알림 발송 시점 현재가 (과거 알림은 null)
     isRead: boolean;
     createdAt: string;
 }

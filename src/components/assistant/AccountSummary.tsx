@@ -25,11 +25,7 @@ function StatRow({stats}: { stats: AccountStat[] }) {
     );
 }
 
-/**
- * 개인 보유 섹션. 위는 총액 박스, 아래는 증권사별 박스.
- * 값 문자열과 색은 서버가 완성해서 보낸다.
- */
-export default function AccountSummary({account}: { account: AccountBlock }) {
+export default function AccountSummary({account, groupLabel = '증권사별'}: { account: AccountBlock; groupLabel?: string | null }) {
     return (
         <Stack spacing={1.25}>
             <Box sx={{...BOX_SX, px: 2, py: 1.5}}>
@@ -45,7 +41,7 @@ export default function AccountSummary({account}: { account: AccountBlock }) {
                 )}
             </Box>
 
-            <Typography sx={{fontSize: 12, color: 'text.secondary'}}>증권사별</Typography>
+            {groupLabel && <Typography sx={{fontSize: 12, color: 'text.secondary'}}>{groupLabel}</Typography>}
 
             {account.brokers.map((b) => (
                 <Box key={b.name} sx={{...BOX_SX, px: 2, py: 1.25}}>

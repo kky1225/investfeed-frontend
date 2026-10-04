@@ -208,6 +208,7 @@ export default function CalendarManagement() {
             case 'RATE_DECISION': return '한국 기준금리 결정';
             case 'US_RATE_DECISION': return '미국 기준금리 결정';
             case 'GDP_RELEASE': return 'GDP 발표';
+            case 'CPI_RELEASE': return '한국 CPI 발표';
             case 'CUSTOM': return '수동 입력';
             case 'HOLIDAY': return '휴장일';
             default: return type;
@@ -379,6 +380,7 @@ export default function CalendarManagement() {
                         <MenuItem value="RATE_DECISION">한국 기준금리 결정</MenuItem>
                         <MenuItem value="US_RATE_DECISION">미국 기준금리 결정</MenuItem>
                         <MenuItem value="GDP_RELEASE">GDP 발표</MenuItem>
+                        <MenuItem value="CPI_RELEASE">한국 CPI 발표</MenuItem>
                         <MenuItem value="CUSTOM">수동 입력</MenuItem>
                         <MenuItem value="HOLIDAY">휴장일</MenuItem>
                     </TextField>

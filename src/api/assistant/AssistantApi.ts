@@ -1,12 +1,13 @@
 import type {AxiosRequestConfig} from "axios";
 import api from "../../axios.ts";
 import type {ApiResponse} from "../../type/AuthType";
-import type {AssistantSettingReq, AssistantSettingRes, AssistantTokenRes, ReadMarkerReq, TelegramLinkCodeRes, TelegramStatusReq, TelegramStatusRes, TimelinePage} from "../../type/AssistantType.ts";
+import type {AssistantSettingReq, AssistantSettingRes, AssistantTokenRes, ReadMarkerReq, StoredCard, TelegramLinkCodeRes, TelegramStatusReq, TelegramStatusRes, TimelinePage, TimelineView} from "../../type/AssistantType.ts";
 
 export interface TimelineQuery {
     before?: number;
     limit?: number;
     date?: string; // YYYY-MM-DD
+    view?: TimelineView; // 보기 필터. 미지정 = ALL
 }
 
 /** 로그인만. 개인 섹션 제거된 타임라인 */
@@ -73,7 +74,22 @@ export const unlinkTelegram = async (): Promise<ApiResponse<TelegramStatusRes>> 
     return res.data;
 };
 
-export const fetchAssistantCard = async (ref: string): Promise<ApiResponse<unknown>> => {
-    const res = await api.get<ApiResponse<unknown>>(`/assistant/secure/cards/${encodeURIComponent(ref)}`, {secondaryAuthSource: 'assistant'});
+export const fetchAssistantCard = async (ref: string, config?: AxiosRequestConfig): Promise<ApiResponse<StoredCard>> => {
+    const res = await api.get<ApiResponse<StoredCard>>(`/assistant/secure/cards/${encodeURIComponent(ref)}`, {...config, secondaryAuthSource: 'assistant'});
+    return res.data;
+};
+
+export const confirmAssistantPriceAlert = async (cardRef: string): Promise<ApiResponse<unknown>> => {
+    const res = await api.post<ApiResponse<unknown>>("/assistant/secure/actions/price-alert", {cardRef}, {secondaryAuthSource: 'assistant', skipGlobalError: true});
+    return res.data;
+};
+
+export const deleteAssistantMessage = async (id: number): Promise<ApiResponse<number | null>> => {
+    const res = await api.delete<ApiResponse<number | null>>(`/assistant/timeline/messages/${id}`, {skipGlobalError: true});
+    return res.data;
+};
+
+export const deleteAssistantMessages = async (view: TimelineView): Promise<ApiResponse<number>> => {
+    const res = await api.delete<ApiResponse<number>>("/assistant/timeline/messages", {params: {view}, skipGlobalError: true});
     return res.data;
 };

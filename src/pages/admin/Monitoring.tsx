@@ -5,6 +5,7 @@ import {requireOk} from '../../lib/apiResponse';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
 import Tabs from '@mui/material/Tabs';
+import AssistantAdminTab from '../../components/assistant/AssistantAdminTab';
 import Tab from '@mui/material/Tab';
 import Card from '@mui/material/Card';
 import CardContent from '@mui/material/CardContent';
@@ -88,7 +89,7 @@ import type {
     TelegramSendRes,
 } from '../../type/MonitoringType';
 
-type TabKey = 'scheduler' | 'config' | 'redis' | 'error' | 'apicall' | 'system';
+type TabKey = 'scheduler' | 'config' | 'redis' | 'error' | 'apicall' | 'system' | 'assistant';
 
 function formatDateTime(s: string | null): string {
     if (!s) return '-';
@@ -666,7 +667,11 @@ export default function Monitoring() {
                 <Tab label="에러 로그" value="error"/>
                 <Tab label="외부 API" value="apicall"/>
                 <Tab label="시스템" value="system"/>
+                <Tab label="AI 비서" value="assistant"/>
             </Tabs>
+
+            {/* AI 비서: Q&A 사용량 + 종목 별칭 사전 */}
+            {tab === 'assistant' && <AssistantAdminTab/>}
 
             {/* Tab 1: 스케줄러 */}
             {tab === 'scheduler' && (
