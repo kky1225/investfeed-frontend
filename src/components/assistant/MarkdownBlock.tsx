@@ -51,14 +51,16 @@ const components: Components = {
     h3: ({children}) => <Box component="strong">{children}</Box>,
     img: () => null,
     table: ({node, children}) => {
-        // 열 수: 종목 표(6열)처럼 넓은 표는 첫 열을 좁혀 숫자 열 폭을 확보
+        // 열 수: 종목 표(6열)처럼 넓은 표는 첫 열을 좁혀 숫자 열 폭을 확보 (auto 배치라 첫 열 폭은 권장값)
         const firstRow = (node?.children?.[0] as {children?: unknown[]} | undefined)?.children?.[0] as {children?: unknown[]} | undefined;
         const cols = firstRow?.children?.filter((c) => (c as {type?: string}).type === 'element').length ?? 0;
         const firstColWidth = cols >= 5 ? '28%' : '40%';
         return (
+        // 열 폭은 내용 기준(auto). fixed 로 비율을 고정하면 nowrap 숫자가 칸 밖으로 넘쳐 옆 칸과 겹친다 (2026-10-07).
+        // 평소엔 폭을 꽉 채우고(minWidth 100%), 내용이 더 넓으면 표가 넓어져 바깥 Box 에서 가로 스크롤된다
         <Box sx={{overflowX: 'auto', my: 0.5}}>
             <Box component="table" sx={{
-                borderCollapse: 'collapse', width: '100%', tableLayout: 'fixed', fontSize: '0.875rem', fontVariantNumeric: 'tabular-nums',
+                borderCollapse: 'collapse', minWidth: '100%', tableLayout: 'auto', fontSize: '0.875rem', fontVariantNumeric: 'tabular-nums',
                 '& th, & td': {px: 0.75, py: 0.4, whiteSpace: 'nowrap', textAlign: 'right'},
                 '& th:first-of-type, & td:first-of-type': {textAlign: 'left', pl: 0, width: firstColWidth},
                 '& thead tr:not(:has(th:not(:empty)))': {display: 'none'},   // 요약 표(| | |)처럼 헤더가 비면 숨김
