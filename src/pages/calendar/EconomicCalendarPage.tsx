@@ -363,7 +363,7 @@ export default function EconomicCalendarPage() {
                                     const dateStr = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
                                     const isToday = dateStr === todayStr;
                                     const dayOfWeek = new Date(year, month - 1, day).getDay();
-                                    const hasHoliday = dayEvents.some(e => e.type === 'HOLIDAY');
+                                    const hasKrHoliday = dayEvents.some(e => e.type === 'HOLIDAY' && e.country === 'KR' && e.source !== 'KRX');
 
                                     return (
                                         <Grid key={day} size={1}>
@@ -378,7 +378,7 @@ export default function EconomicCalendarPage() {
                                                     return (<>
                                                         <Typography variant="caption" component="span" sx={{
                                                             fontWeight: isToday ? 700 : 400,
-                                                            color: isToday ? '#fff' : (dayOfWeek === 0 || hasHoliday) ? 'error.main' : dayOfWeek === 6 ? 'info.main' : 'text.primary',
+                                                            color: isToday ? '#fff' : (dayOfWeek === 0 || hasKrHoliday) ? 'error.main' : dayOfWeek === 6 ? 'info.main' : 'text.primary',
                                                             ...(isToday && {
                                                                 bgcolor: 'primary.main', borderRadius: '50%',
                                                                 width: 20, height: 20, display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
@@ -389,7 +389,7 @@ export default function EconomicCalendarPage() {
                                                         <Box>
                                                             {holidays.map((h, i) => (
                                                                 <Typography key={`h-${i}`} sx={{fontSize: 10, color: 'error.main', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap'}}>
-                                                                    {h.name}
+                                                                    {h.country === 'KR' ? '🇰🇷' : '🇺🇸'} {h.name}
                                                                 </Typography>
                                                             ))}
                                                             {indicatorEvents.length > 0 && <Box sx={{mt: 0.5}}/>}
@@ -430,7 +430,7 @@ export default function EconomicCalendarPage() {
                     </Typography>
                     {popoverEvents.filter(e => e.type === 'HOLIDAY').map((e, i) => (
                         <Typography key={`ph-${i}`} sx={{fontSize: 11, color: 'error.main', fontWeight: 600, mb: 0.3}}>
-                            {e.name}
+                            {e.country === 'KR' ? '🇰🇷' : '🇺🇸'} {e.name}
                         </Typography>
                     ))}
                     {popoverEvents.filter(e => e.type !== 'HOLIDAY').map((e, i) => (

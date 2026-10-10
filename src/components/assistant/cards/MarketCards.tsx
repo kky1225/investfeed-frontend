@@ -184,10 +184,15 @@ const FLAG: Record<string, string> = {KR: '🇰🇷', US: '🇺🇸'};
  */
 const MARKET_NAME: Record<string, string> = {KR: '국내 증시', US: '미국 증시'};
 
-/** "미국 증시 휴장 (추수감사절)" → "휴장 · 추수감사절", "개천절" → "휴장 · 개천절". 어느 나라가 쉬는지는 앞의 국기로 */
+/**
+ * "추수감사절 다음날 (조기폐장)" → "조기폐장 · 추수감사절 다음날", "개천절" → "휴장 · 개천절". 어느 나라가 쉬는지는 앞의 국기로
+ * 예전 이름 "미국 증시 휴장 (추수감사절)" 은 Redis 에 저장된 지난 카드 표시용으로 유지 (2026-10-09 이름 변경)
+ */
 const holidayLabel = (name: string) => {
-    const m = name.match(/^미국 증시 (휴장|조기폐장) \((.+)\)$/);
-    return m ? `${m[1]} · ${m[2]}` : `휴장 · ${name}`;
+    const legacy = name.match(/^미국 증시 (휴장|조기폐장) \((.+)\)$/);
+    if (legacy) return `${legacy[1]} · ${legacy[2]}`;
+    const early = name.match(/^(.+) \(조기폐장\)$/);
+    return early ? `조기폐장 · ${early[1]}` : `휴장 · ${name}`;
 };
 
 export function CalendarCard({p, meta, args}: { p: CalendarItemPayload[]; meta: Meta; args?: Record<string, unknown> | null }) {

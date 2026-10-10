@@ -43,7 +43,7 @@ export interface CalendarEvent {
     value: string | null;
     isFuture: boolean;
     type: string; // INDICATOR, HOLIDAY, MEETING
-    source: string; // ECOS, FRED, HOLIDAY, MANUAL
+    source: string; // ECOS, FRED, HOLIDAY(공휴일), KRX(거래소 자체 휴장), MANUAL
 }
 
 export interface ManualCalendarEventReq {
