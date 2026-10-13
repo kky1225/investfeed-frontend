@@ -81,10 +81,10 @@ const HIDDEN_TOKEN_COLUMNS = {llmCalls: false, inputTokens: false, cacheReadToke
 
 /** 결과 칩 색 (문구는 서버 routeLabel) */
 const ROUTE_COLOR: Record<string, 'default' | 'success' | 'warning' | 'error' | 'info'> = {
-    TOOL: 'success', PICK: 'success', REJECT: 'warning', ASK_USER: 'info', BLOCKED: 'error', ERROR: 'error',
+    TOOL: 'success', PICK: 'success', RESUME: 'success', AUTH_REQUIRED: 'info', REJECT: 'warning', ASK_USER: 'info', BLOCKED: 'error', ERROR: 'error',
 };
 
-const NORMAL_ROUTES = new Set(['TOOL', 'PICK']);
+const NORMAL_ROUTES = new Set(['TOOL', 'PICK', 'RESUME', 'AUTH_REQUIRED']);
 
 const LOG_COLUMNS: GridColDef<AssistantChatLogRes>[] = [
     {field: 'createdAt', headerName: '시각', width: 140, valueFormatter: (v: string) => dayjs(v).format('MM-DD HH:mm:ss')},

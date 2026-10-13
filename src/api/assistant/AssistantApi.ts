@@ -36,9 +36,15 @@ export const markTimelineRead = async (req: ReadMarkerReq): Promise<ApiResponse<
     return res.data;
 };
 
-/** 2차 인증 경로. Python 호출용 비서 토큰 발급. 사용자 JWT 는 Python 에 절대 보내지 않는다 */
-export const issueAssistantToken = async (): Promise<ApiResponse<AssistantTokenRes>> => {
-    const res = await api.post<ApiResponse<AssistantTokenRes>>("/assistant/secure/token", null, {secondaryAuthSource: 'assistant'});
+/** 2차 인증 경로. Python 호출용 비서 토큰 발급 (시장 + 개인 질문). 사용자 JWT 는 Python 에 절대 보내지 않는다 */
+export const issueAssistantToken = async (config?: AxiosRequestConfig): Promise<ApiResponse<AssistantTokenRes>> => {
+    const res = await api.post<ApiResponse<AssistantTokenRes>>("/assistant/secure/token", null, {...config, secondaryAuthSource: 'assistant'});
+    return res.data;
+};
+
+/** 로그인만. 시장 질문 전용 비서 토큰 — 개인 질문이면 비서가 2차 인증을 요청한다 */
+export const issueAssistantMarketToken = async (): Promise<ApiResponse<AssistantTokenRes>> => {
+    const res = await api.post<ApiResponse<AssistantTokenRes>>("/assistant/token");
     return res.data;
 };
 

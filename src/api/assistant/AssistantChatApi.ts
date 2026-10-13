@@ -26,11 +26,14 @@ export class AssistantChatError extends Error {
 export interface ChatRequest {
     message: string;
     pick?: ChatPick;
+    /** 2차 인증 후 이어서 실행 — 비서가 인증 전에 골라 둔 조회를 LLM 재호출 없이 실행한다 */
+    resume?: boolean;
 }
 
 /**
  * 질문 1턴 (POST /assistant/chat, SSE).
  * 이벤트: meta {requestId} → card TurnCard* → reply {text, route} → done {requestId, saved}
+ * route 가 AUTH_REQUIRED 면 개인 질문인데 시장 토큰이었다는 뜻 — 호출부가 2차 인증 후 이어서 보낸다
  */
 export async function assistantChat(token: string, req: ChatRequest, onEvent: (event: string, data: unknown) => void, signal?: AbortSignal): Promise<void> {
     const res = await fetch('/assistant/chat', {

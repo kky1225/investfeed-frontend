@@ -21,7 +21,7 @@ import SendRoundedIcon from '@mui/icons-material/SendRounded';
 import SmartToyOutlinedIcon from '@mui/icons-material/SmartToyOutlined';
 import type {ChatPick, TimelineView, TurnCard} from '../../type/AssistantType';
 import {AssistantChatError, assistantChat, assistantHealth, type ChatRequest} from '../../api/assistant/AssistantChatApi';
-import {useAssistantToken} from '../../hooks/useAssistantToken';
+import {type AssistantToken, useAssistantToken} from '../../hooks/useAssistantToken';
 import {ASSISTANT_TIMELINE_KEY, useAssistant} from '../../context/AssistantContext';
 import AssistantTimeline from './AssistantTimeline';
 import AssistantSettings from './AssistantSettings';
@@ -45,6 +45,7 @@ interface LiveTurn {
 }
 
 const UNAVAILABLE = '질문 기능을 일시적으로 사용할 수 없습니다. 브리핑·알림은 정상적으로 제공됩니다.';
+const AUTH_NEEDED = '2차 비밀번호 인증이 필요한 질문입니다';
 
 /** 필터별 전체 삭제 확인 문구 */
 const CLEAR_TEXT: Record<TimelineView, string> = {
@@ -80,7 +81,7 @@ export default function AssistantPanel({onClose, variant}: AssistantPanelProps) 
         onError: () => setClearOpen(false),
     });
     const queryClient = useQueryClient();
-    const {getToken, invalidate} = useAssistantToken();
+    const {getToken, getPersonalToken, invalidate} = useAssistantToken();
     const {personalUnlocked, setPersonalUnlocked} = useAssistant();
     const seq = useRef(0);
 
@@ -95,25 +96,47 @@ export default function AssistantPanel({onClose, variant}: AssistantPanelProps) 
     const run = useCallback(async (key: string, req: ChatRequest) => {
         let finished = false;
         let saved = false;
+        let authRequired = false;
         const onEvent = (event: string, data: unknown) => {
             if (event === 'card') patch(key, (t) => ({...t, cards: [...t.cards, data as TurnCard]}));
             else if (event === 'reply') {
                 const r = data as { text: string; route: string };
-                patch(key, (t) => ({...t, reply: r.text, route: r.route}));
+                if (r.route === 'AUTH_REQUIRED') authRequired = true;   // 답 대신 2차 인증 창으로 넘어간다
+                else patch(key, (t) => ({...t, reply: r.text, route: r.route}));
             }
             else if (event === 'done') { finished = true; saved = !!(data as { saved?: boolean }).saved; }
         };
-        try {
-            // 토큰 발급은 2차 인증 경로. 통과했으면 개인 카드도 볼 수 있으므로 타임라인을 개인 모드로 둔다
-            let token = await getToken();
-            if (!personalUnlocked) setPersonalUnlocked(true);
+        /** 한 번 전송. 비서 토큰이 만료(401)됐으면 재발급해 한 번 더 보낸다 */
+        const chat = async (body: ChatRequest, issue: () => Promise<AssistantToken>) => {
+            let t = await issue();
+            // 개인 토큰이면 2차 인증을 통과한 것 — 개인 카드도 볼 수 있으므로 타임라인을 개인 모드로 둔다
+            if (t.personal) setPersonalUnlocked(true);
             try {
-                await assistantChat(token, req, onEvent);
+                await assistantChat(t.token, body, onEvent);
             } catch (e) {
                 if (!(e instanceof AssistantChatError && e.status === 401)) throw e;
                 invalidate();
-                token = await getToken();
-                await assistantChat(token, req, onEvent);
+                t = await issue();
+                await assistantChat(t.token, body, onEvent);
+            }
+        };
+        try {
+            // 2차 인증 전이면 시장 토큰으로 보낸다. 시장 질문은 그대로 답이 온다
+            await chat(req, () => getToken(personalUnlocked));
+            if (authRequired) {
+                // 개인 질문 — 2차 인증을 받고, 비서가 골라 둔 조회를 이어서 실행한다 (종목 선택은 같은 선택을 다시 보낸다)
+                const next: ChatRequest = req.pick ? req : {...req, resume: true};
+                try {
+                    await getPersonalToken();
+                } catch {
+                    patch(key, (t) => ({...t, req: next, status: 'failed', error: AUTH_NEEDED}));
+                    return;
+                }
+                authRequired = false;
+                finished = false;
+                saved = false;
+                await chat(next, getPersonalToken);
+                if (authRequired) throw new Error(AUTH_NEEDED);
             }
             if (!finished) throw new Error('응답이 중간에 끊겼습니다');
         } catch (e) {
@@ -128,7 +151,7 @@ export default function AssistantPanel({onClose, variant}: AssistantPanelProps) 
         await queryClient.invalidateQueries({queryKey: ASSISTANT_TIMELINE_KEY});
         setTurns((prev) => prev.filter((t) => t.key !== key));
         setTailVersion((v) => v + 1);
-    }, [checkHealth, getToken, invalidate, patch, personalUnlocked, queryClient, setPersonalUnlocked]);
+    }, [checkHealth, getPersonalToken, getToken, invalidate, patch, personalUnlocked, queryClient, setPersonalUnlocked]);
 
     const send = useCallback((req: ChatRequest) => {
         const key = `t${++seq.current}`;
