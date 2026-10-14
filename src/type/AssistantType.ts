@@ -103,6 +103,8 @@ export interface StockQuotePayload {
     code: string; name: string; market: StockMarket; link: string; currency: string;
     price: number; changeRate: number | null; changeAmount: number | null; volume: number | null;
     high: number | null; low: number | null; high52w: number | null; low52w: number | null;
+    /** 카드 제목(상세형). 미국: ETF "TLT (풀네임)", 개별주 "애플 (AAPL)". 이전에 저장된 카드에는 없다 → name */
+    title?: string;
 }
 
 export interface StockFlowDay { date: string; foreignEok: number | null; institutionEok: number | null; individualEok: number | null; close: number | null; changeRate: number | null; }
@@ -145,6 +147,8 @@ export interface PortfolioPayload {
 export interface HoldingPayload {
     asOf: string; code: string; name: string; market: StockMarket; link: string; currency: string;
     curPrc: number | null; dayRate: number | null; dayChange: number | null;
+    /** 카드 제목(상세형) — StockQuotePayload.title 과 같은 규칙. 이전에 저장된 카드에는 없다 → name */
+    title?: string;
     brokers: { broker: string; qty: number | null; purPrice: number | null; eval: number | null; evalProfit: number | null; totalRate: number | null }[];
 }
 

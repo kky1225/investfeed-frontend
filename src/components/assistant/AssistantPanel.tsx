@@ -9,7 +9,6 @@ import Typography from '@mui/material/Typography';
 import IconButton from '@mui/material/IconButton';
 import TextField from '@mui/material/TextField';
 import Tooltip from '@mui/material/Tooltip';
-import Alert from '@mui/material/Alert';
 import Button from '@mui/material/Button';
 import Chip from '@mui/material/Chip';
 import ButtonBase from '@mui/material/ButtonBase';
@@ -44,7 +43,11 @@ interface LiveTurn {
     error?: string;
 }
 
-const UNAVAILABLE = '질문 기능을 일시적으로 사용할 수 없습니다. 브리핑·알림은 정상적으로 제공됩니다.';
+const PLACEHOLDER = '시세·수급·일정·내 계좌를 물어보세요';
+/** 비서 서버에 연결되지 않을 때: 입력창을 막고 안내는 입력창 안과 그 아래 한 줄로 */
+const UNAVAILABLE_PLACEHOLDER = '질문 기능을 일시적으로 사용할 수 없습니다';
+const UNAVAILABLE_NOTE = '브리핑·알림은 정상 제공됩니다';
+const HEALTH_RETRY_MS = 10_000;
 const AUTH_NEEDED = '2차 비밀번호 인증이 필요한 질문입니다';
 
 /** 필터별 전체 삭제 확인 문구 */
@@ -87,6 +90,12 @@ export default function AssistantPanel({onClose, variant}: AssistantPanelProps) 
 
     const checkHealth = useCallback(() => { assistantHealth().then(setHealthy); }, []);
     useEffect(checkHealth, [checkHealth]);
+    // 연결이 안 되는 동안만 주기적으로 다시 확인 — 살아나면 입력창이 저절로 풀린다
+    useEffect(() => {
+        if (healthy) return;
+        const id = setInterval(checkHealth, HEALTH_RETRY_MS);
+        return () => clearInterval(id);
+    }, [healthy, checkHealth]);
 
     const patch = useCallback((key: string, f: (t: LiveTurn) => LiveTurn) => {
         setTurns((prev) => prev.map((t) => (t.key === key ? f(t) : t)));
@@ -168,7 +177,7 @@ export default function AssistantPanel({onClose, variant}: AssistantPanelProps) 
 
     const handleSend = () => {
         const text = draft.trim();
-        if (!text) return;
+        if (!text || !healthy) return;
         setDraft('');
         send({message: text});
     };
@@ -262,19 +271,22 @@ export default function AssistantPanel({onClose, variant}: AssistantPanelProps) 
 
             {view === 'timeline' && (
                 <Box sx={{borderTop: '1px solid', borderColor: 'divider'}}>
-                    {!healthy && <Alert severity="warning" sx={{borderRadius: 0}}>{UNAVAILABLE}</Alert>}
-                    <Stack direction="row" spacing={1} sx={{p: 1.5}}>
+                    <Stack direction="row" spacing={1} sx={{p: 1.5, pb: healthy ? 1.5 : 0.5}}>
                         <TextField
                             size="small"
                             fullWidth
-                            placeholder="시세·수급·일정·내 계좌를 물어보세요"
+                            disabled={!healthy}
+                            placeholder={healthy ? PLACEHOLDER : UNAVAILABLE_PLACEHOLDER}
                             value={draft}
                             onChange={(e) => setDraft(e.target.value)}
                             slotProps={{htmlInput: {maxLength: 500}}}
                             onKeyDown={(e) => { if (e.key === 'Enter' && !e.nativeEvent.isComposing) { e.preventDefault(); handleSend(); } }}
                         />
-                        <IconButton color="primary" onClick={handleSend} aria-label="보내기"><SendRoundedIcon/></IconButton>
+                        <IconButton color="primary" disabled={!healthy} onClick={handleSend} aria-label="보내기"><SendRoundedIcon/></IconButton>
                     </Stack>
+                    {!healthy && (
+                        <Typography variant="caption" color="text.secondary" sx={{display: 'block', px: 1.5, pb: 1}}>{UNAVAILABLE_NOTE}</Typography>
+                    )}
                 </Box>
             )}
         </Stack>

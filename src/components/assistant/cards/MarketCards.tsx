@@ -116,7 +116,8 @@ function QuoteHeader({q}: { q: StockQuotePayload }) {
 
 /** 종목 1~3개. 1개면 종목명이 제목, 여러 개면 종목별 블록을 쌓는다 (비교) */
 export function StockQuoteCard({p, meta}: { p: StockQuotePayload[]; meta: Meta }) {
-    const nameLink = (q: StockQuotePayload) => <Link component={RouterLink} to={q.link} underline="hover" color="inherit">{q.name}</Link>;
+    // 제목은 미국 종목 상세 페이지와 같은 표기 (ETF: 티커 (풀네임), 개별주: 이름 (티커))
+    const nameLink = (q: StockQuotePayload) => <Link component={RouterLink} to={q.link} underline="hover" color="inherit">{q.title ?? q.name}</Link>;
     if (p.length === 1) {
         return <CardFrame title={nameLink(p[0])} {...meta}><QuoteHeader q={p[0]}/></CardFrame>;
     }

@@ -122,7 +122,7 @@ function Cell({label, children}: { label: string; children: ReactNode }) {
 export function HoldingCard({p}: { p: HoldingPayload }) {
     return (
         // 상단은 종목 시세 카드와 같은 모양 (제목 = 종목명 링크, 큰 현재가 · 등락 금액 · 등락률 칩). "보유" 접두는 뺐다 (2026-10-01)
-        <CardFrame personal title={<Link component={RouterLink} to={p.link} underline="hover" color="inherit">{p.name}</Link>} asOf={p.asOf}>
+        <CardFrame personal title={<Link component={RouterLink} to={p.link} underline="hover" color="inherit">{p.title ?? p.name}</Link>} asOf={p.asOf}>
             <Stack direction="row" alignItems="center" gap={1} flexWrap="wrap">
                 <Typography variant="h5" component="p">{money(p.curPrc, p.currency)}</Typography>
                 {p.dayChange !== null && renderChangeAmount(p.dayChange, p.currency === 'USD' ? '달러' : '원')}
