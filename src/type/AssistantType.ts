@@ -236,6 +236,7 @@ export const BRIEFING_SECTIONS: { group: string; items: { id: string; label: str
             {id: 'C2', label: '국내 지수'},
             {id: 'C3', label: '투자자 수급'},
             {id: 'C4', label: '업종'},
+            {id: 'C7', label: '한국 국채 금리'},
             {id: 'C6', label: '환율 마감'},
         ],
     },

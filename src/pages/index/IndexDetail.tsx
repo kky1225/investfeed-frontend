@@ -12,7 +12,7 @@ import StackedLineChartIcon from '@mui/icons-material/StackedLineChart';
 import ToggleButton from '@mui/material/ToggleButton';
 import ToggleButtonGroup, {toggleButtonGroupClasses,} from '@mui/material/ToggleButtonGroup';
 import {styled} from "@mui/material/styles";
-import {Accordion, AccordionDetails, AccordionSummary, Select, SelectChangeEvent, Slider, Tab, Tabs} from "@mui/material";
+import {Accordion, AccordionDetails, AccordionSummary, Select, SelectChangeEvent, Slider, Tab, Tabs, Tooltip} from "@mui/material";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import MenuItem from "@mui/material/MenuItem";
 import {GridColDef} from "@mui/x-data-grid";
@@ -22,9 +22,10 @@ import {renderTradeColor} from "../../components/CustomRender.tsx";
 import * as React from "react";
 import IndexDetailLineChart, {CustomIndexDetailLineChartProps} from "../../components/IndexDetailLineChart.tsx";
 import InvestorBarChart from "../../components/InvestorBarChart.tsx";
-import {fetchIndexDetail, fetchIndexStream} from "../../api/index/IndexApi.ts";
+import {fetchIndexCircuitBreakers, fetchIndexDetail, fetchIndexStream} from "../../api/index/IndexApi.ts";
 import {useMarketWebSocket} from "../detail/useMarketWebSocket.ts";
 import {
+    CircuitBreakerRes,
     IndexChartType,
     IndexDetailReq,
     IndexDetailRes,
@@ -238,6 +239,32 @@ const INVESTOR_COLUMNS: GridColDef[] = [
     {field: 'nativeTrmtFrgnrNetprps', headerName: '내국인대우외국인', flex: 1, minWidth: 140, renderCell: (params) => renderTradeColor(params.value as number)},
 ];
 
+// LocalDateTime ISO 문자열 → HH:mm
+const hhmm = (dateTime: string) => dateTime.slice(11, 16);
+
+// 종목 상세 VI 칩과 같은 형식: 발동 중이면 채운 칩, 재개 후에는 테두리 칩. 상세는 툴팁
+function CircuitBreakerChip({list}: {list: CircuitBreakerRes[]}) {
+    const latest = [...list].sort((a, b) => b.stage - a.stage)[0];
+    if (!latest) return null;
+    const tooltip = (
+        <Box sx={{whiteSpace: 'pre-line'}}>
+            {[...list].sort((a, b) => a.stage - b.stage).map(cb => [
+                `${cb.stage}단계 발동시각: ${hhmm(cb.firedAt)}`,
+                `발동 등락률: ${cb.triggerRate > 0 ? '+' : ''}${cb.triggerRate.toFixed(2)}%`,
+                cb.resumeAt ? `${cb.halted ? '재개 예정' : '재개시각'}: ${hhmm(cb.resumeAt)}` : '당일 장 종료',
+            ].join('\n')).join('\n\n')}
+        </Box>
+    );
+    const label = latest.halted
+        ? ['서킷브레이커 발동 중', `${latest.stage}단계`, latest.resumeAt ? `${hhmm(latest.resumeAt)} 재개` : '당일 장 종료'].join(' · ')
+        : `금일 서킷브레이커 ${latest.stage}단계`;
+    return (
+        <Tooltip title={tooltip} placement="right">
+            <Chip label={label} size="small" color="error" variant={latest.halted ? 'filled' : 'outlined'}/>
+        </Tooltip>
+    );
+}
+
 const IndexDetail = () => {
     const { id } = useParams();
     const indsCd = id || "";
@@ -251,6 +278,13 @@ const IndexDetail = () => {
         (config) => fetchIndexDetail(indsCd, req, config),
     );
     const loading = isLoading;
+
+    // 서킷브레이커는 서버가 지수 실시간(0J)으로 판정한 결과를 10초마다 확인 (코스피·코스닥만 응답이 있음)
+    const {data: circuitBreakers} = usePollingQuery<CircuitBreakerRes[]>(
+        ['indexCircuitBreakers', indsCd],
+        (config) => fetchIndexCircuitBreakers(indsCd, config),
+        {intervalMs: 10_000, fallback: [], enabled: indsCd === '001' || indsCd === '101'},
+    );
 
     // 폴링 (`indexInfo.tmN`) 와 WS (values["20"]) 양쪽 stamp 비교로 last-write-wins.
     type LivePrice = {
@@ -615,9 +649,12 @@ const IndexDetail = () => {
                 <Grid size={{ xs: 12, md: 12 }}>
                     <Card variant="outlined" sx={{ width: '100%' }}>
                         <CardContent>
-                            <Typography component="h2" variant="subtitle2" gutterBottom>
-                                {loading ? <Skeleton width={100}/> : sectChartData.title}
-                            </Typography>
+                            <Stack direction="row" sx={{alignItems: 'center', gap: 1}}>
+                                <Typography component="h2" variant="subtitle2" gutterBottom>
+                                    {loading ? <Skeleton width={100}/> : sectChartData.title}
+                                </Typography>
+                                {!loading && <CircuitBreakerChip list={circuitBreakers ?? []}/>}
+                            </Stack>
                             <Stack sx={{ justifyContent: 'space-between' }}>
                                 <Stack
                                     direction="row"

@@ -123,3 +123,12 @@ export interface IndexDetailRes {
     programList: ProgramListItem[],
     investorDailyList: IndexInvestorDailyItem[],
 }
+/** 지수 상세 — 당일 서킷브레이커 발동 현황. 시각은 ISO LocalDateTime 문자열 */
+export interface CircuitBreakerRes {
+    indexCode: 'KOSPI' | 'KOSDAQ',
+    stage: number,
+    triggerRate: number,
+    firedAt: string,
+    resumeAt: string | null, // 3단계는 null (당일 장 종료)
+    halted: boolean,
+}

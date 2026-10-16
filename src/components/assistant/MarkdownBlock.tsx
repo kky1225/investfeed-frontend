@@ -4,17 +4,21 @@ import {Link} from 'react-router-dom';
 import Typography from '@mui/material/Typography';
 import Box from '@mui/material/Box';
 import {TREND_COLORS} from '../CustomRender';
+import WarnIcon, {WARN_TOKEN} from './WarnIcon';
 
 /**
  * 비서 메시지 본문 렌더러 (docs/assistant-spec.md 5.3).
  * - GFM 부분집합: 굵게·목록·표·내부 링크. 제목·이미지·HTML 은 비활성
- * - 색 문법 `{값|up}` / `{값|down}` 은 표준 마크다운 밖의 유일한 자체 규칙.
- *   렌더 전 `[값](color:up)` 링크로 바꾸고 a 컴포넌트에서 색 span 으로 그린다 (추가 의존성 없음)
+ * - 색 문법 `{값|up}` / `{값|down}` 과 경고 문법 `{!|툴팁}` 이 표준 마크다운 밖의 자체 규칙.
+ *   렌더 전 `[값](color:up)` · `[!](warn:툴팁)` 링크로 바꾸고 a 컴포넌트에서 색 span · 경고 아이콘으로 그린다 (추가 의존성 없음)
  */
 const COLOR_TOKEN = /\{([^{}|]+)\|(up|down)\}/g;
 
 function toColorLinks(text: string): string {
-    return text.replace(COLOR_TOKEN, (_m, value: string, sign: string) => `[${value}](color:${sign})`);
+    return text
+        .replace(COLOR_TOKEN, (_m, value: string, sign: string) => `[${value}](color:${sign})`)
+        // 링크 주소에 공백·괄호가 있으면 마크다운이 깨져 인코딩한다
+        .replace(WARN_TOKEN, (_m, title: string) => `[!](warn:${encodeURIComponent(title).replace(/\(/g, '%28').replace(/\)/g, '%29')})`);
 }
 
 const components: Components = {
@@ -22,6 +26,9 @@ const components: Components = {
         if (href?.startsWith('color:')) {
             const sign = href.slice('color:'.length) as 'up' | 'down';
             return <span style={{color: TREND_COLORS[sign], fontVariantNumeric: 'tabular-nums'}}>{children}</span>;
+        }
+        if (href?.startsWith('warn:')) {
+            return <WarnIcon title={decodeURIComponent(href.slice('warn:'.length))}/>;
         }
         if (href?.startsWith('/')) {
             return <Link to={href} style={{color: 'inherit', textDecorationStyle: 'dotted'}}>{children}</Link>;
