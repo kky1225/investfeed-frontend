@@ -122,8 +122,9 @@ export interface IndexDetailRes {
     programChartList: ProgramChart[],
     programList: ProgramListItem[],
     investorDailyList: IndexInvestorDailyItem[],
+    circuitBreakers?: CircuitBreakerRes[],
 }
-/** 지수 상세 — 당일 서킷브레이커 발동 현황. 시각은 ISO LocalDateTime 문자열 */
+
 export interface CircuitBreakerRes {
     indexCode: 'KOSPI' | 'KOSDAQ',
     stage: number,

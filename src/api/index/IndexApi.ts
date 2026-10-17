@@ -16,8 +16,3 @@ export const fetchIndexDetail = async (indsCd: string, req: IndexDetailReq, conf
     const res = await api.get(`/stock/indexes/${indsCd}`, {...config, params: req});
     return res.data
 }
-
-export const fetchIndexCircuitBreakers = async (indsCd: string, config?: AxiosRequestConfig) => {
-    const res = await api.get(`/stock/indexes/${indsCd}/circuit-breakers`, config);
-    return res.data
-}

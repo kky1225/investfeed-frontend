@@ -22,7 +22,7 @@ import {renderTradeColor} from "../../components/CustomRender.tsx";
 import * as React from "react";
 import IndexDetailLineChart, {CustomIndexDetailLineChartProps} from "../../components/IndexDetailLineChart.tsx";
 import InvestorBarChart from "../../components/InvestorBarChart.tsx";
-import {fetchIndexCircuitBreakers, fetchIndexDetail, fetchIndexStream} from "../../api/index/IndexApi.ts";
+import {fetchIndexDetail, fetchIndexStream} from "../../api/index/IndexApi.ts";
 import {useMarketWebSocket} from "../detail/useMarketWebSocket.ts";
 import {
     CircuitBreakerRes,
@@ -279,14 +279,8 @@ const IndexDetail = () => {
     );
     const loading = isLoading;
 
-    // 서킷브레이커는 서버가 지수 실시간(0J)으로 판정한 결과를 10초마다 확인 (코스피·코스닥만 응답이 있음)
-    const {data: circuitBreakers} = usePollingQuery<CircuitBreakerRes[]>(
-        ['indexCircuitBreakers', indsCd],
-        (config) => fetchIndexCircuitBreakers(indsCd, config),
-        {intervalMs: 10_000, fallback: [], enabled: indsCd === '001' || indsCd === '101'},
-    );
+    const circuitBreakers: CircuitBreakerRes[] = result?.circuitBreakers ?? [];
 
-    // 폴링 (`indexInfo.tmN`) 와 WS (values["20"]) 양쪽 stamp 비교로 last-write-wins.
     type LivePrice = {
         value: string;
         fluRt: string;
@@ -653,7 +647,7 @@ const IndexDetail = () => {
                                 <Typography component="h2" variant="subtitle2" gutterBottom>
                                     {loading ? <Skeleton width={100}/> : sectChartData.title}
                                 </Typography>
-                                {!loading && <CircuitBreakerChip list={circuitBreakers ?? []}/>}
+                                {!loading && <CircuitBreakerChip list={circuitBreakers}/>}
                             </Stack>
                             <Stack sx={{ justifyContent: 'space-between' }}>
                                 <Stack
