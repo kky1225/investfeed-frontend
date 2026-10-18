@@ -15,6 +15,9 @@ import {fetchInvestorList, fetchInvestorStream} from "../../api/investor/Investo
 import {renderChip, renderTradePricaColor} from "../../components/CustomRender.tsx";
 import FreshnessIndicator from "../../components/FreshnessIndicator.tsx";
 import {usePollingQuery} from "../../lib/pollingQuery.ts";
+import dayjs from "dayjs";
+
+const WEEKDAY = ['일', '월', '화', '수', '목', '금', '토'];
 
 interface LiveInvestorUpdate {
     curPrc: string;
@@ -226,6 +229,12 @@ const InvestorList = () => {
                 <Typography component="h2" variant="h6">
                     투자자별 목록
                 </Typography>
+                {/* 기준일: 장중은 잠정치(ETF 미포함), 그 외는 직전 거래일 확정치 */}
+                {result?.baseDate && (
+                    <Typography variant="caption" color="text.secondary">
+                        {`${dayjs(result.baseDate).format('M/D')}(${WEEKDAY[dayjs(result.baseDate).day()]}) ${result.provisional ? '장중 잠정 · ETF 제외' : '확정'}`}
+                    </Typography>
+                )}
                 <Box sx={{flex: 1}}/>
                 <FreshnessIndicator lastUpdated={lastUpdated} error={pollError}/>
             </Box>

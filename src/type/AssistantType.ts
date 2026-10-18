@@ -92,11 +92,15 @@ export interface MarketSummaryPayload {
 export interface FlowStock { code: string; name: string; netAmountEok: number; periodChangeRate: number | null; streakDays: number | null; }
 export interface MarketInvestorFlowPayload {
     investor: 'FOREIGN' | 'INSTITUTION' | 'PENSION' | 'INDIVIDUAL';
-    market: 'KOSPI' | 'KOSDAQ';
+    market?: 'KOSPI' | 'KOSDAQ' | null;
     days: number;
     side: 'BUY' | 'SELL';
     minStreakDays: number | null;
     stocks: FlowStock[];
+    /** 집계 기간 "10/15(목)"·"10/13(월)~10/15(목)". 이전 카드에는 없음 */
+    basis?: string | null;
+    /** 장중 잠정치 (투자자별 목록 화면과 같은 ka10063, ETF 제외) */
+    provisional?: boolean;
 }
 
 export interface StockQuotePayload {
@@ -105,7 +109,12 @@ export interface StockQuotePayload {
     high: number | null; low: number | null; high52w: number | null; low52w: number | null;
     /** 카드 제목(상세형). 미국: ETF "TLT (풀네임)", 개별주 "애플 (AAPL)". 이전에 저장된 카드에는 없다 → name */
     title?: string;
+    /** 기준 표기 "10/15(목) 종가"·"10/17(금) 장중"·"현지 10/15(목) 종가". 코인 실시간·이전 카드는 없음 */
+    basis?: string | null;
 }
+
+/** 여러 종목 중 일부만 그날 조회할 수 없을 때 (예: 미국만 휴장) */
+export interface StockQuoteAnswerPayload { quotes: StockQuotePayload[]; notice: string; }
 
 export interface StockFlowDay { date: string; foreignEok: number | null; institutionEok: number | null; individualEok: number | null; close: number | null; changeRate: number | null; }
 export interface StockInvestorFlowPayload { code: string; name: string; link: string; days: StockFlowDay[]; foreignStreak: number; institutionStreak: number; }
@@ -166,6 +175,13 @@ export interface PriceAlertPreviewPayload {
 export interface StoredCard { ref: string; memberId: number; kind: string; createdAt: string; payload: unknown; }
 
 export interface ChatPick { code: string; market: StockMarket; name: string; }
+
+export interface CircuitBreakerAnswerPayload {
+    market: 'KR' | 'US';
+    tradeDate: string;
+    reply: string | null;
+    alerts: { alertId: number; asOf: string; body: MessageBody }[];
+}
 
 export interface TimelineMessage {
     id: number;

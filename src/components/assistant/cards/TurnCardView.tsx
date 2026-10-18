@@ -6,9 +6,9 @@ import CircularProgress from '@mui/material/CircularProgress';
 import LockOutlinedIcon from '@mui/icons-material/LockOutlined';
 import WarningAmberIcon from '@mui/icons-material/WarningAmber';
 import type {
-    BriefingPointerPayload, CalendarItemPayload, ChatPick, GlobalIndexPayload, HoldingPayload, MarketInvestorFlowPayload,
+    BriefingPointerPayload, CalendarItemPayload, ChatPick, CircuitBreakerAnswerPayload, GlobalIndexPayload, HoldingPayload, MarketInvestorFlowPayload,
     MarketBriefPayload, MarketSummaryPayload, NewsRowPayload, PnlPayload, PortfolioPayload, PriceAlertPreviewPayload, RecommendListPayload,
-    StockChoicePayload, StockInvestorFlowPayload, StockQuotePayload, TurnCard,
+    StockChoicePayload, StockInvestorFlowPayload, StockQuoteAnswerPayload, StockQuotePayload, TurnCard,
 } from '../../../type/AssistantType';
 import {fetchAssistantCard} from '../../../api/assistant/AssistantApi';
 import {requireOk} from '../../../lib/apiResponse';
@@ -18,14 +18,18 @@ import {
     StockChoiceCard, StockFlowCard, StockQuoteCard,
 } from './MarketCards';
 import {ConfirmPriceAlertCard, HoldingCard, PnlCard, PortfolioCard} from './PersonalCards';
+import AssistantMessageView from '../AssistantMessageView';
+import AssistantBubble from '../AssistantBubble';
 
 /** 카드 종류 이름 (오류·잠금 카드 제목) */
 export const CARD_LABEL: Record<string, string> = {
     get_market_summary: '시장 요약',
+    get_circuit_breakers: '서킷브레이커',
     get_market_investor_flow: '투자자 수급',
     get_stock_quote: '종목 시세',
     get_stock_investor_flow: '종목 수급',
     get_global_indexes: '해외 지수',
+    get_treasury_yields: '국채 금리',
     get_calendar: '일정',
     get_recommend_list: '추천 목록',
     search_news: '뉴스',
@@ -54,16 +58,44 @@ interface Props {
 /** 브리핑 형식 시장 카드인지 (예전 답변은 이전 형식) */
 const isBrief = (v: unknown): v is MarketBriefPayload => !!v && typeof v === 'object' && 'sections' in v && 'summary' in v;
 
+/** 문장으로 답한 도구 결과 ("발동하지 않았습니다", "휴장일입니다" 등) — 서버가 reply 문장을 준다 */
+const replyText = (v: unknown): string | null =>
+    !!v && typeof v === 'object' && 'reply' in v && typeof (v as {reply: unknown}).reply === 'string' ? (v as {reply: string}).reply : null;
+
 function render(kind: string, payload: unknown, card: TurnCard, onPick?: (p: ChatPick) => void) {
     const meta = {asOf: card.asOf, source: card.source};
+    const reply = replyText(payload);
+    if (reply) return <AssistantBubble text={reply}/>;
     switch (kind) {
+        case 'get_circuit_breakers': {
+            // 발동했으면 타임라인에 게시된 서킷브레이커 알림 카드를 그대로 보여 준다 (발동 없음은 위에서 문장 말풍선)
+            const p = payload as CircuitBreakerAnswerPayload;
+            return (
+                <Stack spacing={1.5}>
+                    {p.alerts.map((a) => (
+                        <AssistantMessageView key={a.alertId} message={{id: a.alertId, createdAt: a.asOf, body: a.body}}/>
+                    ))}
+                </Stack>
+            );
+        }
         case 'get_market_summary':
             return isBrief(payload) ? <MarketBriefCard p={payload} meta={meta}/> : <MarketSummaryCard p={payload as MarketSummaryPayload} meta={meta}/>;
         case 'get_market_investor_flow': return <MarketFlowCard p={payload as MarketInvestorFlowPayload} meta={meta}/>;
-        case 'get_stock_quote': return <StockQuoteCard p={payload as StockQuotePayload[]} meta={meta}/>;
+        case 'get_stock_quote': {
+            // 여러 종목 중 일부만 그날 조회할 수 없으면 {quotes, notice} — 안내 말풍선 + 조회된 카드
+            if (Array.isArray(payload)) return <StockQuoteCard p={payload as StockQuotePayload[]} meta={meta}/>;
+            const a = payload as StockQuoteAnswerPayload;
+            return (
+                <Stack spacing={1}>
+                    <AssistantBubble text={a.notice}/>
+                    <StockQuoteCard p={a.quotes} meta={meta}/>
+                </Stack>
+            );
+        }
         case 'get_stock_investor_flow': return <StockFlowCard p={payload as StockInvestorFlowPayload[]} meta={meta}/>;
         case 'get_global_indexes':
             return isBrief(payload) ? <MarketBriefCard p={payload} meta={meta}/> : <GlobalIndexCard p={payload as GlobalIndexPayload[]} meta={meta}/>;
+        case 'get_treasury_yields': return <MarketBriefCard p={payload as MarketBriefPayload} meta={meta}/>;
         case 'get_calendar': return <CalendarCard p={payload as CalendarItemPayload[]} meta={meta} args={card.args}/>;
         case 'get_recommend_list': return <RecommendCard p={payload as RecommendListPayload} meta={meta}/>;
         case 'search_news': return <NewsCard p={payload as NewsRowPayload[]} meta={meta}/>;

@@ -52,7 +52,7 @@ export function CardFrame({title, asOf, source, link, linkLabel = '화면에서 
         </>
     );
     return (
-        <Paper variant="outlined" sx={{px: 2.25, py: 1.75, borderRadius: 3, bgcolor: 'background.default'}}>
+        <Paper variant="outlined" sx={{px: 2.25, py: 1.75, borderRadius: 3, bgcolor: 'background.default', minWidth: 0}}>
             <Stack direction="row" alignItems="center" spacing={0.75}>
                 <Typography component="div" sx={{fontSize: 15, fontWeight: 600, flexGrow: personal ? 0 : 1}}>{title}</Typography>
                 {personal && (
@@ -97,20 +97,31 @@ export function SignedText({text}: { text: string }) {
     return <span style={{color}}>{text}</span>;
 }
 
-export function MiniTable({head, rows}: { head: ReactNode[]; rows: ReactNode[][] }) {
+/**
+ * leftCols: 왼쪽 정렬할 열 수 (기본 1 = 첫 열만). 순위 표처럼 "순위 · 종목명" 두 열을 왼쪽에 둘 때 2.
+ * maxHeight: 주면 표 안에서 세로 스크롤하고 표 머리를 위에 고정한다 (긴 순위 목록 펼침)
+ */
+export function MiniTable({head, rows, leftCols = 1, maxHeight}: { head: ReactNode[]; rows: ReactNode[][]; leftCols?: number; maxHeight?: number }) {
     return (
-        <Box sx={{overflowX: 'auto'}}>
+        <Box sx={{
+            overflow: 'auto', width: '100%', maxHeight,
+            // 머리 고정. 첫 열(가로 고정)과 겹치는 머리 첫 칸이 위에 오도록 z-index 를 더 준다
+            ...(maxHeight ? {
+                '& thead th': {position: 'sticky', top: 0, zIndex: 2, bgcolor: 'background.default'},
+                '& thead th:first-of-type': {zIndex: 3},
+            } : {}),
+        }}>
             {/* 첫 열(종목명) 고정: 컬럼이 많아 좌우로 밀어도 종목명이 보이게 */}
             <Table size="small" sx={{
                 '& td, & th': {px: 1, py: 0.5, whiteSpace: 'nowrap'},
                 '& td:first-of-type, & th:first-of-type': {position: 'sticky', left: 0, zIndex: 1, bgcolor: 'background.default'},
             }}>
                 <TableHead>
-                    <TableRow>{head.map((h, i) => <TableCell key={i} align={i === 0 ? 'left' : 'right'} sx={{color: 'text.secondary', fontSize: 12}}>{h}</TableCell>)}</TableRow>
+                    <TableRow>{head.map((h, i) => <TableCell key={i} align={i < leftCols ? 'left' : 'right'} sx={{color: 'text.secondary', fontSize: 12}}>{h}</TableCell>)}</TableRow>
                 </TableHead>
                 <TableBody>
                     {rows.map((r, ri) => (
-                        <TableRow key={ri}>{r.map((c, ci) => <TableCell key={ci} align={ci === 0 ? 'left' : 'right'}>{c}</TableCell>)}</TableRow>
+                        <TableRow key={ri}>{r.map((c, ci) => <TableCell key={ci} align={ci < leftCols ? 'left' : 'right'}>{c}</TableCell>)}</TableRow>
                     ))}
                 </TableBody>
             </Table>

@@ -23,6 +23,13 @@ export class AssistantChatError extends Error {
     }
 }
 
+/**
+ * 응답 대기 제한. 비서는 턴 전체 20초 + 저장 5초 안에 끝내고, 그 사이에도 15초마다 ping 을 보낸다.
+ * 이 시간 동안 아무것도 오지 않으면 연결이 끊긴 것으로 본다 (비서 재시작 등으로 응답 없이 멈추는 경우)
+ */
+const IDLE_TIMEOUT_MS = 35_000;
+export const STREAM_STALLED = '응답이 중간에 끊겼습니다';
+
 export interface ChatRequest {
     message: string;
     pick?: ChatPick;
@@ -36,6 +43,27 @@ export interface ChatRequest {
  * route 가 AUTH_REQUIRED 면 개인 질문인데 시장 토큰이었다는 뜻 — 호출부가 2차 인증 후 이어서 보낸다
  */
 export async function assistantChat(token: string, req: ChatRequest, onEvent: (event: string, data: unknown) => void, signal?: AbortSignal): Promise<void> {
+    // 무응답 감시: 데이터(ping 포함)가 올 때마다 타이머를 다시 건다. 시간이 넘으면 요청을 끊고 STREAM_STALLED 로 알린다
+    const controller = new AbortController();
+    signal?.addEventListener('abort', () => controller.abort(), {once: true});
+    let stalled = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const arm = () => {
+        clearTimeout(timer);
+        timer = setTimeout(() => { stalled = true; controller.abort(); }, IDLE_TIMEOUT_MS);
+    };
+    arm();
+    try {
+        await readStream(token, req, onEvent, controller.signal, arm);
+    } catch (e) {
+        if (stalled) throw new Error(STREAM_STALLED);
+        throw e;
+    } finally {
+        clearTimeout(timer);
+    }
+}
+
+async function readStream(token: string, req: ChatRequest, onEvent: (event: string, data: unknown) => void, signal: AbortSignal, onData: () => void): Promise<void> {
     const res = await fetch('/assistant/chat', {
         method: 'POST',
         credentials: 'omit',
@@ -50,6 +78,7 @@ export async function assistantChat(token: string, req: ChatRequest, onEvent: (e
     for (;;) {
         const {value, done} = await reader.read();
         if (done) break;
+        onData();
         buffer = (buffer + decoder.decode(value, {stream: true})).replace(/\r\n/g, '\n');   // sse-starlette 는 CRLF. 청크 경계에서 끊겨도 합친 뒤 정규화
         let idx: number;
         while ((idx = buffer.indexOf('\n\n')) >= 0) {

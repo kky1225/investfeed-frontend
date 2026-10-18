@@ -28,4 +28,8 @@ export interface InvestorStream {
 
 export interface InvestorListRes {
     investorList: InvestorListItem[],
+    /** 기준 거래일 yyyy-MM-dd */
+    baseDate?: string | null,
+    /** 장중 잠정치(ETF 없음)면 true, 장 마감 확정치(ETF 포함)면 false */
+    provisional?: boolean,
 }

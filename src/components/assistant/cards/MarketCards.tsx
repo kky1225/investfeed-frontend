@@ -1,3 +1,4 @@
+import {useState} from 'react';
 import {Link as RouterLink} from 'react-router-dom';
 import Stack from '@mui/material/Stack';
 import Typography from '@mui/material/Typography';
@@ -68,23 +69,43 @@ export function MarketSummaryCard({p, meta}: { p: MarketSummaryPayload; meta: Me
     );
 }
 
+/** 처음 보이는 순위 수. 더보기를 누르면 받은 전부(최대 100)를 카드 안 스크롤로 보여 준다 */
+const FLOW_PREVIEW = 10;
+
 export function MarketFlowCard({p, meta}: { p: MarketInvestorFlowPayload; meta: Meta }) {
-    const title = `${INVESTOR_LABEL[p.investor] ?? p.investor} ${p.days}일 ${p.side === 'BUY' ? '순매수' : '순매도'} 상위 · ${p.market}`
-        + (p.minStreakDays ? ` · ${p.minStreakDays}일 이상 연속` : '');
+    const [expanded, setExpanded] = useState(false);
+    const title = `${INVESTOR_LABEL[p.investor] ?? p.investor} ${p.days}일 ${p.side === 'BUY' ? '순매수' : '순매도'} 상위 · ${p.market ?? '전체'}`  // 예전 카드에는 코스피/코스닥이 있다. 지금은 항상 전체
+        + (p.minStreakDays ? ` · ${p.minStreakDays}일 이상 연속` : '')
+        + (p.basis ? ` · ${p.basis}` : '')
+        + (p.provisional ? ' · 장중 잠정(ETF 제외)' : '');
+    const shown = expanded ? p.stocks : p.stocks.slice(0, FLOW_PREVIEW);
+    const more = p.stocks.length > FLOW_PREVIEW;
+    const withStreak = p.stocks.some((s) => s.streakDays != null);
+    const withRate = p.stocks.some((s) => s.periodChangeRate != null);
     return (
         <CardFrame title={title} {...meta}>
             {p.stocks.length === 0
                 ? <Typography variant="body2" color="text.secondary">해당 종목이 없습니다</Typography>
                 : <MiniTable
-                    // 투자자별 매매 화면(InvestorList)과 같은 순서: 종목명 · 등락률 · 순매수 (연속은 끝에)
-                    head={['종목명', '등락률', '순매수', '연속']}
-                    rows={p.stocks.map((s) => [
+                    // 투자자별 매매 화면(InvestorList)과 같은 순서: 순위 · 종목명 · 등락률 · 순매수.
+                    // 등락률은 최근 거래일 1일 조회에만 있고(ka10058 현재가는 "지금" 값), 연속 일수는 "N일 연속" 조건(ka10131)에만 있다 — 없으면 칸을 뺀다
+                    head={['순위', '종목명', ...(withRate ? ['등락률'] : []), p.side === 'BUY' ? '순매수' : '순매도', ...(withStreak ? ['연속'] : [])]}
+                    leftCols={2}
+                    // 펼치면 카드 높이는 고정하고 표 안에서 스크롤 (표 머리 고정) — 채팅 흐름이 길게 밀리지 않게
+                    maxHeight={expanded ? 520 : undefined}
+                    rows={shown.map((s, i) => [
+                        i + 1,
                         <Link component={RouterLink} to={`/stock/detail/${s.code}`} underline="hover">{s.name}</Link>,
-                        rateChip(s.periodChangeRate),
+                        ...(withRate ? [rateChip(s.periodChangeRate)] : []),
                         <Eok value={s.netAmountEok}/>,
-                        s.streakDays ? `${s.streakDays}일` : '-',
+                        ...(withStreak ? [s.streakDays ? `${s.streakDays}일` : '-'] : []),
                     ])}
                 />}
+            {more && (
+                <Button size="small" fullWidth onClick={() => setExpanded((v) => !v)} sx={{mt: 0.5}}>
+                    {expanded ? '접기' : `더보기 (${p.stocks.length}개)`}
+                </Button>
+            )}
         </CardFrame>
     );
 }
@@ -99,6 +120,7 @@ function QuoteHeader({q}: { q: StockQuotePayload }) {
     );
     return (
         <Box>
+            {q.basis && <Typography variant="caption" color="text.secondary" component="p">{q.basis}</Typography>}
             <Stack direction="row" alignItems="center" gap={1} flexWrap="wrap">
                 <Typography variant="h5" component="p">{usd ? `$${fmt(q.price, 2)}` : fmt(q.price, q.market === 'CRYPTO' && q.price < 100 ? 4 : 0)}</Typography>
                 {q.changeAmount !== null && renderChangeAmount(q.changeAmount, usd ? '달러' : '원')}
@@ -109,7 +131,8 @@ function QuoteHeader({q}: { q: StockQuotePayload }) {
                 {sub('저가', price(q.low, q.currency))}
                 {sub('거래량', fmt(q.volume, q.market === 'CRYPTO' ? 4 : 0))}
             </Box>
-            <Box>{sub('52주', `${price(q.low52w, q.currency)} ~ ${price(q.high52w, q.currency)}`)}</Box>
+            {/* 날짜 지정 시세(일봉)는 52주 고저가 없다 */}
+            {(q.low52w !== null || q.high52w !== null) && <Box>{sub('52주', `${price(q.low52w, q.currency)} ~ ${price(q.high52w, q.currency)}`)}</Box>}
         </Box>
     );
 }

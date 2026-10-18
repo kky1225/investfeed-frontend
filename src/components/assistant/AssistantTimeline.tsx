@@ -267,6 +267,10 @@ export default function AssistantTimeline({tail, tailVersion = 0, onPick, filter
                     ))}
                 </Stack>
             ))}
+            {/* 그날 첫 질문은 응답이 저장되기 전까지 타임라인에 오늘 메시지가 없어 구분선이 안 생긴다 → 보내는 중인 질문 위에 직접 표시 */}
+            {tail && !groups.has('오늘') && (
+                <Divider><Typography variant="caption" color="text.secondary">오늘</Typography></Divider>
+            )}
             {tail}
             <Box ref={bottomRef}/>
             <DeleteConfirmDialog

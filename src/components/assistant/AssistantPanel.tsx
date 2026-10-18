@@ -19,7 +19,7 @@ import CloseIcon from '@mui/icons-material/Close';
 import SendRoundedIcon from '@mui/icons-material/SendRounded';
 import SmartToyOutlinedIcon from '@mui/icons-material/SmartToyOutlined';
 import type {ChatPick, TimelineView, TurnCard} from '../../type/AssistantType';
-import {AssistantChatError, assistantChat, assistantHealth, type ChatRequest} from '../../api/assistant/AssistantChatApi';
+import {AssistantChatError, assistantChat, assistantHealth, type ChatRequest, STREAM_STALLED} from '../../api/assistant/AssistantChatApi';
 import {type AssistantToken, useAssistantToken} from '../../hooks/useAssistantToken';
 import {ASSISTANT_TIMELINE_KEY, useAssistant} from '../../context/AssistantContext';
 import AssistantTimeline from './AssistantTimeline';
@@ -147,7 +147,7 @@ export default function AssistantPanel({onClose, variant}: AssistantPanelProps) 
                 await chat(next, getPersonalToken);
                 if (authRequired) throw new Error(AUTH_NEEDED);
             }
-            if (!finished) throw new Error('응답이 중간에 끊겼습니다');
+            if (!finished) throw new Error(STREAM_STALLED);
         } catch (e) {
             checkHealth();
             patch(key, (t) => ({...t, status: 'failed', error: e instanceof AssistantChatError ? '전송에 실패했습니다' : (e as Error).message || '전송에 실패했습니다'}));
@@ -247,7 +247,7 @@ export default function AssistantPanel({onClose, variant}: AssistantPanelProps) 
                 </Stack>
             )}
 
-            <Box ref={scrollRef} sx={{flexGrow: 1, overflowY: 'auto', minHeight: 0}}>
+            <Box ref={scrollRef} sx={{flexGrow: 1, overflowY: 'auto', overflowX: 'hidden', minHeight: 0}}>
                 {view === 'timeline'
                     ? <AssistantTimeline
                         key={filter}
