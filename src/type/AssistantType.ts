@@ -103,6 +103,18 @@ export interface MarketInvestorFlowPayload {
     provisional?: boolean;
 }
 
+export interface RankStock { rank: number; code: string; name: string; link: string; changeRate: number | null; price: number | null; value: number | null; }
+export interface TradingRankPayload {
+    market: 'KR' | 'US';
+    type: 'VALUE' | 'VOLUME' | 'SURGE';
+    /** "10/17(금) 장중"·"10/17(금) 기준"·"현지 10/16(목) 기준" */
+    basis: string;
+    currency: string;
+    /** 순위 기준 값 열 제목 (순위 화면과 같은 단위: 거래대금(백만)·거래대금(천 USD)·거래량·급증률) */
+    valueLabel: string;
+    stocks: RankStock[];
+}
+
 export interface StockQuotePayload {
     code: string; name: string; market: StockMarket; link: string; currency: string;
     price: number; changeRate: number | null; changeAmount: number | null; volume: number | null;
@@ -111,7 +123,11 @@ export interface StockQuotePayload {
     title?: string;
     /** 기준 표기 "10/15(목) 종가"·"10/17(금) 장중"·"현지 10/15(목) 종가". 코인 실시간·이전 카드는 없음 */
     basis?: string | null;
+    /** 미국 데이·프리·애프터마켓 등락률 (토스 연동 회원만). 없으면 키움 값만 */
+    session?: SessionQuotePayload | null;
 }
+
+export interface SessionQuotePayload { label: string; regularClose: number; regularCloseDate: string; changeAmount: number; changeRate: number; }
 
 /** 여러 종목 중 일부만 그날 조회할 수 없을 때 (예: 미국만 휴장) */
 export interface StockQuoteAnswerPayload { quotes: StockQuotePayload[]; notice: string; }

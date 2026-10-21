@@ -1,4 +1,4 @@
-import {useCallback, useEffect, useRef, useState} from 'react';
+import {useCallback, useEffect, useRef, useState, type ReactNode} from 'react';
 import {useMutation, useQueryClient} from '@tanstack/react-query';
 import DeleteConfirmDialog from './DeleteConfirmDialog';
 import {deleteAssistantMessages} from '../../api/assistant/AssistantApi';
@@ -25,6 +25,8 @@ import {ASSISTANT_TIMELINE_KEY, useAssistant} from '../../context/AssistantConte
 import AssistantTimeline from './AssistantTimeline';
 import AssistantSettings from './AssistantSettings';
 import {AnswerView, UserBubble} from './AssistantMessageView';
+import {CopyAction} from './BubbleActions';
+import {assistantCopyText} from './copyText';
 
 interface AssistantPanelProps {
     /** 드로어면 닫기(X), 전체 화면이면 뒤로가기 */
@@ -184,22 +186,38 @@ export default function AssistantPanel({onClose, variant}: AssistantPanelProps) 
 
     const handlePick = useCallback((pick: ChatPick) => send({message: pick.name, pick}), [send]);
 
+    const liveActions = (children: ReactNode, align: 'flex-start' | 'flex-end') => (
+        <Stack direction="row" alignItems="center" spacing={1} justifyContent={align}
+               sx={{mt: 0.5, px: 0.75, minHeight: 20, opacity: 0, transition: 'opacity .15s', '.live-turn:hover &': {opacity: 1}, '@media (hover: none)': {opacity: 1}}}>
+            {children}
+        </Stack>
+    );
+
     const tail = turns.length > 0 && (
         <Stack spacing={1.5}>
             {turns.map((t) => (
                 <Stack key={t.key} spacing={1}>
-                    <UserBubble
-                        text={t.req.message}
-                        footer={t.status === 'failed' && (
-                            <Stack direction="row" alignItems="center" spacing={0.5} sx={{mt: 0.5}}>
-                                <Typography variant="caption" color="error">{t.error}</Typography>
-                                <Button size="small" onClick={() => retry(t)}>재시도</Button>
-                            </Stack>
-                        )}
-                    />
-                    {t.status !== 'failed' && (
-                        <AnswerView text={t.reply} cards={t.cards} route={t.route} onPick={handlePick} pending={t.status === 'sending' && !t.reply}/>
-                    )}
+                    <Box className="live-turn">
+                        <UserBubble
+                            text={t.req.message}
+                            footer={t.status === 'failed' && (
+                                <Stack direction="row" alignItems="center" spacing={0.5} sx={{mt: 0.5}}>
+                                    <Typography variant="caption" color="error">{t.error}</Typography>
+                                    <Button size="small" onClick={() => retry(t)}>재시도</Button>
+                                </Stack>
+                            )}
+                        />
+                        {liveActions(<CopyAction text={t.req.message}/>, 'flex-end')}
+                    </Box>
+                    {t.status !== 'failed' && (() => {
+                        const copyText = t.status === 'done' ? assistantCopyText(t.reply, t.cards, t.route) : null;
+                        return (
+                            <Box className="live-turn">
+                                <AnswerView text={t.reply} cards={t.cards} route={t.route} onPick={handlePick} pending={t.status === 'sending' && !t.reply}/>
+                                {copyText && liveActions(<CopyAction text={copyText}/>, 'flex-start')}
+                            </Box>
+                        );
+                    })()}
                 </Stack>
             ))}
         </Stack>

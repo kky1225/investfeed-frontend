@@ -8,14 +8,14 @@ import WarningAmberIcon from '@mui/icons-material/WarningAmber';
 import type {
     BriefingPointerPayload, CalendarItemPayload, ChatPick, CircuitBreakerAnswerPayload, GlobalIndexPayload, HoldingPayload, MarketInvestorFlowPayload,
     MarketBriefPayload, MarketSummaryPayload, NewsRowPayload, PnlPayload, PortfolioPayload, PriceAlertPreviewPayload, RecommendListPayload,
-    StockChoicePayload, StockInvestorFlowPayload, StockQuoteAnswerPayload, StockQuotePayload, TurnCard,
+    StockChoicePayload, StockInvestorFlowPayload, StockQuoteAnswerPayload, StockQuotePayload, TradingRankPayload, TurnCard,
 } from '../../../type/AssistantType';
 import {fetchAssistantCard} from '../../../api/assistant/AssistantApi';
 import {requireOk} from '../../../lib/apiResponse';
 import {CardFrame, PersonalOpenContext} from './CardParts';
 import {
     BriefingLinkCard, CalendarCard, GlobalIndexCard, MarketBriefCard, MarketFlowCard, MarketSummaryCard, NewsCard, RecommendCard,
-    StockChoiceCard, StockFlowCard, StockQuoteCard,
+    StockChoiceCard, StockFlowCard, StockQuoteCard, TradingRankCard,
 } from './MarketCards';
 import {ConfirmPriceAlertCard, HoldingCard, PnlCard, PortfolioCard} from './PersonalCards';
 import AssistantMessageView from '../AssistantMessageView';
@@ -26,6 +26,7 @@ export const CARD_LABEL: Record<string, string> = {
     get_market_summary: '시장 요약',
     get_circuit_breakers: '서킷브레이커',
     get_market_investor_flow: '투자자 수급',
+    get_trading_rank: '거래 순위',
     get_stock_quote: '종목 시세',
     get_stock_investor_flow: '종목 수급',
     get_global_indexes: '해외 지수',
@@ -81,6 +82,7 @@ function render(kind: string, payload: unknown, card: TurnCard, onPick?: (p: Cha
         case 'get_market_summary':
             return isBrief(payload) ? <MarketBriefCard p={payload} meta={meta}/> : <MarketSummaryCard p={payload as MarketSummaryPayload} meta={meta}/>;
         case 'get_market_investor_flow': return <MarketFlowCard p={payload as MarketInvestorFlowPayload} meta={meta}/>;
+        case 'get_trading_rank': return <TradingRankCard p={payload as TradingRankPayload} meta={meta}/>;
         case 'get_stock_quote': {
             // 여러 종목 중 일부만 그날 조회할 수 없으면 {quotes, notice} — 안내 말풍선 + 조회된 카드
             if (Array.isArray(payload)) return <StockQuoteCard p={payload as StockQuotePayload[]} meta={meta}/>;

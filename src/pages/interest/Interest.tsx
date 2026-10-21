@@ -1,4 +1,5 @@
 import React, {createContext, useContext, useEffect, useMemo, useRef, useState} from "react";
+import {sessionChangeRate} from "../../lib/usSession.ts";
 import {mergeLive} from "../../lib/streamOverlay.ts";
 import {useMutation, useQuery, useQueryClient} from "@tanstack/react-query";
 import {requireOk} from "../../lib/apiResponse.ts";
@@ -547,6 +548,21 @@ const Interest = () => {
         deleteItemMutation.mutate(vars);
     };
 
+    const sessionLabel = items.find((i) => i.sessionLabel)?.sessionLabel;
+    const sessionColumn: GridColDef[] = sessionLabel ? [{
+        field: "sessionRt",
+        headerName: `${sessionLabel} 등락률`,
+        flex: 0.6,
+        minWidth: 120,
+        sortable: false,
+        renderCell: (params) => {
+            if (!params.row.stexTp) return "";
+            const price = Number(String(params.row.curPrc ?? "").replace(/^[+-]/, ""));
+            const rate = sessionChangeRate(price, params.row.regularClose);
+            return rate === null ? "-" : renderChip(rate.toFixed(2));
+        },
+    }] : [];
+
     const columns: GridColDef[] = [
         {
             field: "__drag__",
@@ -575,6 +591,7 @@ const Interest = () => {
             minWidth: 100,
             renderCell: (params) => renderChip(params.value as string),
         },
+        ...sessionColumn,
         {
             field: "curPrc",
             headerName: "현재가",
@@ -619,6 +636,7 @@ const Interest = () => {
             mrktNm: item.mrktNm,
             curPrc: live?.curPrc ?? item.curPrc,
             fluRt: live?.fluRt ?? item.fluRt,
+            regularClose: item.regularClose,
         };
     }), [items, liveOverlay]);
 

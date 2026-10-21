@@ -1,4 +1,5 @@
 import {mergeLive} from "../../lib/streamOverlay.ts";
+import {sessionChangeRate} from '../../lib/usSession';
 import React, {createContext, useCallback, useContext, useMemo, useState} from "react";
 import {useMutation, useQuery, useQueryClient} from "@tanstack/react-query";
 import {requireOk} from "../../lib/apiResponse.ts";
@@ -309,13 +310,19 @@ const HoldingList = ({source = 'KIWOOM'}: {source?: HoldingSource}) => {
         ];
     };
 
-    const krColumns = buildColumns('KRW');
-    const usColumns = buildColumns('USD');
+    const sessionLabel = holdings.find(h => h.sessionLabel)?.sessionLabel;
+    const usSessionColumn: GridColDef[] = sessionLabel ? [{
+        field: 'sessionRt', headerName: `${sessionLabel} 등락률`, flex: 0.8, minWidth: 120, sortable: false,
+        renderCell: (params) => {
+            const rate = sessionChangeRate(Number(params.row.curPrcUsd), params.row.regularClose);
+            return rate === null ? '-' : renderChip(rate.toFixed(2));
+        },
+    }] : [];
 
-    // 키움 해외는 member_holding 미참여로 id 가 전부 0 이라 DataGrid 고유 키 제약을 어긴다 → 종목코드를 키로 쓴다.
-    // 국내·토스는 기존대로 member_holding id 를 유지해 드래그 정렬이 그대로 동작한다.
+    const krColumns = buildColumns('KRW');
+    const usColumns = buildColumns('USD').flatMap(c => c.field === 'curPrcUsd' ? [c, ...usSessionColumn] : [c]);
+
     // 비중(possRt)은 서버가 계좌 전체(국내+해외) 기준으로 계산해 내려준다.
-    // 실시간으로 평가금액이 바뀐 뒤에만 화면에서 다시 계산한다.
     const totalEvltAmtNum = Number(totEvltAmt);
     const needPossRtRecalc = hasLive;
 
@@ -340,6 +347,7 @@ const HoldingList = ({source = 'KIWOOM'}: {source?: HoldingSource}) => {
         purAmtUsd: stock.purPricUsd ? String(Number(stock.purPricUsd) * Number(stock.rmndQty)) : undefined,
         stexTp: stock.stexTp,
         usStkCd: stock.usStkCd,
+        regularClose: stock.regularClose,
     }));
 
     const krRows = rows.filter(r => !r.stexTp);

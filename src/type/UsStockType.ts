@@ -75,4 +75,11 @@ export interface UsStockDetailRes {
     usStockInfo: UsStockInfo;
     chartList: UsStockChart[];
     dailyPriceList: UsStockDailyPrice[];
+    /** 데이·프리·애프터마켓 등락률 기준 (토스 연동 회원만, 정규장·휴장이면 null) */
+    sessionBase?: UsSessionBase | null;
+}
+
+export interface UsSessionBase {
+    sessionLabel: string;
+    regularClose: number;
 }

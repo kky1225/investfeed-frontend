@@ -26,6 +26,7 @@ import {UsStockChart, UsStockChartType, UsStockDetailRes} from "../../type/UsSto
 import {StockStreamRes} from "../../type/StockType.ts";
 import {useParams} from "react-router-dom";
 import {renderChangeAmount} from "../../components/CustomRender.tsx";
+import UsSessionChange from "../../components/UsSessionChange.tsx";
 import FreshnessIndicator from "../../components/FreshnessIndicator.tsx";
 import {usePollingQuery} from "../../lib/pollingQuery.ts";
 import {EXCHANGE_LABEL} from "../../lib/exchange.ts";
@@ -445,16 +446,24 @@ const UsStockDetail = () => {
                                     <Typography variant="h4" component="p">
                                         {loading ? <Skeleton width={160}/> : `$${chartData.value}`}
                                     </Typography>
+                                    {/* 원화 환산은 달러 가격 바로 옆 (데이마켓 줄과 섞이지 않게, 2026-10-20) */}
+                                    {!loading && krwPrice && (
+                                        <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+                                            약 {krwPrice.toLocaleString()}원
+                                        </Typography>
+                                    )}
                                     {loading ? <Skeleton width={80}/> : renderChangeAmount(chartData.changePrice, '달러')}
                                     {loading
                                         ? <Skeleton variant="rounded" width={60} height={24}/>
                                         : <Chip size="small" color={color} label={trendValues[chartData.trend]} />}
                                 </Stack>
-                                <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-                                    {loading
-                                        ? <Skeleton width={140}/>
-                                        : (krwPrice ? `약 ${krwPrice.toLocaleString()}원` : '')}
-                                </Typography>
+                                {!loading && result?.sessionBase && (
+                                    <UsSessionChange
+                                        label={result.sessionBase.sessionLabel}
+                                        price={curPrcNum}
+                                        regularClose={result.sessionBase.regularClose}
+                                    />
+                                )}
                             </Stack>
                         </CardContent>
                         <Box sx={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>

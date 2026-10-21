@@ -16,7 +16,8 @@ import {streakText} from './cardText';
 import dayjs from 'dayjs';
 import type {
     BriefingPointerPayload, CalendarItemPayload, GlobalIndexPayload, MarketInvestorFlowPayload, MarketSummaryPayload,
-    HoldingAlertPayload, NewsRowPayload, RecommendListPayload, StockChoicePayload, StockInvestorFlowPayload, StockQuotePayload, ChatPick, MarketBriefPayload} from '../../../type/AssistantType';
+    HoldingAlertPayload, NewsRowPayload, RecommendListPayload, StockChoicePayload, StockInvestorFlowPayload, StockQuotePayload, ChatPick, MarketBriefPayload,
+    TradingRankPayload} from '../../../type/AssistantType';
 import {CardFrame, Eok, INVESTOR_LABEL, MiniTable, SignedText, Stat, amount, fmt, price, rateChip} from './CardParts';
 
 interface Meta { asOf?: string | null; source?: string | null; }
@@ -110,6 +111,39 @@ export function MarketFlowCard({p, meta}: { p: MarketInvestorFlowPayload; meta: 
     );
 }
 
+const RANK_TYPE_LABEL: Record<string, string> = {VALUE: '거래대금', VOLUME: '거래량', SURGE: '거래량 급증률'};
+
+export function TradingRankCard({p, meta}: { p: TradingRankPayload; meta: Meta }) {
+    const [expanded, setExpanded] = useState(false);
+    const title = `${p.market === 'US' ? '미국' : '국내'} ${RANK_TYPE_LABEL[p.type] ?? p.type} 상위 · ${p.basis}`;
+    const shown = expanded ? p.stocks : p.stocks.slice(0, FLOW_PREVIEW);
+    const more = p.stocks.length > FLOW_PREVIEW;
+    const value = (v: number | null) => p.type === 'SURGE' ? (v === null ? '-' : `${fmt(v, 2)}%`) : fmt(v);
+    return (
+        <CardFrame title={title} {...meta}>
+            {p.stocks.length === 0
+                ? <Typography variant="body2" color="text.secondary">해당 종목이 없습니다</Typography>
+                : <MiniTable
+                    head={['순위', '종목명', '등락률', '현재가', p.valueLabel]}
+                    leftCols={2}
+                    maxHeight={expanded ? 520 : undefined}
+                    rows={shown.map((s) => [
+                        s.rank,
+                        <Link component={RouterLink} to={s.link} underline="hover">{s.name}</Link>,
+                        rateChip(s.changeRate),
+                        price(s.price, p.currency),
+                        value(s.value),
+                    ])}
+                />}
+            {more && (
+                <Button size="small" fullWidth onClick={() => setExpanded((v) => !v)} sx={{mt: 0.5}}>
+                    {expanded ? '접기' : `더보기 (${p.stocks.length}개)`}
+                </Button>
+            )}
+        </CardFrame>
+    );
+}
+
 /** 종목 상세 페이지 상단과 같은 모양: 큰 현재가 + 등락 금액(renderChangeAmount) + 등락률 칩 */
 function QuoteHeader({q}: { q: StockQuotePayload }) {
     const usd = q.currency === 'USD';
@@ -126,6 +160,14 @@ function QuoteHeader({q}: { q: StockQuotePayload }) {
                 {q.changeAmount !== null && renderChangeAmount(q.changeAmount, usd ? '달러' : '원')}
                 <Chip size="small" color={chipColor} label={signedRate(rate)}/>
             </Stack>
+            {/* 미국 데이·프리·애프터마켓 등락률 (토스 연동 회원만) — 상세 페이지와 같은 한 줄 */}
+            {q.session && (
+                <Stack direction="row" alignItems="center" gap={1} flexWrap="wrap" sx={{mt: 0.5}}>
+                    <Typography variant="body2" sx={{fontWeight: 600}}>{q.session.label}</Typography>
+                    {renderChangeAmount(q.session.changeAmount, '달러')}
+                    {rateChip(q.session.changeRate)}
+                </Stack>
+            )}
             <Box sx={{mt: 0.75}}>
                 {sub('고가', price(q.high, q.currency))}
                 {sub('저가', price(q.low, q.currency))}

@@ -18,6 +18,8 @@ import {deleteAssistantMessage, fetchSecureTimeline, fetchTimeline} from '../../
 import type {ChatPick, TimelineMessage, TimelinePage, TimelineView} from '../../type/AssistantType';
 import {ASSISTANT_TIMELINE_KEY, useAssistant} from '../../context/AssistantContext';
 import AssistantMessageView from './AssistantMessageView';
+import {CopyAction} from './BubbleActions';
+import {assistantCopyText} from './copyText';
 
 function formatDate(dateStr: string) {
     const date = new Date(dateStr);
@@ -246,7 +248,8 @@ export default function AssistantTimeline({tail, tailVersion = 0, onPick, filter
                                 autoOpen={m.id === unlockTarget || m.id > (openedMaxIdRef.current ?? 0)}
                                 onPick={onPick}
                             />
-                            {/* 메시지 아래 작은 줄: 시각 · 삭제. 마우스를 올리면 보이고(터치 기기는 항상), 자리는 항상 잡아 둬 화면이 흔들리지 않는다 */}
+                            {/* 메시지 아래 작은 줄: (복사) · 시각 · 삭제. 마우스를 올리면 보이고(터치 기기는 항상), 자리는 항상 잡아 둬 화면이 흔들리지 않는다.
+                                복사는 내 질문과 비서 말풍선 문장만 (카드 제외) */}
                             <Stack
                                 className="msg-actions"
                                 direction="row"
@@ -255,6 +258,11 @@ export default function AssistantTimeline({tail, tailVersion = 0, onPick, filter
                                 justifyContent={m.body.type === 'USER' ? 'flex-end' : 'flex-start'}
                                 sx={{mt: 0.5, px: 0.75, minHeight: 20, opacity: 0, transition: 'opacity .15s', '@media (hover: none)': {opacity: 1}}}
                             >
+                                {(() => {
+                                    const copyText = m.body.type === 'USER' ? m.body.headline.text
+                                        : m.body.type === 'ASSISTANT' ? assistantCopyText(m.body.headline.text, m.body.turnCards ?? [], m.body.subtype) : null;
+                                    return copyText ? <CopyAction text={copyText}/> : null;
+                                })()}
                                 <Typography variant="caption" color="text.disabled">{dayjs(m.createdAt).format('HH:mm')}</Typography>
                                 <ButtonBase
                                     onClick={() => setDeleteTarget({id: m.id, isQuestion: m.body.type === 'USER'})}
