@@ -12,12 +12,13 @@ import MarkdownBlock from '../MarkdownBlock';
 import SummaryTiles from '../SummaryTiles';
 import SectionView from '../SectionView';
 import AssistantBubble from '../AssistantBubble';
+import SectorHeatmap, {HeatmapLegend, type HeatmapTile} from '../../SectorHeatmap';
 import {streakText} from './cardText';
 import dayjs from 'dayjs';
 import type {
     BriefingPointerPayload, CalendarItemPayload, GlobalIndexPayload, MarketInvestorFlowPayload, MarketSummaryPayload,
     HoldingAlertPayload, NewsRowPayload, RecommendListPayload, StockChoicePayload, StockInvestorFlowPayload, StockQuotePayload, ChatPick, MarketBriefPayload,
-    TradingRankPayload} from '../../../type/AssistantType';
+    SectorPerformancePayload, SectorRow, SectorStock, TradingRankPayload} from '../../../type/AssistantType';
 import {CardFrame, Eok, INVESTOR_LABEL, MiniTable, SignedText, Stat, amount, fmt, price, rateChip} from './CardParts';
 
 interface Meta { asOf?: string | null; source?: string | null; }
@@ -140,6 +141,99 @@ export function TradingRankCard({p, meta}: { p: TradingRankPayload; meta: Meta }
                     {expanded ? '접기' : `더보기 (${p.stocks.length}개)`}
                 </Button>
             )}
+        </CardFrame>
+    );
+}
+
+/** 업종 소속 종목: 10개 미리보기 + 더보기(카드 안 스크롤) — 거래 순위 카드와 같은 규칙 */
+function SectorStockTable({stocks, currency}: { stocks: SectorStock[]; currency: string }) {
+    const [expanded, setExpanded] = useState(false);
+    const shown = expanded ? stocks : stocks.slice(0, FLOW_PREVIEW);
+    if (stocks.length === 0) return <Typography variant="body2" color="text.secondary">해당 종목이 없습니다</Typography>;
+    return (
+        <>
+            <MiniTable
+                head={['종목명', '등락률', '현재가', '거래량']}
+                maxHeight={expanded ? 520 : undefined}
+                rows={shown.map((s) => [
+                    <Link component={RouterLink} to={s.link} underline="hover">{s.name}</Link>,
+                    rateChip(s.changeRate),
+                    price(s.price, currency),
+                    fmt(s.volume),
+                ])}
+            />
+            {stocks.length > FLOW_PREVIEW && (
+                <Button size="small" fullWidth onClick={() => setExpanded((v) => !v)} sx={{mt: 0.5}}>
+                    {expanded ? '접기' : `더보기 (${stocks.length}개)`}
+                </Button>
+            )}
+        </>
+    );
+}
+
+/** 하위 업종을 포함하는 업종 — 히트맵 툴팁 안내 (국내 업종 화면과 같음) */
+const SECTOR_NOTE: Record<string, string> = {'021': '증권·보험 포함'};
+
+const eokText = (v: number | null) => v === null ? '-' : `${fmt(v / 100)}억`;
+
+/** 업종을 하나 말하지 않으면 업종 화면과 같은 히트맵, 하나를 말하면 그 업종의 시장별 소속 종목 */
+export function SectorPerformanceCard({p, meta}: { p: SectorPerformancePayload; meta: Meta }) {
+    const kr = p.market === 'KR';
+    const groupLink = (label: string) => !kr ? '/us-stock/sect/list' : label === '코스닥' ? '/stock/sect/list/101' : '/stock/sect/list/001';
+
+    if (p.sectorName) {
+        // 국내 화학처럼 코스피·코스닥 양쪽에 있으면 시장별 블록 — 업종 지수가 달라 등락률도 다르다
+        const stockSort = p.sort === 'FALL' ? ' · 하락 순' : p.sort === 'VALUE' ? ' · 거래량 순' : '';
+        const only = p.groups.length === 1 ? p.groups[0].sectors[0] : null;
+        return (
+            <CardFrame title={`${p.sectorName} 업종 · ${p.basis}${stockSort}`} link={only?.link ?? groupLink('코스피')}
+                       linkLabel={only ? '업종 화면에서 보기' : undefined} {...meta}>
+                <Stack spacing={2}>
+                    {p.groups.map((g) => {
+                        const s = g.sectors[0];
+                        return (
+                            <Box key={g.label}>
+                                <Stack direction="row" alignItems="center" gap={1} flexWrap="wrap" sx={{mb: 0.5}}>
+                                    <Link component={RouterLink} to={s.link} underline="hover" color="inherit" sx={{fontWeight: 600}}>
+                                        {kr ? `${g.label} ${s.name}` : s.name}
+                                    </Link>
+                                    {rateChip(s.changeRate)}
+                                    {kr && (
+                                        <Typography variant="caption" color="text.secondary">
+                                            거래대금 {eokText(s.tradeAmount)} · 상승 {fmt(s.rising)} / 하락 {fmt(s.falling)}
+                                        </Typography>
+                                    )}
+                                </Stack>
+                                <SectorStockTable stocks={g.stocks ?? []} currency={p.currency}/>
+                            </Box>
+                        );
+                    })}
+                </Stack>
+            </CardFrame>
+        );
+    }
+
+    const sortLabel = p.sort === 'FALL' ? ' · 하락 순' : p.sort === 'VALUE' ? ' · 거래대금 순' : '';
+    const marketLabel = !kr ? '미국' : p.groups.length === 1 ? p.groups[0].label : '국내';
+    const tiles = (sectors: SectorRow[]): HeatmapTile[] => sectors.map((s) => ({
+        key: s.code,
+        name: s.name,
+        rate: s.changeRate ?? 0,
+        link: s.link,
+        tooltip: kr ? [['거래대금', eokText(s.tradeAmount)], ['상승 / 하락', `${fmt(s.rising)} / ${fmt(s.falling)}`]] : undefined,
+        note: kr ? SECTOR_NOTE[s.code] : undefined,
+    }));
+    return (
+        <CardFrame title={`${marketLabel} 업종 등락률 · ${p.basis}${sortLabel}`} link={groupLink(p.groups[0]?.label ?? '')} {...meta}>
+            <Stack spacing={1.5}>
+                {p.groups.map((g) => (
+                    <Box key={g.label}>
+                        {p.groups.length > 1 && <Typography variant="body2" sx={{fontWeight: 600, mb: 0.5}}>{g.label}</Typography>}
+                        <SectorHeatmap tiles={tiles(g.sectors)} palette={kr ? 'kr' : 'us'} dense/>
+                    </Box>
+                ))}
+                <HeatmapLegend palette={kr ? 'kr' : 'us'}/>
+            </Stack>
         </CardFrame>
     );
 }

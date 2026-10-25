@@ -1,11 +1,6 @@
 import {mergeLive} from "../../lib/streamOverlay.ts";
 import {Box, Tab, Tabs} from "@mui/material";
 import Typography from "@mui/material/Typography";
-import Grid from "@mui/material/Grid";
-import Card from "@mui/material/Card";
-import CardContent from "@mui/material/CardContent";
-import Stack from "@mui/material/Stack";
-import Skeleton from "@mui/material/Skeleton";
 import {useEffect, useMemo, useRef, useState} from "react";
 import {useNavigate, useParams} from "react-router-dom";
 import * as React from "react";
@@ -13,18 +8,35 @@ import {SectListItem, SectListReq, SectListRes, SectListStream, SectListStreamRe
 import {MarketType} from "../../type/timeType.ts";
 import {fetchMarketInfo, getServerNow, getServerOffset} from "../../lib/serverTime.ts";
 import {fetchSectList, fetchSectListStream} from "../../api/sect/SectApi.ts";
-import SectCard, {SectCardProps} from "../../components/SectCard.tsx";
 import FreshnessIndicator from "../../components/FreshnessIndicator.tsx";
+import SectorHeatmap, {HeatmapLegend, HeatmapTile} from "../../components/SectorHeatmap.tsx";
 import {usePollingQuery} from "../../lib/pollingQuery.ts";
 
 interface LiveSectUpdate {
     value: string;
     fluRt: string;
-    trend: 'up' | 'down' | 'neutral';
 }
 
-const trendColor = (value: string): 'up' | 'down' | 'neutral' =>
-    ["1", "2"].includes(value) ? 'up' : ["4", "5"].includes(value) ? 'down' : 'neutral';
+// 하위 업종을 포함하는 업종 — 같은 종목이 두 타일에 반영됨을 툴팁으로 알림
+const SECT_NOTE: Record<string, string> = {
+    '021': '증권·보험 포함',
+};
+
+const rateNum = (raw: string | undefined): number => {
+    const n = Number(String(raw ?? '').replace(/^\+/, ''));
+    return Number.isFinite(n) ? n : 0;
+};
+
+const numText = (raw: string | undefined): string => {
+    const n = Number(String(raw ?? '').replace(/^[+-]/, ''));
+    return Number.isFinite(n) ? n.toLocaleString() : '-';
+};
+
+// 거래대금 단위: 백만원 → 억
+const amountText = (raw: string | undefined): string => {
+    const n = Number(raw);
+    return Number.isFinite(n) && raw ? `${Math.round(n / 100).toLocaleString()}억` : '-';
+};
 
 const SectList = () => {
     const navigate = useNavigate();
@@ -50,22 +62,27 @@ const SectList = () => {
         setLiveOverlay(new Map());
     }, [result]);
 
-    const sectDataList: SectCardProps[] = useMemo(() => {
+    const sectList: SectListItem[] = useMemo(() => {
         if (!result) return [];
-        const list: SectListItem[] = result.sectList ?? [];
-        return list.map((sect: SectListItem) => {
-            const live = liveOverlay.get(sect.stkCd);
-            return {
-                id: sect.stkCd,
-                title: sect.stkNm,
-                value: live?.value ?? sect.curPrc.replace(/^[+-]/, ''),
-                fluRt: live?.fluRt ?? sect.fluRt,
-                trend: live?.trend ?? trendColor(sect.preSig),
-            };
-        });
-    }, [result, liveOverlay]);
+        return [...(result.sectList ?? [])].sort((a, b) => rateNum(b.fluRt) - rateNum(a.fluRt));
+    }, [result]);
 
-    const loading = isLoading;
+    const tiles: HeatmapTile[] = useMemo(() => sectList.map((sect) => {
+        const live = liveOverlay.get(sect.stkCd);
+        return {
+            key: sect.stkCd,
+            name: sect.stkNm,
+            rate: rateNum(live?.fluRt ?? sect.fluRt),
+            link: `/stock/sect/${sect.stkCd}/list`,
+            tooltip: [
+                ['지수', numText(live?.value ?? sect.curPrc.replace(/^[+-]/, ''))],
+                ['거래대금', amountText(sect.trdePrica)],
+                ['상승 / 보합 / 하락', `${sect.rising ?? '-'} / ${sect.stdns ?? '-'} / ${sect.fall ?? '-'}`],
+                ['종목수', sect.floStkNum ?? '-'],
+            ],
+            note: SECT_NOTE[sect.stkCd],
+        };
+    }), [sectList, liveOverlay]);
 
     const timeNow = async () => {
         const info = await fetchMarketInfo(MarketType.INDEX);
@@ -133,7 +150,6 @@ const SectList = () => {
                 setLiveOverlay((prev) => mergeLive(prev, streamBufferRef.current, (u) => ({
                     value: u.value.replace(/^[+-]/, ''),
                     fluRt: u.fluRt,
-                    trend: trendColor(u.trend),
                 })));
                 streamBufferRef.current.clear();
             }, 200);
@@ -189,49 +205,16 @@ const SectList = () => {
                 <Box sx={{flex: 1}}/>
                 <FreshnessIndicator lastUpdated={lastUpdated} error={pollError}/>
             </Box>
-            <Grid
-                container
-                spacing={2}
-                columns={12}
-                sx={{mb: (theme) => theme.spacing(2)}}
-            >
-                <Box sx={{width: '100%'}}>
-                    <Box sx={{borderBottom: 1, borderColor: 'divider'}}>
-                        <Tabs value={value} onChange={handleChange} aria-label="basic tabs example">
-                            <Tab label="종합(KOSPI)" {...a11yProps("001")} />
-                            <Tab label="종합(KOSDAQ)" {...a11yProps("101")} />
-                        </Tabs>
-                    </Box>
-                    <Grid
-                        container
-                        spacing={2}
-                        columns={12}
-                        sx={{mt: 1, mb: (theme) => theme.spacing(2)}}
-                    >
-                        {loading ? (
-                            Array.from({length: 8}).map((_, index) => (
-                                <Grid key={index} size={{xs: 12, md: 6, lg: 3}}>
-                                    <Card variant="outlined" sx={{width: '100%'}}>
-                                        <CardContent>
-                                            <Skeleton width={120} height={24}/>
-                                            <Stack direction="row" spacing={1} sx={{alignItems: 'center', mt: 1}}>
-                                                <Skeleton width={100} height={40}/>
-                                                <Skeleton variant="rounded" width={60} height={24}/>
-                                            </Stack>
-                                        </CardContent>
-                                    </Card>
-                                </Grid>
-                            ))
-                        ) : (
-                            sectDataList.map((data: SectCardProps, index: number) => (
-                                <Grid key={index} size={{xs: 12, md: 6, lg: 3}}>
-                                    <SectCard {...data} />
-                                </Grid>
-                            ))
-                        )}
-                    </Grid>
-                </Box>
-            </Grid>
+            <Box sx={{borderBottom: 1, borderColor: 'divider', mb: 2}}>
+                <Tabs value={value} onChange={handleChange} aria-label="basic tabs example">
+                    <Tab label="종합(KOSPI)" {...a11yProps("001")} />
+                    <Tab label="종합(KOSDAQ)" {...a11yProps("101")} />
+                </Tabs>
+            </Box>
+            <Box sx={{mb: 2}}>
+                <HeatmapLegend palette="kr"/>
+            </Box>
+            <SectorHeatmap tiles={tiles} palette="kr" loading={isLoading}/>
         </Box>
     );
 };

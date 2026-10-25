@@ -16,8 +16,12 @@ export interface SectListItem {
     preSig: string,
     stkCd: string,
     stkNm: string,
-    trdePrica: string,
-    trdeQty: string
+    trdePrica: string, // 단위: 백만원
+    trdeQty: string,
+    rising: string, // 상승 종목수
+    stdns: string, // 보합 종목수
+    fall: string, // 하락 종목수
+    floStkNum: string, // 상장 종목수
 }
 
 export interface SectListStreamReq {

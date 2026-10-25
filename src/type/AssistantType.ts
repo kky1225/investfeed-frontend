@@ -115,6 +115,27 @@ export interface TradingRankPayload {
     stocks: RankStock[];
 }
 
+/** 업종 한 줄. tradeAmount(백만원)·rising·falling 은 국내만 */
+export interface SectorRow {
+    code: string; name: string; link: string; changeRate: number | null;
+    tradeAmount: number | null; rising: number | null; falling: number | null;
+}
+export interface SectorStock { code: string; name: string; link: string; changeRate: number | null; price: number | null; volume: number | null; }
+export interface SectorPerformancePayload {
+    market: 'KR' | 'US';
+    /** "10/23(금) 기준"·"10/23(금) 장중"·"10/23 정규장". 등락률은 당일만 */
+    basis: string;
+    currency: string;
+    /** 정렬: RISE 등락률 높은 순, FALL 낮은 순, VALUE 업종 거래대금·종목 거래량 순 */
+    sort: 'RISE' | 'FALL' | 'VALUE';
+    /** 시장별 업종 (국내: 코스피·코스닥 중 요청한 시장, 미국: 미국). 업종 상세면 그 업종 한 행 + 그 시장 소속 종목(정렬됨) */
+    groups: { label: string; sectors: SectorRow[]; stocks?: SectorStock[] | null }[];
+    /** 업종 상세일 때만 */
+    sectorName?: string | null;
+    /** 별칭 안내("반도체 → 전기/전자")·기간 안내 */
+    notice?: string | null;
+}
+
 export interface StockQuotePayload {
     code: string; name: string; market: StockMarket; link: string; currency: string;
     price: number; changeRate: number | null; changeAmount: number | null; volume: number | null;
