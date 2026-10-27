@@ -105,7 +105,7 @@ export interface MarketInvestorFlowPayload {
 
 export interface RankStock { rank: number; code: string; name: string; link: string; changeRate: number | null; price: number | null; value: number | null; }
 export interface TradingRankPayload {
-    market: 'KR' | 'US';
+    market: 'KR' | 'US' | 'CRYPTO';
     type: 'VALUE' | 'VOLUME' | 'SURGE';
     /** "10/17(금) 장중"·"10/17(금) 기준"·"현지 10/16(목) 기준" */
     basis: string;
@@ -159,7 +159,7 @@ export interface StockInvestorFlowPayload { code: string; name: string; link: st
 /** 보유 종목 급등락 알림 1종목 (2026-10-02~, 잠금 없음). 시세 카드 모양으로 그린다 */
 export interface HoldingAlertPayload { name: string; link: string; price: number | null; currency: string; label: string; up: boolean; }
 
-/** 시장 카드 (2026-10-01~): 브리핑과 같은 지수 타일(summary) + 섹션. get_market_summary·get_global_indexes */
+/** 시장 카드 (2026-10-01~): 브리핑과 같은 지수 타일(summary) + 섹션. get_market_summary·get_global_indexes·get_treasury_yields·get_exchange_rates */
 export interface MarketBriefPayload { title: string; asOf: string; summary: string; sections: Section[]; }
 
 export interface GlobalIndexPayload { type: string; name: string; price: string; changeAmount: string; changeRate: string; delayStatus: string; updatedAt: string; }

@@ -113,10 +113,11 @@ export function MarketFlowCard({p, meta}: { p: MarketInvestorFlowPayload; meta: 
 }
 
 const RANK_TYPE_LABEL: Record<string, string> = {VALUE: '거래대금', VOLUME: '거래량', SURGE: '거래량 급증률'};
+const RANK_MARKET_LABEL: Record<string, string> = {KR: '국내', US: '미국', CRYPTO: '코인'};
 
 export function TradingRankCard({p, meta}: { p: TradingRankPayload; meta: Meta }) {
     const [expanded, setExpanded] = useState(false);
-    const title = `${p.market === 'US' ? '미국' : '국내'} ${RANK_TYPE_LABEL[p.type] ?? p.type} 상위 · ${p.basis}`;
+    const title = `${RANK_MARKET_LABEL[p.market] ?? p.market} ${RANK_TYPE_LABEL[p.type] ?? p.type} 상위 · ${p.basis}`;
     const shown = expanded ? p.stocks : p.stocks.slice(0, FLOW_PREVIEW);
     const more = p.stocks.length > FLOW_PREVIEW;
     const value = (v: number | null) => p.type === 'SURGE' ? (v === null ? '-' : `${fmt(v, 2)}%`) : fmt(v);
@@ -132,7 +133,8 @@ export function TradingRankCard({p, meta}: { p: TradingRankPayload; meta: Meta }
                         s.rank,
                         <Link component={RouterLink} to={s.link} underline="hover">{s.name}</Link>,
                         rateChip(s.changeRate),
-                        price(s.price, p.currency),
+                        // 코인은 1원 미만도 있어 코인 순위 화면처럼 소수까지 표기
+                        p.market === 'CRYPTO' ? (s.price === null ? '-' : `${s.price.toLocaleString()}원`) : price(s.price, p.currency),
                         value(s.value),
                     ])}
                 />}

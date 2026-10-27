@@ -32,6 +32,7 @@ export const CARD_LABEL: Record<string, string> = {
     get_stock_investor_flow: '종목 수급',
     get_global_indexes: '해외 지수',
     get_treasury_yields: '국채 금리',
+    get_exchange_rates: '환율',
     get_calendar: '일정',
     get_recommend_list: '추천 목록',
     search_news: '뉴스',
@@ -108,7 +109,8 @@ function render(kind: string, payload: unknown, card: TurnCard, onPick?: (p: Cha
         case 'get_stock_investor_flow': return <StockFlowCard p={payload as StockInvestorFlowPayload[]} meta={meta}/>;
         case 'get_global_indexes':
             return isBrief(payload) ? <MarketBriefCard p={payload} meta={meta}/> : <GlobalIndexCard p={payload as GlobalIndexPayload[]} meta={meta}/>;
-        case 'get_treasury_yields': return <MarketBriefCard p={payload as MarketBriefPayload} meta={meta}/>;
+        case 'get_treasury_yields':
+        case 'get_exchange_rates': return <MarketBriefCard p={payload as MarketBriefPayload} meta={meta}/>;
         case 'get_calendar': return <CalendarCard p={payload as CalendarItemPayload[]} meta={meta} args={card.args}/>;
         case 'get_recommend_list': return <RecommendCard p={payload as RecommendListPayload} meta={meta}/>;
         case 'search_news': return <NewsCard p={payload as NewsRowPayload[]} meta={meta}/>;
