@@ -184,7 +184,9 @@ export default function AssistantPanel({onClose, variant}: AssistantPanelProps) 
         send({message: text});
     };
 
-    const handlePick = useCallback((pick: ChatPick) => send({message: pick.name, pick}), [send]);
+    const handlePick = useCallback((pick: ChatPick) => send('groupId' in pick
+        ? {message: `관심종목 ${pick.name}`, group: pick}
+        : {message: pick.name, pick}), [send]);
 
     const liveActions = (children: ReactNode, align: 'flex-start' | 'flex-end') => (
         <Stack direction="row" alignItems="center" spacing={1} justifyContent={align}

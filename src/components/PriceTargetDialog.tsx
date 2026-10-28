@@ -17,6 +17,14 @@ import IconButton from "@mui/material/IconButton";
 import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
 import {createPriceTarget, fetchPriceTargets, deletePriceTarget} from "../api/notification/NotificationApi.ts";
 import type {AssetType, PriceTarget, PriceTargetCreateReq} from "../type/NotificationType.ts";
+import {formatAlertPrice} from "./CustomRender.tsx";
+
+/** 입력 중 표기: 정수부만 콤마, 소수부는 친 그대로 ("1,234." · "250.5") */
+const formatInput = (raw: string) => {
+    const [int, frac] = raw.split('.');
+    const intText = int ? Number(int).toLocaleString() : (frac !== undefined ? '0' : '');
+    return frac !== undefined ? `${intText}.${frac}` : intText;
+};
 
 interface PriceTargetDialogProps {
     open: boolean;
@@ -31,6 +39,8 @@ export default function PriceTargetDialog({open, onClose, assetType, assetCode, 
     const queryClient = useQueryClient();
     const [targetPrice, setTargetPrice] = useState("");
     const [targetPriceError, setTargetPriceError] = useState("");
+    // 미국 주식(_US)은 달러·소수 4자리까지 (2026-10-27)
+    const usd = assetCode.endsWith('_US');
 
     const {data: allTargetsData} = useQuery<PriceTarget[]>({
         queryKey: ['priceTargets'],
@@ -111,19 +121,22 @@ export default function PriceTargetDialog({open, onClose, assetType, assetCode, 
                         {assetName}
                     </Typography>
                     <Typography variant="body2" color="text.secondary">
-                        현재가: {Number(currentPrice.replace(/,/g, '')).toLocaleString()}원
+                        현재가: {formatAlertPrice(Number(currentPrice.replace(/,/g, '')), assetCode)}
                     </Typography>
                     <TextField
                         autoFocus required
-                        label="목표가 (원)"
+                        label={usd ? "목표가 (달러)" : "목표가 (원)"}
                         size="small"
-                        value={targetPrice ? Number(targetPrice).toLocaleString() : ''}
+                        value={formatInput(targetPrice)}
                         onChange={e => {
-                            const raw = e.target.value.replace(/,/g, '').replace(/[^0-9]/g, '');
+                            const cleaned = e.target.value.replace(/,/g, '');
+                            const raw = usd
+                                ? cleaned.replace(/[^0-9.]/g, '').replace(/^([^.]*\.)(.*)$/, (_, a: string, b: string) => a + b.replace(/\./g, '').slice(0, 4))
+                                : cleaned.replace(/[^0-9]/g, '');
                             setTargetPrice(raw);
                             if (targetPriceError) setTargetPriceError("");
                         }}
-                        slotProps={{htmlInput: {inputMode: 'numeric'}}}
+                        slotProps={{htmlInput: {inputMode: usd ? 'decimal' : 'numeric'}}}
                         error={!!targetPriceError}
                         helperText={targetPriceError || (() => {
                             const cur = Number(currentPrice.replace(/,/g, ''));
@@ -155,7 +168,7 @@ export default function PriceTargetDialog({open, onClose, assetType, assetCode, 
                                         sx={{px: 0}}
                                     >
                                         <ListItemText
-                                            primary={`${target.targetPrice.toLocaleString()}원 ${target.direction === 'ABOVE' ? '이상' : '이하'}`}
+                                            primary={`${formatAlertPrice(target.targetPrice, target.assetCode)} ${target.direction === 'ABOVE' ? '이상' : '이하'}`}
                                         />
                                     </ListItem>
                                 ))}

@@ -12,7 +12,10 @@ import StackedLineChartIcon from '@mui/icons-material/StackedLineChart';
 import ToggleButton from '@mui/material/ToggleButton';
 import ToggleButtonGroup, {toggleButtonGroupClasses,} from '@mui/material/ToggleButtonGroup';
 import {styled} from "@mui/material/styles";
-import {Select, SelectChangeEvent, Slider, Tabs, Tab} from "@mui/material";
+import {Select, SelectChangeEvent, Slider, Tabs, Tab, Tooltip} from "@mui/material";
+import IconButton from "@mui/material/IconButton";
+import NotificationsActiveIcon from "@mui/icons-material/NotificationsActive";
+import PriceTargetDialog from "../../components/PriceTargetDialog.tsx";
 import MenuItem from "@mui/material/MenuItem";
 import Button from "@mui/material/Button";
 import {GridColDef} from "@mui/x-data-grid";
@@ -131,6 +134,7 @@ const UsStockDetail = () => {
     const stkCd = stkCdParam || "";
 
     const [chartType, setChartType] = useState<UsStockChartType>(UsStockChartType.DAY);
+    const [priceTargetOpen, setPriceTargetOpen] = useState(false);
 
     const {data: result, isLoading, lastUpdated, pollError} = usePollingQuery<UsStockDetailRes>(
         ['usStockDetail', stexTp, stkCd, chartType],
@@ -433,6 +437,11 @@ const UsStockDetail = () => {
                                 <Typography component="h2" variant="subtitle2" gutterBottom>
                                     {loading ? <Skeleton width={120}/> : chartData.title}
                                 </Typography>
+                                <Tooltip title="목표가 알림">
+                                    <IconButton size="small" onClick={() => setPriceTargetOpen(true)} sx={{mb: "3px"}}>
+                                        <NotificationsActiveIcon fontSize="small" />
+                                    </IconButton>
+                                </Tooltip>
                             </Box>
                             <Stack sx={{ justifyContent: 'space-between' }}>
                                 <Stack
@@ -674,6 +683,15 @@ const UsStockDetail = () => {
                     )}
                 </Grid>
             </Grid>
+
+            <PriceTargetDialog
+                open={priceTargetOpen}
+                onClose={() => setPriceTargetOpen(false)}
+                assetType="STOCK"
+                assetCode={`${stkCd}_US`}
+                assetName={info?.isEtf ? stkCd : (info?.stkNm || info?.stkEnm || stkCd)}
+                currentPrice={String(curPrcNum || '')}
+            />
         </Box>
     )
 }

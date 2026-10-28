@@ -64,13 +64,13 @@ import CircularProgress from "@mui/material/CircularProgress";
 import List from "@mui/material/List";
 import ListItemButton from "@mui/material/ListItemButton";
 import ListItemText from "@mui/material/ListItemText";
-import {addInterestItem, fetchInterestGroups} from "../../api/interest/InterestApi.ts";
+import {addWatchlistItem, fetchWatchlistGroups} from "../../api/watchlist/WatchlistApi.ts";
 import {useMutation} from "@tanstack/react-query";
 import {requireOk} from "../../lib/apiResponse.ts";
 import {useAlert} from "../../context/AlertContext";
 import NotificationsActiveIcon from "@mui/icons-material/NotificationsActive";
 import PriceTargetDialog from "../../components/PriceTargetDialog.tsx";
-import {InterestGroup} from "../../type/InterestType.ts";
+import {WatchlistGroup} from "../../type/WatchlistType.ts";
 
 const StyledToggleButtonGroup = styled(ToggleButtonGroup)(({ theme }) => ({
     border: 'none',
@@ -861,28 +861,28 @@ const StockDetail = () => {
         }
     };
 
-    const [interestDialogOpen, setInterestDialogOpen] = useState(false);
-    const [interestGroups, setInterestGroups] = useState<InterestGroup[]>([]);
-    const [interestLoading, setInterestLoading] = useState(false);
+    const [watchlistDialogOpen, setWatchlistDialogOpen] = useState(false);
+    const [watchlistGroups, setWatchlistGroups] = useState<WatchlistGroup[]>([]);
+    const [watchlistLoading, setWatchlistLoading] = useState(false);
     const [addedGroupIds, setAddedGroupIds] = useState<Set<number>>(new Set());
     const showAlert = useAlert();
 
     const handleHeartClick = async () => {
-        setInterestDialogOpen(true);
-        setInterestLoading(true);
+        setWatchlistDialogOpen(true);
+        setWatchlistLoading(true);
         setAddedGroupIds(new Set());
         try {
-            const res = await fetchInterestGroups();
+            const res = await fetchWatchlistGroups();
             if (res.code !== "0000") throw new Error(res.message || `관심 그룹 조회 실패 (${res.code})`);
-            setInterestGroups(res.result ?? []);
+            setWatchlistGroups(res.result ?? []);
         } finally {
-            setInterestLoading(false);
+            setWatchlistLoading(false);
         }
     };
 
     const addToGroupMutation = useMutation({
-        mutationFn: async (group: InterestGroup) => {
-            requireOk(await addInterestItem(group.id, {stkCd: stockChartData.id, stkNm: stockChartData.title}), '관심 종목 추가');
+        mutationFn: async (group: WatchlistGroup) => {
+            requireOk(await addWatchlistItem(group.id, {stkCd: stockChartData.id, stkNm: stockChartData.title}), '관심 종목 추가');
             return group;
         },
         onSuccess: (group) => {
@@ -895,7 +895,7 @@ const StockDetail = () => {
         },
     });
 
-    const handleAddToGroup = (group: InterestGroup) => {
+    const handleAddToGroup = (group: WatchlistGroup) => {
         addToGroupMutation.mutate(group);
     };
 
@@ -1555,14 +1555,14 @@ const StockDetail = () => {
             </Grid>
 
             {/* 관심종목 그룹 선택 다이얼로그 */}
-            <Dialog open={interestDialogOpen} onClose={() => setInterestDialogOpen(false)} maxWidth="xs" fullWidth>
+            <Dialog open={watchlistDialogOpen} onClose={() => setWatchlistDialogOpen(false)} maxWidth="xs" fullWidth>
                 <DialogTitle>관심종목에 추가</DialogTitle>
                 <DialogContent sx={{pb: 1}}>
-                    {interestLoading ? (
+                    {watchlistLoading ? (
                         <Box sx={{display: 'flex', justifyContent: 'center', py: 3}}>
                             <CircularProgress size={24} />
                         </Box>
-                    ) : interestGroups.length === 0 ? (
+                    ) : watchlistGroups.length === 0 ? (
                         <Box sx={{py: 2, textAlign: 'center'}}>
                             <Typography variant="body2" color="text.secondary">
                                 관심종목 그룹이 없습니다.
@@ -1573,7 +1573,7 @@ const StockDetail = () => {
                         </Box>
                     ) : (
                         <List dense disablePadding>
-                            {interestGroups.map(group => (
+                            {watchlistGroups.map(group => (
                                 <ListItemButton
                                     key={group.id}
                                     onClick={() => handleAddToGroup(group)}
@@ -1593,7 +1593,7 @@ const StockDetail = () => {
                     )}
                 </DialogContent>
                 <DialogActions>
-                    <Button onClick={() => setInterestDialogOpen(false)}>닫기</Button>
+                    <Button onClick={() => setWatchlistDialogOpen(false)}>닫기</Button>
                 </DialogActions>
             </Dialog>
 

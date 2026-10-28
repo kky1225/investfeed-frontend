@@ -36,18 +36,18 @@ import {arrayMove, SortableContext, useSortable, verticalListSortingStrategy} fr
 import {CSS} from "@dnd-kit/utilities";
 import {useNavigate, useParams} from "react-router-dom";
 import {
-    addCryptoInterestItem,
-    createCryptoInterestGroup,
-    deleteCryptoInterestGroup,
-    deleteCryptoInterestItem,
-    fetchCryptoInterestGroups,
-    fetchCryptoInterestItems,
-    fetchCryptoInterestItemsStream,
-    reorderCryptoInterestGroups,
-    reorderCryptoInterestItems,
-    updateCryptoInterestGroup,
-} from "../../api/cryptoInterest/CryptoInterestApi.ts";
-import {AddItemMutationVars, CreateCryptoGroupReq, CryptoInterestGroup, CryptoInterestItem, DeleteItemMutationVars, ReorderItemsMutationVars, ReorderReq, UpdateGroupMutationVars} from "../../type/CryptoInterestType.ts";
+    addCryptoWatchlistItem,
+    createCryptoWatchlistGroup,
+    deleteCryptoWatchlistGroup,
+    deleteCryptoWatchlistItem,
+    fetchCryptoWatchlistGroups,
+    fetchCryptoWatchlistItems,
+    fetchCryptoWatchlistItemsStream,
+    reorderCryptoWatchlistGroups,
+    reorderCryptoWatchlistItems,
+    updateCryptoWatchlistGroup,
+} from "../../api/cryptoWatchlist/CryptoWatchlistApi.ts";
+import {AddItemMutationVars, CreateCryptoGroupReq, CryptoWatchlistGroup, CryptoWatchlistItem, DeleteItemMutationVars, ReorderItemsMutationVars, ReorderReq, UpdateGroupMutationVars} from "../../type/CryptoWatchlistType.ts";
 import {fetchCryptoSearch} from "../../api/crypto/CryptoApi.ts";
 
 interface CryptoSearchItem {
@@ -58,11 +58,11 @@ interface CryptoSearchItem {
 
 interface GroupMenuState {
     anchorEl: HTMLElement;
-    group: CryptoInterestGroup;
+    group: CryptoWatchlistGroup;
 }
 
 interface SortableGroupItemProps {
-    group: CryptoInterestGroup;
+    group: CryptoWatchlistGroup;
     selected: boolean;
     onSelect: () => void;
     onMenuOpen: (e: React.MouseEvent<HTMLButtonElement>) => void;
@@ -183,23 +183,23 @@ const DraggableRow = React.forwardRef<HTMLDivElement, GridRowProps>((props, _ref
     );
 });
 
-const CryptoInterest = () => {
+const CryptoWatchlist = () => {
     const navigate = useNavigate();
     const {groupId} = useParams<{ groupId: string }>();
     const queryClient = useQueryClient();
 
-    const {data: groupsData, isLoading: groupsLoading} = useQuery<CryptoInterestGroup[]>({
-        queryKey: ['cryptoInterestGroups'],
-        queryFn: async () => requireOk(await fetchCryptoInterestGroups(), [] as CryptoInterestGroup[]),
+    const {data: groupsData, isLoading: groupsLoading} = useQuery<CryptoWatchlistGroup[]>({
+        queryKey: ['cryptoWatchlistGroups'],
+        queryFn: async () => requireOk(await fetchCryptoWatchlistGroups(), [] as CryptoWatchlistGroup[]),
     });
-    const [groupOrderOverride, setGroupOrderOverride] = useState<CryptoInterestGroup[] | null>(null);
+    const [groupOrderOverride, setGroupOrderOverride] = useState<CryptoWatchlistGroup[] | null>(null);
     const groups = groupOrderOverride ?? groupsData ?? [];
 
-    const [selectedGroup, setSelectedGroup] = useState<CryptoInterestGroup | null>(null);
+    const [selectedGroup, setSelectedGroup] = useState<CryptoWatchlistGroup | null>(null);
     const [groupOrderDirty, setGroupOrderDirty] = useState(false);
     const [itemOrderDirty, setItemOrderDirty] = useState(false);
 
-    const [prevGroupsData, setPrevGroupsData] = useState<CryptoInterestGroup[] | undefined>(undefined);
+    const [prevGroupsData, setPrevGroupsData] = useState<CryptoWatchlistGroup[] | undefined>(undefined);
     if (groupsData !== prevGroupsData) {
         setPrevGroupsData(groupsData);
         setGroupOrderOverride(null);
@@ -215,15 +215,15 @@ const CryptoInterest = () => {
         }
     }
 
-    const {data: itemsData, isLoading: itemsLoading} = useQuery<CryptoInterestItem[]>({
-        queryKey: ['cryptoInterestItems', selectedGroup?.id],
+    const {data: itemsData, isLoading: itemsLoading} = useQuery<CryptoWatchlistItem[]>({
+        queryKey: ['cryptoWatchlistItems', selectedGroup?.id],
         queryFn: async () => {
             if (!selectedGroup) return [];
-            return requireOk(await fetchCryptoInterestItems(selectedGroup.id), [] as CryptoInterestItem[]);
+            return requireOk(await fetchCryptoWatchlistItems(selectedGroup.id), [] as CryptoWatchlistItem[]);
         },
         enabled: selectedGroup !== null,
     });
-    const [itemsOrderOverride, setItemsOrderOverride] = useState<CryptoInterestItem[] | null>(null);
+    const [itemsOrderOverride, setItemsOrderOverride] = useState<CryptoWatchlistItem[] | null>(null);
     const items = useMemo(() => itemsOrderOverride ?? itemsData ?? [], [itemsOrderOverride, itemsData]);
     const [liveOverlay, setLiveOverlay] = useState<Map<string, {tradePrice: number; signedChangeRate: number; change: string}>>(new Map());
 
@@ -276,7 +276,7 @@ const CryptoInterest = () => {
 
         (async () => {
             try {
-                const streamRes = await fetchCryptoInterestItemsStream(targetGroupId);
+                const streamRes = await fetchCryptoWatchlistItemsStream(targetGroupId);
                 if (cancelled) return;
                 if (streamRes.code !== "0000") throw new Error(streamRes.message || `관심 코인 스트림 실패 (${streamRes.code})`);
 
@@ -319,16 +319,16 @@ const CryptoInterest = () => {
         };
     }, [selectedGroup]);
 
-    const handleSelectGroup = (group: CryptoInterestGroup) => {
+    const handleSelectGroup = (group: CryptoWatchlistGroup) => {
         setSelectedGroup(group);
-        navigate(`/crypto/interest/list/${group.id}`, {replace: true});
+        navigate(`/crypto/watchlist/list/${group.id}`, {replace: true});
     };
 
     const createGroupMutation = useMutation({
         mutationFn: async (req: CreateCryptoGroupReq) =>
-            requireOk(await createCryptoInterestGroup(req), '관심 그룹 생성'),
+            requireOk(await createCryptoWatchlistGroup(req), '관심 그룹 생성'),
         onSuccess: (created) => {
-            queryClient.invalidateQueries({queryKey: ['cryptoInterestGroups']});
+            queryClient.invalidateQueries({queryKey: ['cryptoWatchlistGroups']});
             setAddGroupOpen(false);
             setNewGroupName("");
             setSelectedGroup(created);
@@ -344,11 +344,11 @@ const CryptoInterest = () => {
 
     const updateGroupMutation = useMutation({
         mutationFn: async (vars: UpdateGroupMutationVars) => {
-            requireOk(await updateCryptoInterestGroup(vars.id, vars.req), '관심 그룹 수정');
+            requireOk(await updateCryptoWatchlistGroup(vars.id, vars.req), '관심 그룹 수정');
             return vars;
         },
         onSuccess: ({id, req}) => {
-            queryClient.invalidateQueries({queryKey: ['cryptoInterestGroups']});
+            queryClient.invalidateQueries({queryKey: ['cryptoWatchlistGroups']});
             if (selectedGroup?.id === id) {
                 setSelectedGroup(prev => prev ? {...prev, groupNm: req.groupNm} : prev);
             }
@@ -366,7 +366,7 @@ const CryptoInterest = () => {
 
     const deleteGroupMutation = useMutation({
         mutationFn: async (id: number) => {
-            requireOk(await deleteCryptoInterestGroup(id), '관심 그룹 삭제');
+            requireOk(await deleteCryptoWatchlistGroup(id), '관심 그룹 삭제');
             return id;
         },
         onSuccess: (id) => {
@@ -374,7 +374,7 @@ const CryptoInterest = () => {
             if (selectedGroup?.id === id) {
                 setSelectedGroup(remaining.length > 0 ? remaining[0] : null);
             }
-            queryClient.invalidateQueries({queryKey: ['cryptoInterestGroups']});
+            queryClient.invalidateQueries({queryKey: ['cryptoWatchlistGroups']});
             setGroupOrderDirty(false);
             setDeleteGroupOpen(false);
             setGroupMenu(null);
@@ -428,22 +428,22 @@ const CryptoInterest = () => {
 
     const reorderGroupsMutation = useMutation({
         mutationFn: async (req: ReorderReq) => {
-            requireOk(await reorderCryptoInterestGroups(req), '관심 그룹 순서 변경');
+            requireOk(await reorderCryptoWatchlistGroups(req), '관심 그룹 순서 변경');
         },
         onSuccess: () => {
             setGroupOrderDirty(false);
-            queryClient.invalidateQueries({queryKey: ['cryptoInterestGroups']});
+            queryClient.invalidateQueries({queryKey: ['cryptoWatchlistGroups']});
         },
         onError: (err) => console.error(err),
     });
 
     const reorderItemsMutation = useMutation({
         mutationFn: async (vars: ReorderItemsMutationVars) => {
-            requireOk(await reorderCryptoInterestItems(vars.groupId, vars.req), '관심 종목 순서 변경');
+            requireOk(await reorderCryptoWatchlistItems(vars.groupId, vars.req), '관심 종목 순서 변경');
         },
         onSuccess: (_data, vars) => {
             setItemOrderDirty(false);
-            queryClient.invalidateQueries({queryKey: ['cryptoInterestItems', vars.groupId]});
+            queryClient.invalidateQueries({queryKey: ['cryptoWatchlistItems', vars.groupId]});
         },
         onError: (err) => console.error(err),
     });
@@ -484,9 +484,9 @@ const CryptoInterest = () => {
 
     const addItemMutation = useMutation({
         mutationFn: async (vars: AddItemMutationVars) =>
-            requireOk(await addCryptoInterestItem(vars.groupId, vars.req), '관심 종목 추가'),
+            requireOk(await addCryptoWatchlistItem(vars.groupId, vars.req), '관심 종목 추가'),
         onSuccess: (_data, vars) => {
-            queryClient.invalidateQueries({queryKey: ['cryptoInterestItems', vars.groupId]});
+            queryClient.invalidateQueries({queryKey: ['cryptoWatchlistItems', vars.groupId]});
             setAddItemOpen(false);
             setSearchKeyword("");
             setSearchResults([]);
@@ -501,11 +501,11 @@ const CryptoInterest = () => {
 
     const deleteItemMutation = useMutation({
         mutationFn: async (vars: DeleteItemMutationVars) => {
-            requireOk(await deleteCryptoInterestItem(vars.groupId, vars.itemId), '관심 종목 삭제');
+            requireOk(await deleteCryptoWatchlistItem(vars.groupId, vars.itemId), '관심 종목 삭제');
             return vars;
         },
         onSuccess: (vars) => {
-            queryClient.invalidateQueries({queryKey: ['cryptoInterestItems', vars.groupId]});
+            queryClient.invalidateQueries({queryKey: ['cryptoWatchlistItems', vars.groupId]});
         },
         onError: (err) => console.error(err),
     });
@@ -944,4 +944,4 @@ const CryptoInterest = () => {
     );
 };
 
-export default CryptoInterest;
+export default CryptoWatchlist;

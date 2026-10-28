@@ -6,10 +6,26 @@ import Button from '@mui/material/Button';
 import Alert from '@mui/material/Alert';
 import Link from '@mui/material/Link';
 import Box from '@mui/material/Box';
-import type {HoldingPayload, HoldingRowPayload, PnlPayload, PortfolioPayload, PriceAlertPreviewPayload} from '../../../type/AssistantType';
-import {renderChangeAmount} from '../../CustomRender';
+import LinearProgress from '@mui/material/LinearProgress';
+import Chip from '@mui/material/Chip';
+import Radio from '@mui/material/Radio';
+import RadioGroup from '@mui/material/RadioGroup';
+import FormControlLabel from '@mui/material/FormControlLabel';
+import type {
+    GoalUpdatePreviewPayload, GoalsPayload, HoldingPayload, HoldingRowPayload, PnlPayload, PortfolioPayload, PriceAlertDeletePreviewPayload,
+    PriceAlertPreviewPayload, PriceAlertRowPayload, TurnCard,
+} from '../../../type/AssistantType';
+import {goalTypeLabel} from '../../../type/GoalType';
+import {formatAlertPrice, renderChangeAmount} from '../../CustomRender';
 import AccountSummary from '../AccountSummary';
-import {confirmAssistantPriceAlert} from '../../../api/assistant/AssistantApi';
+import {
+    cancelAssistantGoalUpdate, cancelAssistantPriceAlert, cancelAssistantPriceAlertDelete, confirmAssistantGoalUpdate, confirmAssistantPriceAlert,
+    confirmAssistantPriceAlertDelete,
+} from '../../../api/assistant/AssistantApi';
+import {useQueryClient} from '@tanstack/react-query';
+import dayjs from 'dayjs';
+import {ASSISTANT_TIMELINE_KEY} from '../../../context/AssistantContext';
+import type {ApiResponse} from '../../../type/AuthType';
 import {requireOk} from '../../../lib/apiResponse';
 import {ASSET_CLASS_LABEL, CardFrame, MiniTable, Stat, amount, fmt, price, rateChip} from './CardParts';
 
@@ -194,36 +210,169 @@ export function PnlCard({p}: { p: PnlPayload }) {
     );
 }
 
-/** 목표가 확인 카드. 버튼은 cardRef 만 보내고 서버가 Redis 원본으로 등록한다 */
-export function ConfirmPriceAlertCard({p, cardRef}: { p: PriceAlertPreviewPayload; cardRef?: string | null }) {
-    const [state, setState] = useState<'idle' | 'sending' | 'done' | 'error'>('idle');
+/** 투자 목표: 웹 투자 목표 화면(GoalPage)과 같은 모양 — 종류 · 달성 완료 칩 · 진행 막대 · 달성률 · 현재/목표 금액 */
+export function GoalsCard({p}: { p: GoalsPayload }) {
+    return (
+        <CardFrame personal title="투자 목표" asOf={p.asOf} link="/goal" linkLabel="투자 목표 화면">
+            {p.goals.length === 0 && <Typography variant="body2" color="text.secondary">설정된 투자 목표가 없습니다</Typography>}
+            <Stack spacing={1.25}>
+                {p.goals.map((g) => {
+                    const isOver = g.achievementRate >= 100;
+                    return (
+                        <Box key={g.id} sx={{borderTop: '1px solid', borderColor: 'divider', pt: 1, '&:first-of-type': {borderTop: 0, pt: 0}}}>
+                            <Stack direction="row" alignItems="center" gap={1} sx={{mb: 0.5}}>
+                                <Typography variant="body2" sx={{fontWeight: 600}}>{goalTypeLabel[g.type]}</Typography>
+                                {isOver && <Chip label="달성 완료" size="small" color="success" variant="outlined"/>}
+                            </Stack>
+                            <Stack direction="row" alignItems="center" gap={1}>
+                                <LinearProgress variant="determinate" value={Math.min(g.achievementRate, 100)} color={isOver ? 'success' : 'primary'}
+                                                sx={{flex: 1, height: 8, borderRadius: 4}}/>
+                                <Typography variant="body2" sx={{fontWeight: 700, minWidth: 50, textAlign: 'right'}}>{g.achievementRate.toFixed(1)}%</Typography>
+                            </Stack>
+                            <Typography variant="caption" color="text.secondary">
+                                {g.currentAmount.toLocaleString()}원 / {g.targetAmount.toLocaleString()}원
+                            </Typography>
+                        </Box>
+                    );
+                })}
+            </Stack>
+        </CardFrame>
+    );
+}
+
+/** 확인 카드가 Redis 에 남아 있는 시간 (Kotlin CardStore.TTL). 지나면 버튼 대신 만료 안내 */
+const CONFIRM_TTL_MS = 30 * 60 * 1000;
+
+type ActionStatus = TurnCard['actionStatus'];
+
+/**
+ * 확인 카드 아래 줄: 링크 · [취소] [확인]. 누르면 서버가 결과 답변을 타임라인에 올리고 이 카드에 결과를 기록한다 (2026-10-27).
+ * 처리한 카드(actionStatus)는 버튼만 없앤다 — 결과는 바로 아래 비서 답변이 말하므로 카드에 다시 쓰지 않는다 (중복 지적, 2026-10-27).
+ * 만료된 카드는 답변이 없으니 만료 안내를 보인다. 새로고침해도 버튼이 다시 살아나지 않는다
+ */
+function ConfirmActions({cardRef, status, asOf, link, confirmLabel, confirm, cancel}: {
+    cardRef?: string | null;
+    status?: ActionStatus;
+    asOf?: string | null;
+    link: ReactNode;
+    confirmLabel: string;
+    confirm: (ref: string) => Promise<ApiResponse<unknown>>;
+    cancel: (ref: string) => Promise<ApiResponse<unknown>>;
+}) {
+    const queryClient = useQueryClient();
+    const [local, setLocal] = useState<ActionStatus>(null);
+    const [sending, setSending] = useState(false);
     const [message, setMessage] = useState('');
-    const submit = async () => {
-        if (!cardRef || state === 'sending' || state === 'done') return;
-        setState('sending');
+    const result = status ?? local;
+    const expired = !result && !!asOf && Date.now() - dayjs(asOf).valueOf() > CONFIRM_TTL_MS;
+    const run = async (action: 'CONFIRMED' | 'CANCELED') => {
+        if (!cardRef || sending || result) return;
+        setSending(true);
+        setMessage('');
         try {
-            requireOk(await confirmAssistantPriceAlert(cardRef), '목표가 알림 등록');
-            setState('done');
+            requireOk(await (action === 'CONFIRMED' ? confirm : cancel)(cardRef), action === 'CONFIRMED' ? confirmLabel : '취소');
+            setLocal(action);
+            await queryClient.invalidateQueries({queryKey: ASSISTANT_TIMELINE_KEY});   // 결과 답변·카드 상태 반영
         } catch (e) {
             const msg = (e as {response?: {data?: {message?: string}}}).response?.data?.message ?? (e as Error).message;
-            setMessage(msg || '등록하지 못했습니다');
-            setState('error');
+            setMessage(msg || '처리하지 못했습니다');
+        } finally {
+            setSending(false);
         }
     };
     return (
-        <CardFrame personal title="목표가 알림 등록">
-            <Stat label="종목">{p.name} <Typography component="span" variant="caption" color="text.secondary">{p.code}</Typography></Stat>
-            <Stat label="조건">{`${fmt(p.price)}원 ${p.direction === 'ABOVE' ? '이상' : '이하'} 도달 시`}</Stat>
-            {state === 'error' && <Alert severity="error" sx={{py: 0, mt: 1}}>{message}</Alert>}
+        <>
+            {message && <Alert severity="error" sx={{py: 0, mt: 1}}>{message}</Alert>}
             {/* 카드 안 실행 버튼이라 색 있는 버튼 (관리자 등록 버튼과 같은 contained), 오른쪽 아래 */}
-            <Stack direction="row" alignItems="center" sx={{mt: 1}}>
+            <Stack direction="row" alignItems="center" spacing={1} sx={{mt: 1}}>
                 {/* 링크에 flexGrow 를 주면 링크 폭이 줄 전체로 늘어나 밑줄이 길어진다 → 여백은 별도 Box */}
-                <Link component={RouterLink} to="/notification/settings" variant="caption">알림 설정</Link>
+                {link}
                 <Box sx={{flexGrow: 1}}/>
-                {state === 'done'
-                    ? <Typography variant="body2" color="success.main">등록되었습니다</Typography>
-                    : <Button variant="contained" size="small" onClick={submit}>{state === 'sending' ? '등록 중…' : '등록'}</Button>}
+                {expired && <Typography variant="body2" color="text.secondary">만료되었습니다. 다시 요청해 주세요</Typography>}
+                {!result && !expired && (
+                    <>
+                        <Button size="small" onClick={() => run('CANCELED')}>취소</Button>
+                        <Button variant="contained" size="small" onClick={() => run('CONFIRMED')}>{sending ? '처리 중…' : confirmLabel}</Button>
+                    </>
+                )}
             </Stack>
+        </>
+    );
+}
+
+/** 투자 목표 변경 확인 카드. 버튼은 cardRef 만 보내고 서버가 Redis 원본으로 변경한다 (목표가 확인 카드와 같은 방식, 2차 인증) */
+export function ConfirmGoalCard({p, cardRef, status}: { p: GoalUpdatePreviewPayload; cardRef?: string | null; status?: ActionStatus }) {
+    const isNew = p.currentTarget === null;
+    return (
+        <CardFrame personal title={isNew ? '투자 목표 설정' : '투자 목표 변경'}>
+            <Stat label="목표">{goalTypeLabel[p.type]}</Stat>
+            <Stat label="현재 목표">{isNew ? '없음' : `${fmt(p.currentTarget)}원`}</Stat>
+            <Stat label="새 목표"><b>{fmt(p.newTarget)}원</b></Stat>
+            <ConfirmActions
+                cardRef={cardRef} status={status} asOf={p.asOf}
+                link={<Link component={RouterLink} to="/goal" variant="caption">투자 목표</Link>}
+                confirmLabel={isNew ? '설정' : '변경'}
+                confirm={confirmAssistantGoalUpdate} cancel={cancelAssistantGoalUpdate}
+            />
+        </CardFrame>
+    );
+}
+
+/** 목표가 확인 카드. 버튼은 cardRef 만 보내고 서버가 Redis 원본으로 등록한다 */
+export function ConfirmPriceAlertCard({p, cardRef, status}: { p: PriceAlertPreviewPayload; cardRef?: string | null; status?: ActionStatus }) {
+    return (
+        // 웹 목표가 알림처럼 2차 인증 없이 보인다 (2026-10-27) — 개인 카드 잠금·접기 없음
+        <CardFrame title="목표가 알림 등록">
+            <Stat label="종목">{p.name} <Typography component="span" variant="caption" color="text.secondary">{p.code}</Typography></Stat>
+            <Stat label="조건">{`${formatAlertPrice(p.price, p.assetCode)} ${p.direction === 'ABOVE' ? '이상' : '이하'} 도달 시`}</Stat>
+            <ConfirmActions
+                cardRef={cardRef} status={status} asOf={p.asOf}
+                link={<Link component={RouterLink} to="/notification/settings" variant="caption">알림 설정</Link>}
+                confirmLabel="등록"
+                confirm={confirmAssistantPriceAlert} cancel={cancelAssistantPriceAlert}
+            />
+        </CardFrame>
+    );
+}
+
+const alertCondition = (a: PriceAlertRowPayload) => `${formatAlertPrice(a.price, a.assetCode)} ${a.direction === 'ABOVE' ? '이상' : '이하'} 도달 시`;
+
+/**
+ * 목표가 알림 삭제 확인 카드 (2026-10-28). 알림이 하나면 등록 카드와 같은 모양, 여럿이면 하나를 골라 삭제한다.
+ * 버튼은 cardRef + 고른 알림 id 만 보내고 서버가 Redis 원본에 있는 알림인지 확인한다
+ */
+export function ConfirmPriceAlertDeleteCard({p, status}: { p: PriceAlertDeletePreviewPayload; status?: ActionStatus }) {
+    const single = p.alerts.length === 1;
+    const [selected, setSelected] = useState<number | null>(single ? p.alerts[0].id : null);
+    const confirm = async (ref: string) => {
+        if (selected === null) throw new Error('삭제할 알림을 골라 주세요');
+        return confirmAssistantPriceAlertDelete(ref, selected);
+    };
+    return (
+        // 웹 목표가 알림처럼 2차 인증 없이 보인다
+        <CardFrame title="목표가 알림 삭제">
+            {p.notice && <Typography variant="body2" color="text.secondary" sx={{mb: 0.75}}>{p.notice}</Typography>}
+            {single ? (
+                <>
+                    <Stat label="종목">{p.alerts[0].name} <Typography component="span" variant="caption" color="text.secondary">{p.alerts[0].code}</Typography></Stat>
+                    <Stat label="조건">{alertCondition(p.alerts[0])}</Stat>
+                </>
+            ) : (
+                <RadioGroup value={selected ?? ''} onChange={(e) => setSelected(Number(e.target.value))}>
+                    {p.alerts.map((a) => (
+                        <FormControlLabel
+                            key={a.id} value={a.id} control={<Radio size="small"/>}
+                            label={<Typography variant="body2">{a.name} · {alertCondition(a)}</Typography>}
+                        />
+                    ))}
+                </RadioGroup>
+            )}
+            <ConfirmActions
+                cardRef={p.confirmRef} status={status} asOf={p.asOf}
+                link={<Link component={RouterLink} to="/notification/settings" variant="caption">알림 설정</Link>}
+                confirmLabel="삭제"
+                confirm={confirm} cancel={cancelAssistantPriceAlertDelete}
+            />
         </CardFrame>
     );
 }

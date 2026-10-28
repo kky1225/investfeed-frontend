@@ -39,7 +39,7 @@ const fallbackBreadcrumb = (pathname: string): string[] | null => {
 
     // 주식 (국내+해외 통합)
     if (pathname.startsWith('/stock/holding/list/')) return ['주식', '주식 계좌'];
-    if (pathname === '/stock/interest' || pathname.startsWith('/stock/interest/list/')) return ['주식', '관심 종목'];
+    if (pathname === '/stock/watchlist' || pathname.startsWith('/stock/watchlist/list/')) return ['주식', '관심 종목'];
 
     // 주식 > 해외 주식
     if (pathname.startsWith('/us-stock/detail/')) return ['주식', '해외 주식', '종목 상세'];
@@ -49,7 +49,7 @@ const fallbackBreadcrumb = (pathname: string): string[] | null => {
     // 암호화폐
     if (pathname.startsWith('/crypto/detail/')) return ['암호화폐', '종목 상세'];
     if (pathname.startsWith('/crypto/holding/list/')) return ['암호화폐', '코인 계좌'];
-    if (pathname.startsWith('/crypto/interest/list/')) return ['암호화폐', '관심 종목'];
+    if (pathname.startsWith('/crypto/watchlist/list/')) return ['암호화폐', '관심 종목'];
 
     // 원자재
     if (pathname.startsWith('/commodity/detail/')) return ['원자재', '원자재 상세'];

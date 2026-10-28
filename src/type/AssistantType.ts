@@ -1,4 +1,5 @@
 // Kotlin domain/assistant DTO 와 1:1 (docs/assistant-spec.md 5.3)
+import type {GoalType, InvestmentGoalRes} from './GoalType';
 
 export type MessageType = 'BRIEFING' | 'ALERT' | 'USER' | 'ASSISTANT' | 'SYSTEM';
 export type HeadlineScope = 'PERSONAL' | 'MARKET';
@@ -73,11 +74,14 @@ export interface TurnCard {
     payload?: unknown;
     /** 조회 조건 (공개 데이터 카드의 도구 인자). 예: get_calendar {from, to, type, country} */
     args?: Record<string, unknown> | null;
+    /** 확인 카드(목표가 알림·투자 목표)를 처리한 결과 — 있으면 버튼 없이 결과만 */
+    actionStatus?: 'CONFIRMED' | 'CANCELED' | null;
 }
 
 export type StockMarket = 'KR' | 'US' | 'CRYPTO';
 
-export interface StockCandidate { code: string; name: string; market: StockMarket; }
+/** similar: 정확히 일치하지 않아 제안하는 후보 ("이 종목이 맞나요?", 2026-10-27~) */
+export interface StockCandidate { code: string; name: string; market: StockMarket; similar?: boolean; }
 export interface StockChoicePayload { query: string; candidates: StockCandidate[]; }
 
 export interface IndexSnapshot { name: string; close: number; changeRate: number | null; changeAmount: number | null; high: number | null; low: number | null; }
@@ -207,11 +211,50 @@ export interface PnlPayload {
 export interface PriceAlertPreviewPayload {
     asOf: string; code: string; name: string; market: StockMarket; assetCode: string;
     price: number; direction: 'ABOVE' | 'BELOW'; currency: string;
+    confirmRef?: string | null;
 }
+
+export interface PriceAlertRowPayload {
+    id: number; code: string; name: string; assetCode: string;
+    price: number; direction: 'ABOVE' | 'BELOW'; currency: string;
+}
+
+export interface PriceAlertDeletePreviewPayload {
+    asOf: string; alerts: PriceAlertRowPayload[];
+    notice?: string | null;
+    confirmRef?: string | null;
+}
+
+export interface GoalsPayload { asOf: string; goals: InvestmentGoalRes[]; }
+
+export interface GoalUpdatePreviewPayload { asOf: string; type: GoalType; currentTarget: number | null; newTarget: number; }
 
 export interface StoredCard { ref: string; memberId: number; kind: string; createdAt: string; payload: unknown; }
 
-export interface ChatPick { code: string; market: StockMarket; name: string; }
+export interface StockPick { code: string; market: StockMarket; name: string; }
+/** 관심종목 그룹 선택 (그룹 목록 카드 버튼) — 비서가 LLM 없이 그 그룹을 조회한다 */
+export interface WatchlistGroupPick { groupId: number; kind: WatchlistKind; name: string; }
+/** 선택 카드 버튼: 종목 후보 또는 관심종목 그룹 */
+export type ChatPick = StockPick | WatchlistGroupPick;
+
+export type WatchlistKind = 'STOCK' | 'CRYPTO';
+export interface WatchlistGroupsPayload {
+    groups: { groupId: number; kind: WatchlistKind; name: string; count: number }[];
+    /** 질문한 그룹명이 없을 때 안내 */
+    notice: string | null;
+}
+export interface WatchlistItemPayload {
+    code: string; name: string; market: StockMarket;
+    /** 국내 시장명(코스피 등) 또는 미국 거래소 코드(ND/NY/NA). 코인은 null */
+    exchange: string | null;
+    link: string; currency: string; price: number | null; changeRate: number | null;
+    /** 미국 데이·프리·애프터마켓 등락률 (토스 연동 회원만) */
+    sessionRate: number | null;
+}
+export interface WatchlistPayload {
+    groupId: number; kind: WatchlistKind; groupName: string; link: string;
+    sessionLabel: string | null; items: WatchlistItemPayload[];
+}
 
 export interface CircuitBreakerAnswerPayload {
     market: 'KR' | 'US';

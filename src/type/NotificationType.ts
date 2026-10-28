@@ -15,6 +15,8 @@ export interface Notification {
     price: number | null;     // 등락률 알림 발송 시점 현재가 (과거 알림은 null)
     isRead: boolean;
     createdAt: string;
+    /** 눌렀을 때 갈 상세 화면 (서버 계산, 2026-10-27). null 이면 알림 종류로 이동 — 미국 상세는 거래소 구분이 필요해 서버가 준다 */
+    link?: string | null;
 }
 
 export interface PriceTarget {

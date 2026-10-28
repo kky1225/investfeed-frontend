@@ -1,4 +1,4 @@
-import type {ChatPick} from '../../type/AssistantType';
+import type {StockPick, WatchlistGroupPick} from '../../type/AssistantType';
 
 /**
  * Python 비서 서비스(/assistant/**, Vite 프록시 → 8000) 호출. axios 인스턴스(/api, 쿠키)와 분리한다.
@@ -32,7 +32,9 @@ export const STREAM_STALLED = '응답이 중간에 끊겼습니다';
 
 export interface ChatRequest {
     message: string;
-    pick?: ChatPick;
+    pick?: StockPick;
+    /** 관심종목 그룹 목록 카드에서 고른 그룹 */
+    group?: WatchlistGroupPick;
     /** 2차 인증 후 이어서 실행 — 비서가 인증 전에 골라 둔 조회를 LLM 재호출 없이 실행한다 */
     resume?: boolean;
 }

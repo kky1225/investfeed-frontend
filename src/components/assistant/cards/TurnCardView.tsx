@@ -7,17 +7,19 @@ import LockOutlinedIcon from '@mui/icons-material/LockOutlined';
 import WarningAmberIcon from '@mui/icons-material/WarningAmber';
 import type {
     BriefingPointerPayload, CalendarItemPayload, ChatPick, CircuitBreakerAnswerPayload, GlobalIndexPayload, HoldingPayload, MarketInvestorFlowPayload,
-    MarketBriefPayload, MarketSummaryPayload, NewsRowPayload, PnlPayload, PortfolioPayload, PriceAlertPreviewPayload, RecommendListPayload,
+    MarketBriefPayload, MarketSummaryPayload, NewsRowPayload, PnlPayload, PortfolioPayload, PriceAlertDeletePreviewPayload, PriceAlertPreviewPayload,
+    RecommendListPayload,
     SectorPerformancePayload, StockChoicePayload, StockInvestorFlowPayload, StockQuoteAnswerPayload, StockQuotePayload, TradingRankPayload, TurnCard,
+    WatchlistGroupsPayload, WatchlistPayload, GoalsPayload, GoalUpdatePreviewPayload,
 } from '../../../type/AssistantType';
 import {fetchAssistantCard} from '../../../api/assistant/AssistantApi';
 import {requireOk} from '../../../lib/apiResponse';
 import {CardFrame, PersonalOpenContext} from './CardParts';
 import {
     BriefingLinkCard, CalendarCard, GlobalIndexCard, MarketBriefCard, MarketFlowCard, MarketSummaryCard, NewsCard, RecommendCard,
-    SectorPerformanceCard, StockChoiceCard, StockFlowCard, StockQuoteCard, TradingRankCard,
+    SectorPerformanceCard, StockChoiceCard, StockFlowCard, StockQuoteCard, TradingRankCard, WatchlistCard, WatchlistGroupsCard,
 } from './MarketCards';
-import {ConfirmPriceAlertCard, HoldingCard, PnlCard, PortfolioCard} from './PersonalCards';
+import {ConfirmGoalCard, ConfirmPriceAlertCard, ConfirmPriceAlertDeleteCard, GoalsCard, HoldingCard, PnlCard, PortfolioCard} from './PersonalCards';
 import AssistantMessageView from '../AssistantMessageView';
 import AssistantBubble from '../AssistantBubble';
 
@@ -36,15 +38,21 @@ export const CARD_LABEL: Record<string, string> = {
     get_calendar: '일정',
     get_recommend_list: '추천 목록',
     search_news: '뉴스',
+    get_my_watchlist: '관심종목',
     show_briefing: '브리핑',
     show_my_portfolio: '내 계좌',
     show_my_holding: '보유 종목',
     show_my_pnl: '실현손익',
+    show_my_goals: '투자 목표',
     create_price_alert: '목표가 알림',
+    delete_price_alert: '목표가 알림 삭제',
+    update_my_goal: '투자 목표 변경',
     PORTFOLIO: '내 계좌',
     HOLDING: '보유 종목',
     REALIZED_PNL: '실현손익',
     CONFIRM_PRICE_ALERT: '목표가 알림',
+    GOALS: '투자 목표',
+    CONFIRM_GOAL: '투자 목표 변경',
     STOCK_CHOICE: '종목 선택',
 };
 
@@ -114,11 +122,19 @@ function render(kind: string, payload: unknown, card: TurnCard, onPick?: (p: Cha
         case 'get_calendar': return <CalendarCard p={payload as CalendarItemPayload[]} meta={meta} args={card.args}/>;
         case 'get_recommend_list': return <RecommendCard p={payload as RecommendListPayload} meta={meta}/>;
         case 'search_news': return <NewsCard p={payload as NewsRowPayload[]} meta={meta}/>;
+        case 'get_my_watchlist':
+            return 'groups' in (payload as object)
+                ? <WatchlistGroupsCard p={payload as WatchlistGroupsPayload} meta={meta} onPick={onPick}/>
+                : <WatchlistCard p={payload as WatchlistPayload} meta={meta}/>;
         case 'show_briefing': return <BriefingLinkCard p={payload as BriefingPointerPayload} meta={meta}/>;
         case 'PORTFOLIO': return <PortfolioCard p={payload as PortfolioPayload}/>;
         case 'HOLDING': return <HoldingCard p={payload as HoldingPayload}/>;
         case 'REALIZED_PNL': return <PnlCard p={payload as PnlPayload}/>;
-        case 'CONFIRM_PRICE_ALERT': return <ConfirmPriceAlertCard p={payload as PriceAlertPreviewPayload} cardRef={card.ref}/>;
+        case 'GOALS': return <GoalsCard p={payload as GoalsPayload}/>;
+        case 'CONFIRM_GOAL': return <ConfirmGoalCard p={payload as GoalUpdatePreviewPayload} cardRef={card.ref} status={card.actionStatus}/>;
+        case 'create_price_alert': return <ConfirmPriceAlertCard p={payload as PriceAlertPreviewPayload} cardRef={(payload as PriceAlertPreviewPayload).confirmRef} status={card.actionStatus}/>;
+        case 'delete_price_alert': return <ConfirmPriceAlertDeleteCard p={payload as PriceAlertDeletePreviewPayload} status={card.actionStatus}/>;
+        case 'CONFIRM_PRICE_ALERT': return <ConfirmPriceAlertCard p={payload as PriceAlertPreviewPayload} cardRef={card.ref} status={card.actionStatus}/>;
         case 'STOCK_CHOICE': return <StockChoiceCard p={payload as StockChoicePayload} onPick={onPick}/>;
         default: return <CardFrame title={kind}><Typography variant="body2" color="text.secondary">표시할 수 없는 카드입니다</Typography></CardFrame>;
     }

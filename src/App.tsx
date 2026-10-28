@@ -17,7 +17,7 @@ import AppTheme from "./components/AppTheme.tsx";
 import {processSecondaryAuthQueue} from "./axios.ts";
 import Dashboard from "./pages/dashboard/Dashboard.tsx";
 import MainLayout from "./layout/MainLayout.tsx";
-import Interest from "./pages/interest/Interest.tsx";
+import Watchlist from "./pages/watchlist/Watchlist.tsx";
 import IndexList from "./pages/index/IndexList.tsx";
 import IndexDetail from "./pages/index/IndexDetail.tsx";
 import StockDetail from "./pages/stock/StockDetail.tsx";
@@ -39,7 +39,7 @@ import MarketIndexList from "./pages/marketindex/MarketIndexList.tsx";
 import CryptoList from "./pages/crypto/CryptoList.tsx";
 import CryptoDetail from "./pages/crypto/CryptoDetail.tsx";
 import CryptoRank from "./pages/crypto/CryptoRank.tsx";
-import CryptoInterest from "./pages/cryptoInterest/CryptoInterest.tsx";
+import CryptoWatchlist from "./pages/cryptoWatchlist/CryptoWatchlist.tsx";
 import NotificationList from "./pages/notification/NotificationList.tsx";
 import MemberManagement from "./pages/admin/MemberManagement.tsx";
 import MenuManagement from "./pages/admin/MenuManagement.tsx";
@@ -252,8 +252,8 @@ function App() {
                         <Route path="/" Component={MarketIndexList} />
                         <Route path="/stock/dashboard" Component={Dashboard} />
                         <Route path="/dashboard" Component={AssetDashboard} />
-                        <Route path="/stock/interest" Component={Interest} />
-                        <Route path="/stock/interest/list/:groupId?" Component={Interest} />
+                        <Route path="/stock/watchlist" Component={Watchlist} />
+                        <Route path="/stock/watchlist/list/:groupId?" Component={Watchlist} />
                         <Route path="/stock/index/list" Component={IndexList} />
                         <Route path="/stock/index/detail/:id" Component={IndexDetail} />
                         <Route path="/commodity/list" Component={CommodityList} />
@@ -283,7 +283,7 @@ function App() {
                         <Route path="/crypto/rank" Component={CryptoRank} />
                         <Route path="/crypto/detail/:id" Component={CryptoDetail} />
 
-                        <Route path="/crypto/interest/list/:groupId?" Component={CryptoInterest} />
+                        <Route path="/crypto/watchlist/list/:groupId?" Component={CryptoWatchlist} />
                         <Route path="/multi-view" Component={MultiViewPage} />
                         <Route path="/rebalancing" Component={RebalancingPage} />
                         <Route path="/calendar" Component={EconomicCalendarPage} />

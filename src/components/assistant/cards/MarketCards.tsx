@@ -18,7 +18,8 @@ import dayjs from 'dayjs';
 import type {
     BriefingPointerPayload, CalendarItemPayload, GlobalIndexPayload, MarketInvestorFlowPayload, MarketSummaryPayload,
     HoldingAlertPayload, NewsRowPayload, RecommendListPayload, StockChoicePayload, StockInvestorFlowPayload, StockQuotePayload, ChatPick, MarketBriefPayload,
-    SectorPerformancePayload, SectorRow, SectorStock, TradingRankPayload} from '../../../type/AssistantType';
+    SectorPerformancePayload, SectorRow, SectorStock, TradingRankPayload, WatchlistGroupsPayload, WatchlistKind, WatchlistPayload} from '../../../type/AssistantType';
+import {EXCHANGE_LABEL} from '../../../lib/exchange';
 import {CardFrame, Eok, INVESTOR_LABEL, MiniTable, SignedText, Stat, amount, fmt, price, rateChip} from './CardParts';
 
 interface Meta { asOf?: string | null; source?: string | null; }
@@ -464,9 +465,14 @@ export function BriefingLinkCard({p, meta}: { p: BriefingPointerPayload; meta: M
 
 export function StockChoiceCard({p, onPick}: { p: StockChoicePayload; onPick?: (pick: ChatPick) => void }) {
     const MARKET: Record<string, string> = {KR: '국내', US: '미국', CRYPTO: '코인'};
+    // 정확히 일치하지 않아 제안한 후보면 1개여도 바로 확정하지 않고 묻는다 (2026-10-27)
+    const similar = p.candidates.length > 0 && p.candidates.every((c) => c.similar);
+    const title = !similar ? '어떤 종목인가요?' : p.candidates.length === 1 ? '이 종목이 맞나요?' : '이 중에 찾는 종목이 있나요?';
     return (
-        <CardFrame title="어떤 종목인가요?">
-            <Typography variant="caption" color="text.secondary" display="block" sx={{mb: 0.75}}>&quot;{p.query}&quot; 검색 결과</Typography>
+        <CardFrame title={title}>
+            <Typography variant="caption" color="text.secondary" display="block" sx={{mb: 0.75}}>
+                {similar ? <>&quot;{p.query}&quot;와 정확히 일치하는 종목이 없습니다. 맞는 종목을 눌러 주세요</> : <>&quot;{p.query}&quot; 검색 결과</>}
+            </Typography>
             <Stack direction="row" flexWrap="wrap" gap={0.75}>
                 {p.candidates.map((c) => (
                     <Button key={`${c.market}-${c.code}`} size="small" variant="outlined"
@@ -475,6 +481,63 @@ export function StockChoiceCard({p, onPick}: { p: StockChoicePayload; onPick?: (
                     </Button>
                 ))}
             </Stack>
+        </CardFrame>
+    );
+}
+
+const WATCHLIST_KIND_LABEL: Record<WatchlistKind, string> = {STOCK: '주식', CRYPTO: '코인'};
+
+/**
+ * 관심종목 그룹 목록: 버튼을 누르면 그 그룹의 종목 카드 (비서가 LLM 없이 조회). 버튼 모양은 종목 선택 카드와 같다.
+ * 주식·코인 그룹이 섞여 있을 때만 종류를 붙인다. 웹 관심종목 메뉴처럼 2차 인증 없이 보인다
+ */
+export function WatchlistGroupsCard({p, meta, onPick}: { p: WatchlistGroupsPayload; meta: Meta; onPick?: (pick: ChatPick) => void }) {
+    const mixed = new Set(p.groups.map((g) => g.kind)).size > 1;
+    return (
+        <CardFrame title="관심종목 그룹" {...meta}>
+            {p.notice && <Typography variant="body2" color="text.secondary" sx={{mb: 0.75}}>{p.notice}</Typography>}
+            <Stack direction="row" flexWrap="wrap" gap={0.75}>
+                {p.groups.map((g) => (
+                    <Button key={`${g.kind}-${g.groupId}`} size="small" variant="outlined"
+                            onClick={() => onPick?.({groupId: g.groupId, kind: g.kind, name: g.name})}>
+                        {g.name}
+                        <Typography component="span" variant="caption" color="text.secondary" sx={{ml: 0.5}}>
+                            {mixed ? `${WATCHLIST_KIND_LABEL[g.kind]} · ` : ''}{g.count}종목
+                        </Typography>
+                    </Button>
+                ))}
+            </Stack>
+        </CardFrame>
+    );
+}
+
+/** 관심종목 그룹 하나: 관심종목 화면과 같은 열 (종목명 · 거래소 · 등락률 · [장구분 등락률] · 현재가), 10개 미리보기 + 더보기 */
+export function WatchlistCard({p, meta}: { p: WatchlistPayload; meta: Meta }) {
+    const [expanded, setExpanded] = useState(false);
+    const shown = expanded ? p.items : p.items.slice(0, FLOW_PREVIEW);
+    const crypto = p.kind === 'CRYPTO';
+    const session = p.sessionLabel !== null;
+    return (
+        <CardFrame title={`관심종목 · ${p.groupName}`} {...meta} link={p.link} linkLabel="관심종목 화면">
+            {p.items.length === 0
+                ? <Typography variant="body2" color="text.secondary">그룹에 종목이 없습니다</Typography>
+                : <MiniTable
+                    head={['종목명', ...(crypto ? [] : ['거래소']), '등락률', ...(session ? [`${p.sessionLabel} 등락률`] : []), '현재가']}
+                    maxHeight={expanded ? 520 : undefined}
+                    rows={shown.map((s) => [
+                        <Link component={RouterLink} to={s.link} underline="hover">{s.name}</Link>,
+                        ...(crypto ? [] : [s.market === 'US' ? (EXCHANGE_LABEL[s.exchange ?? ''] ?? s.exchange) : (s.exchange ?? '')]),
+                        rateChip(s.changeRate),
+                        ...(session ? [s.market === 'US' ? rateChip(s.sessionRate) : ''] : []),
+                        // 코인은 1원 미만도 있어 코인 화면처럼 소수까지 표기
+                        crypto ? (s.price === null ? '-' : `${s.price.toLocaleString()}원`) : price(s.price, s.currency),
+                    ])}
+                />}
+            {p.items.length > FLOW_PREVIEW && (
+                <Button size="small" fullWidth onClick={() => setExpanded((v) => !v)} sx={{mt: 0.5}}>
+                    {expanded ? '접기' : `더보기 (${p.items.length}개)`}
+                </Button>
+            )}
         </CardFrame>
     );
 }

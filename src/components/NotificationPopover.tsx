@@ -13,6 +13,7 @@ import TrendingDownIcon from '@mui/icons-material/TrendingDown';
 import {useNotification} from '../context/NotificationContext';
 import type {Notification} from '../type/NotificationType';
 import {getServerNow} from '../lib/serverTime';
+import {getNavigationPath} from '../lib/notificationPath';
 import {formatAlertPrice} from './CustomRender';
 
 interface NotificationPopoverProps {
@@ -30,22 +31,6 @@ function formatTime(createdAt: string) {
     const hours = Math.floor(minutes / 60);
     if (hours < 24) return `${hours}시간 전`;
     return `${Math.floor(hours / 24)}일 전`;
-}
-
-function getNavigationPath(notification: Notification): string {
-    if (notification.type === 'GOAL') {
-        return '/dashboard';
-    }
-    if (notification.type === 'REBALANCING') {
-        return '/rebalancing';
-    }
-    if (notification.type === 'PRICE') {
-        if (notification.assetType === 'STOCK') {
-            return `/stock/detail/${notification.assetCode}`;
-        }
-        return `/crypto/detail/${notification.assetCode}`;
-    }
-    return `/stock/detail/${notification.assetCode}`;
 }
 
 export default function NotificationPopover({anchorEl, open, onClose}: NotificationPopoverProps) {

@@ -8,6 +8,7 @@ import ReportProblemIcon from '@mui/icons-material/ReportProblem';
 import CampaignOutlinedIcon from '@mui/icons-material/CampaignOutlined';
 import TrendingUpIcon from '@mui/icons-material/TrendingUp';
 import TrendingDownIcon from '@mui/icons-material/TrendingDown';
+import TrackChangesIcon from '@mui/icons-material/TrackChanges';
 import {TREND_COLORS} from '../CustomRender';
 import Chip from '@mui/material/Chip';
 import dayjs from 'dayjs';
@@ -33,6 +34,7 @@ const SUBTYPE_LABEL: Record<string, string> = {
     INDEX_CB: '서킷브레이커',
     RELEASE: '지표 발표',
     HOLDING: '보유 종목',
+    PRICE_TARGET: '목표가 도달',
 };
 
 /**
@@ -42,6 +44,7 @@ const SUBTYPE_LABEL: Record<string, string> = {
 const ALERT_ICON: Record<string, { Icon: typeof WarningAmberIcon; color: 'warning' | 'error' | 'info' }> = {
     INDEX_CB: {Icon: ReportProblemIcon, color: 'error'},
     RELEASE: {Icon: CampaignOutlinedIcon, color: 'info'},
+    PRICE_TARGET: {Icon: TrackChangesIcon, color: 'info'},
 };
 
 /** 지수 급변은 방향 화살표 (상승 빨강·하락 파랑). 헤드라인 첫 부호로 판단 ("코스닥 +3.01% (881.52)") */
@@ -101,7 +104,7 @@ export default function AssistantMessageView({message, onUnlock, onPick, autoOpe
     const label = body.subtype ? SUBTYPE_LABEL[body.subtype] ?? body.subtype : body.type;
     const isBriefing = body.type === 'BRIEFING' || body.type === 'ALERT';
     const alertIcon = body.subtype ? ALERT_ICON[body.subtype] : undefined;
-    const holdingCards = body.subtype === 'HOLDING' && body.turnCards?.some((c) => c.kind === 'HOLDING_ALERT')
+    const holdingCards = (body.subtype === 'HOLDING' || body.subtype === 'PRICE_TARGET') && body.turnCards?.some((c) => c.kind === 'HOLDING_ALERT')
         ? body.turnCards.filter((c) => c.kind === 'HOLDING_ALERT') : null;
     return (
         <Paper variant="outlined" sx={{px: 2.25, py: 1.75, borderRadius: 3, bgcolor: 'background.default'}}>
@@ -113,7 +116,7 @@ export default function AssistantMessageView({message, onUnlock, onPick, autoOpe
                     </Typography>
                 )}
             </Stack>
-            {/* 보유 종목 1건이면 카드가 곧 내용이라 헤드라인을 생략, 여러 건이면 "보유 N종목 급등락" */}
+            {/* 보유 종목·목표가 1건이면 카드가 곧 내용이라 헤드라인을 생략, 여러 건이면 "보유 N종목 급등락"·"목표가 도달 N종목" */}
             {!(holdingCards && holdingCards.length === 1) && (
                 <Stack direction="row" alignItems="flex-start" spacing={0.75} sx={{mt: 1}}>
                     {alertIcon && <alertIcon.Icon color={alertIcon.color} sx={{fontSize: 21, mt: '2px', flexShrink: 0}}/>}

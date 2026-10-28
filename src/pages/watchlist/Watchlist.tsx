@@ -38,18 +38,18 @@ import {arrayMove, SortableContext, useSortable, verticalListSortingStrategy} fr
 import {CSS} from "@dnd-kit/utilities";
 import {useNavigate, useParams} from "react-router-dom";
 import {
-    addInterestItem,
-    createInterestGroup,
-    deleteInterestGroup,
-    deleteInterestItem,
-    fetchInterestGroups,
-    fetchInterestItems,
-    fetchInterestItemsStream,
-    reorderInterestGroups,
-    reorderInterestItems,
-    updateInterestGroup,
-} from "../../api/interest/InterestApi.ts";
-import {AddItemMutationVars, CreateGroupReq, DeleteItemMutationVars, InterestGroup, InterestItem, ReorderItemsMutationVars, ReorderReq, UpdateGroupMutationVars} from "../../type/InterestType.ts";
+    addWatchlistItem,
+    createWatchlistGroup,
+    deleteWatchlistGroup,
+    deleteWatchlistItem,
+    fetchWatchlistGroups,
+    fetchWatchlistItems,
+    fetchWatchlistItemsStream,
+    reorderWatchlistGroups,
+    reorderWatchlistItems,
+    updateWatchlistGroup,
+} from "../../api/watchlist/WatchlistApi.ts";
+import {AddItemMutationVars, CreateGroupReq, DeleteItemMutationVars, WatchlistGroup, WatchlistItem, ReorderItemsMutationVars, ReorderReq, UpdateGroupMutationVars} from "../../type/WatchlistType.ts";
 import {renderChip} from "../../components/CustomRender.tsx";
 import {fetchStockSearch} from "../../api/stock/StockApi.ts";
 import {fetchUsStockSearch} from "../../api/usStock/UsStockApi.ts";
@@ -66,11 +66,11 @@ interface StockSearchItem {
 
 interface GroupMenuState {
     anchorEl: HTMLElement;
-    group: InterestGroup;
+    group: WatchlistGroup;
 }
 
 interface SortableGroupItemProps {
-    group: InterestGroup;
+    group: WatchlistGroup;
     selected: boolean;
     onSelect: () => void;
     onMenuOpen: (e: React.MouseEvent<HTMLButtonElement>) => void;
@@ -191,24 +191,24 @@ const DraggableRow = React.forwardRef<HTMLDivElement, GridRowProps>((props, _ref
     );
 });
 
-const Interest = () => {
+const Watchlist = () => {
     const navigate = useNavigate();
     const {groupId} = useParams<{ groupId: string }>();
     const queryClient = useQueryClient();
 
-    const {data: groupsData, isLoading: groupsLoading} = useQuery<InterestGroup[]>({
-        queryKey: ['interestGroups'],
-        queryFn: async () => requireOk(await fetchInterestGroups(), [] as InterestGroup[]),
+    const {data: groupsData, isLoading: groupsLoading} = useQuery<WatchlistGroup[]>({
+        queryKey: ['watchlistGroups'],
+        queryFn: async () => requireOk(await fetchWatchlistGroups(), [] as WatchlistGroup[]),
     });
 
-    const [groupOrderOverride, setGroupOrderOverride] = useState<InterestGroup[] | null>(null);
+    const [groupOrderOverride, setGroupOrderOverride] = useState<WatchlistGroup[] | null>(null);
     const groups = groupOrderOverride ?? groupsData ?? [];
 
-    const [selectedGroup, setSelectedGroup] = useState<InterestGroup | null>(null);
+    const [selectedGroup, setSelectedGroup] = useState<WatchlistGroup | null>(null);
     const [groupOrderDirty, setGroupOrderDirty] = useState(false);
     const [itemOrderDirty, setItemOrderDirty] = useState(false);
 
-    const [prevGroupsData, setPrevGroupsData] = useState<InterestGroup[] | undefined>(undefined);
+    const [prevGroupsData, setPrevGroupsData] = useState<WatchlistGroup[] | undefined>(undefined);
     if (groupsData !== prevGroupsData) {
         setPrevGroupsData(groupsData);
         setGroupOrderOverride(null);
@@ -224,15 +224,15 @@ const Interest = () => {
         }
     }
 
-    const {data: itemsData, isLoading: itemsLoading} = useQuery<InterestItem[]>({
-        queryKey: ['interestItems', selectedGroup?.id],
+    const {data: itemsData, isLoading: itemsLoading} = useQuery<WatchlistItem[]>({
+        queryKey: ['watchlistItems', selectedGroup?.id],
         queryFn: async () => {
             if (!selectedGroup) return [];
-            return requireOk(await fetchInterestItems(selectedGroup.id), [] as InterestItem[]);
+            return requireOk(await fetchWatchlistItems(selectedGroup.id), [] as WatchlistItem[]);
         },
         enabled: selectedGroup !== null,
     });
-    const [itemsOrderOverride, setItemsOrderOverride] = useState<InterestItem[] | null>(null);
+    const [itemsOrderOverride, setItemsOrderOverride] = useState<WatchlistItem[] | null>(null);
     // 매 렌더마다 새 배열이 되면 아래 rows 의 useMemo 가 무력화된다.
     const items = useMemo(() => itemsOrderOverride ?? itemsData ?? [], [itemsOrderOverride, itemsData]);
 
@@ -255,7 +255,7 @@ const Interest = () => {
     const [editGroupName, setEditGroupName] = useState("");
     const [editGroupId, setEditGroupId] = useState<number | null>(null);
 
-    const [deleteGroupTarget, setDeleteGroupTarget] = useState<InterestGroup | null>(null);
+    const [deleteGroupTarget, setDeleteGroupTarget] = useState<WatchlistGroup | null>(null);
 
     const [groupMenu, setGroupMenu] = useState<GroupMenuState | null>(null);
 
@@ -290,7 +290,7 @@ const Interest = () => {
 
         (async () => {
             try {
-                const streamRes = await fetchInterestItemsStream(targetGroupId);
+                const streamRes = await fetchWatchlistItemsStream(targetGroupId);
                 if (cancelled) return;
                 if (streamRes.code !== "0000") throw new Error(streamRes.message || `관심 종목 스트림 실패 (${streamRes.code})`);
 
@@ -332,16 +332,16 @@ const Interest = () => {
         };
     }, [selectedGroup]);
 
-    const handleSelectGroup = (group: InterestGroup) => {
+    const handleSelectGroup = (group: WatchlistGroup) => {
         setSelectedGroup(group);
-        navigate(`/stock/interest/list/${group.id}`, {replace: true});
+        navigate(`/stock/watchlist/list/${group.id}`, {replace: true});
     };
 
     const createGroupMutation = useMutation({
         mutationFn: async (req: CreateGroupReq) =>
-            requireOk(await createInterestGroup(req), '관심 그룹 생성'),
+            requireOk(await createWatchlistGroup(req), '관심 그룹 생성'),
         onSuccess: (created) => {
-            queryClient.invalidateQueries({queryKey: ['interestGroups']});
+            queryClient.invalidateQueries({queryKey: ['watchlistGroups']});
             setAddGroupOpen(false);
             setNewGroupName("");
             setSelectedGroup(created);
@@ -367,11 +367,11 @@ const Interest = () => {
 
     const updateGroupMutation = useMutation({
         mutationFn: async (vars: UpdateGroupMutationVars) => {
-            requireOk(await updateInterestGroup(vars.id, vars.req), '관심 그룹 수정');
+            requireOk(await updateWatchlistGroup(vars.id, vars.req), '관심 그룹 수정');
             return vars;
         },
         onSuccess: ({id, req}) => {
-            queryClient.invalidateQueries({queryKey: ['interestGroups']});
+            queryClient.invalidateQueries({queryKey: ['watchlistGroups']});
             if (selectedGroup?.id === id) {
                 setSelectedGroup(prev => prev ? {...prev, groupNm: req.groupNm} : prev);
             }
@@ -400,7 +400,7 @@ const Interest = () => {
 
     const deleteGroupMutation = useMutation({
         mutationFn: async (id: number) => {
-            requireOk(await deleteInterestGroup(id), '관심 그룹 삭제');
+            requireOk(await deleteWatchlistGroup(id), '관심 그룹 삭제');
             return id;
         },
         onSuccess: (id) => {
@@ -408,7 +408,7 @@ const Interest = () => {
             if (selectedGroup?.id === id) {
                 setSelectedGroup(remaining.length > 0 ? remaining[0] : null);
             }
-            queryClient.invalidateQueries({queryKey: ['interestGroups']});
+            queryClient.invalidateQueries({queryKey: ['watchlistGroups']});
             setGroupOrderDirty(false);
             setDeleteGroupTarget(null);
         },
@@ -440,22 +440,22 @@ const Interest = () => {
 
     const reorderGroupsMutation = useMutation({
         mutationFn: async (req: ReorderReq) => {
-            requireOk(await reorderInterestGroups(req), '관심 그룹 순서 변경');
+            requireOk(await reorderWatchlistGroups(req), '관심 그룹 순서 변경');
         },
         onSuccess: () => {
             setGroupOrderDirty(false);
-            queryClient.invalidateQueries({queryKey: ['interestGroups']});
+            queryClient.invalidateQueries({queryKey: ['watchlistGroups']});
         },
         onError: (err) => console.error(err),
     });
 
     const reorderItemsMutation = useMutation({
         mutationFn: async (vars: ReorderItemsMutationVars) => {
-            requireOk(await reorderInterestItems(vars.groupId, vars.req), '관심 종목 순서 변경');
+            requireOk(await reorderWatchlistItems(vars.groupId, vars.req), '관심 종목 순서 변경');
         },
         onSuccess: (_data, vars) => {
             setItemOrderDirty(false);
-            queryClient.invalidateQueries({queryKey: ['interestItems', vars.groupId]});
+            queryClient.invalidateQueries({queryKey: ['watchlistItems', vars.groupId]});
         },
         onError: (err) => console.error(err),
     });
@@ -506,9 +506,9 @@ const Interest = () => {
 
     const addItemMutation = useMutation({
         mutationFn: async (vars: AddItemMutationVars) =>
-            requireOk(await addInterestItem(vars.groupId, vars.req), '관심 종목 추가'),
+            requireOk(await addWatchlistItem(vars.groupId, vars.req), '관심 종목 추가'),
         onSuccess: (_data, vars) => {
-            queryClient.invalidateQueries({queryKey: ['interestItems', vars.groupId]});
+            queryClient.invalidateQueries({queryKey: ['watchlistItems', vars.groupId]});
             setAddItemOpen(false);
             setSearchKeyword("");
             setSearchResults([]);
@@ -523,11 +523,11 @@ const Interest = () => {
 
     const deleteItemMutation = useMutation({
         mutationFn: async (vars: DeleteItemMutationVars) => {
-            requireOk(await deleteInterestItem(vars.groupId, vars.itemId), '관심 종목 삭제');
+            requireOk(await deleteWatchlistItem(vars.groupId, vars.itemId), '관심 종목 삭제');
             return vars;
         },
         onSuccess: (vars) => {
-            queryClient.invalidateQueries({queryKey: ['interestItems', vars.groupId]});
+            queryClient.invalidateQueries({queryKey: ['watchlistItems', vars.groupId]});
         },
         onError: (err) => console.error(err),
     });
@@ -1005,4 +1005,4 @@ const Interest = () => {
     );
 };
 
-export default Interest;
+export default Watchlist;

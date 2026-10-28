@@ -38,6 +38,7 @@ import {fetchPriceTargets, deletePriceTarget} from '../../api/notification/Notif
 import type {Notification, AssetType, PriceTarget} from '../../type/NotificationType';
 import FreshnessIndicator from '../../components/FreshnessIndicator';
 import {formatAlertPrice} from '../../components/CustomRender';
+import {getNavigationPath} from '../../lib/notificationPath';
 
 type TabFilter = 'ALL' | AssetType;
 type TypeFilter = 'ALL' | '가격' | '목표' | '리밸런싱' | 'API_KEY';
@@ -99,25 +100,6 @@ function groupByDate(notifications: Notification[]): Map<string, Notification[]>
         groups.get(key)!.push(n);
     }
     return groups;
-}
-
-function getNavigationPath(notification: Notification): string {
-    if (notification.type === 'GOAL') {
-        return '/dashboard';
-    }
-    if (notification.type === 'REBALANCING') {
-        return '/rebalancing';
-    }
-    if (notification.type === 'API_KEY') {
-        return '/settings';
-    }
-    if (notification.type === 'PRICE') {
-        if (notification.assetType === 'STOCK') {
-            return `/stock/detail/${notification.assetCode}`;
-        }
-        return `/crypto/detail/${notification.assetCode}`;
-    }
-    return `/stock/detail/${notification.assetCode}`;
 }
 
 export default function NotificationList() {
@@ -240,7 +222,7 @@ export default function NotificationList() {
                                                 <Typography variant="body2">{target.assetName}</Typography>
                                             </Box>
                                         }
-                                        secondary={`${target.targetPrice.toLocaleString()}원 ${target.direction === 'ABOVE' ? '이상' : '이하'}`}
+                                        secondary={`${formatAlertPrice(target.targetPrice, target.assetCode)} ${target.direction === 'ABOVE' ? '이상' : '이하'}`}
                                     />
                                 </ListItem>
                             ))}

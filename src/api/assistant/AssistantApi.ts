@@ -86,7 +86,33 @@ export const fetchAssistantCard = async (ref: string, config?: AxiosRequestConfi
 };
 
 export const confirmAssistantPriceAlert = async (cardRef: string): Promise<ApiResponse<unknown>> => {
-    const res = await api.post<ApiResponse<unknown>>("/assistant/secure/actions/price-alert", {cardRef}, {secondaryAuthSource: 'assistant', skipGlobalError: true});
+    const res = await api.post<ApiResponse<unknown>>("/assistant/actions/price-alert", {cardRef}, {skipGlobalError: true});
+    return res.data;
+};
+
+export const cancelAssistantPriceAlert = async (cardRef: string): Promise<ApiResponse<unknown>> => {
+    const res = await api.delete<ApiResponse<unknown>>(`/assistant/actions/price-alert/${encodeURIComponent(cardRef)}`, {skipGlobalError: true});
+    return res.data;
+};
+
+export const confirmAssistantPriceAlertDelete = async (cardRef: string, targetId: number): Promise<ApiResponse<unknown>> => {
+    const res = await api.post<ApiResponse<unknown>>("/assistant/actions/price-alert-deletion", {cardRef, targetId}, {skipGlobalError: true});
+    return res.data;
+};
+
+export const cancelAssistantPriceAlertDelete = async (cardRef: string): Promise<ApiResponse<unknown>> => {
+    const res = await api.delete<ApiResponse<unknown>>(`/assistant/actions/price-alert-deletion/${encodeURIComponent(cardRef)}`, {skipGlobalError: true});
+    return res.data;
+};
+
+export const cancelAssistantGoalUpdate = async (cardRef: string): Promise<ApiResponse<unknown>> => {
+    const res = await api.delete<ApiResponse<unknown>>(`/assistant/secure/actions/goal/${encodeURIComponent(cardRef)}`, {secondaryAuthSource: 'assistant', skipGlobalError: true});
+    return res.data;
+};
+
+export const confirmAssistantGoalUpdate = async (cardRef: string): Promise<ApiResponse<unknown>> => {
+    // 웹 투자 목표처럼 2차 인증 필요 (2026-10-27)
+    const res = await api.post<ApiResponse<unknown>>("/assistant/secure/actions/goal", {cardRef}, {secondaryAuthSource: 'assistant', skipGlobalError: true});
     return res.data;
 };
 

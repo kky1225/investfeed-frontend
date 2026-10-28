@@ -1,10 +1,10 @@
-export interface InterestGroup {
+export interface WatchlistGroup {
     id: number;
     groupNm: string;
     displayOrder: number;
 }
 
-export interface InterestItem {
+export interface WatchlistItem {
     id: number;
     stkCd: string;
     stkNm: string;

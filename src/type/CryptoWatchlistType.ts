@@ -1,10 +1,10 @@
-export interface CryptoInterestGroup {
+export interface CryptoWatchlistGroup {
     id: number;
     groupNm: string;
     displayOrder: number;
 }
 
-export interface CryptoInterestItem {
+export interface CryptoWatchlistItem {
     id: number;
     market: string;
     koreanName: string;
