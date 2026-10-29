@@ -61,7 +61,7 @@ const RecommendList = () => {
     const marketTimer = useRef<number>(0);
 
     const queryClient = useQueryClient();
-    const {showAlert} = useAlert();
+    const showAlert = useAlert();
 
     const {data: result, isLoading, lastUpdated, pollError} = usePollingQuery<RecommendListRes>(
         ['recommendList'],

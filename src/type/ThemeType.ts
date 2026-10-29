@@ -62,7 +62,7 @@ export interface ThemeStockListStreamRes {
     type: string,
     name: string,
     item: string,
-    values: Array<ThemeStockListStream>
+    values: Record<string, string>
 }
 
 export interface ThemeListRes {

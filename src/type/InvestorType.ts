@@ -15,6 +15,16 @@ export interface InvestorListItem {
     netprpsQty: string, // 순매수수량
 }
 
+export interface InvestorGridRow {
+    id: string,
+    rank: number,
+    stkNm: string,
+    fluRt: string,
+    curPrc: string,
+    netprpsAmt: string,
+    trend?: string,
+}
+
 export interface InvestorStreamReq {
     items: Array<string>
 }

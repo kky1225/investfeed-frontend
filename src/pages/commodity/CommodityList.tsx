@@ -11,7 +11,7 @@ import {fetchMarketInfo, getServerNow, getServerOffset} from "../../lib/serverTi
 import CommodityLineChart, {CommodityLineChartProps} from "../../components/CommodityLineChart.tsx";
 import {fetchCommodityList, fetchCommodityStream} from "../../api/commodity/CommodityApi.ts";
 import FreshnessIndicator from "../../components/FreshnessIndicator.tsx";
-import {ChartMinute, CommodityListItem, CommodityListRes, CommodityStream, CommodityStreamRes} from "../../type/CommodityType.ts";
+import {ChartMinute, CommodityListItem, CommodityListRes, CommodityStreamRes} from "../../type/CommodityType.ts";
 import {usePollingQuery} from "../../lib/pollingQuery.ts";
 import {parseKiwoomStamp} from "../../lib/tradeStamp.ts";
 

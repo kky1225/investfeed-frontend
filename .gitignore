@@ -26,3 +26,4 @@ dist-ssr
 ## CLAUDE CODE
 CLAUDE.md
 .worktreeinclude
+.claude/*

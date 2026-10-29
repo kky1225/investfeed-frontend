@@ -25,7 +25,7 @@ import {ChartDay, DashboardIndexListItem, DashboardRes, InvestorTradeRankList} f
 import {fetchDashboard, fetchDashboardStream} from "../../api/dashboard/DashboardApi.ts";
 import {MarketType} from "../../type/timeType.ts";
 import {fetchMarketInfo, getServerNow, getServerOffset} from "../../lib/serverTime.ts";
-import {IndexStream, IndexStreamRes} from "../../type/IndexType.ts";
+import {IndexStreamRes} from "../../type/IndexType.ts";
 import {usePollingQuery} from "../../lib/pollingQuery.ts";
 
 interface MessageProps {
@@ -100,7 +100,7 @@ export default function Dashboard() {
 
         return indexList.map((indexItem) => {
             const newDateList = indexItem.chartList.map((chart: ChartDay) => indexDateFormat(chart.dt)).reverse();
-            const newData = indexItem.chartList.map((chart: ChartDay) => chart.curPrc.replace(/^[+-]/, '')).reverse();
+            const newData = indexItem.chartList.map((chart: ChartDay) => Number(chart.curPrc.replace(/^[+-]/, ''))).reverse();
             const baseTrend: 'up' | 'down' | 'neutral' =
                 indexItem.predPreSig === '5' ? 'down' : indexItem.predPreSig === '2' ? 'up' : 'neutral';
 

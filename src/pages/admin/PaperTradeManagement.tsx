@@ -106,7 +106,7 @@ function PaperAccountPanel() {
     const columns: GridColDef[] = [
         {field: 'stkNm', headerName: '종목명', flex: 1.5, minWidth: 150},
         {field: 'prftRt', headerName: '수익률', flex: 0.8, minWidth: 100,
-            renderCell: (params: {value: number}) => renderChip(params.value as number)},
+            renderCell: (params) => renderChip(params.value as number)},
         {field: 'curPrc', headerName: '현재가', flex: 1, minWidth: 100,
             renderCell: (params) => <BlindText>{Number(params.value).toLocaleString()}</BlindText>},
         {field: 'rmndQty', headerName: '보유수량', flex: 0.8, minWidth: 80,

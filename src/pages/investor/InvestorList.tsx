@@ -8,9 +8,16 @@ import {useEffect, useMemo, useRef, useState} from "react";
 import {Tab, Tabs} from "@mui/material";
 import {MarketType} from "../../type/timeType.ts";
 import {fetchMarketInfo, getServerNow, getServerOffset} from "../../lib/serverTime.ts";
-import {StockGridRow, StockStream, StockStreamRes} from "../../type/StockType.ts";
+import {StockStream, StockStreamRes} from "../../type/StockType.ts";
 import {useNavigate, useParams} from "react-router-dom";
-import {InvestorListItem, InvestorListReq, InvestorListRes, InvestorStreamReq} from "../../type/InvestorType.ts";
+import {
+    InvestorGridRow,
+    InvestorListItem,
+    InvestorListReq,
+    InvestorListRes,
+    InvestorStreamReq
+} from "../../type/InvestorType.ts";
+import {GridColDef} from "@mui/x-data-grid";
 import {fetchInvestorList, fetchInvestorStream} from "../../api/investor/InvestorApi.ts";
 import {renderChip, renderTradePricaColor} from "../../components/CustomRender.tsx";
 import FreshnessIndicator from "../../components/FreshnessIndicator.tsx";
@@ -56,7 +63,7 @@ const InvestorList = () => {
         setLiveOverlay(new Map());
     }, [result]);
 
-    const row: StockGridRow[] = useMemo(() => {
+    const row: InvestorGridRow[] = useMemo(() => {
         if (!result) return [];
         const list: InvestorListItem[] = result.investorList ?? [];
         return list.map((investor, index) => {
@@ -69,13 +76,13 @@ const InvestorList = () => {
                 curPrc: live?.curPrc ?? investor.curPrc,
                 netprpsAmt: investor.netprpsAmt,
                 trend: live?.trend,
-            } as StockGridRow;
+            };
         });
     }, [result, liveOverlay]);
 
     const loading = isLoading;
 
-    const columns = [
+    const columns: GridColDef[] = [
         {
             field: 'rank',
             headerName: '순위',
@@ -94,7 +101,7 @@ const InvestorList = () => {
             headerName: '등락률',
             flex: 0.5,
             minWidth: 100,
-            renderCell: (params: {value: number}) => renderChip(params.value as number),
+            renderCell: (params) => renderChip(params.value as number),
         },
         {
             field: 'curPrc',
@@ -108,7 +115,7 @@ const InvestorList = () => {
             headerName: '거래대금',
             flex: 0.5,
             minWidth: 120,
-            renderCell: (params: {value: string}) => renderTradePricaColor(params.value as string),
+            renderCell: (params) => renderTradePricaColor(params.value as string),
         }
     ];
 

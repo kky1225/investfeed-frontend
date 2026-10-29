@@ -1,17 +1,16 @@
 import {DataGrid, GridColDef} from "@mui/x-data-grid";
 import {useNavigate} from "react-router-dom";
-import {StockGridRow} from "../type/StockType.ts";
 
-interface StockTableProps {
-    rows: StockGridRow[],
+interface StockTableProps<R extends { id: string }> {
+    rows: R[],
     columns: GridColDef[],
     pageSize: number,
     loading?: boolean,
     onRowClick?: (id: string) => void, // 미지정 시 국내 종목 상세로 이동
 }
 
-const StockTable = (
-    { rows, columns, pageSize, loading, onRowClick }: StockTableProps
+const StockTable = <R extends { id: string }>(
+    { rows, columns, pageSize, loading, onRowClick }: StockTableProps<R>
 ) => {
     const navigate = useNavigate();
 

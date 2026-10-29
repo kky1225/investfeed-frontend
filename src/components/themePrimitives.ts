@@ -1,4 +1,4 @@
-import { createTheme, alpha, PaletteMode, Shadows } from '@mui/material/styles';
+import { createTheme, alpha, Shadows } from '@mui/material/styles';
 
 declare module '@mui/material/Paper' {
     interface PaperPropsVariantOverrides {
@@ -19,6 +19,7 @@ declare module '@mui/material/styles' {
         900: string;
     }
 
+    // eslint-disable-next-line @typescript-eslint/no-empty-object-type -- MUI 모듈 보강
     interface PaletteColor extends ColorRange {}
 
     interface Palette {
@@ -27,8 +28,6 @@ declare module '@mui/material/styles' {
 }
 
 const defaultTheme = createTheme();
-
-const customShadows: Shadows = [...defaultTheme.shadows];
 
 export const brand = {
     50: 'hsl(210, 100%, 95%)',
@@ -251,7 +250,7 @@ export const shape = {
     borderRadius: 8,
 };
 
-// @ts-ignore
+// @ts-expect-error -- slice() 결과(string[])는 길이 25 고정 튜플인 Shadows 로 좁혀지지 않음
 const defaultShadows: Shadows = [
     'none',
     'var(--template-palette-baseShadow)',

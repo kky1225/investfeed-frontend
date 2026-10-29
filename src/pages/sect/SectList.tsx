@@ -117,7 +117,6 @@ const SectList = () => {
                     streamBufferRef.current.set(entry.item, {
                         code: entry.item,
                         value: values["10"],
-                        change: values["11"],
                         fluRt: values["12"],
                         trend: values["25"],
                     });

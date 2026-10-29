@@ -39,7 +39,7 @@ export default function AddCryptoManualHoldingDialog({open, onClose, brokerId, o
     // purAmtOverride: null = 자동 계산, string = 사용자가 직접 입력한 값 (override)
     const [purAmtOverride, setPurAmtOverride] = useState<string | null>(null);
     const [formErrors, setFormErrors] = useState<{stkCd?: string; purPrice?: string; quantity?: string; purAmt?: string}>({});
-    const searchTimerRef = useRef<ReturnType<typeof setTimeout>>();
+    const searchTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
 
     // purAmt = override 가 있으면 그 값, 없으면 purPrice * quantity 자동 계산
     const purAmt = useMemo<string>(() => {

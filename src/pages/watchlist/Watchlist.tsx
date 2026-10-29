@@ -21,8 +21,6 @@ import ListItemText from "@mui/material/ListItemText";
 import Divider from "@mui/material/Divider";
 import Chip from "@mui/material/Chip";
 import CircularProgress from "@mui/material/CircularProgress";
-import Card from "@mui/material/Card";
-import CardContent from "@mui/material/CardContent";
 import Skeleton from "@mui/material/Skeleton";
 import Menu from "@mui/material/Menu";
 import MenuItem from "@mui/material/MenuItem";
@@ -615,8 +613,7 @@ const Watchlist = () => {
                 <GridActionsCellItem
                     icon={<DeleteOutlineIcon fontSize="small"/>}
                     label="삭제"
-                    color="error"
-                    sx={{width: 26, height: 26}}
+                    material={{color: 'error', sx: {width: 26, height: 26}}}
                     onClick={(e) => {
                         e.stopPropagation();
                         handleDeleteItem(params.row.id);

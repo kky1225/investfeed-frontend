@@ -45,7 +45,7 @@ export interface SectListStreamRes {
     type: string,
     name: string,
     item: string,
-    values: Array<SectListStream>
+    values: Record<string, string>
 }
 
 export interface SectListStream {

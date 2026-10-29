@@ -8,7 +8,6 @@ import CardContent from "@mui/material/CardContent";
 import Grid from "@mui/material/Grid";
 import Chip from "@mui/material/Chip";
 import IconButton from "@mui/material/IconButton";
-import CircularProgress from "@mui/material/CircularProgress";
 import Skeleton from "@mui/material/Skeleton";
 import Popover from "@mui/material/Popover";
 import ChevronLeftIcon from "@mui/icons-material/ChevronLeft";

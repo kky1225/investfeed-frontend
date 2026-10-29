@@ -572,8 +572,7 @@ const CryptoWatchlist = () => {
                 <GridActionsCellItem
                     icon={<DeleteOutlineIcon fontSize="small"/>}
                     label="삭제"
-                    color="error"
-                    sx={{width: 26, height: 26}}
+                    material={{color: 'error', sx: {width: 26, height: 26}}}
                     onClick={(e) => {
                         e.stopPropagation();
                         handleDeleteItem(params.row.id);

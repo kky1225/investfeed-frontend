@@ -33,7 +33,7 @@ const indexDateFormat = (cntrTm: string) =>
 
 const parsePrice = (raw: string) => {
     if (!raw) return null;
-    return (parseInt(raw, 10) / 100).toFixed(2);
+    return Number((parseInt(raw, 10) / 100).toFixed(2));
 };
 
 const IndexList = () => {

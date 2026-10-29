@@ -24,7 +24,7 @@ export interface IndexListItem {
     trdeQty: string,
     trdePrica: string,
     openPric: string,
-    tmN: string,
+    tm: string,
     chartMinuteList: Array<ChartMinute>
 }
 
@@ -37,7 +37,7 @@ export interface IndexStreamRes {
     type: string,
     name: string,
     item: string,
-    values: Array<IndexStream>
+    values: Record<string, string>
 }
 
 export interface IndexStream {

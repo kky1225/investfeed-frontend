@@ -129,7 +129,7 @@ export default function AssetGroupDetail({group, summary}: AssetGroupDetailProps
 
     const columns: GridColDef[] = [
         {field: 'stkNm', headerName: group === 'stock' ? '종목명' : '코인명', flex: 1.5, minWidth: 150},
-        {field: 'prftRt', headerName: '수익률', flex: 0.8, minWidth: 100, renderCell: (params: {value: number}) => renderChip(params.value as number)},
+        {field: 'prftRt', headerName: '수익률', flex: 0.8, minWidth: 100, renderCell: (params) => renderChip(params.value as number)},
         {field: 'curPrc', headerName: '현재가', flex: 1, minWidth: 100, renderCell: (params) => <BlindText>{Number(params.value).toLocaleString()}</BlindText>},
         {field: 'evltAmt', headerName: '평가금액', flex: 1, minWidth: 120, renderCell: (params) => <BlindText>{params.value.toLocaleString()}</BlindText>},
         {field: 'evltPl', headerName: '평가손익', flex: 1, minWidth: 120, renderCell: (params) => <BlindText>{renderTradeColor(params.value)}</BlindText>},

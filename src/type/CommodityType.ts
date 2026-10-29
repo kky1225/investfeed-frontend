@@ -36,7 +36,7 @@ export interface CommodityStreamRes {
     type: string,
     name: string,
     item: string,
-    values: Array<CommodityStream>
+    values: Record<string, string>
 }
 
 export interface CommodityStream {

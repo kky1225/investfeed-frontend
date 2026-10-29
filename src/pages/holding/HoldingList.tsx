@@ -299,7 +299,7 @@ const HoldingList = ({source = 'KIWOOM'}: {source?: HoldingSource}) => {
                 renderCell: (params) => typeof params.row.id === 'number' ? <DragHandleCell/> : null,
             },
             {field: 'stkNm', headerName: '종목명', flex: 1.5, minWidth: 150},
-            {field: 'prftRt', headerName: '수익률', flex: 0.8, minWidth: 100, renderCell: (params: {value: number}) => renderChip(params.value as number)},
+            {field: 'prftRt', headerName: '수익률', flex: 0.8, minWidth: 100, renderCell: (params) => renderChip(params.value as number)},
             {field: f('curPrc'), headerName: '현재가', flex: 1, minWidth: 100, renderCell: (params) => <BlindText>{money(params.value)}</BlindText>},
             {field: 'rmndQty', headerName: '보유수량', flex: 0.8, minWidth: 80, renderCell: (params) => <BlindText>{Number(params.value).toLocaleString()}</BlindText>},
             {field: f('purPric'), headerName: '매입가', flex: 1, minWidth: 100, valueFormatter: (value: string) => money(value)},

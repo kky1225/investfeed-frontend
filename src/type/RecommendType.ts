@@ -23,7 +23,7 @@ export interface RecommendListStreamRes {
     type: string,
     name: string,
     item: string,
-    values: Array<RecommendListStream>
+    values: Record<string, string>
 }
 
 export interface RecommendListStream {

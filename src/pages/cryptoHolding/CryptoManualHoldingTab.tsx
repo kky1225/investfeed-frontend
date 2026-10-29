@@ -333,7 +333,7 @@ export default function CryptoManualHoldingTab({broker}: CryptoManualHoldingTabP
             renderCell: () => <DragHandleCell/>,
         },
         {field: 'stkNm', headerName: '코인명', flex: 1.5, minWidth: 150},
-        {field: 'prftRt', headerName: '수익률', flex: 0.8, minWidth: 100, renderCell: (params: {value: number}) => renderChip(params.value as number)},
+        {field: 'prftRt', headerName: '수익률', flex: 0.8, minWidth: 100, renderCell: (params) => renderChip(params.value as number)},
         {field: 'curPrc', headerName: '현재가', flex: 1, minWidth: 100, renderCell: (params) => <BlindText>{Number(params.value).toLocaleString()}</BlindText>},
         {field: 'rmndQty', headerName: '보유수량', flex: 0.8, minWidth: 80, renderCell: (params) => <BlindText>{params.value}</BlindText>},
         {field: 'purPric', headerName: '매입가', flex: 1, minWidth: 100, valueFormatter: (value: string) => Number(value).toLocaleString()},
