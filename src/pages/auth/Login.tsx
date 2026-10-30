@@ -386,6 +386,7 @@ export default function Login(props: { disableCustomTheme?: boolean }) {
                     helperText={totpCodeError}
                     type="text"
                     id="totpCode"
+                    autoComplete="one-time-code"
                     placeholder="6자리 코드 입력"
                     autoFocus
                     required
@@ -419,6 +420,7 @@ export default function Login(props: { disableCustomTheme?: boolean }) {
                     helperText={totpCodeError}
                     type="text"
                     id="totpCode"
+                    autoComplete="one-time-code"
                     placeholder="6자리 코드 입력"
                     autoFocus
                     required

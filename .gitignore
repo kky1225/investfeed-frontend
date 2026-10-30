@@ -24,6 +24,9 @@ dist-ssr
 *.sw?
 
 ## CLAUDE CODE
-CLAUDE.md
 .worktreeinclude
 .claude/*
+!.claude/settings.json
+!.claude/rules/
+!.claude/skills/
+.claude/settings.local.json

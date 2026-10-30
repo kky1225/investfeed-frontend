@@ -79,6 +79,7 @@ export interface StockInfo {
     marketCode: string,
     marketName: string,
     upName: string,
+    disptyRt: string | null,     // ETF 괴리율 (시장가 vs NAV, %, 부호 포함). ETF만, 그 외 null
     expCntrPric: string,
     expCntrFluRt: string,
     expCntrPreSig: string,

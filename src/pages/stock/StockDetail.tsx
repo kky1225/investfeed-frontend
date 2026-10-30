@@ -110,6 +110,7 @@ interface StockInfoProps {
     eps: number;
     roe: number;
     pbr: number;
+    disptyRt: string | null;
     tradeConditions: string[];
 }
 
@@ -238,6 +239,7 @@ const INITIAL_INFO: StockInfoProps = {
     mac: 0, macWght: 0, forExhRt: 0,
     _250hgst: 0, _250lwst: 0,
     per: 0, eps: 0, roe: 0, pbr: 0,
+    disptyRt: null,
     tradeConditions: [],
 };
 
@@ -553,6 +555,7 @@ const StockDetail = () => {
             eps: Number(stockInfo.eps),
             roe: Number(stockInfo.roe),
             pbr: Number(stockInfo.pbr),
+            disptyRt: stockInfo.disptyRt ?? null,
             tradeConditions: extractTradeConditions(stockInfo.state ?? ''),
         };
     }, [result]);
@@ -1290,6 +1293,20 @@ const StockDetail = () => {
                                         {loading ? <Skeleton width={100}/> : (dividendYield !== null ? `${dividendYield}%` : '-')}
                                     </Typography>
                                 </Grid>
+                                {info.disptyRt !== null && (
+                                    <>
+                                        <Grid size={{xs: 12, md: 3}}>
+                                            <Typography variant="subtitle2" gutterBottom fontWeight={600}>
+                                                괴리율
+                                            </Typography>
+                                        </Grid>
+                                        <Grid size={{xs: 12, md: 3}}>
+                                            <Typography variant="subtitle2" gutterBottom>
+                                                {loading ? <Skeleton width={100}/> : `${info.disptyRt}%`}
+                                            </Typography>
+                                        </Grid>
+                                    </>
+                                )}
                             </Grid>
                         </CardContent>
                     </Card>
