@@ -16,7 +16,7 @@ const KEY = ['assistant', 'setting'] as const;
 
 const BRIEFING_TOGGLES: { key: keyof Omit<AssistantSettingRes, 'sectionsOff'>; label: string; description: string }[] = [
     {key: 'krEnabled', label: '국내주식', description: '장 전 07:00 · 장 마감 16:00 (개장일)'},
-    {key: 'usEnabled', label: '미국주식', description: 'NYSE 마감 +10분 (05:10 / 서머타임 06:10)'},
+    {key: 'usEnabled', label: '미국주식', description: 'NYSE 마감 +10분 (06:10 / 서머타임 05:10)'},
     {key: 'coinEnabled', label: '코인', description: '업비트 일봉 마감 09:05 (매일)'},
 ];
 
