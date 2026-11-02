@@ -116,6 +116,17 @@ export const confirmAssistantGoalUpdate = async (cardRef: string): Promise<ApiRe
     return res.data;
 };
 
+export const cancelAssistantRebalancingUpdate = async (cardRef: string): Promise<ApiResponse<unknown>> => {
+    const res = await api.delete<ApiResponse<unknown>>(`/assistant/secure/actions/rebalancing/${encodeURIComponent(cardRef)}`, {secondaryAuthSource: 'assistant', skipGlobalError: true});
+    return res.data;
+};
+
+export const confirmAssistantRebalancingUpdate = async (cardRef: string): Promise<ApiResponse<unknown>> => {
+    // 웹 리밸런싱처럼 2차 인증 필요 (2026-10-31)
+    const res = await api.post<ApiResponse<unknown>>("/assistant/secure/actions/rebalancing", {cardRef}, {secondaryAuthSource: 'assistant', skipGlobalError: true});
+    return res.data;
+};
+
 export const deleteAssistantMessage = async (id: number): Promise<ApiResponse<number | null>> => {
     const res = await api.delete<ApiResponse<number | null>>(`/assistant/timeline/messages/${id}`, {skipGlobalError: true});
     return res.data;

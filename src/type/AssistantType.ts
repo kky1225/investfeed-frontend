@@ -1,5 +1,6 @@
 // Kotlin domain/assistant DTO 와 1:1 (docs/assistant-spec.md 5.3)
 import type {GoalType, InvestmentGoalRes} from './GoalType';
+import type {RebalancingSettingRes, RebalancingStatusRes} from './RebalancingType';
 
 export type MessageType = 'BRIEFING' | 'ALERT' | 'USER' | 'ASSISTANT' | 'SYSTEM';
 export type HeadlineScope = 'PERSONAL' | 'MARKET';
@@ -74,8 +75,8 @@ export interface TurnCard {
     payload?: unknown;
     /** 조회 조건 (공개 데이터 카드의 도구 인자). 예: get_calendar {from, to, type, country} */
     args?: Record<string, unknown> | null;
-    /** 확인 카드(목표가 알림·투자 목표)를 처리한 결과 — 있으면 버튼 없이 결과만 */
-    actionStatus?: 'CONFIRMED' | 'CANCELED' | null;
+    /** 확인 카드를 처리한 결과 — 있으면 버튼 없이 결과만. REPLACED=이어서 말해 새 카드로 바뀜, EXPIRED=그 사이 설정이 바뀌어 거절 (리밸런싱) */
+    actionStatus?: 'CONFIRMED' | 'CANCELED' | 'REPLACED' | 'EXPIRED' | null;
 }
 
 export type StockMarket = 'KR' | 'US' | 'CRYPTO';
@@ -228,6 +229,12 @@ export interface PriceAlertDeletePreviewPayload {
 export interface GoalsPayload { asOf: string; goals: InvestmentGoalRes[]; }
 
 export interface GoalUpdatePreviewPayload { asOf: string; type: GoalType; currentTarget: number | null; newTarget: number; }
+
+/** status 가 null 이면 리밸런싱 설정이 없다 (웹 리밸런싱 화면과 같은 계산) */
+export interface RebalancingPayload { asOf: string; status: RebalancingStatusRes | null; }
+
+/** current 가 null 이면 새로 설정 */
+export interface RebalancingUpdatePreviewPayload { asOf: string; current: RebalancingSettingRes | null; next: RebalancingSettingRes; }
 
 export interface StoredCard { ref: string; memberId: number; kind: string; createdAt: string; payload: unknown; }
 

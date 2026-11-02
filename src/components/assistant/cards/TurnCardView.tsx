@@ -10,7 +10,7 @@ import type {
     MarketBriefPayload, MarketSummaryPayload, NewsRowPayload, PnlPayload, PortfolioPayload, PriceAlertDeletePreviewPayload, PriceAlertPreviewPayload,
     RecommendListPayload,
     SectorPerformancePayload, StockChoicePayload, StockInvestorFlowPayload, StockQuoteAnswerPayload, StockQuotePayload, TradingRankPayload, TurnCard,
-    WatchlistGroupsPayload, WatchlistPayload, GoalsPayload, GoalUpdatePreviewPayload,
+    WatchlistGroupsPayload, WatchlistPayload, GoalsPayload, GoalUpdatePreviewPayload, RebalancingPayload, RebalancingUpdatePreviewPayload,
 } from '../../../type/AssistantType';
 import {fetchAssistantCard} from '../../../api/assistant/AssistantApi';
 import {requireOk} from '../../../lib/apiResponse';
@@ -19,7 +19,9 @@ import {
     BriefingLinkCard, CalendarCard, GlobalIndexCard, MarketBriefCard, MarketFlowCard, MarketSummaryCard, NewsCard, RecommendCard,
     SectorPerformanceCard, StockChoiceCard, StockFlowCard, StockQuoteCard, TradingRankCard, WatchlistCard, WatchlistGroupsCard,
 } from './MarketCards';
-import {ConfirmGoalCard, ConfirmPriceAlertCard, ConfirmPriceAlertDeleteCard, GoalsCard, HoldingCard, PnlCard, PortfolioCard} from './PersonalCards';
+import {
+    ConfirmGoalCard, ConfirmPriceAlertCard, ConfirmPriceAlertDeleteCard, ConfirmRebalancingCard, GoalsCard, HoldingCard, PnlCard, PortfolioCard, RebalancingCard,
+} from './PersonalCards';
 import AssistantMessageView from '../AssistantMessageView';
 import AssistantBubble from '../AssistantBubble';
 
@@ -44,15 +46,19 @@ export const CARD_LABEL: Record<string, string> = {
     show_my_holding: '보유 종목',
     show_my_pnl: '실현손익',
     show_my_goals: '투자 목표',
+    show_my_rebalancing: '리밸런싱',
     create_price_alert: '목표가 알림',
     delete_price_alert: '목표가 알림 삭제',
     update_my_goal: '투자 목표 변경',
+    update_my_rebalancing: '리밸런싱 비중 변경',
     PORTFOLIO: '내 계좌',
     HOLDING: '보유 종목',
     REALIZED_PNL: '실현손익',
     CONFIRM_PRICE_ALERT: '목표가 알림',
     GOALS: '투자 목표',
     CONFIRM_GOAL: '투자 목표 변경',
+    REBALANCING: '리밸런싱',
+    CONFIRM_REBALANCING: '리밸런싱 비중 변경',
     STOCK_CHOICE: '종목 선택',
 };
 
@@ -132,6 +138,8 @@ function render(kind: string, payload: unknown, card: TurnCard, onPick?: (p: Cha
         case 'REALIZED_PNL': return <PnlCard p={payload as PnlPayload}/>;
         case 'GOALS': return <GoalsCard p={payload as GoalsPayload}/>;
         case 'CONFIRM_GOAL': return <ConfirmGoalCard p={payload as GoalUpdatePreviewPayload} cardRef={card.ref} status={card.actionStatus}/>;
+        case 'REBALANCING': return <RebalancingCard p={payload as RebalancingPayload}/>;
+        case 'CONFIRM_REBALANCING': return <ConfirmRebalancingCard p={payload as RebalancingUpdatePreviewPayload} cardRef={card.ref} status={card.actionStatus}/>;
         case 'create_price_alert': return <ConfirmPriceAlertCard p={payload as PriceAlertPreviewPayload} cardRef={(payload as PriceAlertPreviewPayload).confirmRef} status={card.actionStatus}/>;
         case 'delete_price_alert': return <ConfirmPriceAlertDeleteCard p={payload as PriceAlertDeletePreviewPayload} status={card.actionStatus}/>;
         case 'CONFIRM_PRICE_ALERT': return <ConfirmPriceAlertCard p={payload as PriceAlertPreviewPayload} cardRef={card.ref} status={card.actionStatus}/>;

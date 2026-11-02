@@ -13,14 +13,15 @@ import RadioGroup from '@mui/material/RadioGroup';
 import FormControlLabel from '@mui/material/FormControlLabel';
 import type {
     GoalUpdatePreviewPayload, GoalsPayload, HoldingPayload, HoldingRowPayload, PnlPayload, PortfolioPayload, PriceAlertDeletePreviewPayload,
-    PriceAlertPreviewPayload, PriceAlertRowPayload, TurnCard,
+    PriceAlertPreviewPayload, PriceAlertRowPayload, RebalancingPayload, RebalancingUpdatePreviewPayload, TurnCard,
 } from '../../../type/AssistantType';
+import type {RatioDirection, RebalancingSettingRes} from '../../../type/RebalancingType';
 import {goalTypeLabel} from '../../../type/GoalType';
 import {formatAlertPrice, renderChangeAmount} from '../../CustomRender';
 import AccountSummary from '../AccountSummary';
 import {
-    cancelAssistantGoalUpdate, cancelAssistantPriceAlert, cancelAssistantPriceAlertDelete, confirmAssistantGoalUpdate, confirmAssistantPriceAlert,
-    confirmAssistantPriceAlertDelete,
+    cancelAssistantGoalUpdate, cancelAssistantPriceAlert, cancelAssistantPriceAlertDelete, cancelAssistantRebalancingUpdate, confirmAssistantGoalUpdate,
+    confirmAssistantPriceAlert, confirmAssistantPriceAlertDelete, confirmAssistantRebalancingUpdate,
 } from '../../../api/assistant/AssistantApi';
 import {useQueryClient} from '@tanstack/react-query';
 import dayjs from 'dayjs';
@@ -248,7 +249,8 @@ type ActionStatus = TurnCard['actionStatus'];
 /**
  * 확인 카드 아래 줄: 링크 · [취소] [확인]. 누르면 서버가 결과 답변을 타임라인에 올리고 이 카드에 결과를 기록한다 (2026-10-27).
  * 처리한 카드(actionStatus)는 버튼만 없앤다 — 결과는 바로 아래 비서 답변이 말하므로 카드에 다시 쓰지 않는다 (중복 지적, 2026-10-27).
- * 만료된 카드는 답변이 없으니 만료 안내를 보인다. 새로고침해도 버튼이 다시 살아나지 않는다
+ * 만료된 카드는 답변이 없으니 만료 안내를 보인다. 새로고침해도 버튼이 다시 살아나지 않는다.
+ * 리밸런싱은 이어서 말하면 새 카드로 바뀌고(REPLACED), 그 사이 설정이 바뀐 카드는 서버가 거절한다(EXPIRED) (2026-11-02)
  */
 function ConfirmActions({cardRef, status, asOf, link, confirmLabel, confirm, cancel}: {
     cardRef?: string | null;
@@ -264,7 +266,7 @@ function ConfirmActions({cardRef, status, asOf, link, confirmLabel, confirm, can
     const [sending, setSending] = useState(false);
     const [message, setMessage] = useState('');
     const result = status ?? local;
-    const expired = !result && !!asOf && Date.now() - dayjs(asOf).valueOf() > CONFIRM_TTL_MS;
+    const expired = result === 'EXPIRED' || (!result && !!asOf && Date.now() - dayjs(asOf).valueOf() > CONFIRM_TTL_MS);
     const run = async (action: 'CONFIRMED' | 'CANCELED') => {
         if (!cardRef || sending || result) return;
         setSending(true);
@@ -276,6 +278,7 @@ function ConfirmActions({cardRef, status, asOf, link, confirmLabel, confirm, can
         } catch (e) {
             const msg = (e as {response?: {data?: {message?: string}}}).response?.data?.message ?? (e as Error).message;
             setMessage(msg || '처리하지 못했습니다');
+            await queryClient.invalidateQueries({queryKey: ASSISTANT_TIMELINE_KEY});   // 서버가 거절하며 남긴 카드 상태(EXPIRED) 반영
         } finally {
             setSending(false);
         }
@@ -289,6 +292,7 @@ function ConfirmActions({cardRef, status, asOf, link, confirmLabel, confirm, can
                 {link}
                 <Box sx={{flexGrow: 1}}/>
                 {expired && <Typography variant="body2" color="text.secondary">만료되었습니다. 다시 요청해 주세요</Typography>}
+                {result === 'REPLACED' && <Typography variant="body2" color="text.secondary">아래 새 카드로 바뀌었습니다</Typography>}
                 {!result && !expired && (
                     <>
                         <Button size="small" onClick={() => run('CANCELED')}>취소</Button>
@@ -313,6 +317,117 @@ export function ConfirmGoalCard({p, cardRef, status}: { p: GoalUpdatePreviewPayl
                 link={<Link component={RouterLink} to="/goal" variant="caption">투자 목표</Link>}
                 confirmLabel={isNew ? '설정' : '변경'}
                 confirm={confirmAssistantGoalUpdate} cancel={cancelAssistantGoalUpdate}
+            />
+        </CardFrame>
+    );
+}
+
+const REBALANCING_ASSET_LABEL: Record<string, string> = {STOCK: '주식', CRYPTO: '코인', CASH: '현금'};
+const ratioDirectionLabel = (d: RatioDirection) => d === 'MIN' ? '이상' : '이하';
+
+/**
+ * 리밸런싱: 웹 리밸런싱 화면(RebalancingPage)의 현황 부분과 같은 모양 (2026-10-31)
+ * — 현재 비중 현황(달성/미달/초과 칩·막대) · 자산 유형 경고 · 종목 비중 초과 표 · 전부 범위 내 안내
+ */
+export function RebalancingCard({p}: { p: RebalancingPayload }) {
+    const s = p.status;
+    return (
+        <CardFrame personal title="리밸런싱" asOf={p.asOf} link="/rebalancing" linkLabel="리밸런싱 화면">
+            {!s && <Typography variant="body2" color="text.secondary">설정된 리밸런싱 비중이 없습니다. 리밸런싱 화면에서 설정해 주세요</Typography>}
+            {s && (
+                <Stack spacing={1.25}>
+                    <Stack spacing={1}>
+                        {[
+                            {label: '주식', current: s.currentRatios.stockRatio, target: s.setting.stockRatio, direction: s.setting.stockDirection, amount: s.currentRatios.stockAmount},
+                            {label: '코인', current: s.currentRatios.cryptoRatio, target: s.setting.cryptoRatio, direction: s.setting.cryptoDirection, amount: s.currentRatios.cryptoAmount},
+                            {label: '현금', current: s.currentRatios.cashRatio, target: s.setting.cashRatio, direction: s.setting.cashDirection, amount: s.currentRatios.cashAmount},
+                        ].map((item) => {
+                            const isViolation = item.direction === 'MAX' ? item.current > item.target : item.current < item.target;
+                            return (
+                                <Box key={item.label}>
+                                    <Stack direction="row" justifyContent="space-between" alignItems="center" gap={1} sx={{mb: 0.5}}>
+                                        <Stack direction="row" alignItems="center" gap={1}>
+                                            <Typography variant="body2" sx={{fontWeight: 600}}>{item.label}</Typography>
+                                            {isViolation
+                                                ? <Chip label={item.direction === 'MIN' ? '미달' : '초과'} size="small" color="error" variant="outlined" sx={{height: 20}}/>
+                                                : <Chip label="달성" size="small" color="success" variant="outlined" sx={{height: 20}}/>}
+                                        </Stack>
+                                        <Typography variant="body2">
+                                            {item.current}% ({item.amount.toLocaleString()}원) / 목표 {item.target}% {ratioDirectionLabel(item.direction)}
+                                        </Typography>
+                                    </Stack>
+                                    <LinearProgress variant="determinate" value={!isViolation ? 100 : Math.min(item.current, 100)}
+                                                    color={isViolation ? 'error' : 'success'} sx={{height: 8, borderRadius: 4}}/>
+                                </Box>
+                            );
+                        })}
+                    </Stack>
+                    {s.overweightAssets.map((item) => {
+                        const label = REBALANCING_ASSET_LABEL[item.assetType] ?? item.assetType;
+                        const isCash = item.assetType === 'CASH';
+                        const excess = <b>{item.excessAmount.toLocaleString()}원</b>;
+                        const message = item.direction === 'MIN'
+                            ? <>{label} 비중이 목표({item.targetRatio}% 이상)에 미달합니다. 약 {excess} {isCash ? '규모의 자산 처분을 검토하세요.' : '추가 매수를 검토하세요.'}</>
+                            : <>{label} 비중이 목표({item.targetRatio}% 이하)를 초과했습니다. 약 {excess} {isCash ? '규모의 투자를 검토하세요.' : '처분을 검토하세요.'}</>;
+                        return <Alert severity="warning" key={item.assetType} sx={{py: 0}}>{message}</Alert>;
+                    })}
+                    {s.overweightStocks.length > 0 && (
+                        <Box>
+                            <Typography variant="body2" sx={{fontWeight: 600, color: 'text.secondary', mb: 0.5}}>
+                                종목 비중 초과 (상한 {s.setting.maxStockRatio}%)
+                            </Typography>
+                            <MiniTable
+                                head={['종목명', '증권사', '현재 비중', '상한', '매도 제안(주)', '매도 제안(금액)']}
+                                leftCols={2}
+                                rows={s.overweightStocks.map((o) => [
+                                    o.stkNm,
+                                    o.brokerName,
+                                    <Typography variant="body2" color="error.main" sx={{fontWeight: 600}}>{o.currentRatio}%</Typography>,
+                                    `${o.maxRatio}%`,
+                                    <b>{o.sellQuantity.toLocaleString()}주</b>,
+                                    `${o.sellAmount.toLocaleString()}원`,
+                                ])}
+                            />
+                        </Box>
+                    )}
+                    {s.overweightAssets.length === 0 && s.overweightStocks.length === 0 && (
+                        <Alert severity="success" sx={{py: 0}}>모든 비중이 목표 범위 내에 있습니다.</Alert>
+                    )}
+                </Stack>
+            )}
+        </CardFrame>
+    );
+}
+
+/** 리밸런싱 설정 한 항목 표기 ("60% 이하", 종목 최대는 항상 이하) */
+const REBALANCING_ROWS: {label: string; text: (s: RebalancingSettingRes) => string}[] = [
+    {label: '주식', text: (s) => `${s.stockRatio}% ${ratioDirectionLabel(s.stockDirection)}`},
+    {label: '코인', text: (s) => `${s.cryptoRatio}% ${ratioDirectionLabel(s.cryptoDirection)}`},
+    {label: '현금', text: (s) => `${s.cashRatio}% ${ratioDirectionLabel(s.cashDirection)}`},
+    {label: '종목 최대', text: (s) => `${s.maxStockRatio}% 이하`},
+];
+
+/**
+ * 리밸런싱 비중 변경 확인 카드. 투자 목표 확인 카드처럼 바뀌는 항목만 "기존 → 새 값"으로 보인다 (2026-11-02). 새로 설정이면 전부.
+ * 버튼은 cardRef 만 보내고 서버가 Redis 원본으로 저장한다 (2차 인증)
+ */
+export function ConfirmRebalancingCard({p, cardRef, status}: { p: RebalancingUpdatePreviewPayload; cardRef?: string | null; status?: ActionStatus }) {
+    const current = p.current;
+    const rows = REBALANCING_ROWS
+        .map((r) => ({label: r.label, current: current ? r.text(current) : null, next: r.text(p.next)}))
+        .filter((r) => r.current !== r.next);
+    return (
+        <CardFrame personal title={current === null ? '리밸런싱 비중 설정' : '리밸런싱 비중 변경'}>
+            {rows.map((r) => (
+                <Stat key={r.label} label={r.label}>
+                    {r.current === null ? <b>{r.next}</b> : <>{r.current} → <b>{r.next}</b></>}
+                </Stat>
+            ))}
+            <ConfirmActions
+                cardRef={cardRef} status={status} asOf={p.asOf}
+                link={<Link component={RouterLink} to="/rebalancing" variant="caption">리밸런싱</Link>}
+                confirmLabel={current === null ? '설정' : '변경'}
+                confirm={confirmAssistantRebalancingUpdate} cancel={cancelAssistantRebalancingUpdate}
             />
         </CardFrame>
     );
