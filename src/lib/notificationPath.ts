@@ -11,6 +11,9 @@ export function getNavigationPath(notification: Notification): string {
     if (notification.type === 'API_KEY') {
         return '/settings';
     }
+    if (notification.type === 'SCHEDULER') {
+        return '/admin/monitoring';
+    }
     if (notification.type === 'PRICE') {
         if (notification.assetType === 'STOCK') {
             return `/stock/detail/${notification.assetCode}`;

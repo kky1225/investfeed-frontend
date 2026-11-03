@@ -384,7 +384,8 @@ export default function NotificationList() {
                                                     notification.isRead ? 'text.disabled' :
                                                     (notification.direction === 'UP' || notification.direction === 'UPPER_LIMIT' || notification.direction === 'HIGH_52W' || notification.direction === 'TARGET_ABOVE' || notification.direction === 'GOAL_ACHIEVED' || notification.direction === 'REBALANCING_ASSET' || notification.direction === 'REBALANCING_STOCK') ? 'error' : 'primary'
                                                 }>
-                                                    {notification.direction === 'REBALANCING_ASSET' ? `비중 초과 (현재 ${notification.fluRt}%)` :
+                                                    {notification.direction === 'SCHEDULER_FAILED' ? '스케줄러 실패 · 모니터링에서 확인' :
+                                                     notification.direction === 'REBALANCING_ASSET' ? `비중 초과 (현재 ${notification.fluRt}%)` :
                                                      notification.direction === 'REBALANCING_STOCK' ? `비중 초과 (현재 ${notification.fluRt}%)` :
                                                      notification.direction === 'GOAL_ACHIEVED' ? `목표 달성 (${notification.threshold.toLocaleString()}원)` :
                                                      notification.direction === 'HIGH_52W' ? `52주 신고가 달성 (${formatAlertPrice(notification.fluRt, notification.assetCode)})` :
