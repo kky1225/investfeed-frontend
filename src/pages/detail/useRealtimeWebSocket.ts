@@ -1,4 +1,5 @@
 import {useEffect, useRef} from "react";
+import {wsUrl} from "../../lib/wsUrl.ts";
 
 interface UseRealtimeWebSocketOptions {
     /** 구독 키 — 변경 시 재연결 (예: market id). 빈 값이면 연결 시도 X. */
@@ -26,7 +27,7 @@ export function useRealtimeWebSocket(opts: UseRealtimeWebSocketOptions): void {
         let cancelled = false;
 
         const openSocket = () => {
-            const ws = new WebSocket("ws://localhost:8080/ws");
+            const ws = new WebSocket(wsUrl('/ws'));
             ws.onmessage = (event) => onMessageRef.current(event);
             return ws;
         };

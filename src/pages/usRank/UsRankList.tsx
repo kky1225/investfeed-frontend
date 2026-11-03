@@ -1,4 +1,5 @@
 import {mergeLive} from "../../lib/streamOverlay.ts";
+import {wsUrl} from "../../lib/wsUrl.ts";
 import Typography from "@mui/material/Typography";
 import Box from "@mui/material/Box";
 import Grid from "@mui/material/Grid";
@@ -130,7 +131,7 @@ const UsRankList = () => {
     const columns: GridColDef[] = useMemo(() => buildColumns(req.type), [req.type]);
 
     const openSocket = () => {
-        const socket = new WebSocket("ws://localhost:8080/ws");
+        const socket = new WebSocket(wsUrl('/ws'));
         socket.onmessage = (event) => {
             const data = JSON.parse(event.data);
             if (data.trnm === "REAL" && Array.isArray(data.data)) {

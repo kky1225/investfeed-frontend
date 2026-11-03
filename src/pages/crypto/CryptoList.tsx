@@ -13,6 +13,7 @@ import {useEffect, useMemo, useRef, useState} from "react";
 import {CryptoChartMinute, CryptoListItem, CryptoListRes, FearGreedItem} from "../../type/CryptoType.ts";
 import {usePollingQuery} from "../../lib/pollingQuery.ts";
 import {parseTradeStamp} from "../../lib/tradeStamp.ts";
+import {wsUrl} from "../../lib/wsUrl.ts";
 
 interface CryptoTickerData {
     market: string;
@@ -145,7 +146,7 @@ const CryptoList = () => {
     const streamBufferRef = useRef<Map<string, CryptoTickerData>>(new Map());
 
     const openSocket = () => {
-        const socket = new WebSocket("ws://localhost:8080/ws");
+        const socket = new WebSocket(wsUrl('/ws'));
 
         socket.onmessage = (event) => {
             const data = JSON.parse(event.data);

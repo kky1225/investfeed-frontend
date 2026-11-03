@@ -1,4 +1,5 @@
 import {mergeLive} from "../../lib/streamOverlay.ts";
+import {wsUrl} from "../../lib/wsUrl.ts";
 import {Box, Tab, Tabs} from "@mui/material";
 import Typography from "@mui/material/Typography";
 import {useEffect, useMemo, useRef, useState} from "react";
@@ -107,7 +108,7 @@ const SectList = () => {
     const streamBufferRef = useRef<Map<string, SectListStream>>(new Map());
 
     const openSocket = () => {
-        const socket = new WebSocket("ws://localhost:8080/ws");
+        const socket = new WebSocket(wsUrl('/ws'));
         socket.onmessage = (event) => {
             const data = JSON.parse(event.data);
             if (data.trnm === "REAL" && Array.isArray(data.data)) {

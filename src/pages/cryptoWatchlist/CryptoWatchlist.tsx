@@ -1,6 +1,7 @@
 import React, {createContext, useContext, useEffect, useMemo, useRef, useState} from "react";
 import {signedRate} from "../../components/CustomRender.tsx";
 import {mergeLive} from "../../lib/streamOverlay.ts";
+import {wsUrl} from "../../lib/wsUrl.ts";
 import {useMutation, useQuery, useQueryClient} from "@tanstack/react-query";
 import {requireOk} from "../../lib/apiResponse.ts";
 import Box from "@mui/material/Box";
@@ -280,7 +281,7 @@ const CryptoWatchlist = () => {
                 if (cancelled) return;
                 if (streamRes.code !== "0000") throw new Error(streamRes.message || `관심 코인 스트림 실패 (${streamRes.code})`);
 
-                const socket = new WebSocket("ws://localhost:8080/ws");
+                const socket = new WebSocket(wsUrl('/ws'));
                 socket.onmessage = (event) => {
                     const data = JSON.parse(event.data);
                     if (data.type === "CRYPTO_TICKER" && data.data) {

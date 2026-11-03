@@ -1,4 +1,5 @@
 import {mergeLive} from "../../lib/streamOverlay.ts";
+import {wsUrl} from "../../lib/wsUrl.ts";
 import {renderChip} from "../../components/CustomRender.tsx";
 import Typography from "@mui/material/Typography";
 import Box from "@mui/material/Box";
@@ -128,7 +129,7 @@ const ThemeStockList = () => {
     };
 
     const openSocket = () => {
-        const socket = new WebSocket("ws://localhost:8080/ws");
+        const socket = new WebSocket(wsUrl('/ws'));
         socket.onmessage = (event) => {
             const data = JSON.parse(event.data);
             if (data.trnm === "REAL" && Array.isArray(data.data)) {

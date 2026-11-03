@@ -1,4 +1,5 @@
 import {mergeLive} from "../../lib/streamOverlay.ts";
+import {wsUrl} from "../../lib/wsUrl.ts";
 import {renderChip} from "../../components/CustomRender.tsx";
 import Box from '@mui/material/Box';
 import {useTheme} from "@mui/material/styles";
@@ -205,7 +206,7 @@ export default function Dashboard() {
     const streamBufferRef = useRef<Map<string, LiveIndexUpdate>>(new Map());
 
     const openSocket = () => {
-        const socket = new WebSocket("ws://localhost:8080/ws");
+        const socket = new WebSocket(wsUrl('/ws'));
         socket.onmessage = (event) => {
             const data = JSON.parse(event.data);
             if (data.trnm === "REAL" && Array.isArray(data.data)) {

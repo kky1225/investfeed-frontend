@@ -1,6 +1,7 @@
 import {useEffect, useRef} from "react";
 import {HoldingStreamReq} from "../../type/HoldingType.ts";
 import {CryptoHoldingBuffer} from "../../type/CryptoType.ts";
+import {wsUrl} from "../../lib/wsUrl.ts";
 
 export function useCryptoHoldingStream(
     markets: string[],
@@ -17,7 +18,7 @@ export function useCryptoHoldingStream(
         let cancelled = false;
 
         const openSocket = () => {
-            const ws = new WebSocket("ws://localhost:8080/ws");
+            const ws = new WebSocket(wsUrl('/ws'));
             ws.onmessage = (event) => {
                 const data = JSON.parse(event.data);
 

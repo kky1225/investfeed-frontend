@@ -1,6 +1,7 @@
 import {useEffect, useRef} from "react";
 import {MarketType} from "../../type/timeType.ts";
 import {useMarketTime} from "../holding/useMarketTime.ts";
+import {wsUrl} from "../../lib/wsUrl.ts";
 
 interface UseMarketWebSocketOptions {
     /** 장 시각 기준 marketType (STOCK / INDEX / COMMODITY) */
@@ -32,7 +33,7 @@ export function useMarketWebSocket(opts: UseMarketWebSocketOptions): void {
         let cancelled = false;
 
         const openSocket = () => {
-            const ws = new WebSocket("ws://localhost:8080/ws");
+            const ws = new WebSocket(wsUrl('/ws'));
             ws.onmessage = (event) => onMessageRef.current(event);
             return ws;
         };

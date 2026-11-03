@@ -1,4 +1,5 @@
 import {mergeLive} from "../../lib/streamOverlay.ts";
+import {wsUrl} from "../../lib/wsUrl.ts";
 import {useEffect, useMemo, useRef, useState} from "react";
 import {useQuery} from "@tanstack/react-query";
 import Typography from "@mui/material/Typography";
@@ -116,7 +117,7 @@ const CryptoRank = () => {
                 console.error(e);
             }
 
-            socket = new WebSocket("ws://localhost:8080/ws");
+            socket = new WebSocket(wsUrl('/ws'));
             socket.onmessage = (event) => {
                 const data = JSON.parse(event.data);
                 if (data.type === "CRYPTO_TICKER" && data.data) {

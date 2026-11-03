@@ -2,6 +2,7 @@ import {useEffect, useRef} from "react";
 import {HoldingBuffer, HoldingStreamReq, HoldingStreamRes} from "../../type/HoldingType.ts";
 import {MarketType} from "../../type/timeType.ts";
 import {useMarketTime} from "./useMarketTime.ts";
+import {wsUrl} from "../../lib/wsUrl.ts";
 
 export function useHoldingStream(
     stkCds: string[],
@@ -21,7 +22,7 @@ export function useHoldingStream(
         let cancelled = false;
 
         const openSocket = () => {
-            const ws = new WebSocket("ws://localhost:8080/ws");
+            const ws = new WebSocket(wsUrl('/ws'));
             ws.onmessage = (event) => {
                 const data = JSON.parse(event.data);
 

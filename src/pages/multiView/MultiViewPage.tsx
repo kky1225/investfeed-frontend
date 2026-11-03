@@ -1,4 +1,5 @@
 import {mergeLive} from "../../lib/streamOverlay.ts";
+import {wsUrl} from "../../lib/wsUrl.ts";
 import {useEffect, useMemo, useRef, useState} from "react";
 import Box from "@mui/material/Box";
 import Typography from "@mui/material/Typography";
@@ -85,7 +86,7 @@ export default function MultiViewPage() {
         const panelCodes = new Set([...stockCodes, ...usStockItems.map(i => i.stkCd)]);
 
         const openSocket = () => {
-            const ws = new WebSocket("ws://localhost:8080/ws");
+            const ws = new WebSocket(wsUrl('/ws'));
             ws.onmessage = (event) => {
                 const data = JSON.parse(event.data);
                 if (data.trnm === "REAL" && Array.isArray(data.data)) {
@@ -157,7 +158,7 @@ export default function MultiViewPage() {
         const panelCodes = new Set(cryptoCodes);
 
         const openSocket = () => {
-            const ws = new WebSocket("ws://localhost:8080/ws");
+            const ws = new WebSocket(wsUrl('/ws'));
             ws.onmessage = (event) => {
                 const data = JSON.parse(event.data);
                 if (data.type === "CRYPTO_TICKER" && data.data) {

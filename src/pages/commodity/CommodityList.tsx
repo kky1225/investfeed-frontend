@@ -14,6 +14,7 @@ import FreshnessIndicator from "../../components/FreshnessIndicator.tsx";
 import {ChartMinute, CommodityListItem, CommodityListRes, CommodityStreamRes} from "../../type/CommodityType.ts";
 import {usePollingQuery} from "../../lib/pollingQuery.ts";
 import {parseKiwoomStamp} from "../../lib/tradeStamp.ts";
+import {wsUrl} from "../../lib/wsUrl.ts";
 
 interface LiveCommodityUpdate {
     value: string;
@@ -127,7 +128,7 @@ const CommodityList = () => {
     const streamBufferRef = useRef<Map<string, {value: string; change: string; fluRt: string; trend: string; tradeTime?: string}>>(new Map());
 
     const openSocket = () => {
-        const socket = new WebSocket("ws://localhost:8080/ws");
+        const socket = new WebSocket(wsUrl('/ws'));
 
         socket.onmessage = (event) => {
             const data = JSON.parse(event.data);

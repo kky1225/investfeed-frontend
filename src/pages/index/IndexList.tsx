@@ -1,4 +1,5 @@
 import {mergeLive} from "../../lib/streamOverlay.ts";
+import {wsUrl} from "../../lib/wsUrl.ts";
 import Box from "@mui/material/Box";
 import Grid from "@mui/material/Grid";
 import Typography from "@mui/material/Typography";
@@ -132,7 +133,7 @@ const IndexList = () => {
     const streamBufferRef = useRef<Map<string, IndexStream>>(new Map());
 
     const openSocket = () => {
-        const socket = new WebSocket("ws://localhost:8080/ws");
+        const socket = new WebSocket(wsUrl('/ws'));
 
         socket.onmessage = (event) => {
             const data = JSON.parse(event.data);

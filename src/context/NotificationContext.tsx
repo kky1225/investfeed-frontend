@@ -2,6 +2,7 @@ import {createContext, useContext, useEffect, useRef, ReactNode, useCallback} fr
 import {useMutation, useQueryClient} from '@tanstack/react-query';
 import {requireOk} from '../lib/apiResponse';
 import {usePollingQuery} from '../lib/pollingQuery';
+import {wsUrl} from '../lib/wsUrl';
 import {useAuth} from './AuthContext';
 import {fetchNotifications, fetchUnreadCount, markAsRead, markAllAsRead} from '../api/notification/NotificationApi';
 import type {Notification} from '../type/NotificationType';
@@ -126,9 +127,7 @@ export function NotificationProvider({children}: { children: ReactNode }) {
         const connect = () => {
             if (isCancelled) return;
 
-            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-            const wsUrl = `${protocol}//${window.location.host}/ws/notification`;
-            const ws = new WebSocket(wsUrl);
+            const ws = new WebSocket(wsUrl('/ws/notification'));
             wsRef.current = ws;
             let openedAt: number | null = null;
 
