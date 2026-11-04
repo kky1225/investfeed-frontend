@@ -64,6 +64,7 @@ export interface UnacknowledgedCountRes {
 export interface DailyCallCount {
     date: string;     // "YYYY-MM-DD"
     count: number;
+    failed: number;
 }
 
 export interface ApiCallStatsItemRes {
@@ -72,6 +73,10 @@ export interface ApiCallStatsItemRes {
     todayCount: number;
     dailyLimit: number | null;
     usageRatio: number | null;
+    todayFailed: number;
+    todayRetried: number;
+    todayAvgLatencyMs: number | null;
+    todayMaxLatencyMs: number | null;
     recent7Days: DailyCallCount[];
 }
 

@@ -1105,6 +1105,30 @@ export default function Monitoring() {
                                 },
                             },
                             {
+                                field: 'failedTrend',
+                                headerName: '7일 실패',
+                                width: 130,
+                                sortable: false,
+                                renderCell: (p) => {
+                                    const recent = (p.row as ApiCallStatsItemRes).recent7Days;
+                                    return (
+                                        <Box sx={{width: '100%', height: '100%', display: 'flex', alignItems: 'center'}}>
+                                            <SparkLineChart
+                                                data={recent.map((d) => d.failed)}
+                                                height={36}
+                                                width={110}
+                                                showHighlight
+                                                showTooltip
+                                                xAxis={{
+                                                    data: recent.map((d) => d.date),
+                                                    scaleType: 'point',
+                                                }}
+                                            />
+                                        </Box>
+                                    );
+                                },
+                            },
+                            {
                                 field: 'usageRatio',
                                 headerName: '사용률',
                                 flex: 1,
@@ -1158,6 +1182,38 @@ export default function Monitoring() {
                                 valueFormatter: (v: number) => v?.toLocaleString() ?? '0',
                             },
                             {
+                                field: 'todayFailed',
+                                headerName: '오늘 실패',
+                                width: 100,
+                                type: 'number',
+                                renderCell: (p) => (
+                                    <Typography variant="body2" color={(p.value as number) > 0 ? 'error' : 'text.primary'} sx={{lineHeight: '56px'}}>
+                                        {(p.value as number)?.toLocaleString() ?? '0'}
+                                    </Typography>
+                                ),
+                            },
+                            {
+                                field: 'todayRetried',
+                                headerName: '오늘 재시도',
+                                width: 110,
+                                type: 'number',
+                                valueFormatter: (v: number) => v?.toLocaleString() ?? '0',
+                            },
+                            {
+                                field: 'todayAvgLatencyMs',
+                                headerName: '평균 응답',
+                                width: 100,
+                                type: 'number',
+                                valueFormatter: (v: number | null) => v == null ? '-' : `${v.toLocaleString()}ms`,
+                            },
+                            {
+                                field: 'todayMaxLatencyMs',
+                                headerName: '최대 응답',
+                                width: 100,
+                                type: 'number',
+                                valueFormatter: (v: number | null) => v == null ? '-' : `${v.toLocaleString()}ms`,
+                            },
+                            {
                                 field: 'dailyLimit',
                                 headerName: '일간 한도',
                                 width: 110,
@@ -1173,7 +1229,7 @@ export default function Monitoring() {
                         slotProps={{loadingOverlay: {variant: 'skeleton', noRowsVariant: 'skeleton'}}}
                     />
                     <Typography variant="caption" color="text.secondary" sx={{display: 'block', mt: 3}}>
-                        최근 7일 일별 호출 추세를 표시합니다. 한도가 명시되지 않은 API 도 호출 폭증 감지를 위해 sparkline 은 항상 노출됩니다.
+                        최근 7일 일별 호출 추세를 표시합니다. 한도가 명시되지 않은 API 도 호출 폭증 감지를 위해 sparkline 은 항상 노출됩니다. 재시도로 성공한 호출은 실패에 포함하지 않으며, 응답 시간에 호출 한도 대기는 포함하지 않습니다.
                     </Typography>
                 </Box>
             )}
