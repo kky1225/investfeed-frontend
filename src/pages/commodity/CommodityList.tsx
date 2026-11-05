@@ -14,7 +14,7 @@ import FreshnessIndicator from "../../components/FreshnessIndicator.tsx";
 import {ChartMinute, CommodityListItem, CommodityListRes, CommodityStreamRes} from "../../type/CommodityType.ts";
 import {usePollingQuery} from "../../lib/pollingQuery.ts";
 import {parseKiwoomStamp} from "../../lib/tradeStamp.ts";
-import {wsUrl} from "../../lib/wsUrl.ts";
+import {openReconnectingSocket, type ReconnectingSocket} from "../../lib/reconnectingSocket.ts";
 
 interface LiveCommodityUpdate {
     value: string;
@@ -115,22 +115,17 @@ const CommodityList = () => {
     };
 
     const commodityListStream = async () => {
-        try {
-            const data = await fetchCommodityStream(["M04020000", "M04020100"]);
-            if (data.code !== "0000") {
-                throw new Error(data.message);
-            }
-        } catch (error) {
-            console.error(error);
+        const data = await fetchCommodityStream(["M04020000", "M04020100"]);
+        if (data.code !== "0000") {
+            throw new Error(data.message);
         }
     };
 
     const streamBufferRef = useRef<Map<string, {value: string; change: string; fluRt: string; trend: string; tradeTime?: string}>>(new Map());
 
-    const openSocket = () => {
-        const socket = new WebSocket(wsUrl('/ws'));
-
-        socket.onmessage = (event) => {
+    const openSocket = () => openReconnectingSocket({
+        register: commodityListStream,
+        onMessage: (event) => {
             const data = JSON.parse(event.data);
 
             if (data.trnm === "REAL" && Array.isArray(data.data)) {
@@ -146,10 +141,8 @@ const CommodityList = () => {
                     });
                 });
             }
-        };
-
-        return socket;
-    };
+        },
+    });
 
     const flushStreamBuffer = () => {
         if (streamBufferRef.current.size === 0) return;
@@ -182,7 +175,8 @@ const CommodityList = () => {
     useEffect(() => {
         let socketTimeout: ReturnType<typeof setTimeout>;
         let displayInterval: ReturnType<typeof setInterval> | undefined;
-        let socket: WebSocket | undefined;
+        let socket: ReconnectingSocket | undefined;
+        let cancelled = false;
 
         const startDisplayLoop = () => {
             displayInterval = setInterval(flushStreamBuffer, 200);
@@ -190,17 +184,17 @@ const CommodityList = () => {
 
         (async () => {
             const marketInfo = await timeNow();
+            if (cancelled) return;
 
             if (marketInfo?.isMarketOpen) {
-                await commodityListStream();
                 socket = openSocket();
                 startDisplayLoop();
             } else {
                 socketTimeout = setTimeout(async () => {
                     socket?.close();
                     const again = await timeNow();
+                    if (cancelled) return;
                     if (again?.isMarketOpen) {
-                        await commodityListStream();
                         socket = openSocket();
                         startDisplayLoop();
                     }
@@ -209,6 +203,7 @@ const CommodityList = () => {
         })();
 
         return () => {
+            cancelled = true;
             socket?.close();
             clearTimeout(socketTimeout);
             if (displayInterval) clearInterval(displayInterval);

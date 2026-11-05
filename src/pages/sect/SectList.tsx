@@ -1,5 +1,5 @@
 import {mergeLive} from "../../lib/streamOverlay.ts";
-import {wsUrl} from "../../lib/wsUrl.ts";
+import {openReconnectingSocket, type ReconnectingSocket} from "../../lib/reconnectingSocket.ts";
 import {Box, Tab, Tabs} from "@mui/material";
 import Typography from "@mui/material/Typography";
 import {useEffect, useMemo, useRef, useState} from "react";
@@ -49,7 +49,6 @@ const SectList = () => {
 
     const chartTimer = useRef<number>(0);
     const marketTimer = useRef<number>(0);
-    const subscribedKeyRef = useRef<string>('');
 
     const {data: result, isLoading, lastUpdated, pollError} = usePollingQuery<SectListRes>(
         ['sectList', req.indsCd],
@@ -97,19 +96,15 @@ const SectList = () => {
     };
 
     const sectListStream = async (req: SectListStreamReq) => {
-        try {
-            const data = await fetchSectListStream(req);
-            if (data.code !== "0000") throw new Error(data.message);
-        } catch (error) {
-            console.error(error);
-        }
+        const data = await fetchSectListStream(req);
+        if (data.code !== "0000") throw new Error(data.message);
     };
 
     const streamBufferRef = useRef<Map<string, SectListStream>>(new Map());
 
-    const openSocket = () => {
-        const socket = new WebSocket(wsUrl('/ws'));
-        socket.onmessage = (event) => {
+    const openSocket = (register: () => Promise<unknown>) => openReconnectingSocket({
+        register,
+        onMessage: (event) => {
             const data = JSON.parse(event.data);
             if (data.trnm === "REAL" && Array.isArray(data.data)) {
                 data.data.forEach((entry: SectListStreamRes) => {
@@ -123,26 +118,23 @@ const SectList = () => {
                     });
                 });
             }
-        };
-        return socket;
-    };
+        },
+    });
 
     // WebSocket 라이프사이클 — sectList 결과의 stkCd 들로 stream 등록.
+    // 폴링으로 result 가 바뀌어도 종목이 같으면 소켓을 유지하도록 키로 구독한다.
+    const streamKey = (result?.sectList ?? []).map((s: SectListItem) => s.stkCd).join(',');
     useEffect(() => {
-        if (!result) return;
-        const items = (result.sectList ?? []).map((s: SectListItem) => s.stkCd);
-        if (items.length === 0) return;
-
-        const key = `${req.indsCd}|${items.join(',')}`;
-        if (subscribedKeyRef.current === key) return;
-        subscribedKeyRef.current = key;
+        if (!streamKey) return;
+        const items = streamKey.split(',');
 
         // indsCd 가 변하면 overlay reset (이전 인덱스 stream 데이터가 새 탭 데이터에 섞이지 않도록)
         setLiveOverlay(new Map());
 
         let socketTimeout: ReturnType<typeof setTimeout>;
         let displayInterval: ReturnType<typeof setInterval> | undefined;
-        let socket: WebSocket | undefined;
+        let socket: ReconnectingSocket | undefined;
+        let cancelled = false;
 
         const startDisplayLoop = () => {
             displayInterval = setInterval(() => {
@@ -157,18 +149,18 @@ const SectList = () => {
 
         (async () => {
             const marketInfo = await timeNow();
+            if (cancelled) return;
 
             if (marketInfo?.isMarketOpen) {
-                await sectListStream({items});
-                socket = openSocket();
+                socket = openSocket(() => sectListStream({items}));
                 startDisplayLoop();
             } else {
                 socketTimeout = setTimeout(async () => {
                     socket?.close();
                     const again = await timeNow();
+                    if (cancelled) return;
                     if (again?.isMarketOpen) {
-                        await sectListStream({items});
-                        socket = openSocket();
+                        socket = openSocket(() => sectListStream({items}));
                         startDisplayLoop();
                     }
                 }, marketTimer.current + 200);
@@ -176,12 +168,13 @@ const SectList = () => {
         })();
 
         return () => {
+            cancelled = true;
             socket?.close();
             clearTimeout(socketTimeout);
             if (displayInterval) clearInterval(displayInterval);
             streamBufferRef.current.clear();
         };
-    }, [result, req.indsCd]);
+    }, [streamKey, req.indsCd]);
 
     const handleChange = (_event: React.SyntheticEvent, index: number) => {
         const newValue = index === 1 ? "101" : "001";

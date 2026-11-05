@@ -1,5 +1,5 @@
 import {mergeLive} from "../../lib/streamOverlay.ts";
-import {wsUrl} from "../../lib/wsUrl.ts";
+import {openReconnectingSocket, type ReconnectingSocket} from "../../lib/reconnectingSocket.ts";
 import {renderChip} from "../../components/CustomRender.tsx";
 import Typography from "@mui/material/Typography";
 import Box from "@mui/material/Box";
@@ -40,7 +40,6 @@ const ThemeStockList = () => {
 
     const [liveOverlay, setLiveOverlay] = useState<Map<string, LiveThemeStockUpdate>>(new Map());
     const stockBufferMap = useRef<Map<string, ThemeStockListStream>>(new Map());
-    const subscribedKeyRef = useRef<string>('');
 
     const chartTimer = useRef<number>(0);
     const marketTimer = useRef<number>(0);
@@ -128,9 +127,9 @@ const ThemeStockList = () => {
         return {...info};
     };
 
-    const openSocket = () => {
-        const socket = new WebSocket(wsUrl('/ws'));
-        socket.onmessage = (event) => {
+    const openSocket = (register: () => Promise<unknown>) => openReconnectingSocket({
+        register,
+        onMessage: (event) => {
             const data = JSON.parse(event.data);
             if (data.trnm === "REAL" && Array.isArray(data.data)) {
                 data.data.forEach((entry: ThemeStockListStreamRes) => {
@@ -144,26 +143,23 @@ const ThemeStockList = () => {
                     });
                 });
             }
-        };
-        return socket;
-    };
+        },
+    });
 
     // WebSocket 라이프사이클 — query 결과 stkCd 들로 stream 등록.
+    // 폴링으로 result 가 바뀌어도 종목이 같으면 소켓을 유지하도록 키로 구독한다.
+    const streamKey = (result?.themeStockList ?? []).map((s: ThemeStockListItem) => s.stkCd).join(',');
     useEffect(() => {
-        if (!result) return;
-        const items = (result.themeStockList ?? []).map((s: ThemeStockListItem) => s.stkCd);
-        if (items.length === 0) return;
-
-        const key = `${themeGrpCdParam}|${items.join(',')}`;
-        if (subscribedKeyRef.current === key) return;
-        subscribedKeyRef.current = key;
+        if (!streamKey) return;
+        const items = streamKey.split(',');
 
         // themaGrpCd 가 변하면 overlay reset
         setLiveOverlay(new Map());
 
         let socketTimeout: ReturnType<typeof setTimeout>;
         let displayInterval: ReturnType<typeof setInterval>;
-        let socket: WebSocket | undefined;
+        let socket: ReconnectingSocket | undefined;
+        let cancelled = false;
 
         const startDisplayLoop = () => {
             displayInterval = setInterval(() => {
@@ -177,34 +173,38 @@ const ThemeStockList = () => {
             }, 200);
         };
 
-        const connectSocket = async (req: ThemeStockListStreamReq) => {
-            const data = await fetchThemeStockListStream(req);
-            if (data.code !== "0000") throw new Error(data.message || `테마 종목 스트림 실패 (${data.code})`);
-            socket = openSocket();
+        const connectSocket = (req: ThemeStockListStreamReq) => {
+            socket = openSocket(async () => {
+                const data = await fetchThemeStockListStream(req);
+                if (data.code !== "0000") throw new Error(data.message || `테마 종목 스트림 실패 (${data.code})`);
+            });
             startDisplayLoop();
         };
 
         (async () => {
             const marketInfo = await timeNow();
+            if (cancelled) return;
             if (marketInfo?.isMarketOpen) {
-                await connectSocket({items});
+                connectSocket({items});
             } else {
                 socketTimeout = setTimeout(async () => {
                     socket?.close();
                     const again = await timeNow();
+                    if (cancelled) return;
                     if (again?.isMarketOpen) {
-                        await connectSocket({items});
+                        connectSocket({items});
                     }
                 }, marketTimer.current + 200);
             }
         })();
 
         return () => {
+            cancelled = true;
             socket?.close();
             clearTimeout(socketTimeout);
             clearInterval(displayInterval);
         };
-    }, [result, themeGrpCdParam]);
+    }, [streamKey, themeGrpCdParam]);
 
 
     return (

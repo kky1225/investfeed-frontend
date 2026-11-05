@@ -1,5 +1,5 @@
 import {useEffect, useRef} from "react";
-import {wsUrl} from "../../lib/wsUrl.ts";
+import {openReconnectingSocket} from "../../lib/reconnectingSocket.ts";
 
 interface UseRealtimeWebSocketOptions {
     /** 구독 키 — 변경 시 재연결 (예: market id). 빈 값이면 연결 시도 X. */
@@ -23,28 +23,11 @@ export function useRealtimeWebSocket(opts: UseRealtimeWebSocketOptions): void {
     useEffect(() => {
         if (!enabled || !subscriptionKey) return;
 
-        let socket: WebSocket | undefined;
-        let cancelled = false;
+        const socket = openReconnectingSocket({
+            register: () => streamFnRef.current(),
+            onMessage: (event) => onMessageRef.current(event),
+        });
 
-        const openSocket = () => {
-            const ws = new WebSocket(wsUrl('/ws'));
-            ws.onmessage = (event) => onMessageRef.current(event);
-            return ws;
-        };
-
-        (async () => {
-            try {
-                await streamFnRef.current();
-                if (cancelled) return;
-                socket = openSocket();
-            } catch (err) {
-                console.error(err);
-            }
-        })();
-
-        return () => {
-            cancelled = true;
-            socket?.close();
-        };
+        return () => socket.close();
     }, [subscriptionKey, enabled]);
 }

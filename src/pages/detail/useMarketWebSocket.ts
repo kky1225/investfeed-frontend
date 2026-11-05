@@ -1,7 +1,7 @@
 import {useEffect, useRef} from "react";
 import {MarketType} from "../../type/timeType.ts";
 import {useMarketTime} from "../holding/useMarketTime.ts";
-import {wsUrl} from "../../lib/wsUrl.ts";
+import {openReconnectingSocket, type ReconnectingSocket} from "../../lib/reconnectingSocket.ts";
 
 interface UseMarketWebSocketOptions {
     /** 장 시각 기준 marketType (STOCK / INDEX / COMMODITY) */
@@ -28,20 +28,15 @@ export function useMarketWebSocket(opts: UseMarketWebSocketOptions): void {
     useEffect(() => {
         if (!enabled || !subscriptionKey) return;
 
-        let socket: WebSocket | undefined;
+        let socket: ReconnectingSocket | undefined;
         let socketTimeout: ReturnType<typeof setTimeout> | undefined;
         let cancelled = false;
 
-        const openSocket = () => {
-            const ws = new WebSocket(wsUrl('/ws'));
-            ws.onmessage = (event) => onMessageRef.current(event);
-            return ws;
-        };
-
-        const connectSocket = async () => {
-            await streamFnRef.current();
-            if (cancelled) return;
-            socket = openSocket();
+        const connectSocket = () => {
+            socket = openReconnectingSocket({
+                register: () => streamFnRef.current(),
+                onMessage: (event) => onMessageRef.current(event),
+            });
         };
 
         (async () => {
@@ -49,14 +44,14 @@ export function useMarketWebSocket(opts: UseMarketWebSocketOptions): void {
             if (cancelled) return;
 
             if (marketInfo?.isMarketOpen) {
-                await connectSocket();
+                connectSocket();
             } else {
                 socketTimeout = setTimeout(async () => {
                     socket?.close();
                     const again = await checkMarketTime();
                     if (cancelled) return;
                     if (again?.isMarketOpen) {
-                        await connectSocket();
+                        connectSocket();
                     }
                 }, marketTimer.current + 200);
             }

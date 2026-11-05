@@ -1,5 +1,5 @@
 import {mergeLive} from "../../lib/streamOverlay.ts";
-import {wsUrl} from "../../lib/wsUrl.ts";
+import {openReconnectingSocket, type ReconnectingSocket} from "../../lib/reconnectingSocket.ts";
 import {useEffect, useMemo, useRef, useState} from "react";
 import Box from "@mui/material/Box";
 import Typography from "@mui/material/Typography";
@@ -79,15 +79,20 @@ export default function MultiViewPage() {
     useEffect(() => {
         if (stockCodes.length === 0 && usStockItems.length === 0) return;
 
-        let socket: WebSocket;
+        let socket: ReconnectingSocket | undefined;
         let displayInterval: ReturnType<typeof setInterval>;
         let socketTimeout: ReturnType<typeof setTimeout>;
 
         const panelCodes = new Set([...stockCodes, ...usStockItems.map(i => i.stkCd)]);
 
-        const openSocket = () => {
-            const ws = new WebSocket(wsUrl('/ws'));
-            ws.onmessage = (event) => {
+        const register = async () => {
+            const data = await fetchMultiViewStockStream({items: stockCodes, usItems: usStockItems});
+            if (data.code !== "0000") throw new Error(data.message || `멀티뷰 주식 스트림 실패 (${data.code})`);
+        };
+
+        const openSocket = () => openReconnectingSocket({
+            register,
+            onMessage: (event) => {
                 const data = JSON.parse(event.data);
                 if (data.trnm === "REAL" && Array.isArray(data.data)) {
                     data.data.forEach((res: {type: string; item: string; values: Record<string, string>}) => {
@@ -102,9 +107,8 @@ export default function MultiViewPage() {
                         });
                     });
                 }
-            };
-            return ws;
-        };
+            },
+        });
 
         const startDisplay = () => {
             displayInterval = setInterval(() => {
@@ -114,14 +118,8 @@ export default function MultiViewPage() {
             }, 200);
         };
 
-        const register = async () => {
-            const data = await fetchMultiViewStockStream({items: stockCodes, usItems: usStockItems});
-            if (data.code !== "0000") throw new Error(data.message || `멀티뷰 주식 스트림 실패 (${data.code})`);
-        };
-
         (async () => {
             try {
-                await register();
                 socket = openSocket();
                 startDisplay();
 
@@ -152,14 +150,16 @@ export default function MultiViewPage() {
     useEffect(() => {
         if (cryptoCodes.length === 0) return;
 
-        let socket: WebSocket;
         let displayInterval: ReturnType<typeof setInterval>;
 
         const panelCodes = new Set(cryptoCodes);
 
-        const openSocket = () => {
-            const ws = new WebSocket(wsUrl('/ws'));
-            ws.onmessage = (event) => {
+        const openSocket = () => openReconnectingSocket({
+            register: async () => {
+                const data = await fetchMultiViewCryptoStream({items: cryptoCodes});
+                if (data.code !== "0000") throw new Error(data.message || `멀티뷰 코인 스트림 실패 (${data.code})`);
+            },
+            onMessage: (event) => {
                 const data = JSON.parse(event.data);
                 if (data.type === "CRYPTO_TICKER" && data.data) {
                     const ticker = data.data;
@@ -176,9 +176,8 @@ export default function MultiViewPage() {
                         trend: rate > 0 ? 'up' : rate < 0 ? 'down' : 'neutral',
                     });
                 }
-            };
-            return ws;
-        };
+            },
+        });
 
         const startDisplay = () => {
             displayInterval = setInterval(() => {
@@ -188,19 +187,11 @@ export default function MultiViewPage() {
             }, 200);
         };
 
-        (async () => {
-            try {
-                const data = await fetchMultiViewCryptoStream({items: cryptoCodes});
-                if (data.code !== "0000") throw new Error(data.message || `멀티뷰 코인 스트림 실패 (${data.code})`);
-                socket = openSocket();
-                startDisplay();
-            } catch (err) {
-                console.error('Crypto socket error:', err);
-            }
-        })();
+        const socket = openSocket();
+        startDisplay();
 
         return () => {
-            socket?.close();
+            socket.close();
             clearInterval(displayInterval);
         };
     }, [cryptoCodes.join(',')]);

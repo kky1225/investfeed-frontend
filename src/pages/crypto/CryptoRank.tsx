@@ -1,5 +1,5 @@
 import {mergeLive} from "../../lib/streamOverlay.ts";
-import {wsUrl} from "../../lib/wsUrl.ts";
+import {openReconnectingSocket} from "../../lib/reconnectingSocket.ts";
 import {useEffect, useMemo, useRef, useState} from "react";
 import {useQuery} from "@tanstack/react-query";
 import Typography from "@mui/material/Typography";
@@ -107,18 +107,9 @@ const CryptoRank = () => {
 
     // WebSocket 라이프사이클 (스트림 등록 + buffer flush)
     useEffect(() => {
-        let displayInterval: ReturnType<typeof setInterval>;
-        let socket: WebSocket | undefined;
-
-        (async () => {
-            try {
-                await fetchCryptoRankStream();
-            } catch (e) {
-                console.error(e);
-            }
-
-            socket = new WebSocket(wsUrl('/ws'));
-            socket.onmessage = (event) => {
+        const socket = openReconnectingSocket({
+            register: () => fetchCryptoRankStream(),
+            onMessage: (event) => {
                 const data = JSON.parse(event.data);
                 if (data.type === "CRYPTO_TICKER" && data.data) {
                     const ticker = data.data;
@@ -131,18 +122,18 @@ const CryptoRank = () => {
                         accTradePrice24h: ticker.accTradePrice24h,
                     });
                 }
-            };
+            },
+        });
 
-            displayInterval = setInterval(() => {
-                if (bufferMap.current.size === 0) return;
-                setLiveOverlay((prev) => mergeLive(prev, bufferMap.current, (v) => v));
-                bufferMap.current.clear();
-            }, 200);
-        })();
+        const displayInterval = setInterval(() => {
+            if (bufferMap.current.size === 0) return;
+            setLiveOverlay((prev) => mergeLive(prev, bufferMap.current, (v) => v));
+            bufferMap.current.clear();
+        }, 200);
 
         return () => {
-            if (displayInterval) clearInterval(displayInterval);
-            socket?.close();
+            clearInterval(displayInterval);
+            socket.close();
         };
     }, []);
 

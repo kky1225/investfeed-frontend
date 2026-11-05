@@ -1,5 +1,5 @@
 import {mergeLive} from "../../lib/streamOverlay.ts";
-import {wsUrl} from "../../lib/wsUrl.ts";
+import {openReconnectingSocket, type ReconnectingSocket} from "../../lib/reconnectingSocket.ts";
 import {renderChip} from "../../components/CustomRender.tsx";
 import Box from '@mui/material/Box';
 import {useTheme} from "@mui/material/styles";
@@ -195,19 +195,15 @@ export default function Dashboard() {
     };
 
     const indexListStream = async () => {
-        try {
-            const data = await fetchDashboardStream();
-            if (data.code !== "0000") throw new Error(data.message);
-        } catch (error) {
-            console.error(error);
-        }
+        const data = await fetchDashboardStream();
+        if (data.code !== "0000") throw new Error(data.message);
     };
 
     const streamBufferRef = useRef<Map<string, LiveIndexUpdate>>(new Map());
 
-    const openSocket = () => {
-        const socket = new WebSocket(wsUrl('/ws'));
-        socket.onmessage = (event) => {
+    const openSocket = () => openReconnectingSocket({
+        register: indexListStream,
+        onMessage: (event) => {
             const data = JSON.parse(event.data);
             if (data.trnm === "REAL" && Array.isArray(data.data)) {
                 data.data.forEach((entry: IndexStreamRes) => {
@@ -224,14 +220,14 @@ export default function Dashboard() {
                     });
                 });
             }
-        };
-        return socket;
-    };
+        },
+    });
 
     useEffect(() => {
         let socketTimeout: ReturnType<typeof setTimeout>;
         let displayInterval: ReturnType<typeof setInterval> | undefined;
-        let socket: WebSocket | undefined;
+        let socket: ReconnectingSocket | undefined;
+        let cancelled = false;
 
         const startDisplayLoop = () => {
             displayInterval = setInterval(() => {
@@ -243,17 +239,17 @@ export default function Dashboard() {
 
         (async () => {
             const marketInfo = await timeNow();
+            if (cancelled) return;
 
             if (marketInfo?.isMarketOpen) {
-                await indexListStream();
                 socket = openSocket();
                 startDisplayLoop();
             } else {
                 socketTimeout = setTimeout(async () => {
                     socket?.close();
                     const again = await timeNow();
+                    if (cancelled) return;
                     if (again?.isMarketOpen) {
-                        await indexListStream();
                         socket = openSocket();
                         startDisplayLoop();
                     }
@@ -262,6 +258,7 @@ export default function Dashboard() {
         })();
 
         return () => {
+            cancelled = true;
             socket?.close();
             clearTimeout(socketTimeout);
             if (displayInterval) clearInterval(displayInterval);

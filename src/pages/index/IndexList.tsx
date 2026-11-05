@@ -1,5 +1,5 @@
 import {mergeLive} from "../../lib/streamOverlay.ts";
-import {wsUrl} from "../../lib/wsUrl.ts";
+import {openReconnectingSocket, type ReconnectingSocket} from "../../lib/reconnectingSocket.ts";
 import Box from "@mui/material/Box";
 import Grid from "@mui/material/Grid";
 import Typography from "@mui/material/Typography";
@@ -120,22 +120,17 @@ const IndexList = () => {
     };
 
     const indexListStream = async () => {
-        try {
-            const data = await fetchIndexStream(["001", "101", "201", "150"]);
-            if (data.code !== "0000") {
-                throw new Error(data.message);
-            }
-        } catch (error) {
-            console.error(error);
+        const data = await fetchIndexStream(["001", "101", "201", "150"]);
+        if (data.code !== "0000") {
+            throw new Error(data.message);
         }
     };
 
     const streamBufferRef = useRef<Map<string, IndexStream>>(new Map());
 
-    const openSocket = () => {
-        const socket = new WebSocket(wsUrl('/ws'));
-
-        socket.onmessage = (event) => {
+    const openSocket = () => openReconnectingSocket({
+        register: indexListStream,
+        onMessage: (event) => {
             const data = JSON.parse(event.data);
 
             if (data.trnm === "REAL" && Array.isArray(data.data)) {
@@ -151,16 +146,15 @@ const IndexList = () => {
                     });
                 });
             }
-        };
-
-        return socket;
-    };
+        },
+    });
 
     // WebSocket 라이프사이클 — 폴링과 독립. 시장 개장 여부 체크 후 socket 연결.
     useEffect(() => {
         let socketTimeout: ReturnType<typeof setTimeout>;
         let displayInterval: ReturnType<typeof setInterval> | undefined;
-        let socket: WebSocket | undefined;
+        let socket: ReconnectingSocket | undefined;
+        let cancelled = false;
 
         const startDisplayLoop = () => {
             displayInterval = setInterval(() => {
@@ -177,17 +171,17 @@ const IndexList = () => {
 
         (async () => {
             const marketInfo = await timeNow();
+            if (cancelled) return;
 
             if (marketInfo?.isMarketOpen) {
-                await indexListStream();
                 socket = openSocket();
                 startDisplayLoop();
             } else {
                 socketTimeout = setTimeout(async () => {
                     socket?.close();
                     const again = await timeNow();
+                    if (cancelled) return;
                     if (again?.isMarketOpen) {
-                        await indexListStream();
                         socket = openSocket();
                         startDisplayLoop();
                     }
@@ -196,6 +190,7 @@ const IndexList = () => {
         })();
 
         return () => {
+            cancelled = true;
             socket?.close();
             clearTimeout(socketTimeout);
             if (displayInterval) clearInterval(displayInterval);

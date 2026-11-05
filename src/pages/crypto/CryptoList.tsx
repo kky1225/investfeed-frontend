@@ -13,7 +13,7 @@ import {useEffect, useMemo, useRef, useState} from "react";
 import {CryptoChartMinute, CryptoListItem, CryptoListRes, FearGreedItem} from "../../type/CryptoType.ts";
 import {usePollingQuery} from "../../lib/pollingQuery.ts";
 import {parseTradeStamp} from "../../lib/tradeStamp.ts";
-import {wsUrl} from "../../lib/wsUrl.ts";
+import {openReconnectingSocket} from "../../lib/reconnectingSocket.ts";
 
 interface CryptoTickerData {
     market: string;
@@ -84,7 +84,6 @@ const CryptoList = () => {
             return next;
         });
     };
-    const subscribedMarketsRef = useRef<string>('');
 
     const {data: result, isLoading, lastUpdated, pollError} = usePollingQuery<CryptoListRes>(
         ['cryptoList'],
@@ -133,32 +132,25 @@ const CryptoList = () => {
     const loading = isLoading;
 
     const cryptoListStream = async (markets: string[]) => {
-        try {
-            const data = await fetchCryptoStream(markets);
-            if (data.code !== "0000") {
-                throw new Error(data.message);
-            }
-        } catch (error) {
-            console.error(error);
+        const data = await fetchCryptoStream(markets);
+        if (data.code !== "0000") {
+            throw new Error(data.message);
         }
     };
 
     const streamBufferRef = useRef<Map<string, CryptoTickerData>>(new Map());
 
-    const openSocket = () => {
-        const socket = new WebSocket(wsUrl('/ws'));
-
-        socket.onmessage = (event) => {
+    const openSocket = (register: () => Promise<unknown>) => openReconnectingSocket({
+        register,
+        onMessage: (event) => {
             const data = JSON.parse(event.data);
 
             if (data.type === "CRYPTO_TICKER" && data.data) {
                 const ticker: CryptoTickerData = data.data;
                 streamBufferRef.current.set(ticker.market, ticker);
             }
-        };
-
-        return socket;
-    };
+        },
+    });
 
     const flushStreamBuffer = () => {
         if (streamBufferRef.current.size === 0) return;
@@ -191,29 +183,21 @@ const CryptoList = () => {
         });
     }, [result]);
 
+    // 폴링으로 result 가 바뀌어도 종목이 같으면 소켓을 유지하도록 키로 구독한다.
+    const streamKey = ((result?.cryptoList ?? []) as CryptoListItem[]).map((c) => c.market).join(',');
     useEffect(() => {
-        if (!result?.cryptoList) return;
-        const markets = (result.cryptoList as CryptoListItem[]).map((c) => c.market);
-        if (markets.length === 0) return;
+        if (!streamKey) return;
+        const markets = streamKey.split(',');
 
-        const key = markets.join(',');
-        if (subscribedMarketsRef.current === key) return;
-        subscribedMarketsRef.current = key;
-
-        let socket: WebSocket | undefined;
-        let displayInterval: ReturnType<typeof setInterval> | undefined;
-        (async () => {
-            await cryptoListStream(markets);
-            socket = openSocket();
-            displayInterval = setInterval(flushStreamBuffer, 200);
-        })();
+        const socket = openSocket(() => cryptoListStream(markets));
+        const displayInterval = setInterval(flushStreamBuffer, 200);
 
         return () => {
-            socket?.close();
-            if (displayInterval) clearInterval(displayInterval);
+            socket.close();
+            clearInterval(displayInterval);
             streamBufferRef.current.clear();
         };
-    }, [result]);
+    }, [streamKey]);
 
     return (
         <Box sx={{width: '100%', maxWidth: {sm: '100%', md: '1700px'}}}>

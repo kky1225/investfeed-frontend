@@ -1,7 +1,7 @@
 import {useEffect, useRef} from "react";
 import {HoldingStreamReq} from "../../type/HoldingType.ts";
 import {CryptoHoldingBuffer} from "../../type/CryptoType.ts";
-import {wsUrl} from "../../lib/wsUrl.ts";
+import {openReconnectingSocket} from "../../lib/reconnectingSocket.ts";
 
 export function useCryptoHoldingStream(
     markets: string[],
@@ -13,13 +13,11 @@ export function useCryptoHoldingStream(
     useEffect(() => {
         if (markets.length === 0) return;
 
-        let socket: WebSocket;
         let displayInterval: ReturnType<typeof setInterval>;
-        let cancelled = false;
 
-        const openSocket = () => {
-            const ws = new WebSocket(wsUrl('/ws'));
-            ws.onmessage = (event) => {
+        const openSocket = () => openReconnectingSocket({
+            register: () => fetcher({items: markets}),
+            onMessage: (event) => {
                 const data = JSON.parse(event.data);
 
                 if (data.type === "CRYPTO_TICKER" && data.data) {
@@ -32,9 +30,8 @@ export function useCryptoHoldingStream(
                         curPrc: ticker.tradePrice != null ? String(ticker.tradePrice) : prev.curPrc,
                     });
                 }
-            };
-            return ws;
-        };
+            },
+        });
 
         const startDisplay = () => {
             displayInterval = setInterval(() => {
@@ -44,18 +41,11 @@ export function useCryptoHoldingStream(
             }, 200);
         };
 
-        const connectSocket = async () => {
-            if (cancelled) return;
-            await fetcher({items: markets});
-            socket = openSocket();
-            startDisplay();
-        };
-
-        connectSocket();
+        const socket = openSocket();
+        startDisplay();
 
         return () => {
-            cancelled = true;
-            socket?.close();
+            socket.close();
             clearInterval(displayInterval);
         };
     }, [markets, onUpdate, fetcher]);

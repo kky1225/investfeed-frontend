@@ -2,7 +2,7 @@ import {useEffect, useRef} from "react";
 import {HoldingBuffer, HoldingStreamReq, HoldingStreamRes} from "../../type/HoldingType.ts";
 import {MarketType} from "../../type/timeType.ts";
 import {useMarketTime} from "./useMarketTime.ts";
-import {wsUrl} from "../../lib/wsUrl.ts";
+import {openReconnectingSocket, type ReconnectingSocket} from "../../lib/reconnectingSocket.ts";
 
 export function useHoldingStream(
     stkCds: string[],
@@ -16,14 +16,14 @@ export function useHoldingStream(
     useEffect(() => {
         if (stkCds.length === 0) return;
 
-        let socket: WebSocket;
+        let socket: ReconnectingSocket | undefined;
         let socketTimeout: ReturnType<typeof setTimeout>;
         let displayInterval: ReturnType<typeof setInterval>;
         let cancelled = false;
 
-        const openSocket = () => {
-            const ws = new WebSocket(wsUrl('/ws'));
-            ws.onmessage = (event) => {
+        const openSocket = () => openReconnectingSocket({
+            register: () => fetcher({items: stkCds}),
+            onMessage: (event) => {
                 const data = JSON.parse(event.data);
 
                 if (data.trnm === "REAL" && Array.isArray(data.data)) {
@@ -64,9 +64,8 @@ export function useHoldingStream(
                         }
                     });
                 }
-            };
-            return ws;
-        };
+            },
+        });
 
         const startDisplay = () => {
             if (displayInterval) return;
@@ -77,13 +76,7 @@ export function useHoldingStream(
             }, 200);
         };
 
-        const connectSocket = async () => {
-            try {
-                await fetcher({items: stkCds});
-            } catch (e) {
-                console.error('보유 실시간 구독 실패', e);
-                return;
-            }
+        const connectSocket = () => {
             socket = openSocket();
             startDisplay();
         };
@@ -93,13 +86,14 @@ export function useHoldingStream(
             if (cancelled) return;
 
             if (marketInfo?.isMarketOpen) {
-                await connectSocket();
+                connectSocket();
             } else {
                 socketTimeout = setTimeout(async () => {
                     socket?.close();
                     const again = await checkMarketTime();
+                    if (cancelled) return;
                     if (again?.isMarketOpen) {
-                        await connectSocket();
+                        connectSocket();
                     }
                 }, marketTimer.current + 200);
             }

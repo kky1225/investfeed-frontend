@@ -1,5 +1,5 @@
 import {mergeLive} from "../../lib/streamOverlay.ts";
-import {wsUrl} from "../../lib/wsUrl.ts";
+import {openReconnectingSocket, type ReconnectingSocket} from "../../lib/reconnectingSocket.ts";
 import {Box, Chip, Divider, Switch, Tooltip} from "@mui/material";
 import Typography from "@mui/material/Typography";
 import InfoOutlinedIcon from "@mui/icons-material/InfoOutlined";
@@ -56,7 +56,6 @@ const trendColor = (value: string): 'up' | 'down' | 'neutral' =>
 
 const RecommendList = () => {
     const [liveOverlay, setLiveOverlay] = useState<Map<string, LiveRecommendUpdate>>(new Map());
-    const subscribedKeyRef = useRef<string>('');
 
     const chartTimer = useRef<number>(0);
     const marketTimer = useRef<number>(0);
@@ -226,19 +225,15 @@ const RecommendList = () => {
     };
 
     const recommendListStream = async (req: RecommendListStreamReq) => {
-        try {
-            const data = await fetchRecommendListStream(req);
-            if (data.code !== "0000") throw new Error(data.message);
-        } catch (error) {
-            console.error(error);
-        }
+        const data = await fetchRecommendListStream(req);
+        if (data.code !== "0000") throw new Error(data.message);
     };
 
     const streamBufferRef = useRef<Map<string, RecommendListStream>>(new Map());
 
-    const openSocket = () => {
-        const socket = new WebSocket(wsUrl('/ws'));
-        socket.onmessage = (event) => {
+    const openSocket = (register: () => Promise<unknown>) => openReconnectingSocket({
+        register,
+        onMessage: (event) => {
             const data = JSON.parse(event.data);
             if (data.trnm === "REAL" && Array.isArray(data.data)) {
                 data.data.forEach((entry: RecommendListStreamRes) => {
@@ -253,27 +248,24 @@ const RecommendList = () => {
                     });
                 });
             }
-        };
-        return socket;
-    };
+        },
+    });
 
     // WebSocket 라이프사이클 — recommend/avoid/hold 종목 stkCd 들로 stream 등록.
+    // 폴링으로 result 가 바뀌어도 종목이 같으면 소켓을 유지하도록 키로 구독한다.
+    const streamKey = [
+        ...(result?.recommendList ?? []),
+        ...(result?.avoidList ?? []),
+        ...(result?.holdList ?? []),
+    ].map((r: RecommendListItem) => r.stkCd).join(',');
     useEffect(() => {
-        if (!result) return;
-        const items = [
-            ...(result.recommendList ?? []),
-            ...(result.avoidList ?? []),
-            ...(result.holdList ?? []),
-        ].map((r: RecommendListItem) => r.stkCd);
-        if (items.length === 0) return;
-
-        const key = items.join(',');
-        if (subscribedKeyRef.current === key) return;
-        subscribedKeyRef.current = key;
+        if (!streamKey) return;
+        const items = streamKey.split(',');
 
         let socketTimeout: ReturnType<typeof setTimeout>;
         let displayInterval: ReturnType<typeof setInterval> | undefined;
-        let socket: WebSocket | undefined;
+        let socket: ReconnectingSocket | undefined;
+        let cancelled = false;
 
         const startDisplayLoop = () => {
             displayInterval = setInterval(() => {
@@ -290,18 +282,18 @@ const RecommendList = () => {
 
         (async () => {
             const marketInfo = await timeNow();
+            if (cancelled) return;
 
             if (marketInfo?.isMarketOpen) {
-                await recommendListStream({items});
-                socket = openSocket();
+                socket = openSocket(() => recommendListStream({items}));
                 startDisplayLoop();
             } else {
                 socketTimeout = setTimeout(async () => {
                     socket?.close();
                     const again = await timeNow();
+                    if (cancelled) return;
                     if (again?.isMarketOpen) {
-                        await recommendListStream({items});
-                        socket = openSocket();
+                        socket = openSocket(() => recommendListStream({items}));
                         startDisplayLoop();
                     }
                 }, marketTimer.current + 200);
@@ -309,12 +301,13 @@ const RecommendList = () => {
         })();
 
         return () => {
+            cancelled = true;
             socket?.close();
             clearTimeout(socketTimeout);
             if (displayInterval) clearInterval(displayInterval);
             streamBufferRef.current.clear();
         };
-    }, [result]);
+    }, [streamKey]);
 
     return (
         <Box sx={{width: '100%', maxWidth: {sm: '100%', md: '1700px'}}}>

@@ -1,7 +1,7 @@
 import React, {createContext, useContext, useEffect, useMemo, useRef, useState} from "react";
 import {sessionChangeRate} from "../../lib/usSession.ts";
 import {mergeLive} from "../../lib/streamOverlay.ts";
-import {wsUrl} from "../../lib/wsUrl.ts";
+import {openReconnectingSocket, type ReconnectingSocket} from "../../lib/reconnectingSocket.ts";
 import {useMutation, useQuery, useQueryClient} from "@tanstack/react-query";
 import {requireOk} from "../../lib/apiResponse.ts";
 import Box from "@mui/material/Box";
@@ -269,7 +269,7 @@ const Watchlist = () => {
     const [editGroupError, setEditGroupError] = useState("");
     const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-    const socketRef = useRef<WebSocket | null>(null);
+    const socketRef = useRef<ReconnectingSocket | null>(null);
     const streamBufferRef = useRef<Map<string, {curPrc: string; fluRt: string}>>(new Map());
 
     const sensors = useSensors(
@@ -280,53 +280,39 @@ const Watchlist = () => {
     useEffect(() => {
         if (!selectedGroup) return;
         const targetGroupId = selectedGroup.id;
-        let cancelled = false;
-        let displayInterval: ReturnType<typeof setInterval> | undefined;
 
         socketRef.current?.close();
-        socketRef.current = null;
         streamBufferRef.current.clear();
 
-        (async () => {
-            try {
+        socketRef.current = openReconnectingSocket({
+            register: async () => {
                 const streamRes = await fetchWatchlistItemsStream(targetGroupId);
-                if (cancelled) return;
                 if (streamRes.code !== "0000") throw new Error(streamRes.message || `관심 종목 스트림 실패 (${streamRes.code})`);
-
-                const socket = new WebSocket(wsUrl('/ws'));
-                socket.onmessage = (event) => {
-                    const data = JSON.parse(event.data);
-                    if (data.trnm === "REAL" && Array.isArray(data.data)) {
-                        data.data.forEach((entry: { item: string; values: Record<string, string> }) => {
-                            if (entry.values?.["10"] == null) return;
-                            streamBufferRef.current.set(entry.item, {
-                                curPrc: entry.values["10"],
-                                fluRt: entry.values["12"],
-                            });
+            },
+            onMessage: (event) => {
+                const data = JSON.parse(event.data);
+                if (data.trnm === "REAL" && Array.isArray(data.data)) {
+                    data.data.forEach((entry: { item: string; values: Record<string, string> }) => {
+                        if (entry.values?.["10"] == null) return;
+                        streamBufferRef.current.set(entry.item, {
+                            curPrc: entry.values["10"],
+                            fluRt: entry.values["12"],
                         });
-                    }
-                };
-                if (cancelled) {
-                    socket.close();
-                    return;
+                    });
                 }
-                socketRef.current = socket;
+            },
+        });
 
-                displayInterval = setInterval(() => {
-                    if (streamBufferRef.current.size === 0) return;
-                    setLiveOverlay((prev) => mergeLive(prev, streamBufferRef.current, (v) => v));
-                    streamBufferRef.current.clear();
-                }, 200);
-            } catch (err) {
-                console.error(err);
-            }
-        })();
+        const displayInterval = setInterval(() => {
+            if (streamBufferRef.current.size === 0) return;
+            setLiveOverlay((prev) => mergeLive(prev, streamBufferRef.current, (v) => v));
+            streamBufferRef.current.clear();
+        }, 200);
 
         return () => {
-            cancelled = true;
             socketRef.current?.close();
             socketRef.current = null;
-            if (displayInterval) clearInterval(displayInterval);
+            clearInterval(displayInterval);
             streamBufferRef.current.clear();
         };
     }, [selectedGroup]);

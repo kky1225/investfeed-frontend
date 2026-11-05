@@ -107,6 +107,7 @@ api.interceptors.response.use(
         // 전역 에러 Dialog 처리 — skip 조건에 해당하면 페이지 catch 로만 전달
         const shouldSkip =
             originalRequest.skipGlobalError === true ||        // 폴링 등 명시적 skip
+            originalRequest.url?.endsWith('/stream') ||         // 실시간 등록은 reconnectingSocket 이 재시도
             isLoginRequest ||                                   // 로그인 API 는 Login.tsx 에서 직접 처리
             isTotpRequest ||                                    // TOTP 도 Login.tsx 에서 코드별로 직접 처리
             isReissueRequest ||                                 // refresh 는 401 분기에서 이미 처리
