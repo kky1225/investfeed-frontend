@@ -38,6 +38,8 @@ export interface RecommendListRes {
     recommendList: RecommendListItem[],
     avoidList: RecommendListItem[],
     holdList: RecommendListItem[],
+    pickedDate: string | null,   // 마지막으로 산출한 추천의 기준일 (YYYY-MM-DD)
+    stale: boolean,              // 직전 거래일 22:00 이후 추천 산출이 없음 (지난 추천)
 }
 
 export type RiskPreset = 'AGGRESSIVE' | 'NORMAL' | 'CONSERVATIVE';

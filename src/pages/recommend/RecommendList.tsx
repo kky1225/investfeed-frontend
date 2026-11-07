@@ -27,6 +27,7 @@ import {
 } from "../../type/RecommendType.ts";
 import RecommendCard, {RecommendCardProps} from "../../components/RecommendCard.tsx";
 import FreshnessIndicator from "../../components/FreshnessIndicator.tsx";
+import dayjs from "dayjs";
 import {usePollingQuery} from "../../lib/pollingQuery.ts";
 import {useMutation, useQuery, useQueryClient} from "@tanstack/react-query";
 import {requireOk} from "../../lib/apiResponse.ts";
@@ -53,6 +54,14 @@ interface LiveRecommendUpdate {
 
 const trendColor = (value: string): 'up' | 'down' | 'neutral' =>
     ["1", "2"].includes(value) ? 'up' : ["4", "5"].includes(value) ? 'down' : 'neutral';
+
+/** 직전 거래일 22:00 이후 추천 산출이 없을 때 — 배치 실패로 목록이 비었으면 문구를 달리한다 */
+const staleMessage = (res: RecommendListRes): string => {
+    const empty = !res.recommendList?.length && !res.avoidList?.length && !res.holdList?.length;
+    return empty
+        ? '최근 추천 산출에 실패해 표시할 추천이 없습니다.'
+        : '최근 추천 산출이 없어 지난 추천을 표시합니다.';
+};
 
 const RecommendList = () => {
     const [liveOverlay, setLiveOverlay] = useState<Map<string, LiveRecommendUpdate>>(new Map());
@@ -321,7 +330,12 @@ const RecommendList = () => {
                     </Tooltip>
                 </Stack>
                 <Box sx={{flex: 1}}/>
-                <FreshnessIndicator lastUpdated={lastUpdated} error={pollError}/>
+                <FreshnessIndicator
+                    lastUpdated={lastUpdated}
+                    error={pollError}
+                    label={result?.pickedDate ? dayjs(result.pickedDate).format('YYYY.MM.DD') : undefined}
+                    staleMessage={result?.stale ? staleMessage(result) : undefined}
+                />
             </Box>
             <Card variant="outlined" sx={{mb: 1.5}}>
                 <CardContent sx={{py: 1.5, "&:last-child": {pb: 1.5}}}>
