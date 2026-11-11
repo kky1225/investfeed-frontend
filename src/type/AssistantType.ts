@@ -151,6 +151,19 @@ export interface StockQuotePayload {
     basis?: string | null;
     /** 미국 데이·프리·애프터마켓 등락률 (토스 연동 회원만). 없으면 키움 값만 */
     session?: SessionQuotePayload | null;
+    /** 종목 기본 정보 (현재 시세만). 날짜 지정 시세·코인·이전 카드는 없음 */
+    profile?: StockProfilePayload | null;
+}
+
+/** 시가총액 단위: 국내 억원, 미국 천 USD. PER·PBR·EPS·ROE·배당은 국내만 */
+export interface StockProfilePayload {
+    sector: string | null; marketCap: number | null;
+    per?: number | null; pbr?: number | null; eps?: number | null; roe?: number | null;
+    /** 작년 주당 배당금 합 / 현재가 (%) — 국내 종목 상세 배당수익률과 같은 식 */
+    dividendYield?: number | null;
+    lastDividend?: { baseDate: string | null; kind: string | null; amount: number | null; payDate: string | null } | null;
+    /** ETF 괴리율 (%, 부호 포함) — 국내 ETF 만. PER·PBR·EPS·ROE 는 ETF 면 비어 있다 */
+    disparityRate?: number | null;
 }
 
 export interface SessionQuotePayload { label: string; regularClose: number; regularCloseDate: string; changeAmount: number; changeRate: number; }

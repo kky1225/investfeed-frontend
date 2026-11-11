@@ -31,24 +31,34 @@ export function parseSummary(summary: string): { label: string; value: Piece | n
     });
 }
 
-export default function SummaryTiles({summary}: { summary: string }) {
-    const tiles = parseSummary(summary);
+export interface MetricTile { label: string; value: string; sub?: string | null; valueColor?: string; subColor?: string }
+
+/** 지표 타일 모양 — 브리핑 요약 타일과 비서 시세 카드(종목 지표)가 같이 쓴다. minWidth: 타일 최소 폭(px) */
+export function MetricTiles({tiles, minWidth = 112}: { tiles: MetricTile[]; minWidth?: number }) {
     if (tiles.length === 0) return null;
     return (
-        <Box sx={{display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(112px, 1fr))', gap: 1, mt: 1.25}}>
+        <Box sx={{display: 'grid', gridTemplateColumns: `repeat(auto-fit, minmax(${minWidth}px, 1fr))`, gap: 1, mt: 1.25}}>
             {tiles.map((t, i) => (
                 <Box key={i} sx={{bgcolor: 'action.hover', borderRadius: 1.5, px: 1.25, py: 0.75, minWidth: 0}}>
                     <Typography variant="caption" color="text.secondary" noWrap display="block">{t.label}</Typography>
-                    <Typography variant="body1" sx={{fontWeight: 600, fontVariantNumeric: 'tabular-nums', lineHeight: 1.3, color: colorOf(t.value)}} noWrap>
-                        {t.value?.text ?? ''}
+                    <Typography variant="body1" sx={{fontWeight: 600, fontVariantNumeric: 'tabular-nums', lineHeight: 1.3, color: t.valueColor}} noWrap>
+                        {t.value}
                     </Typography>
                     {t.sub && (
-                        <Typography variant="caption" sx={{fontVariantNumeric: 'tabular-nums', color: colorOf(t.sub) ?? 'text.disabled'}} noWrap display="block">
-                            {t.sub.text}
+                        <Typography variant="caption" sx={{fontVariantNumeric: 'tabular-nums', color: t.subColor ?? 'text.disabled'}} noWrap display="block">
+                            {t.sub}
                         </Typography>
                     )}
                 </Box>
             ))}
         </Box>
+    );
+}
+
+export default function SummaryTiles({summary}: { summary: string }) {
+    return (
+        <MetricTiles tiles={parseSummary(summary).map((t) => ({
+            label: t.label, value: t.value?.text ?? '', sub: t.sub?.text, valueColor: colorOf(t.value), subColor: colorOf(t.sub),
+        }))}/>
     );
 }

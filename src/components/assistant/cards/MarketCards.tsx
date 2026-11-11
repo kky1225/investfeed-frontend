@@ -7,9 +7,10 @@ import Link from '@mui/material/Link';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Divider from '@mui/material/Divider';
-import {renderChangeAmount, signedRate} from '../../CustomRender';
+import Slider from '@mui/material/Slider';
+import {formatMac, renderChangeAmount, signedRate} from '../../CustomRender';
 import MarkdownBlock from '../MarkdownBlock';
-import SummaryTiles from '../SummaryTiles';
+import SummaryTiles, {MetricTiles, type MetricTile} from '../SummaryTiles';
 import SectionView from '../SectionView';
 import AssistantBubble from '../AssistantBubble';
 import SectorHeatmap, {HeatmapLegend, type HeatmapTile} from '../../SectorHeatmap';
@@ -246,40 +247,117 @@ function QuoteHeader({q}: { q: StockQuotePayload }) {
     const usd = q.currency === 'USD';
     const rate = q.changeRate === null ? null : Number(q.changeRate.toFixed(2));
     const chipColor = rate === null || rate === 0 ? 'default' : rate > 0 ? 'error' : 'info';
-    const sub = (label: string, v: string) => (
-        <Typography component="span" variant="caption" color="text.secondary" sx={{mr: 1.5, whiteSpace: 'nowrap'}}>{label} {v}</Typography>
+    const priceText = <Typography variant="h5" component="p">{usd ? `$${fmt(q.price, 2)}` : fmt(q.price, q.market === 'CRYPTO' && q.price < 100 ? 4 : 0)}</Typography>;
+    const change = (
+        <>
+            {q.changeAmount !== null && renderChangeAmount(q.changeAmount, usd ? '달러' : '원')}
+            <Chip size="small" color={chipColor} label={signedRate(rate)}/>
+        </>
     );
     return (
         <Box>
-            {q.basis && <Typography variant="caption" color="text.secondary" component="p">{q.basis}</Typography>}
-            <Stack direction="row" alignItems="center" gap={1} flexWrap="wrap">
-                <Typography variant="h5" component="p">{usd ? `$${fmt(q.price, 2)}` : fmt(q.price, q.market === 'CRYPTO' && q.price < 100 ? 4 : 0)}</Typography>
-                {q.changeAmount !== null && renderChangeAmount(q.changeAmount, usd ? '달러' : '원')}
-                <Chip size="small" color={chipColor} label={signedRate(rate)}/>
-            </Stack>
-            {/* 미국 데이·프리·애프터마켓 등락률 (토스 연동 회원만) — 상세 페이지와 같은 한 줄 */}
-            {q.session && (
-                <Stack direction="row" alignItems="center" gap={1} flexWrap="wrap" sx={{mt: 0.5}}>
-                    <Typography variant="body2" sx={{fontWeight: 600}}>{q.session.label}</Typography>
-                    {renderChangeAmount(q.session.changeAmount, '달러')}
-                    {rateChip(q.session.changeRate)}
-                </Stack>
+            {q.market === 'US' ? (
+                // 미국 종목 상세와 같은 두 줄: 가격 / [장 이름] 등락. 장 이름은 토스 연동 회원의 데이·프리·애프터마켓만 (2026-11-11)
+                <>
+                    {priceText}
+                    <Stack direction="row" alignItems="center" gap={1} flexWrap="wrap" sx={{mt: 0.25}}>
+                        {q.session && <Typography variant="body2" sx={{fontWeight: 600}}>{q.session.label}</Typography>}
+                        {change}
+                    </Stack>
+                </>
+            ) : (
+                <Stack direction="row" alignItems="center" gap={1} flexWrap="wrap">{priceText}{change}</Stack>
             )}
-            <Box sx={{mt: 0.75}}>
-                {sub('고가', price(q.high, q.currency))}
-                {sub('저가', price(q.low, q.currency))}
-                {sub('거래량', fmt(q.volume, q.market === 'CRYPTO' ? 4 : 0))}
+            {/* 종목 상세와 같은 순서: 이름 → 가격·등락 → 기준 시점 */}
+            {q.basis && <Typography variant="caption" color="text.secondary" component="p" sx={{mt: 0.25}}>{q.basis}</Typography>}
+            <QuoteTiles q={q}/>
+            <Box sx={{mt: 1}}>
+                <Stat label="고가 / 저가">{`${price(q.high, q.currency)} / ${price(q.low, q.currency)}`}</Stat>
+                <Stat label="거래량">{q.market === 'CRYPTO' ? fmt(q.volume, 4) : `${fmt(q.volume)}주`}</Stat>
+                {/* 날짜 지정 시세(일봉)는 52주 고저가 없다 */}
+                {(has(q.low52w) || has(q.high52w)) && (
+                    <Stat label="52주 범위"><RangeGauge low={q.low52w} high={q.high52w} value={q.price} currency={q.currency}/></Stat>
+                )}
+                <QuoteProfileRows q={q}/>
             </Box>
-            {/* 날짜 지정 시세(일봉)는 52주 고저가 없다 */}
-            {(q.low52w !== null || q.high52w !== null) && <Box>{sub('52주', `${price(q.low52w, q.currency)} ~ ${price(q.high52w, q.currency)}`)}</Box>}
         </Box>
+    );
+}
+
+const has = (v: number | null | undefined): v is number => v !== null && v !== undefined;
+
+/** 국내 시가총액(억원) → "1,201조" · "8,350억" */
+const krCap = (eok: number) => (eok >= 10_000 ? `${fmt(Math.round(eok / 10_000))}조` : `${fmt(eok)}억`);
+
+/** 배당 기준일 20260630 → 올해면 "6/30", 지난해면 "2025.12.31" */
+const dividendDate = (d: string | null) => {
+    if (!d || !/^\d{8}$/.test(d)) return d ?? '-';
+    const md = `${Number(d.slice(4, 6))}/${Number(d.slice(6))}`;
+    return d.slice(0, 4) === String(dayjs().year()) ? md : `${d.slice(0, 4)}.${d.slice(4, 6)}.${d.slice(6)}`;
+};
+
+/**
+ * 지표 타일 (브리핑 요약 타일과 같은 부품): PER · PBR · EPS · ROE — 주식에만 있는 지표라 ETF·미국·코인은 타일이 없다.
+ * 시가총액·배당·괴리율처럼 종류마다 있고 없고가 갈리는 값은 아래 목록으로 (2026-11-11 사용자 지시)
+ */
+function QuoteTiles({q}: { q: StockQuotePayload }) {
+    const p = q.profile;
+    if (!p) return null;
+    const tiles: MetricTile[] = [];
+    if (has(p.per)) tiles.push({label: 'PER', value: `${fmt(p.per, 2)}배`});
+    if (has(p.pbr)) tiles.push({label: 'PBR', value: `${fmt(p.pbr, 2)}배`});
+    if (has(p.eps)) tiles.push({label: 'EPS', value: `${fmt(p.eps)}원`});
+    if (has(p.roe)) tiles.push({label: 'ROE', value: `${fmt(p.roe, 2)}%`});
+    return <MetricTiles tiles={tiles} minWidth={84}/>;
+}
+
+/**
+ * 52주 범위 게이지: "최저 ──●── 최고" 를 값 칸 안에 한 줄로. 카드 폭 전체를 가로지르지 않게 해 구분선처럼 보이지 않게 한다.
+ * 막대는 종목 상세 52주 범위와 같은 부품(Slider disabled · track 없음) — 색도 상세와 같다 (2026-11-11 사용자 지적)
+ */
+function RangeGauge({low, high, value, currency}: { low: number | null; high: number | null; value: number; currency: string }) {
+    const text = (v: number | null) => <Typography component="span" variant="body2" sx={{fontVariantNumeric: 'tabular-nums'}}>{price(v, currency)}</Typography>;
+    if (!has(low) || !has(high) || high <= low) return <>{text(low)} ~ {text(high)}</>;
+    return (
+        <Stack direction="row" alignItems="center" gap={1.5}>
+            {text(low)}
+            <Slider size="small" track={false} disabled value={Math.min(Math.max(value, low), high)} min={low} max={high}
+                    aria-label="52주 범위 안 현재가" sx={{width: 88, flexShrink: 0, py: 1}}/>
+            {text(high)}
+        </Stack>
+    );
+}
+
+/** 목록으로 보이는 기본 정보: 시가총액 · 배당수익률 · 최근 배당 · 괴리율(ETF). 값이 있는 것만 */
+function QuoteProfileRows({q}: { q: StockQuotePayload }) {
+    const p = q.profile;
+    if (!p) return null;
+    const d = p.lastDividend;
+    return (
+        <>
+            {has(p.marketCap) && <Stat label="시가총액">{q.currency === 'USD' ? formatMac(p.marketCap) : krCap(p.marketCap)}</Stat>}
+            {has(p.disparityRate) && <Stat label="괴리율">{signedRate(p.disparityRate)}</Stat>}
+            {has(p.dividendYield) && <Stat label="배당수익률">{`${fmt(p.dividendYield, 2)}%`}</Stat>}
+            {d && has(d.amount) && (
+                <Stat label="최근 배당">
+                    {`주당 ${fmt(d.amount)}원 · ${dividendDate(d.baseDate)} 기준${d.kind && d.kind !== '현금배당' ? ` (${d.kind})` : ''}`}
+                </Stat>
+            )}
+        </>
     );
 }
 
 /** 종목 1~3개. 1개면 종목명이 제목, 여러 개면 종목별 블록을 쌓는다 (비교) */
 export function StockQuoteCard({p, meta}: { p: StockQuotePayload[]; meta: Meta }) {
-    // 제목은 미국 종목 상세 페이지와 같은 표기 (ETF: 티커 (풀네임), 개별주: 이름 (티커))
-    const nameLink = (q: StockQuotePayload) => <Link component={RouterLink} to={q.link} underline="hover" color="inherit">{q.title ?? q.name}</Link>;
+    // 제목은 미국 종목 상세 페이지와 같은 표기 (ETF: 티커 (풀네임), 개별주: 이름 (티커)). 업종은 제목 옆에 작게
+    const nameLink = (q: StockQuotePayload) => (
+        <>
+            <Link component={RouterLink} to={q.link} underline="hover" color="inherit">{q.title ?? q.name}</Link>
+            {q.profile?.sector && (
+                <Typography component="span" variant="caption" color="text.secondary" sx={{ml: 1, fontWeight: 400}}>{q.profile.sector}</Typography>
+            )}
+        </>
+    );
     if (p.length === 1) {
         return <CardFrame title={nameLink(p[0])} {...meta}><QuoteHeader q={p[0]}/></CardFrame>;
     }

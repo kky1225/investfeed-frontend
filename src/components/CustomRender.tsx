@@ -83,6 +83,14 @@ export function formatAlertPrice(value: number, assetCode: string): string {
         : `${value.toLocaleString()}원`;
 }
 
+/** 미국 시가총액(키움 천 USD) 표기 — 미국 종목 상세·비서 시세 카드 공용 */
+export const formatMac = (macThousandUsd: number) => {
+    const usd = macThousandUsd * 1_000;
+    if (usd >= 1_000_000_000_000) return (usd / 1_000_000_000_000).toFixed(1) + '조 달러';
+    if (usd >= 100_000_000) return (usd / 100_000_000).toFixed(0).toLocaleString() + '억 달러';
+    return usd.toLocaleString() + ' 달러';
+};
+
 export function renderChangeAmount(value: string | number, unit: string = '원') {
     const num = typeof value === 'string' ? Number(value) : value;
     const isUsd = unit === '달러';
