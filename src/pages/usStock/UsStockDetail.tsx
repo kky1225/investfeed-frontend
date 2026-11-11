@@ -16,6 +16,7 @@ import {Select, SelectChangeEvent, Slider, Tabs, Tab, Tooltip} from "@mui/materi
 import IconButton from "@mui/material/IconButton";
 import NotificationsActiveIcon from "@mui/icons-material/NotificationsActive";
 import PriceTargetDialog from "../../components/PriceTargetDialog.tsx";
+import WatchlistAddButton from "../../components/WatchlistAddButton.tsx";
 import MenuItem from "@mui/material/MenuItem";
 import Button from "@mui/material/Button";
 import {GridColDef} from "@mui/x-data-grid";
@@ -28,8 +29,7 @@ import {useRealtimeWebSocket} from "../detail/useRealtimeWebSocket.ts";
 import {UsStockChart, UsStockChartType, UsStockDetailRes} from "../../type/UsStockType.ts";
 import {StockStreamRes} from "../../type/StockType.ts";
 import {useParams} from "react-router-dom";
-import {renderChangeAmount} from "../../components/CustomRender.tsx";
-import UsSessionChange from "../../components/UsSessionChange.tsx";
+import {formatMac, renderChangeAmount} from "../../components/CustomRender.tsx";
 import FreshnessIndicator from "../../components/FreshnessIndicator.tsx";
 import {usePollingQuery} from "../../lib/pollingQuery.ts";
 import {EXCHANGE_LABEL} from "../../lib/exchange.ts";
@@ -88,13 +88,6 @@ const usDateFormat = (raw: string | null | undefined, showTime: boolean) => {
         return `${cleaned.substring(4, 6)}.${cleaned.substring(6, 8)} ${cleaned.substring(8, 10)}:${cleaned.substring(10, 12)}`;
     }
     return `${cleaned.substring(0, 4)}.${cleaned.substring(4, 6)}.${cleaned.substring(6, 8)}`;
-};
-
-const formatMac = (macThousandUsd: number) => {
-    const usd = macThousandUsd * 1_000;
-    if (usd >= 1_000_000_000_000) return (usd / 1_000_000_000_000).toFixed(1) + '조 달러';
-    if (usd >= 100_000_000) return (usd / 100_000_000).toFixed(0).toLocaleString() + '억 달러';
-    return usd.toLocaleString() + ' 달러';
 };
 
 const INITIAL_CHART_DATA: CryptoDetailLineChartProps = {
@@ -433,15 +426,21 @@ const UsStockDetail = () => {
                 <Grid size={{ xs: 12, md: 12 }}>
                     <Card variant="outlined" sx={{ width: '100%' }}>
                         <CardContent>
-                            <Box sx={{display: 'flex', alignItems: 'center', gap: 1}}>
+                            {/* 국내 종목 상세와 같은 머리: 왼쪽 종목명, 오른쪽 관심종목 추가 · 목표가 알림 (2026-11-11) */}
+                            <Box sx={{display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1}}>
                                 <Typography component="h2" variant="subtitle2" gutterBottom>
                                     {loading ? <Skeleton width={120}/> : chartData.title}
                                 </Typography>
-                                <Tooltip title="목표가 알림">
-                                    <IconButton size="small" onClick={() => setPriceTargetOpen(true)} sx={{mb: "3px"}}>
-                                        <NotificationsActiveIcon fontSize="small" />
-                                    </IconButton>
-                                </Tooltip>
+                                <Stack direction="row" alignItems="center" gap={0.5}>
+                                    {!loading && info?.stkCd && (
+                                        <WatchlistAddButton stkCd={info.stkCd} stkNm={info.stkNm ?? info.stkCd} stexTp={stexTp}/>
+                                    )}
+                                    <Tooltip title="목표가 알림">
+                                        <IconButton size="small" onClick={() => setPriceTargetOpen(true)} sx={{mb: "3px"}}>
+                                            <NotificationsActiveIcon fontSize="small" />
+                                        </IconButton>
+                                    </Tooltip>
+                                </Stack>
                             </Box>
                             <Stack sx={{ justifyContent: 'space-between' }}>
                                 <Stack
@@ -461,18 +460,20 @@ const UsStockDetail = () => {
                                             약 {krwPrice.toLocaleString()}원
                                         </Typography>
                                     )}
+                                </Stack>
+                                {/*
+                                  * 둘째 줄: [장 이름] 등락 금액 · 등락률 (토스 MTS 와 같은 두 줄 구성, 2026-11-11).
+                                  * 장 이름은 토스 연동 회원의 데이·프리·애프터마켓만 — 실시간 등락률이 이미 토스 체결가 기준이라 장구분 등락률 줄은 따로 두지 않는다
+                                  */}
+                                <Stack direction="row" sx={{alignItems: 'center', gap: 1, mt: 0.5}}>
+                                    {!loading && result?.sessionBase && (
+                                        <Typography variant="body2" sx={{fontWeight: 600}}>{result.sessionBase.sessionLabel}</Typography>
+                                    )}
                                     {loading ? <Skeleton width={80}/> : renderChangeAmount(chartData.changePrice, '달러')}
                                     {loading
                                         ? <Skeleton variant="rounded" width={60} height={24}/>
                                         : <Chip size="small" color={color} label={trendValues[chartData.trend]} />}
                                 </Stack>
-                                {!loading && result?.sessionBase && (
-                                    <UsSessionChange
-                                        label={result.sessionBase.sessionLabel}
-                                        price={curPrcNum}
-                                        regularClose={result.sessionBase.regularClose}
-                                    />
-                                )}
                             </Stack>
                         </CardContent>
                         <Box sx={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>

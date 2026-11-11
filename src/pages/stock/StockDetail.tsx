@@ -49,28 +49,16 @@ import InvestorLineChart from "../../components/InvestorLineChart.tsx";
 import ProgramLineChart from "../../components/ProgramLineChart.tsx";
 import * as React from "react";
 import {renderTradeColor, renderChangeAmount} from "../../components/CustomRender.tsx";
-import FavoriteBorderIcon from "@mui/icons-material/FavoriteBorder";
 import {usePollingQuery} from "../../lib/pollingQuery.ts";
 import {parseTradeStamp, parseKiwoomStamp} from "../../lib/tradeStamp.ts";
 import {getServerNow} from "../../lib/serverTime.ts";
-import FavoriteIcon from "@mui/icons-material/Favorite";
 import IconButton from "@mui/material/IconButton";
 import Button from "@mui/material/Button";
-import Dialog from "@mui/material/Dialog";
-import DialogTitle from "@mui/material/DialogTitle";
-import DialogContent from "@mui/material/DialogContent";
-import DialogActions from "@mui/material/DialogActions";
 import CircularProgress from "@mui/material/CircularProgress";
-import List from "@mui/material/List";
-import ListItemButton from "@mui/material/ListItemButton";
-import ListItemText from "@mui/material/ListItemText";
-import {addWatchlistItem, fetchWatchlistGroups} from "../../api/watchlist/WatchlistApi.ts";
-import {useMutation} from "@tanstack/react-query";
 import {requireOk} from "../../lib/apiResponse.ts";
-import {useAlert} from "../../context/AlertContext";
 import NotificationsActiveIcon from "@mui/icons-material/NotificationsActive";
 import PriceTargetDialog from "../../components/PriceTargetDialog.tsx";
-import {WatchlistGroup} from "../../type/WatchlistType.ts";
+import WatchlistAddButton from "../../components/WatchlistAddButton.tsx";
 
 const StyledToggleButtonGroup = styled(ToggleButtonGroup)(({ theme }) => ({
     border: 'none',
@@ -864,44 +852,6 @@ const StockDetail = () => {
         }
     };
 
-    const [watchlistDialogOpen, setWatchlistDialogOpen] = useState(false);
-    const [watchlistGroups, setWatchlistGroups] = useState<WatchlistGroup[]>([]);
-    const [watchlistLoading, setWatchlistLoading] = useState(false);
-    const [addedGroupIds, setAddedGroupIds] = useState<Set<number>>(new Set());
-    const showAlert = useAlert();
-
-    const handleHeartClick = async () => {
-        setWatchlistDialogOpen(true);
-        setWatchlistLoading(true);
-        setAddedGroupIds(new Set());
-        try {
-            const res = await fetchWatchlistGroups();
-            if (res.code !== "0000") throw new Error(res.message || `관심 그룹 조회 실패 (${res.code})`);
-            setWatchlistGroups(res.result ?? []);
-        } finally {
-            setWatchlistLoading(false);
-        }
-    };
-
-    const addToGroupMutation = useMutation({
-        mutationFn: async (group: WatchlistGroup) => {
-            requireOk(await addWatchlistItem(group.id, {stkCd: stockChartData.id, stkNm: stockChartData.title}), '관심 종목 추가');
-            return group;
-        },
-        onSuccess: (group) => {
-            setAddedGroupIds(prev => new Set(prev).add(group.id));
-            showAlert(`${group.groupNm}에 추가되었습니다.`, 'success');
-        },
-        onError: (error) => {
-            console.error(error);
-            showAlert('이미 추가된 종목이거나 오류가 발생했습니다.', 'error');
-        },
-    });
-
-    const handleAddToGroup = (group: WatchlistGroup) => {
-        addToGroupMutation.mutate(group);
-    };
-
     return (
         <Box sx={{ width: '100%', maxWidth: { sm: '100%', md: '1700px' } }}>
             <Box sx={{ display: 'flex', alignItems: 'center', mb: 2, gap: 2 }}>
@@ -997,14 +947,7 @@ const StockDetail = () => {
                                             </Tooltip>
                                         </Typography>
                                     }
-                                    <Tooltip title="관심종목 추가">
-                                        <IconButton size="small" onClick={handleHeartClick} sx={{mb: "3px"}}>
-                                            {addedGroupIds.size > 0
-                                                ? <FavoriteIcon fontSize="small" color="error" />
-                                                : <FavoriteBorderIcon fontSize="small" color="error" />
-                                            }
-                                        </IconButton>
-                                    </Tooltip>
+                                    <WatchlistAddButton stkCd={stockChartData.id} stkNm={stockChartData.title}/>
                                     <Tooltip title="목표가 알림">
                                         <IconButton size="small" onClick={() => setPriceTargetOpen(true)} sx={{mb: "3px"}}>
                                             <NotificationsActiveIcon fontSize="small" />
@@ -1570,49 +1513,6 @@ const StockDetail = () => {
                     )}
                 </Grid>
             </Grid>
-
-            {/* 관심종목 그룹 선택 다이얼로그 */}
-            <Dialog open={watchlistDialogOpen} onClose={() => setWatchlistDialogOpen(false)} maxWidth="xs" fullWidth>
-                <DialogTitle>관심종목에 추가</DialogTitle>
-                <DialogContent sx={{pb: 1}}>
-                    {watchlistLoading ? (
-                        <Box sx={{display: 'flex', justifyContent: 'center', py: 3}}>
-                            <CircularProgress size={24} />
-                        </Box>
-                    ) : watchlistGroups.length === 0 ? (
-                        <Box sx={{py: 2, textAlign: 'center'}}>
-                            <Typography variant="body2" color="text.secondary">
-                                관심종목 그룹이 없습니다.
-                            </Typography>
-                            <Typography variant="caption" color="text.secondary">
-                                관심종목 메뉴에서 그룹을 먼저 만들어주세요.
-                            </Typography>
-                        </Box>
-                    ) : (
-                        <List dense disablePadding>
-                            {watchlistGroups.map(group => (
-                                <ListItemButton
-                                    key={group.id}
-                                    onClick={() => handleAddToGroup(group)}
-                                    disabled={addedGroupIds.has(group.id)}
-                                    sx={{borderRadius: 1}}
-                                >
-                                    <ListItemText
-                                        primary={group.groupNm}
-                                        primaryTypographyProps={{variant: 'body2'}}
-                                    />
-                                    {addedGroupIds.has(group.id) && (
-                                        <FavoriteIcon fontSize="small" color="error" />
-                                    )}
-                                </ListItemButton>
-                            ))}
-                        </List>
-                    )}
-                </DialogContent>
-                <DialogActions>
-                    <Button onClick={() => setWatchlistDialogOpen(false)}>닫기</Button>
-                </DialogActions>
-            </Dialog>
 
             <PriceTargetDialog
                 open={priceTargetOpen}
