@@ -44,6 +44,7 @@ export interface CalendarEvent {
     isFuture: boolean;
     type: string; // INDICATOR, HOLIDAY, MEETING
     source: string; // ECOS, FRED, HOLIDAY(공휴일), KRX(거래소 자체 휴장), MANUAL
+    note?: string | null; // 값 옆 안내. 대체 지표면 "전월비 · 전년비 미발표", 값이 없으면 "미발표"
 }
 
 export interface ManualCalendarEventReq {

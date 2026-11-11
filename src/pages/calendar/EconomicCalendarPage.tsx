@@ -22,6 +22,12 @@ import {getServerNow} from "../../lib/serverTime.ts";
 
 const WEEKDAYS = ['일', '월', '화', '수', '목', '금', '토'];
 
+/** 일정 이름 뒤 값 표기: " 값 안내". 안내(note)는 대체 지표("전월비 · 전년비 미발표 ...")·미발표일 때만 있다 */
+const eventValueText = (e: CalendarEvent) => {
+    const text = [e.value, e.note].filter(Boolean).join(' ');
+    return text ? ` ${text}` : '';
+};
+
 export default function EconomicCalendarPage() {
     const theme = useTheme();
     const now = new Date(getServerNow());
@@ -399,7 +405,7 @@ export default function EconomicCalendarPage() {
                                                                     color: event.isFuture ? 'warning.contrastText' : 'text.primary',
                                                                     overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
                                                                 }}>
-                                                                    {event.country === 'KR' ? '🇰🇷' : '🇺🇸'} {event.name}{event.value ? ` ${event.value}` : ''}
+                                                                    {event.country === 'KR' ? '🇰🇷' : '🇺🇸'} {event.name}{eventValueText(event)}
                                                                 </Box>
                                                             ))}
                                                             {indicatorEvents.length > 3 && (
@@ -438,7 +444,7 @@ export default function EconomicCalendarPage() {
                             bgcolor: e.isFuture ? 'warning.light' : 'action.hover',
                             color: e.isFuture ? 'warning.contrastText' : 'text.primary',
                         }}>
-                            {e.country === 'KR' ? '🇰🇷' : '🇺🇸'} {e.name}{e.value ? ` ${e.value}` : ''}
+                            {e.country === 'KR' ? '🇰🇷' : '🇺🇸'} {e.name}{eventValueText(e)}
                         </Box>
                     ))}
                 </Box>
