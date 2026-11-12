@@ -27,6 +27,8 @@ const CROSSHAIR_DASH = [4, 3];
 const CURRENT_PRICE_DASH = [2, 2];
 const PRICE_LINE_DASH = [6, 4];
 const PRICE_LINE_TITLE_OFFSET = 8;  // 선과 그 위 이름 사이
+const EXTREME_LABEL_GAP = 4;        // 최고·최저가 표시와 캔들 사이 (가로)
+const EXTREME_LABEL_OFFSET = 8;     // 최고·최저가 표시와 캔들 끝 사이 (세로)
 const SERIES_LINE_WIDTH = 1.5;  // 이동평균선·지표선 굵기
 const LEGEND_LEFT = 8;
 const LEGEND_HEIGHT = 18;
@@ -181,6 +183,9 @@ export class CandleChartEngine {
     onToolChange: ((tool: DrawingTool | null) => void) | null = null;
     /** 선택한 도형이 바뀌면 알린다. */
     onSelectionChange: ((id: string | null) => void) | null = null;
+    /** 가장 최근 캔들이 화면에 보이는지가 바뀌면 알린다. (최근으로 이동 버튼 표시용) */
+    onLatestChange: ((atLatest: boolean) => void) | null = null;
+    private atLatest = true;
     private macd: MacdSeries = {macd: [], signal: [], histogram: []};
 
     constructor(container: HTMLElement) {
@@ -259,6 +264,12 @@ export class CandleChartEngine {
     setPriceLines(priceLines: PriceLine[]) {
         this.priceLines = priceLines;
         this.scheduleDraw();
+    }
+
+    /** 확대 정도는 그대로 두고 가장 최근 캔들이 오른쪽 끝에 오도록 이동한다. */
+    scrollToLatest() {
+        const view = this.resolveView();
+        this.setView({...view, rightEdge: Math.max(this.candles.length, this.plotWidth() / view.spacing)});
     }
 
     /** 드래그·확대한 상태를 버리고 기본 보기로 돌아간다. 다른 종목·주기로 바뀔 때 부른다. */
@@ -780,6 +791,12 @@ export class CandleChartEngine {
             this.frame = 0;
             this.layout = this.drawMain();
             this.drawOverlay();
+
+            const atLatest = this.resolveView().rightEdge >= this.candles.length - 0.5;
+            if (atLatest !== this.atLatest) {
+                this.atLatest = atLatest;
+                this.onLatestChange?.(atLatest);
+            }
         });
     }
 
@@ -977,6 +994,27 @@ export class CandleChartEngine {
             });
         });
 
+        // 보이는 구간의 최고가·최저가를 그 캔들 옆에 적는다. 오른쪽에 자리가 없으면 왼쪽에 적는다.
+        const markExtreme = (offset: number, price: number, name: string, color: string, above: boolean) => {
+            const x = this.centerX(range.from + offset, range);
+            const label = `${name} ${price.toLocaleString('ko-KR')}`;
+            const gap = this.px(EXTREME_LABEL_GAP);
+            const toRight = x + gap + ctx.measureText(`← ${label}`).width <= plotRightPx;
+            const half = this.px(FONT_SIZE) / 2;
+            const y = clamp(
+                this.px(priceY(price)) + (above ? -1 : 1) * this.px(EXTREME_LABEL_OFFSET),
+                this.px(priceTop) + half,
+                this.px(priceBottom) - half,
+            );
+            ctx.fillStyle = color;
+            ctx.textAlign = toRight ? 'left' : 'right';
+            ctx.fillText(toRight ? `← ${label}` : `${label} →`, toRight ? x + gap : x - gap, y);
+        };
+        const highOffset = visible.reduce((best, candle, offset) => candle.high > visible[best].high ? offset : best, 0);
+        const lowOffset = visible.reduce((best, candle, offset) => candle.low < visible[best].low ? offset : best, 0);
+        markExtreme(highOffset, visible[highOffset].high, '최고', style.upColor, true);
+        markExtreme(lowOffset, visible[lowOffset].low, '최저', style.downColor, false);
+
         // 현재가 선: 마지막 캔들의 종가 높이에 점선을 긋고, 오른쪽 축에 캔들 색 라벨을 붙인다.
         // 과거로 이동해 현재가가 가격축 범위를 벗어나면 그리지 않는다.
         const last = this.candles[this.candles.length - 1];
@@ -1139,8 +1177,10 @@ export class CandleChartEngine {
 
         this.drawDrawings(layout, style);
 
-        // 마우스가 가리키는 캔들이 없으면 가장 최근 캔들의 지표 값을 보여 준다.
+        // 마우스가 가리키는 캔들이 없으면 가장 최근 캔들의 값을 보여 준다.
         const index = this.drawCrosshair(layout, style) ?? this.candles.length - 1;
+        const candle = this.candles[index];
+        if (candle) this.drawLegend(candle, style);
         this.drawAverageLegend(layout, style, index);
         this.drawIndicatorLegends(layout, style, index);
     }
@@ -1261,7 +1301,6 @@ export class CandleChartEngine {
         ctx.textAlign = 'center';
         ctx.fillText(timeLabel, timeLeft + timeWidth / 2, timeTop + labelHeight / 2);
 
-        this.drawLegend(candle, style);
         return index;
     }
 

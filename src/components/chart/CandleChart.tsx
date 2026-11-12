@@ -1,4 +1,4 @@
-import {useEffect, useRef, useState} from "react";
+import {useEffect, useMemo, useRef, useState} from "react";
 import Box from "@mui/material/Box";
 import Stack from "@mui/material/Stack";
 import IconButton from "@mui/material/IconButton";
@@ -8,7 +8,10 @@ import Tooltip from "@mui/material/Tooltip";
 import ShowChartIcon from "@mui/icons-material/ShowChart";
 import HorizontalRuleIcon from "@mui/icons-material/HorizontalRule";
 import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
-import DeleteSweepIcon from "@mui/icons-material/DeleteSweep";
+import SettingsIcon from "@mui/icons-material/Settings";
+import KeyboardDoubleArrowRightIcon from "@mui/icons-material/KeyboardDoubleArrowRight";
+import ChartSettingsDialog, {ChartSettingOption} from "./ChartSettingsDialog.tsx";
+import {loadChartSettings, saveChartSettings} from "../../lib/chart/settingsStorage.ts";
 import {useColorScheme} from "@mui/material/styles";
 import {CandleChartEngine, INDICATOR_PANE_HEIGHT} from "../../lib/chart/CandleChart.ts";
 import {Candle, Drawing, DrawingTool, IndicatorType, PriceLine, TimeUnit} from "../../lib/chart/types.ts";
@@ -28,6 +31,11 @@ export interface CandleChartProps {
 const DEFAULT_MOVING_AVERAGES = [5, 20, 60, 120];
 const DEFAULT_INDICATORS: IndicatorType[] = ['rsi', 'macd'];
 const NO_PRICE_LINES: PriceLine[] = [];
+const NO_MOVING_AVERAGES: number[] = [];
+
+// 설정 창에서 켜고 끄는 항목의 key. 이동평균선 전체가 하나, 보조지표는 종류별로 하나
+const AVERAGE_TOGGLE = 'average';
+const INDICATOR_LABELS: Record<IndicatorType, string> = {rsi: 'RSI', macd: 'MACD'};
 
 const CandleChart = ({
     candles, timeUnit, seriesKey, drawingKey,
@@ -46,6 +54,27 @@ const CandleChart = ({
     const drawings = stored.drawings;
     const [tool, setTool] = useState<DrawingTool | null>(null);
     const [selectedId, setSelectedId] = useState<string | null>(null);
+    const [atLatest, setAtLatest] = useState(true);
+
+    // 차트 설정: 꺼 둔 지표. 브라우저에 저장해 다시 열어도 유지한다.
+    const [settingsOpen, setSettingsOpen] = useState(false);
+    const [hidden, setHidden] = useState<string[]>(() => loadChartSettings().hidden);
+    const toggleSetting = (key: string, visible: boolean) => {
+        const next = visible ? hidden.filter(item => item !== key) : [...hidden, key];
+        setHidden(next);
+        saveChartSettings({hidden: next});
+    };
+    const settingOptions = useMemo<ChartSettingOption[]>(() => [
+        ...(movingAverages.length > 0
+            ? [{key: AVERAGE_TOGGLE, label: `이동평균선 (${movingAverages.join('·')})`}]
+            : []),
+        ...indicators.map(type => ({key: type, label: INDICATOR_LABELS[type]})),
+    ], [movingAverages, indicators]);
+    const activeAverages = hidden.includes(AVERAGE_TOGGLE) ? NO_MOVING_AVERAGES : movingAverages;
+    const activeIndicators = useMemo(
+        () => indicators.filter(type => !hidden.includes(type)),
+        [indicators, hidden],
+    );
 
     const updateDrawings = (next: Drawing[]) => {
         setStored({key: drawingKey, drawings: next});
@@ -66,6 +95,7 @@ const CandleChart = ({
         engine.onDrawingsChange = next => updateDrawingsRef.current(next);
         engine.onToolChange = setTool;
         engine.onSelectionChange = setSelectedId;
+        engine.onLatestChange = setAtLatest;
 
         const observer = new ResizeObserver(entries => {
             const {width, height} = entries[0].contentRect;
@@ -85,12 +115,12 @@ const CandleChart = ({
     }, [seriesKey]);
 
     useEffect(() => {
-        engineRef.current?.setMovingAverages(movingAverages);
-    }, [movingAverages]);
+        engineRef.current?.setMovingAverages(activeAverages);
+    }, [activeAverages]);
 
     useEffect(() => {
-        engineRef.current?.setIndicators(indicators);
-    }, [indicators]);
+        engineRef.current?.setIndicators(activeIndicators);
+    }, [activeIndicators]);
 
     useEffect(() => {
         engineRef.current?.setPriceLines(priceLines);
@@ -162,20 +192,41 @@ const CandleChart = ({
                         </IconButton>
                     </Tooltip>
                 )}
-                {drawings.length > 0 && (
-                    <Tooltip title="그린 선 모두 삭제">
-                        <IconButton size="small" aria-label="그린 선 모두 삭제" onClick={() => updateDrawings([])}>
-                            <DeleteSweepIcon fontSize="small"/>
+
+                {/* 오른쪽: 최근으로 이동(과거를 보고 있을 때만), 차트 설정 */}
+                <Box sx={{flexGrow: 1}}/>
+                {!atLatest && (
+                    <Tooltip title="최근으로 이동">
+                        <IconButton
+                            size="small"
+                            aria-label="최근으로 이동"
+                            onClick={() => engineRef.current?.scrollToLatest()}
+                        >
+                            <KeyboardDoubleArrowRightIcon fontSize="small"/>
                         </IconButton>
                     </Tooltip>
                 )}
+                <Tooltip title="차트 설정">
+                    <IconButton size="small" aria-label="차트 설정" onClick={() => setSettingsOpen(true)}>
+                        <SettingsIcon fontSize="small"/>
+                    </IconButton>
+                </Tooltip>
             </Stack>
+            <ChartSettingsDialog
+                open={settingsOpen}
+                onClose={() => setSettingsOpen(false)}
+                options={settingOptions}
+                hidden={hidden}
+                onToggle={toggleSetting}
+                drawingCount={drawings.length}
+                onClearDrawings={() => updateDrawings([])}
+            />
             <Box
                 ref={containerRef}
                 sx={(theme) => ({
                     position: 'relative',
                     width: '100%',
-                    height: height + indicators.length * INDICATOR_PANE_HEIGHT,
+                    height: height + activeIndicators.length * INDICATOR_PANE_HEIGHT,
                     '--chart-up': (theme.vars || theme).palette.error.main,
                     '--chart-down': (theme.vars || theme).palette.info.main,
                     '--chart-text': (theme.vars || theme).palette.text.secondary,

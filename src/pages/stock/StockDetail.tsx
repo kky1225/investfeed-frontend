@@ -1092,7 +1092,8 @@ const StockDetail = () => {
                             </Stack>
                         </CardContent>
                         <Box sx={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
-                            <Box sx={{ minWidth: 1200 }}>
+                            {/* 캔들 차트는 스스로 이동·확대하므로 화면 너비에 맞춘다. 선 차트만 최소 너비를 둔다. */}
+                            <Box sx={{ minWidth: formats === 'candle' ? 0 : 1200 }}>
                                 {loading ? (
                                     <Skeleton variant="rectangular" height={400} sx={{mx: 2, mb: 2, borderRadius: 1}}/>
                                 ) : formats === 'candle' ? (
