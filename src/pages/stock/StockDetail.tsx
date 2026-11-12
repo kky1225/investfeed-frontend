@@ -1046,7 +1046,11 @@ const StockDetail = () => {
                                 {loading ? (
                                     <Skeleton variant="rectangular" height={400} sx={{mx: 2, mb: 2, borderRadius: 1}}/>
                                 ) : formats === 'candle' ? (
-                                    <CandleChart candles={candleList} timeUnit={CHART_TIME_UNIT[req.chartType]} />
+                                    <CandleChart
+                                        candles={candleList}
+                                        timeUnit={CHART_TIME_UNIT[req.chartType]}
+                                        seriesKey={`${stkCd}-${req.chartType}`}
+                                    />
                                 ) : (
                                     <StockDetailLineChart {...stockChartData} />
                                 )}

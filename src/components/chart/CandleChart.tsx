@@ -7,10 +7,11 @@ import {Candle, TimeUnit} from "../../lib/chart/types.ts";
 export interface CandleChartProps {
     candles: Candle[],      // 오래된 순
     timeUnit: TimeUnit,
+    seriesKey?: string,     // 종목·주기처럼 다른 차트로 바뀌는 기준. 바뀌면 드래그·확대 상태를 기본 보기로 되돌린다
     height?: number,
 }
 
-const CandleChart = ({candles, timeUnit, height = 400}: CandleChartProps) => {
+const CandleChart = ({candles, timeUnit, seriesKey, height = 400}: CandleChartProps) => {
     const containerRef = useRef<HTMLDivElement>(null);
     const engineRef = useRef<CandleChartEngine | null>(null);
     const {mode, systemMode} = useColorScheme();
@@ -34,6 +35,10 @@ const CandleChart = ({candles, timeUnit, height = 400}: CandleChartProps) => {
             engineRef.current = null;
         };
     }, []);
+
+    useEffect(() => {
+        engineRef.current?.resetView();
+    }, [seriesKey]);
 
     useEffect(() => {
         engineRef.current?.setData(candles, timeUnit);
