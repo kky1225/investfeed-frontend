@@ -11,6 +11,13 @@ export interface Candle {
 /** 날짜 눈금 표기 단위. minute=HH:mm, day=YYYY.MM.DD, month=YYYY.MM, year=YYYY */
 export type TimeUnit = 'minute' | 'day' | 'month' | 'year';
 
+/** 특정 가격에 긋는 가로선 (목표가 등) */
+export interface PriceLine {
+    price: number,
+    title: string,                      // 선 왼쪽에 적는 이름
+    tone: 'up' | 'down' | 'neutral',    // 색: 상승색 / 하락색 / 글자색
+}
+
 /** 차트 아래 별도 영역에 그리는 보조지표 */
 export type IndicatorType = 'rsi' | 'macd';
 

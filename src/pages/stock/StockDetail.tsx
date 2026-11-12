@@ -32,7 +32,10 @@ import {
 } from "../../type/StockType.ts";
 import StockDetailLineChart, {CustomStockDetailLineChartProps} from "../../components/StockDetailLineChart.tsx";
 import CandleChart from "../../components/chart/CandleChart.tsx";
-import {Candle, CandleInterval, TimeUnit} from "../../lib/chart/types.ts";
+import {Candle, CandleInterval, PriceLine, TimeUnit} from "../../lib/chart/types.ts";
+import {useQuery} from "@tanstack/react-query";
+import {fetchPriceTargets} from "../../api/notification/NotificationApi.ts";
+import type {PriceTarget} from "../../type/NotificationType.ts";
 import {applyTick} from "../../lib/chart/realtime.ts";
 import {fetchStockDetail, fetchStockStream, fetchStockProgramChart} from "../../api/stock/StockApi.ts";
 import {useMarketWebSocket} from "../detail/useMarketWebSocket.ts";
@@ -569,6 +572,23 @@ const StockDetail = () => {
             .reverse();
     }, [result]);
 
+    // 이 종목에 등록한 목표가 알림을 차트에 선으로 표시한다. 목표가 알림 창과 같은 조회를 공유해 등록·삭제가 바로 반영된다.
+    const {data: priceTargets} = useQuery<PriceTarget[]>({
+        queryKey: ['priceTargets'],
+        queryFn: async ({signal}) => requireOk(await fetchPriceTargets({signal, skipGlobalError: true}), [] as PriceTarget[]),
+        refetchOnWindowFocus: false,
+    });
+    const targetLines = useMemo<PriceLine[]>(
+        () => (priceTargets ?? [])
+            .filter(target => target.assetCode === stkCd)
+            .map(target => ({
+                price: target.targetPrice,
+                title: '목표가',
+                tone: target.direction === 'ABOVE' ? 'up' : 'down',
+            })),
+        [priceTargets, stkCd],
+    );
+
     // 실시간 체결을 반영한 캔들. 폴링으로 새 목록이 오면 버리고 그 목록에서 다시 쌓는다.
     const [liveCandles, setLiveCandles] = useState<{ base: Candle[], candles: Candle[] } | null>(null);
     const chartCandles = liveCandles?.base === candleList ? liveCandles.candles : candleList;
@@ -1080,6 +1100,7 @@ const StockDetail = () => {
                                         candles={chartCandles}
                                         timeUnit={CHART_TIME_UNIT[req.chartType]}
                                         seriesKey={`${stkCd}-${req.chartType}`}
+                                        priceLines={targetLines}
                                     />
                                 ) : (
                                     <StockDetailLineChart {...stockChartData} />

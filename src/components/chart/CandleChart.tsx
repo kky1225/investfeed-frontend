@@ -2,7 +2,7 @@ import {useEffect, useRef} from "react";
 import Box from "@mui/material/Box";
 import {useColorScheme} from "@mui/material/styles";
 import {CandleChartEngine, INDICATOR_PANE_HEIGHT} from "../../lib/chart/CandleChart.ts";
-import {Candle, IndicatorType, TimeUnit} from "../../lib/chart/types.ts";
+import {Candle, IndicatorType, PriceLine, TimeUnit} from "../../lib/chart/types.ts";
 
 export interface CandleChartProps {
     candles: Candle[],      // 오래된 순
@@ -10,15 +10,18 @@ export interface CandleChartProps {
     seriesKey?: string,     // 종목·주기처럼 다른 차트로 바뀌는 기준. 바뀌면 드래그·확대 상태를 기본 보기로 되돌린다
     movingAverages?: number[],  // 이동평균선 기간. 색은 순서대로 success·warning·secondary·text.primary
     indicators?: IndicatorType[],   // 차트 아래에 쌓을 보조지표
+    priceLines?: PriceLine[],   // 특정 가격에 긋는 가로선 (목표가 등)
     height?: number,            // 가격+거래량 영역 높이. 보조지표 영역은 이 아래에 더해진다
 }
 
 const DEFAULT_MOVING_AVERAGES = [5, 20, 60, 120];
 const DEFAULT_INDICATORS: IndicatorType[] = ['rsi', 'macd'];
+const NO_PRICE_LINES: PriceLine[] = [];
 
 const CandleChart = ({
     candles, timeUnit, seriesKey,
-    movingAverages = DEFAULT_MOVING_AVERAGES, indicators = DEFAULT_INDICATORS, height = 400,
+    movingAverages = DEFAULT_MOVING_AVERAGES, indicators = DEFAULT_INDICATORS, priceLines = NO_PRICE_LINES,
+    height = 400,
 }: CandleChartProps) => {
     const containerRef = useRef<HTMLDivElement>(null);
     const engineRef = useRef<CandleChartEngine | null>(null);
@@ -55,6 +58,10 @@ const CandleChart = ({
     useEffect(() => {
         engineRef.current?.setIndicators(indicators);
     }, [indicators]);
+
+    useEffect(() => {
+        engineRef.current?.setPriceLines(priceLines);
+    }, [priceLines]);
 
     useEffect(() => {
         engineRef.current?.setData(candles, timeUnit);

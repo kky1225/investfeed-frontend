@@ -1,4 +1,4 @@
-import {Candle, ChartStyle, IndicatorType, TimeUnit} from "./types.ts";
+import {Candle, ChartStyle, IndicatorType, PriceLine, TimeUnit} from "./types.ts";
 import {createInverseScale, createLinearScale, formatPrice, formatTime, formatVolume, niceTicks} from "./scale.ts";
 import {macd, MacdSeries, movingAverage, relativeStrength, Series} from "./indicators.ts";
 
@@ -25,6 +25,8 @@ const CROSSHAIR_LABEL_HEIGHT = 18;
 const CROSSHAIR_LABEL_PADDING = 6;
 const CROSSHAIR_DASH = [4, 3];
 const CURRENT_PRICE_DASH = [2, 2];
+const PRICE_LINE_DASH = [6, 4];
+const PRICE_LINE_TITLE_OFFSET = 8;  // 선과 그 위 이름 사이
 const SERIES_LINE_WIDTH = 1.5;  // 이동평균선·지표선 굵기
 const LEGEND_LEFT = 8;
 const LEGEND_HEIGHT = 18;
@@ -132,6 +134,7 @@ export class CandleChartEngine {
     private averagePeriods: number[] = [];
     private averages: Series[] = [];        // averagePeriods 와 같은 순서
     private indicators: IndicatorType[] = [];
+    private priceLines: PriceLine[] = [];
     private rsi: Series = [];
     private macd: MacdSeries = {macd: [], signal: [], histogram: []};
 
@@ -184,6 +187,12 @@ export class CandleChartEngine {
     setIndicators(indicators: IndicatorType[]) {
         this.indicators = indicators;
         this.computeSeries();
+        this.scheduleDraw();
+    }
+
+    /** 특정 가격에 긋는 가로선들 (목표가 등). 가격축 범위 밖의 선은 그리지 않는다. */
+    setPriceLines(priceLines: PriceLine[]) {
+        this.priceLines = priceLines;
         this.scheduleDraw();
     }
 
@@ -638,6 +647,37 @@ export class CandleChartEngine {
             ctx.textAlign = 'left';
             ctx.fillText(last.close.toLocaleString('ko-KR'), axisLabelX, y);
         }
+
+        // 가격선(목표가 등): 점선 + 선 위 이름 + 오른쪽 축에 테두리 라벨. 현재가 라벨(채움)과 구분된다.
+        this.priceLines
+            .filter(priceLine => priceLine.price >= priceMin && priceLine.price <= priceMax)
+            .forEach(priceLine => {
+                const color = priceLine.tone === 'up' ? style.upColor
+                    : priceLine.tone === 'down' ? style.downColor
+                    : style.textColor;
+                const y = this.px(priceY(priceLine.price));
+                const labelHeight = this.px(CROSSHAIR_LABEL_HEIGHT);
+                const labelTop = Math.round(y - labelHeight / 2);
+                ctx.strokeStyle = color;
+                ctx.lineWidth = line;
+                ctx.setLineDash(PRICE_LINE_DASH.map(length => this.px(length)));
+                ctx.beginPath();
+                ctx.moveTo(0, y + line / 2);
+                ctx.lineTo(plotRightPx, y + line / 2);
+                ctx.stroke();
+                ctx.setLineDash([]);
+
+                ctx.fillStyle = style.backgroundColor;
+                ctx.fillRect(plotRightPx, labelTop, this.px(PRICE_AXIS_WIDTH), labelHeight);
+                ctx.strokeRect(
+                    plotRightPx + line / 2, labelTop + line / 2,
+                    this.px(PRICE_AXIS_WIDTH) - line, labelHeight - line,
+                );
+                ctx.fillStyle = color;
+                ctx.textAlign = 'left';
+                ctx.fillText(priceLine.price.toLocaleString('ko-KR'), axisLabelX, y);
+                ctx.fillText(priceLine.title, this.px(LEGEND_LEFT), y - this.px(PRICE_LINE_TITLE_OFFSET));
+            });
 
         // 보조지표 영역
         const indicatorPanes = this.indicators.map((type, order) => {
