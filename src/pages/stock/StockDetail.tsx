@@ -32,7 +32,8 @@ import {
 } from "../../type/StockType.ts";
 import StockDetailLineChart, {CustomStockDetailLineChartProps} from "../../components/StockDetailLineChart.tsx";
 import CandleChart from "../../components/chart/CandleChart.tsx";
-import {Candle, TimeUnit} from "../../lib/chart/types.ts";
+import {Candle, CandleInterval, TimeUnit} from "../../lib/chart/types.ts";
+import {applyTick} from "../../lib/chart/realtime.ts";
 import {fetchStockDetail, fetchStockStream, fetchStockProgramChart} from "../../api/stock/StockApi.ts";
 import {useMarketWebSocket} from "../detail/useMarketWebSocket.ts";
 import {fetchNews} from "../../api/news/NewsApi.ts";
@@ -337,6 +338,19 @@ const CHART_TIME_UNIT: Record<StockChartType, TimeUnit> = {
     [StockChartType.YEAR]: 'year',
 };
 
+// 실시간 체결이 어느 캔들에 들어갈지 정하는 기준
+const CHART_INTERVAL: Record<StockChartType, CandleInterval> = {
+    [StockChartType.MINUTE_1]: {unit: 'minute', count: 1},
+    [StockChartType.MINUTE_3]: {unit: 'minute', count: 3},
+    [StockChartType.MINUTE_5]: {unit: 'minute', count: 5},
+    [StockChartType.MINUTE_10]: {unit: 'minute', count: 10},
+    [StockChartType.MINUTE_30]: {unit: 'minute', count: 30},
+    [StockChartType.DAY]: {unit: 'day'},
+    [StockChartType.WEEK]: {unit: 'week'},
+    [StockChartType.MONTH]: {unit: 'month'},
+    [StockChartType.YEAR]: {unit: 'year'},
+};
+
 const StockDetail = () => {
     const { id } = useParams();
     const stkCd = id || "";
@@ -449,6 +463,7 @@ const StockDetail = () => {
                         }, 2 * 60 * 1000);
                     }
                 } else {
+                    applyChartTick(stamp, parseChartPrice(values["10"]), Math.abs(Number(values["15"])) || 0);
                     updateIfNewerExp({value: null, stamp});
                     updateIfNewerLive({
                         value: Number(values["10"]?.replace(/^[+-]/, '') ?? '0').toLocaleString(),
@@ -553,6 +568,21 @@ const StockDetail = () => {
             .filter(candle => [candle.time, candle.open, candle.high, candle.low, candle.close].every(Number.isFinite))
             .reverse();
     }, [result]);
+
+    // 실시간 체결을 반영한 캔들. 폴링으로 새 목록이 오면 버리고 그 목록에서 다시 쌓는다.
+    const [liveCandles, setLiveCandles] = useState<{ base: Candle[], candles: Candle[] } | null>(null);
+    const chartCandles = liveCandles?.base === candleList ? liveCandles.candles : candleList;
+
+    // 폴링 응답에 이미 들어 있는 체결(조회 시각 이전)은 다시 더하지 않는다.
+    const chartBaseStamp = result?.stockInfo ? parseTradeStamp(result.stockInfo.tm) : 0;
+    const applyChartTick = (time: number, price: number, volume: number) => {
+        if (!time || !Number.isFinite(price) || time <= chartBaseStamp || candleList.length === 0) return;
+        const interval = CHART_INTERVAL[req.chartType];
+        setLiveCandles(prev => ({
+            base: candleList,
+            candles: applyTick(prev?.base === candleList ? prev.candles : candleList, {time, price, volume}, interval),
+        }));
+    };
 
     // 폴링 base expectedPrice (expCntrPric 가 있을 때만 객체, 없으면 null)
     const baseExpectedPrice = useMemo<ExpectedPriceShape | null>(() => {
@@ -1047,7 +1077,7 @@ const StockDetail = () => {
                                     <Skeleton variant="rectangular" height={400} sx={{mx: 2, mb: 2, borderRadius: 1}}/>
                                 ) : formats === 'candle' ? (
                                     <CandleChart
-                                        candles={candleList}
+                                        candles={chartCandles}
                                         timeUnit={CHART_TIME_UNIT[req.chartType]}
                                         seriesKey={`${stkCd}-${req.chartType}`}
                                     />

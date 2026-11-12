@@ -11,6 +11,18 @@ export interface Candle {
 /** 날짜 눈금 표기 단위. minute=HH:mm, day=YYYY.MM.DD, month=YYYY.MM, year=YYYY */
 export type TimeUnit = 'minute' | 'day' | 'month' | 'year';
 
+/** 캔들 한 개가 담는 기간. 실시간 체결이 어느 캔들에 들어갈지 정하는 데 쓴다. */
+export type CandleInterval =
+    | { unit: 'minute', count: number }     // count 분봉
+    | { unit: 'day' | 'week' | 'month' | 'year' };
+
+/** 실시간 체결 한 건 */
+export interface Tick {
+    time: number,       // epoch ms
+    price: number,
+    volume: number,     // 이 체결의 수량
+}
+
 /** 캔버스는 CSS 변수를 못 읽으므로, 테마에서 풀어낸 실제 색 문자열을 넘긴다. */
 export interface ChartStyle {
     upColor: string,     // 상승 (종가 > 시가)
