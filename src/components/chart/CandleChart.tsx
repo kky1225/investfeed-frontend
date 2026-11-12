@@ -8,10 +8,15 @@ export interface CandleChartProps {
     candles: Candle[],      // 오래된 순
     timeUnit: TimeUnit,
     seriesKey?: string,     // 종목·주기처럼 다른 차트로 바뀌는 기준. 바뀌면 드래그·확대 상태를 기본 보기로 되돌린다
+    movingAverages?: number[],  // 이동평균선 기간. 색은 순서대로 success·warning·secondary·text.primary
     height?: number,
 }
 
-const CandleChart = ({candles, timeUnit, seriesKey, height = 400}: CandleChartProps) => {
+const DEFAULT_MOVING_AVERAGES = [5, 20, 60, 120];
+
+const CandleChart = ({
+    candles, timeUnit, seriesKey, movingAverages = DEFAULT_MOVING_AVERAGES, height = 400,
+}: CandleChartProps) => {
     const containerRef = useRef<HTMLDivElement>(null);
     const engineRef = useRef<CandleChartEngine | null>(null);
     const {mode, systemMode} = useColorScheme();
@@ -41,6 +46,10 @@ const CandleChart = ({candles, timeUnit, seriesKey, height = 400}: CandleChartPr
     }, [seriesKey]);
 
     useEffect(() => {
+        engineRef.current?.setMovingAverages(movingAverages);
+    }, [movingAverages]);
+
+    useEffect(() => {
         engineRef.current?.setData(candles, timeUnit);
     }, [candles, timeUnit]);
 
@@ -58,6 +67,7 @@ const CandleChart = ({candles, timeUnit, seriesKey, height = 400}: CandleChartPr
                 textColor: color('--chart-text'),
                 gridColor: color('--chart-grid'),
                 backgroundColor: color('--chart-background'),
+                lineColors: ['--chart-line-1', '--chart-line-2', '--chart-line-3', '--chart-line-4'].map(color),
                 fontFamily: computed.fontFamily,
             });
         });
@@ -76,6 +86,10 @@ const CandleChart = ({candles, timeUnit, seriesKey, height = 400}: CandleChartPr
                 '--chart-text': (theme.vars || theme).palette.text.secondary,
                 '--chart-grid': (theme.vars || theme).palette.divider,
                 '--chart-background': (theme.vars || theme).palette.background.paper,
+                '--chart-line-1': (theme.vars || theme).palette.success.main,
+                '--chart-line-2': (theme.vars || theme).palette.warning.main,
+                '--chart-line-3': (theme.vars || theme).palette.secondary.main,
+                '--chart-line-4': (theme.vars || theme).palette.text.primary,
             })}
         />
     );

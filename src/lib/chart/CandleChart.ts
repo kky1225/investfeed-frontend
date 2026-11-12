@@ -1,5 +1,6 @@
 import {Candle, ChartStyle, TimeUnit} from "./types.ts";
 import {createInverseScale, createLinearScale, formatPrice, formatTime, formatVolume, niceTicks} from "./scale.ts";
+import {movingAverage} from "./indicators.ts";
 
 // 배치 상수 (CSS px)
 const PRICE_AXIS_WIDTH = 64;
@@ -20,6 +21,8 @@ const AXIS_LABEL_OFFSET = 6;
 const CROSSHAIR_LABEL_HEIGHT = 18;
 const CROSSHAIR_LABEL_PADDING = 6;
 const CROSSHAIR_DASH = [4, 3];
+const CURRENT_PRICE_DASH = [2, 2];
+const AVERAGE_LINE_WIDTH = 1.5;
 const LEGEND_LEFT = 8;
 const LEGEND_HEIGHT = 18;
 const LEGEND_GAP = 4;           // 이름과 값 사이
@@ -96,6 +99,8 @@ export class CandleChartEngine {
     private view: View | null = null;       // null 이면 기본 보기(최근 캔들을 오른쪽 끝에 맞춤)
     private gesture: Gesture | null = null;
     private readonly activePointers = new Map<number, Point>();    // 누르고 있는 포인터
+    private averagePeriods: number[] = [];
+    private averages: (number | null)[][] = [];     // averagePeriods 와 같은 순서. 각 줄은 캔들과 같은 길이
 
     constructor(container: HTMLElement) {
         this.container = container;
@@ -126,6 +131,14 @@ export class CandleChartEngine {
         }
         this.candles = candles;
         this.timeUnit = timeUnit;
+        this.averages = this.averagePeriods.map(period => movingAverage(candles, period));
+        this.scheduleDraw();
+    }
+
+    /** 그릴 이동평균선의 기간들 (예: [5, 20, 60, 120]) */
+    setMovingAverages(periods: number[]) {
+        this.averagePeriods = periods;
+        this.averages = periods.map(period => movingAverage(this.candles, period));
         this.scheduleDraw();
     }
 
@@ -409,8 +422,12 @@ export class CandleChartEngine {
         const priceBottom = volumeTop - PANE_GAP;
 
         // 보이는 구간의 최고·최저가에 맞춰 가격축을 잡고, 위아래로 5% 여백을 둔다.
-        const highest = Math.max(...visible.map(candle => candle.high));
-        const lowest = Math.min(...visible.map(candle => candle.low));
+        // 이동평균선이 잘리지 않게 보이는 구간의 평균값도 범위에 넣는다.
+        const visibleAverages = this.averages
+            .flatMap(values => values.slice(range.from, range.from + range.count))
+            .filter((value): value is number => value !== null);
+        const highest = Math.max(...visible.map(candle => candle.high), ...visibleAverages);
+        const lowest = Math.min(...visible.map(candle => candle.low), ...visibleAverages);
         const padding = (highest - lowest) * 0.05 || highest * 0.01 || 1;
         const priceMin = lowest - padding;
         const priceMax = highest + padding;
@@ -495,7 +512,55 @@ export class CandleChartEngine {
                 ctx.fillRect(bodyLeft, top, bodyWidth, plotBottomPx - top);
             }
         });
+
+        // 이동평균선. 화면 가장자리에서 끊겨 보이지 않게 양옆 한 칸씩 더 잇는다.
+        if (style.lineColors.length > 0) {
+            ctx.lineWidth = Math.max(1, Math.round(AVERAGE_LINE_WIDTH * this.dpr));
+            ctx.lineJoin = 'round';
+            const start = Math.max(0, range.from - 1);
+            const end = Math.min(this.candles.length, range.from + range.count + 1);
+            this.averages.forEach((values, order) => {
+                ctx.strokeStyle = style.lineColors[order % style.lineColors.length];
+                ctx.beginPath();
+                let started = false;
+                for (let index = start; index < end; index++) {
+                    const value = values[index];
+                    if (value === null || value === undefined) continue;
+                    const x = this.centerX(index, range);
+                    const y = priceY(value) * this.dpr;
+                    if (started) {
+                        ctx.lineTo(x, y);
+                    } else {
+                        ctx.moveTo(x, y);
+                        started = true;
+                    }
+                }
+                ctx.stroke();
+            });
+        }
         ctx.restore();
+
+        // 현재가 선: 마지막 캔들의 종가 높이에 점선을 긋고, 오른쪽 축에 캔들 색 라벨을 붙인다.
+        // 과거로 이동해 현재가가 가격축 범위를 벗어나면 그리지 않는다.
+        const last = this.candles[this.candles.length - 1];
+        if (last.close >= priceMin && last.close <= priceMax) {
+            const color = this.candleColor(last, style);
+            const y = this.px(priceY(last.close));
+            const labelHeight = this.px(CROSSHAIR_LABEL_HEIGHT);
+            ctx.strokeStyle = color;
+            ctx.lineWidth = line;
+            ctx.setLineDash(CURRENT_PRICE_DASH.map(length => this.px(length)));
+            ctx.beginPath();
+            ctx.moveTo(0, y + line / 2);
+            ctx.lineTo(plotRightPx, y + line / 2);
+            ctx.stroke();
+            ctx.setLineDash([]);
+            ctx.fillStyle = color;
+            ctx.fillRect(plotRightPx, Math.round(y - labelHeight / 2), this.px(PRICE_AXIS_WIDTH), labelHeight);
+            ctx.fillStyle = style.backgroundColor;
+            ctx.textAlign = 'left';
+            ctx.fillText(last.close.toLocaleString('ko-KR'), plotRightPx + this.px(AXIS_LABEL_OFFSET), y);
+        }
 
         return {
             range, plotWidth, plotBottom,
@@ -504,23 +569,62 @@ export class CandleChartEngine {
         };
     }
 
-    /** 십자선, 축 위의 가격·날짜 라벨, 마우스가 가리키는 캔들의 값 표시 */
+    /** 위 장 전체: 십자선과 값 표시, 이동평균 값 */
     private drawOverlay() {
         const ctx = this.overlayCtx;
         ctx.clearRect(0, 0, this.overlayCanvas.width, this.overlayCanvas.height);
 
-        const {layout, style, pointer} = this;
-        if (!layout || !style || !pointer) return;
+        const {layout, style} = this;
+        if (!layout || !style) return;
+
+        ctx.font = `${this.px(FONT_SIZE)}px ${style.fontFamily}`;
+        ctx.textBaseline = 'middle';
+
+        // 마우스가 가리키는 캔들이 없으면 가장 최근 캔들의 이동평균 값을 보여 준다.
+        const hovered = this.drawCrosshair(layout, style);
+        this.drawAverageLegend(layout, style, hovered ?? this.candles.length - 1);
+    }
+
+    /** 이동평균 값을 값 표시 아랫줄에 선 색으로 적는다. */
+    private drawAverageLegend(layout: Layout, style: ChartStyle, index: number) {
+        if (this.averagePeriods.length === 0 || style.lineColors.length === 0) return;
+        const ctx = this.overlayCtx;
+        const itemGap = this.px(LEGEND_ITEM_GAP);
+        const middle = this.px(PADDING_TOP + LEGEND_HEIGHT) + this.px(LEGEND_HEIGHT) / 2;
+        let cursor = this.px(LEGEND_LEFT);
+
+        ctx.textAlign = 'left';
+        ctx.fillStyle = style.textColor;
+        ctx.fillText('이평', cursor, middle);
+        cursor += ctx.measureText('이평').width + itemGap;
+
+        this.averagePeriods.forEach((period, order) => {
+            const value = this.averages[order]?.[index];
+            const text = `${period} ${value === null || value === undefined ? '-' : formatPrice(value, layout.priceDecimals)}`;
+            ctx.fillStyle = style.lineColors[order % style.lineColors.length];
+            ctx.fillText(text, cursor, middle);
+            cursor += ctx.measureText(text).width + itemGap;
+        });
+    }
+
+    /**
+     * 십자선, 축 위의 가격·날짜 라벨, 마우스가 가리키는 캔들의 값 표시.
+     * 가리키는 캔들의 순번을 돌려주고, 없으면 null
+     */
+    private drawCrosshair(layout: Layout, style: ChartStyle): number | null {
+        const ctx = this.overlayCtx;
+        const pointer = this.pointer;
+        if (!pointer) return null;
 
         const {range, plotBottom} = layout;
         const insidePlot = pointer.x >= 0 && pointer.x < layout.plotWidth
             && pointer.y >= 0 && pointer.y <= plotBottom;
-        if (!insidePlot) return;
+        if (!insidePlot) return null;
 
         // 세로선은 마우스가 올라간 캔들의 가운데에 붙인다. 캔들이 없는 빈 자리면 그리지 않는다.
         const index = Math.floor(range.leftEdge + pointer.x / range.spacing);
         const candle = this.candles[index];
-        if (!candle) return;
+        if (!candle) return null;
 
         const line = this.lineWidth();
         const plotRightPx = this.px(layout.plotWidth);
@@ -540,9 +644,6 @@ export class CandleChartEngine {
         ctx.lineTo(plotRightPx, y);
         ctx.stroke();
         ctx.setLineDash([]);
-
-        ctx.font = `${this.px(FONT_SIZE)}px ${style.fontFamily}`;
-        ctx.textBaseline = 'middle';
 
         const labelHeight = this.px(CROSSHAIR_LABEL_HEIGHT);
         const labelPadding = this.px(CROSSHAIR_LABEL_PADDING);
@@ -576,6 +677,7 @@ export class CandleChartEngine {
         ctx.fillText(timeLabel, timeLeft + timeWidth / 2, timeTop + labelHeight / 2);
 
         this.drawLegend(candle, style);
+        return index;
     }
 
     /** 왼쪽 위에 시가·고가·저가·종가·거래량을 한 줄로 표시한다. 값은 캔들 색을 따른다. */

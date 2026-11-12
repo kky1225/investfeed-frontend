@@ -30,5 +30,6 @@ export interface ChartStyle {
     textColor: string,   // 축 글자, 보합 캔들
     gridColor: string,   // 격자, 축 경계선
     backgroundColor: string,    // 십자선 라벨 글자, 값 표시 바탕
+    lineColors: string[],       // 이동평균선 색. 기간 순서대로 돌려 쓴다
     fontFamily: string,
 }
