@@ -18,6 +18,19 @@ export interface PriceLine {
     tone: 'up' | 'down' | 'neutral',    // 색: 상승색 / 하락색 / 글자색
 }
 
+/** 그린 도형이 붙는 자리. 화면 좌표가 아니라 캔들 시각과 가격에 고정된다. */
+export interface Anchor {
+    time: number,   // 캔들 시각 (epoch ms)
+    price: number,
+}
+
+/** 사용자가 차트에 직접 그린 도형 */
+export type Drawing =
+    | { id: string, type: 'trend', from: Anchor, to: Anchor }  // 추세선: 두 점을 잇는 선분
+    | { id: string, type: 'horizontal', price: number };       // 수평선
+
+export type DrawingTool = Drawing['type'];
+
 /** 차트 아래 별도 영역에 그리는 보조지표 */
 export type IndicatorType = 'rsi' | 'macd';
 

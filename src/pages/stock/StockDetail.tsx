@@ -1101,6 +1101,7 @@ const StockDetail = () => {
                                         timeUnit={CHART_TIME_UNIT[req.chartType]}
                                         seriesKey={`${stkCd}-${req.chartType}`}
                                         priceLines={targetLines}
+                                        drawingKey={stkCd}
                                     />
                                 ) : (
                                     <StockDetailLineChart {...stockChartData} />

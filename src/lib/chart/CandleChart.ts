@@ -1,4 +1,4 @@
-import {Candle, ChartStyle, IndicatorType, PriceLine, TimeUnit} from "./types.ts";
+import {Anchor, Candle, ChartStyle, Drawing, DrawingTool, IndicatorType, PriceLine, TimeUnit} from "./types.ts";
 import {createInverseScale, createLinearScale, formatPrice, formatTime, formatVolume, niceTicks} from "./scale.ts";
 import {macd, MacdSeries, movingAverage, relativeStrength, Series} from "./indicators.ts";
 
@@ -46,7 +46,13 @@ const MACD_FAST = 12;
 const MACD_SLOW = 26;
 const MACD_SIGNAL = 9;
 
+// 그리기 도구
+const HIT_TOLERANCE = 6;        // 선에서 이만큼 안쪽을 누르면 그 선을 잡은 것으로 본다
+const HANDLE_SIZE = 7;          // 선택한 추세선 양 끝의 손잡이 크기
+const DRAFT_ID = 'draft';       // 그리는 중인 도형
+
 // style.lineColors 안에서의 색 순서
+const DRAWING_COLOR = 3;
 const RSI_COLOR = 2;
 const MACD_COLOR = 3;
 const MACD_SIGNAL_COLOR = 1;
@@ -97,7 +103,31 @@ type Gesture =
     | { type: 'pan', startX: number, startRightEdge: number, moved: boolean }
     | { type: 'pinch', startDistance: number, startSpacing: number, anchor: number };  // anchor: 두 손가락 가운데의 순번
 
+/** 그리는 중인 추세선. origin 은 첫 점을 누른 화면 위치 */
+interface Draft {
+    from: Anchor,
+    to: Anchor,
+    origin: Point,
+}
+
+/** 이미 그린 도형을 끌어 옮기는 중. part 는 잡은 부분(전체·시작점·끝점) */
+interface Move {
+    part: 'body' | 'from' | 'to',
+    start: Point,
+    original: Drawing,
+    changed: boolean,
+}
+
 const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
+
+/** 점 p 에서 선분 a-b 까지의 거리 */
+const distanceToSegment = (p: Point, a: Point, b: Point): number => {
+    const dx = b.x - a.x;
+    const dy = b.y - a.y;
+    const lengthSquared = dx * dx + dy * dy;
+    const t = lengthSquared === 0 ? 0 : clamp(((p.x - a.x) * dx + (p.y - a.y) * dy) / lengthSquared, 0, 1);
+    return Math.hypot(p.x - (a.x + t * dx), p.y - (a.y + t * dy));
+};
 
 const isNumber = (value: number | null | undefined): value is number => value !== null && value !== undefined;
 
@@ -136,6 +166,21 @@ export class CandleChartEngine {
     private indicators: IndicatorType[] = [];
     private priceLines: PriceLine[] = [];
     private rsi: Series = [];
+
+    // 그리기 도구
+    private drawings: Drawing[] = [];
+    private tool: DrawingTool | null = null;        // 고른 도구. null 이면 선택·이동 상태
+    private selectedId: string | null = null;
+    private draft: Draft | null = null;
+    private move: Move | null = null;
+    private editPointerId: number | null = null;    // 그리기·옮기기에 쓰이는 포인터. 이 포인터는 차트를 이동시키지 않는다
+
+    /** 도형이 추가·변경·삭제되면 새 목록을 알린다. */
+    onDrawingsChange: ((drawings: Drawing[]) => void) | null = null;
+    /** 도형 하나를 다 그렸거나 취소해서 도구가 풀리면 알린다. */
+    onToolChange: ((tool: DrawingTool | null) => void) | null = null;
+    /** 선택한 도형이 바뀌면 알린다. */
+    onSelectionChange: ((id: string | null) => void) | null = null;
     private macd: MacdSeries = {macd: [], signal: [], histogram: []};
 
     constructor(container: HTMLElement) {
@@ -151,6 +196,10 @@ export class CandleChartEngine {
         // 세로 스크롤은 브라우저에 맡기고, 가로 드래그와 두 손가락 확대는 직접 처리한다.
         container.style.touchAction = 'pan-y';
         container.style.userSelect = 'none';
+        // 선택한 도형을 Delete 키로 지울 수 있게 포커스를 받을 수 있도록 한다.
+        container.tabIndex = -1;
+        container.style.outline = 'none';
+        container.addEventListener('keydown', this.handleKeyDown);
         container.addEventListener('pointerdown', this.handlePointerDown);
         container.addEventListener('pointermove', this.handlePointerMove);
         container.addEventListener('pointerup', this.handlePointerUp);
@@ -190,6 +239,22 @@ export class CandleChartEngine {
         this.scheduleDraw();
     }
 
+    /** 사용자가 그린 도형 목록을 통째로 바꾼다. */
+    setDrawings(drawings: Drawing[]) {
+        this.drawings = drawings;
+        if (this.selectedId && !drawings.some(drawing => drawing.id === this.selectedId)) this.select(null);
+        this.scheduleOverlay();
+    }
+
+    /** 그리기 도구를 고른다. null 이면 선택·이동 상태로 돌아간다. */
+    setTool(tool: DrawingTool | null) {
+        this.tool = tool;
+        this.draft = null;
+        if (tool) this.select(null);
+        this.updateCursor();
+        this.scheduleOverlay();
+    }
+
     /** 특정 가격에 긋는 가로선들 (목표가 등). 가격축 범위 밖의 선은 그리지 않는다. */
     setPriceLines(priceLines: PriceLine[]) {
         this.priceLines = priceLines;
@@ -220,6 +285,7 @@ export class CandleChartEngine {
         if (this.overlayFrame) cancelAnimationFrame(this.overlayFrame);
         this.frame = 0;
         this.overlayFrame = 0;
+        this.container.removeEventListener('keydown', this.handleKeyDown);
         this.container.removeEventListener('pointerdown', this.handlePointerDown);
         this.container.removeEventListener('pointermove', this.handlePointerMove);
         this.container.removeEventListener('pointerup', this.handlePointerUp);
@@ -251,6 +317,17 @@ export class CandleChartEngine {
     private readonly handlePointerDown = (event: PointerEvent) => {
         if (event.pointerType === 'mouse' && event.button !== 0) return;
         const point = this.localPoint(event);
+        this.container.focus({preventScroll: true});
+
+        // 도구를 골랐거나 도형 위를 눌렀으면 그리기·옮기기로 처리하고, 차트는 이동시키지 않는다.
+        if (this.activePointers.size === 0 && this.editPointerId === null && this.beginEdit(point)) {
+            this.editPointerId = event.pointerId;
+            this.container.setPointerCapture(event.pointerId);
+            this.pointer = point;
+            this.scheduleOverlay();
+            return;
+        }
+
         this.activePointers.set(event.pointerId, point);
         this.container.setPointerCapture(event.pointerId);
         this.beginGesture();
@@ -261,10 +338,18 @@ export class CandleChartEngine {
 
     private readonly handlePointerMove = (event: PointerEvent) => {
         const point = this.localPoint(event);
+        if (event.pointerId === this.editPointerId) {
+            this.pointer = point;
+            this.updateEdit(point);
+            this.scheduleOverlay();
+            return;
+        }
         if (!this.activePointers.has(event.pointerId)) {
-            // 누르지 않은 채 움직임: 십자선만 옮긴다.
+            // 누르지 않은 채 움직임: 십자선만 옮긴다. 추세선의 첫 점을 찍은 뒤라면 끝점이 따라온다.
             if (event.pointerType === 'touch') return;
             this.pointer = point;
+            if (this.draft) this.draft.to = this.anchorAt(point, true) ?? this.draft.to;
+            this.updateCursor(point);
             this.scheduleOverlay();
             return;
         }
@@ -281,6 +366,15 @@ export class CandleChartEngine {
     };
 
     private readonly handlePointerUp = (event: PointerEvent) => {
+        if (event.pointerId === this.editPointerId) {
+            this.editPointerId = null;
+            if (this.container.hasPointerCapture(event.pointerId)) {
+                this.container.releasePointerCapture(event.pointerId);
+            }
+            this.finishEdit(this.localPoint(event));
+            this.scheduleOverlay();
+            return;
+        }
         if (!this.activePointers.delete(event.pointerId)) return;
         if (this.container.hasPointerCapture(event.pointerId)) {
             this.container.releasePointerCapture(event.pointerId);
@@ -335,7 +429,264 @@ export class CandleChartEngine {
         } else {
             this.gesture = null;
         }
-        this.container.style.cursor = this.gesture ? 'grabbing' : '';
+        this.updateCursor();
+    }
+
+    /** 상황에 맞는 마우스 커서: 끄는 중 / 도구 고름 / 도형 위 / 기본 */
+    private updateCursor(hover?: Point) {
+        this.container.style.cursor = this.gesture ? 'grabbing'
+            : this.tool ? 'crosshair'
+            : hover && this.hitTest(hover) ? 'pointer'
+            : '';
+    }
+
+    private readonly handleKeyDown = (event: KeyboardEvent) => {
+        if (event.key === 'Escape') {
+            // 그리던 것을 취소하고, 그리는 중이 아니면 선택을 푼다.
+            if (this.tool || this.draft) this.releaseTool();
+            else this.select(null);
+            this.scheduleOverlay();
+        } else if ((event.key === 'Delete' || event.key === 'Backspace') && this.selectedId) {
+            event.preventDefault();
+            const selectedId = this.selectedId;
+            this.select(null);
+            this.changeDrawings(this.drawings.filter(drawing => drawing.id !== selectedId));
+        }
+    };
+
+    // ---------- 그리기 도구 ----------
+
+    private select(id: string | null) {
+        if (this.selectedId === id) return;
+        this.selectedId = id;
+        this.onSelectionChange?.(id);
+        this.scheduleOverlay();
+    }
+
+    private changeDrawings(drawings: Drawing[]) {
+        this.drawings = drawings;
+        this.onDrawingsChange?.(drawings);
+        this.scheduleOverlay();
+    }
+
+    /** 도형 하나를 다 그렸거나 취소했을 때 도구를 푼다. */
+    private releaseTool() {
+        this.tool = null;
+        this.draft = null;
+        this.updateCursor();
+        this.onToolChange?.(null);
+    }
+
+    private createId(): string {
+        return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+    }
+
+    /** 시각이 time 인 캔들의 순번. 꼭 맞는 캔들이 없으면(주기가 바뀐 경우) 그 직전 캔들 */
+    private timeToIndex(time: number): number {
+        let low = 0;
+        let high = this.candles.length - 1;
+        while (low < high) {
+            const middle = Math.ceil((low + high) / 2);
+            if (this.candles[middle].time <= time) low = middle;
+            else high = middle - 1;
+        }
+        return low;
+    }
+
+    /**
+     * 화면 위치를 캔들 시각·가격으로 바꾼다. 가로는 그 자리의 캔들에 붙인다.
+     * 가격 영역 밖이면 null. clampToPane 이면 영역 안으로 끌어와 계산한다(끄는 중에 영역을 벗어났을 때).
+     */
+    private anchorAt(point: Point, clampToPane: boolean): Anchor | null {
+        const layout = this.layout;
+        const pane = layout?.panes[0];
+        if (!layout || !pane || this.candles.length === 0) return null;
+        const inside = point.x >= 0 && point.x < layout.plotWidth && point.y >= pane.top && point.y <= pane.bottom;
+        if (!inside && !clampToPane) return null;
+        const index = clamp(
+            Math.floor(layout.range.leftEdge + point.x / layout.range.spacing),
+            0, this.candles.length - 1,
+        );
+        const y = clamp(point.y, pane.top, pane.bottom);
+        return {
+            time: this.candles[index].time,
+            price: createInverseScale(pane.min, pane.max, pane.scaleTop, pane.scaleBottom)(y),
+        };
+    }
+
+    /** 캔들 시각·가격을 화면 위치(CSS px)로 바꾼다. */
+    private anchorPoint(anchor: Anchor, layout: Layout): Point {
+        const pane = layout.panes[0];
+        return {
+            x: (this.timeToIndex(anchor.time) + 0.5 - layout.range.leftEdge) * layout.range.spacing,
+            y: createLinearScale(pane.min, pane.max, pane.scaleTop, pane.scaleBottom)(anchor.price),
+        };
+    }
+
+    /** 화면 위치에 있는 도형과 잡힌 부분. 나중에 그린 도형이 먼저 잡힌다. */
+    private hitTest(point: Point): { drawing: Drawing, part: Move['part'] } | null {
+        const layout = this.layout;
+        const pane = layout?.panes[0];
+        if (!layout || !pane) return null;
+        if (point.x < 0 || point.x >= layout.plotWidth || point.y < pane.top || point.y > pane.bottom) return null;
+
+        for (let order = this.drawings.length - 1; order >= 0; order--) {
+            const drawing = this.drawings[order];
+            if (drawing.type === 'horizontal') {
+                const y = createLinearScale(pane.min, pane.max, pane.scaleTop, pane.scaleBottom)(drawing.price);
+                if (Math.abs(point.y - y) <= HIT_TOLERANCE) return {drawing, part: 'body'};
+                continue;
+            }
+            const from = this.anchorPoint(drawing.from, layout);
+            const to = this.anchorPoint(drawing.to, layout);
+            if (Math.hypot(point.x - from.x, point.y - from.y) <= HIT_TOLERANCE + 2) return {drawing, part: 'from'};
+            if (Math.hypot(point.x - to.x, point.y - to.y) <= HIT_TOLERANCE + 2) return {drawing, part: 'to'};
+            if (distanceToSegment(point, from, to) <= HIT_TOLERANCE) return {drawing, part: 'body'};
+        }
+        return null;
+    }
+
+    /** 누른 자리에서 그리기나 옮기기를 시작한다. 시작했으면 true, 아니면(빈 곳) false 로 차트 이동에 넘긴다. */
+    private beginEdit(point: Point): boolean {
+        if (this.tool) {
+            const anchor = this.anchorAt(point, false);
+            if (!anchor) return false;
+            if (this.tool === 'horizontal') {
+                // 수평선은 누른 자리의 가격에 바로 긋는다.
+                this.changeDrawings([...this.drawings, {id: this.createId(), type: 'horizontal', price: anchor.price}]);
+                this.releaseTool();
+            } else if (this.draft) {
+                // 첫 점을 찍어 둔 상태: 이번에 누른 자리가 끝점
+                this.draft.to = anchor;
+            } else {
+                this.draft = {from: anchor, to: anchor, origin: point};
+            }
+            return true;
+        }
+
+        const hit = this.hitTest(point);
+        if (!hit) {
+            this.select(null);
+            return false;
+        }
+        this.select(hit.drawing.id);
+        this.move = {part: hit.part, start: point, original: hit.drawing, changed: false};
+        return true;
+    }
+
+    /** 누른 채 움직이는 동안: 그리는 추세선의 끝점을 옮기거나, 잡은 도형을 옮긴다. */
+    private updateEdit(point: Point) {
+        const target = this.anchorAt(point, true);
+        if (!target) return;
+        if (this.draft) {
+            this.draft.to = target;
+            return;
+        }
+        const move = this.move;
+        if (!move) return;
+        if (!move.changed && Math.hypot(point.x - move.start.x, point.y - move.start.y) < DRAG_THRESHOLD) return;
+
+        const original = move.original;
+        let next: Drawing;
+        if (original.type === 'horizontal') {
+            next = {...original, price: target.price};
+        } else if (move.part === 'from') {
+            next = {...original, from: target};
+        } else if (move.part === 'to') {
+            next = {...original, to: target};
+        } else {
+            // 선 전체: 잡은 자리에서 움직인 캔들 수·가격만큼 두 점을 같이 옮긴다.
+            const start = this.anchorAt(move.start, true);
+            if (!start) return;
+            const indexDelta = this.timeToIndex(target.time) - this.timeToIndex(start.time);
+            const priceDelta = target.price - start.price;
+            const shift = (anchor: Anchor): Anchor => ({
+                time: this.candles[clamp(this.timeToIndex(anchor.time) + indexDelta, 0, this.candles.length - 1)].time,
+                price: anchor.price + priceDelta,
+            });
+            next = {...original, from: shift(original.from), to: shift(original.to)};
+        }
+        move.changed = true;
+        this.drawings = this.drawings.map(drawing => drawing.id === next.id ? next : drawing);
+    }
+
+    /** 손을 뗐을 때: 추세선을 확정하거나, 옮긴 결과를 알린다. */
+    private finishEdit(point: Point) {
+        if (this.draft) {
+            // 끌어서 그렸으면 바로 확정. 제자리에서 뗐으면 첫 점만 찍힌 상태로 두고 다음 누름을 끝점으로 받는다.
+            const {from, to, origin} = this.draft;
+            if (Math.hypot(point.x - origin.x, point.y - origin.y) >= DRAG_THRESHOLD) {
+                this.changeDrawings([...this.drawings, {id: this.createId(), type: 'trend', from, to}]);
+                this.releaseTool();
+            }
+            return;
+        }
+        if (this.move?.changed) this.onDrawingsChange?.(this.drawings);
+        this.move = null;
+    }
+
+    /** 그린 도형들을 위 장에 그린다. 가격 영역 밖으로는 나가지 않는다. */
+    private drawDrawings(layout: Layout, style: ChartStyle) {
+        const drawings: Drawing[] = this.draft
+            ? [...this.drawings, {id: DRAFT_ID, type: 'trend', from: this.draft.from, to: this.draft.to}]
+            : this.drawings;
+        if (drawings.length === 0) return;
+
+        const ctx = this.overlayCtx;
+        const pane = layout.panes[0];
+        const toY = createLinearScale(pane.min, pane.max, pane.scaleTop, pane.scaleBottom);
+        const color = this.lineColor(style, DRAWING_COLOR);
+        const line = this.lineWidth();
+        const plotRightPx = this.px(layout.plotWidth);
+        const baseWidth = Math.max(1, Math.round(SERIES_LINE_WIDTH * this.dpr));
+        const handle = this.px(HANDLE_SIZE);
+
+        ctx.save();
+        ctx.beginPath();
+        ctx.rect(0, this.px(pane.top), plotRightPx, this.px(pane.bottom) - this.px(pane.top));
+        ctx.clip();
+        ctx.strokeStyle = color;
+        ctx.fillStyle = color;
+        drawings.forEach(drawing => {
+            const active = drawing.id === this.selectedId || drawing.id === DRAFT_ID;
+            ctx.lineWidth = active ? baseWidth + line : baseWidth;
+            ctx.beginPath();
+            if (drawing.type === 'horizontal') {
+                const y = this.px(toY(drawing.price)) + line / 2;
+                ctx.moveTo(0, y);
+                ctx.lineTo(plotRightPx, y);
+                ctx.stroke();
+                return;
+            }
+            const points = [this.anchorPoint(drawing.from, layout), this.anchorPoint(drawing.to, layout)]
+                .map(point => ({x: point.x * this.dpr, y: point.y * this.dpr}));
+            ctx.moveTo(points[0].x, points[0].y);
+            ctx.lineTo(points[1].x, points[1].y);
+            ctx.stroke();
+            // 선택했거나 그리는 중이면 양 끝에 손잡이
+            if (active) {
+                points.forEach(point => {
+                    ctx.fillRect(Math.round(point.x - handle / 2), Math.round(point.y - handle / 2), handle, handle);
+                });
+            }
+        });
+        ctx.restore();
+
+        // 수평선은 오른쪽 축에 가격 라벨을 붙인다.
+        const labelHeight = this.px(CROSSHAIR_LABEL_HEIGHT);
+        ctx.textAlign = 'left';
+        ctx.lineWidth = line;
+        drawings.forEach(drawing => {
+            if (drawing.type !== 'horizontal' || drawing.price < pane.min || drawing.price > pane.max) return;
+            const y = this.px(toY(drawing.price));
+            const labelTop = Math.round(y - labelHeight / 2);
+            ctx.fillStyle = style.backgroundColor;
+            ctx.fillRect(plotRightPx, labelTop, this.px(PRICE_AXIS_WIDTH), labelHeight);
+            ctx.strokeStyle = color;
+            ctx.strokeRect(plotRightPx + line / 2, labelTop + line / 2, this.px(PRICE_AXIS_WIDTH) - line, labelHeight - line);
+            ctx.fillStyle = color;
+            ctx.fillText(pane.format(drawing.price), plotRightPx + this.px(AXIS_LABEL_OFFSET), y);
+        });
     }
 
     /** 진행 중인 드래그·확대를 보기 상태에 반영한다. 보기가 바뀌었으면 true */
@@ -785,6 +1136,8 @@ export class CandleChartEngine {
 
         ctx.font = `${this.px(FONT_SIZE)}px ${style.fontFamily}`;
         ctx.textBaseline = 'middle';
+
+        this.drawDrawings(layout, style);
 
         // 마우스가 가리키는 캔들이 없으면 가장 최근 캔들의 지표 값을 보여 준다.
         const index = this.drawCrosshair(layout, style) ?? this.candles.length - 1;
