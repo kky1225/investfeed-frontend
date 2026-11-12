@@ -1,13 +1,16 @@
-import {Candle, ChartStyle, TimeUnit} from "./types.ts";
+import {Candle, ChartStyle, IndicatorType, TimeUnit} from "./types.ts";
 import {createInverseScale, createLinearScale, formatPrice, formatTime, formatVolume, niceTicks} from "./scale.ts";
-import {movingAverage} from "./indicators.ts";
+import {macd, MacdSeries, movingAverage, relativeStrength, Series} from "./indicators.ts";
+
+/** 보조지표 영역 하나의 높이 (CSS px). 래퍼가 전체 높이를 정할 때 쓴다. */
+export const INDICATOR_PANE_HEIGHT = 90;
 
 // 배치 상수 (CSS px)
 const PRICE_AXIS_WIDTH = 64;
 const TIME_AXIS_HEIGHT = 24;
 const PADDING_TOP = 8;
 const PANE_GAP = 8;             // 가격 영역과 거래량 영역 사이
-const VOLUME_RATIO = 0.22;      // 전체 그림 높이 중 거래량 영역 비율
+const VOLUME_RATIO = 0.22;      // 가격+거래량 높이 중 거래량 영역 비율
 const DEFAULT_MIN_BAR_SPACING = 4;  // 처음 보여 줄 때 캔들 한 칸 최소 너비
 const DEFAULT_MAX_BAR_SPACING = 16; // 처음 보여 줄 때 캔들 한 칸 최대 너비
 const MIN_BAR_SPACING = 1;      // 축소 한계
@@ -22,15 +25,29 @@ const CROSSHAIR_LABEL_HEIGHT = 18;
 const CROSSHAIR_LABEL_PADDING = 6;
 const CROSSHAIR_DASH = [4, 3];
 const CURRENT_PRICE_DASH = [2, 2];
-const AVERAGE_LINE_WIDTH = 1.5;
+const SERIES_LINE_WIDTH = 1.5;  // 이동평균선·지표선 굵기
 const LEGEND_LEFT = 8;
 const LEGEND_HEIGHT = 18;
 const LEGEND_GAP = 4;           // 이름과 값 사이
 const LEGEND_ITEM_GAP = 10;     // 항목 사이
+const INDICATOR_PADDING_BOTTOM = 6;
+const HISTOGRAM_ALPHA = 0.5;
 const DRAG_THRESHOLD = 3;       // 이만큼 움직여야 드래그로 본다
 const WHEEL_ZOOM_RATE = 0.0015;
 const PINCH_WHEEL_ZOOM_RATE = 0.01; // 트랙패드 두 손가락 벌리기 (ctrl + wheel 로 들어옴)
 const WHEEL_LINE_HEIGHT = 16;
+
+// 지표 설정
+const RSI_PERIOD = 14;
+const RSI_LEVELS = [70, 30];    // 과매수·과매도 기준선
+const MACD_FAST = 12;
+const MACD_SLOW = 26;
+const MACD_SIGNAL = 9;
+
+// style.lineColors 안에서의 색 순서
+const RSI_COLOR = 2;
+const MACD_COLOR = 3;
+const MACD_SIGNAL_COLOR = 1;
 
 /**
  * 보기 상태. 가로축은 캔들 순번이고, rightEdge 는 그림 오른쪽 끝에 놓인 순번(소수 가능)이다.
@@ -48,18 +65,25 @@ interface VisibleRange {
     leftEdge: number,   // 그림 왼쪽 끝에 놓인 순번(소수 가능)
 }
 
+/** 세로로 쌓인 영역 하나(가격·거래량·보조지표). 십자선이 마우스 높이를 값으로 바꿀 때 쓴다. (CSS px) */
+interface Pane {
+    top: number,            // 영역 범위
+    bottom: number,
+    scaleTop: number,       // max 가 놓이는 높이
+    scaleBottom: number,    // min 이 놓이는 높이
+    min: number,
+    max: number,
+    format: (value: number) => string,
+}
+
 /** 마지막으로 그린 화면의 배치. 십자선이 같은 좌표계를 쓰도록 남겨 둔다. (CSS px) */
 interface Layout {
     range: VisibleRange,
     plotWidth: number,
     plotBottom: number,
-    priceTop: number,
-    priceBottom: number,
-    priceMin: number,
-    priceMax: number,
     priceDecimals: number,
-    volumeTop: number,
-    volumeMax: number,
+    panes: Pane[],
+    indicators: { type: IndicatorType, top: number }[],
 }
 
 interface Point {
@@ -73,9 +97,14 @@ type Gesture =
 
 const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
 
+const isNumber = (value: number | null | undefined): value is number => value !== null && value !== undefined;
+
+const formatIndicator = (value: number | null | undefined): string =>
+    isNumber(value) ? value.toLocaleString('ko-KR', {maximumFractionDigits: 2}) : '-';
+
 /**
  * Canvas 2D 캔들 차트 엔진. React 와 무관한 순수 TypeScript.
- * 캔버스 두 장을 겹친다: 아래(main)는 캔들·거래량·축, 위(overlay)는 십자선과 값 표시.
+ * 캔버스 두 장을 겹친다: 아래(main)는 캔들·거래량·지표·축, 위(overlay)는 십자선과 값 표시.
  * 마우스가 움직일 때는 위 장만 다시 그린다.
  * 좌표는 CSS px 로 계산한 뒤 px() 로 기기 픽셀에 맞춰 선이 흐려지지 않게 한다.
  */
@@ -99,8 +128,12 @@ export class CandleChartEngine {
     private view: View | null = null;       // null 이면 기본 보기(최근 캔들을 오른쪽 끝에 맞춤)
     private gesture: Gesture | null = null;
     private readonly activePointers = new Map<number, Point>();    // 누르고 있는 포인터
+
     private averagePeriods: number[] = [];
-    private averages: (number | null)[][] = [];     // averagePeriods 와 같은 순서. 각 줄은 캔들과 같은 길이
+    private averages: Series[] = [];        // averagePeriods 와 같은 순서
+    private indicators: IndicatorType[] = [];
+    private rsi: Series = [];
+    private macd: MacdSeries = {macd: [], signal: [], histogram: []};
 
     constructor(container: HTMLElement) {
         this.container = container;
@@ -131,19 +164,26 @@ export class CandleChartEngine {
         }
         this.candles = candles;
         this.timeUnit = timeUnit;
-        this.averages = this.averagePeriods.map(period => movingAverage(candles, period));
+        this.computeSeries();
+        this.scheduleDraw();
+    }
+
+    setStyle(style: ChartStyle) {
+        this.style = style;
         this.scheduleDraw();
     }
 
     /** 그릴 이동평균선의 기간들 (예: [5, 20, 60, 120]) */
     setMovingAverages(periods: number[]) {
         this.averagePeriods = periods;
-        this.averages = periods.map(period => movingAverage(this.candles, period));
+        this.computeSeries();
         this.scheduleDraw();
     }
 
-    setStyle(style: ChartStyle) {
-        this.style = style;
+    /** 차트 아래에 쌓을 보조지표. 적은 순서대로 위에서 아래로 놓인다. */
+    setIndicators(indicators: IndicatorType[]) {
+        this.indicators = indicators;
+        this.computeSeries();
         this.scheduleDraw();
     }
 
@@ -179,6 +219,17 @@ export class CandleChartEngine {
         this.container.removeEventListener('wheel', this.handleWheel);
         this.mainCanvas.remove();
         this.overlayCanvas.remove();
+    }
+
+    /** 캔들이나 지표 설정이 바뀌면 이동평균·보조지표 값을 다시 계산한다. */
+    private computeSeries() {
+        this.averages = this.averagePeriods.map(period => movingAverage(this.candles, period));
+        if (this.indicators.includes('rsi')) {
+            this.rsi = relativeStrength(this.candles, RSI_PERIOD);
+        }
+        if (this.indicators.includes('macd')) {
+            this.macd = macd(this.candles, MACD_FAST, MACD_SLOW, MACD_SIGNAL);
+        }
     }
 
     // ---------- 입력 ----------
@@ -350,7 +401,7 @@ export class CandleChartEngine {
         return {from, count: Math.max(0, to - from), spacing: view.spacing, leftEdge};
     }
 
-    // ---------- 그리기 ----------
+    // ---------- 그리기 공통 ----------
 
     private createCanvas(): HTMLCanvasElement {
         const canvas = document.createElement('canvas');
@@ -396,28 +447,77 @@ export class CandleChartEngine {
         return this.px((index + 0.5 - range.leftEdge) * range.spacing);
     }
 
+    /** 캔들 몸통·막대 너비 (기기 픽셀) */
+    private bodyWidth(range: VisibleRange): number {
+        return Math.max(1, this.px(range.spacing * BODY_RATIO));
+    }
+
     private candleColor(candle: Candle, style: ChartStyle): string {
         return candle.close > candle.open ? style.upColor
             : candle.close < candle.open ? style.downColor
             : style.textColor;
     }
 
-    /** 캔들·거래량·축을 그리고, 그린 배치를 돌려준다. 그릴 것이 없으면 null */
+    private lineColor(style: ChartStyle, order: number): string {
+        return style.lineColors.length > 0 ? style.lineColors[order % style.lineColors.length] : style.textColor;
+    }
+
+    /** 아래 장에서 그림 영역의 top~bottom 밖으로 나가지 않게 잘라 그린다. */
+    private clipped(top: number, bottom: number, draw: () => void) {
+        const ctx = this.mainCtx;
+        ctx.save();
+        ctx.beginPath();
+        ctx.rect(0, this.px(top), this.px(this.width - PRICE_AXIS_WIDTH), this.px(bottom) - this.px(top));
+        ctx.clip();
+        draw();
+        ctx.restore();
+    }
+
+    /** 지표 값을 선으로 잇는다. 화면 가장자리에서 끊겨 보이지 않게 양옆 한 칸씩 더 잇는다. */
+    private strokeSeries(values: Series, range: VisibleRange, toY: (value: number) => number, color: string) {
+        const ctx = this.mainCtx;
+        const start = Math.max(0, range.from - 1);
+        const end = Math.min(values.length, range.from + range.count + 1);
+        ctx.strokeStyle = color;
+        ctx.lineWidth = Math.max(1, Math.round(SERIES_LINE_WIDTH * this.dpr));
+        ctx.lineJoin = 'round';
+        ctx.beginPath();
+        let started = false;
+        for (let index = start; index < end; index++) {
+            const value = values[index];
+            if (!isNumber(value)) continue;
+            const x = this.centerX(index, range);
+            const y = toY(value) * this.dpr;
+            if (started) {
+                ctx.lineTo(x, y);
+            } else {
+                ctx.moveTo(x, y);
+                started = true;
+            }
+        }
+        ctx.stroke();
+    }
+
+    // ---------- 아래 장: 캔들·거래량·지표·축 ----------
+
+    /** 아래 장 전체를 그리고, 그린 배치를 돌려준다. 그릴 것이 없으면 null */
     private drawMain(): Layout | null {
         const ctx = this.mainCtx;
         const style = this.style;
         ctx.clearRect(0, 0, this.mainCanvas.width, this.mainCanvas.height);
 
+        // 위에서부터: 가격 / 거래량 / 보조지표들 / 날짜축
         const plotWidth = this.width - PRICE_AXIS_WIDTH;
         const plotBottom = this.height - TIME_AXIS_HEIGHT;
-        const plotHeight = plotBottom - PADDING_TOP;
-        if (!style || this.candles.length === 0 || plotWidth <= 0 || plotHeight <= 0) return null;
+        const mainBottom = plotBottom - this.indicators.length * INDICATOR_PANE_HEIGHT;
+        const mainHeight = mainBottom - PADDING_TOP;
+        if (!style || this.candles.length === 0 || plotWidth <= 0 || mainHeight <= 0) return null;
 
         const range = this.visibleRange();
         if (range.count === 0) return null;
         const visible = this.candles.slice(range.from, range.from + range.count);
 
-        const volumeTop = plotBottom - plotHeight * VOLUME_RATIO;
+        const volumeTop = mainBottom - mainHeight * VOLUME_RATIO;
         const priceTop = PADDING_TOP;
         const priceBottom = volumeTop - PANE_GAP;
 
@@ -425,7 +525,7 @@ export class CandleChartEngine {
         // 이동평균선이 잘리지 않게 보이는 구간의 평균값도 범위에 넣는다.
         const visibleAverages = this.averages
             .flatMap(values => values.slice(range.from, range.from + range.count))
-            .filter((value): value is number => value !== null);
+            .filter(isNumber);
         const highest = Math.max(...visible.map(candle => candle.high), ...visibleAverages);
         const lowest = Math.min(...visible.map(candle => candle.low), ...visibleAverages);
         const padding = (highest - lowest) * 0.05 || highest * 0.01 || 1;
@@ -434,11 +534,13 @@ export class CandleChartEngine {
         const priceY = createLinearScale(priceMin, priceMax, priceTop, priceBottom);
 
         const volumeMax = Math.max(...visible.map(candle => candle.volume)) || 1;
-        const volumeY = createLinearScale(0, volumeMax, volumeTop, plotBottom);
+        const volumeY = createLinearScale(0, volumeMax, volumeTop, mainBottom);
 
         const line = this.lineWidth();
         const plotRightPx = this.px(plotWidth);
         const plotBottomPx = this.px(plotBottom);
+        const mainBottomPx = this.px(mainBottom);
+        const axisLabelX = plotRightPx + this.px(AXIS_LABEL_OFFSET);
 
         ctx.font = `${this.px(FONT_SIZE)}px ${style.fontFamily}`;
         ctx.textBaseline = 'middle';
@@ -451,7 +553,7 @@ export class CandleChartEngine {
             ctx.fillStyle = style.gridColor;
             ctx.fillRect(0, y, plotRightPx, line);
             ctx.fillStyle = style.textColor;
-            ctx.fillText(formatPrice(value, priceTicks.decimals), plotRightPx + this.px(AXIS_LABEL_OFFSET), y);
+            ctx.fillText(formatPrice(value, priceTicks.decimals), axisLabelX, y);
         });
 
         // 거래량 눈금: 오른쪽 라벨만
@@ -459,7 +561,7 @@ export class CandleChartEngine {
         niceTicks(0, volumeMax, 2).values
             .filter(value => value > 0)
             .forEach(value => {
-                ctx.fillText(formatVolume(value), plotRightPx + this.px(AXIS_LABEL_OFFSET), this.px(volumeY(value)));
+                ctx.fillText(formatVolume(value), axisLabelX, this.px(volumeY(value)));
             });
 
         // 날짜 눈금: 세로 격자 + 아래 라벨. 전체 순번 기준이라 보이는 구간이 바뀌어도 같은 캔들에 붙는다.
@@ -484,61 +586,36 @@ export class CandleChartEngine {
         ctx.fillRect(0, plotBottomPx, plotRightPx + line, line);
         ctx.fillRect(0, this.px(volumeTop - PANE_GAP / 2), plotRightPx, line);
 
-        // 캔들 + 거래량. 드래그로 반쯤 걸친 캔들이 축 영역으로 넘어가지 않게 그림 영역으로 자른다.
-        ctx.save();
-        ctx.beginPath();
-        ctx.rect(0, 0, plotRightPx, plotBottomPx);
-        ctx.clip();
-        const bodyWidth = Math.max(1, this.px(range.spacing * BODY_RATIO));
-        visible.forEach((candle, offset) => {
-            const x = this.centerX(range.from + offset, range);
-            const bodyLeft = x - Math.floor(bodyWidth / 2);
-            ctx.fillStyle = this.candleColor(candle, style);
+        // 캔들 + 거래량 + 이동평균선. 드래그로 반쯤 걸친 캔들이 축 영역으로 넘어가지 않게 자른다.
+        this.clipped(0, mainBottom, () => {
+            const bodyWidth = this.bodyWidth(range);
+            visible.forEach((candle, offset) => {
+                const x = this.centerX(range.from + offset, range);
+                const bodyLeft = x - Math.floor(bodyWidth / 2);
+                ctx.fillStyle = this.candleColor(candle, style);
 
-            // 꼬리
-            const highY = this.px(priceY(candle.high));
-            const lowY = this.px(priceY(candle.low));
-            ctx.fillRect(x - Math.floor(line / 2), highY, line, Math.max(1, lowY - highY));
+                // 꼬리
+                const highY = this.px(priceY(candle.high));
+                const lowY = this.px(priceY(candle.low));
+                ctx.fillRect(x - Math.floor(line / 2), highY, line, Math.max(1, lowY - highY));
 
-            // 몸통 (시가 = 종가면 1픽셀 선)
-            const openY = this.px(priceY(candle.open));
-            const closeY = this.px(priceY(candle.close));
-            const bodyTop = Math.min(openY, closeY);
-            ctx.fillRect(bodyLeft, bodyTop, bodyWidth, Math.max(1, Math.abs(closeY - openY)));
+                // 몸통 (시가 = 종가면 1픽셀 선)
+                const openY = this.px(priceY(candle.open));
+                const closeY = this.px(priceY(candle.close));
+                const bodyTop = Math.min(openY, closeY);
+                ctx.fillRect(bodyLeft, bodyTop, bodyWidth, Math.max(1, Math.abs(closeY - openY)));
 
-            // 거래량
-            if (candle.volume > 0) {
-                const top = Math.min(this.px(volumeY(candle.volume)), plotBottomPx - 1);
-                ctx.fillRect(bodyLeft, top, bodyWidth, plotBottomPx - top);
-            }
-        });
-
-        // 이동평균선. 화면 가장자리에서 끊겨 보이지 않게 양옆 한 칸씩 더 잇는다.
-        if (style.lineColors.length > 0) {
-            ctx.lineWidth = Math.max(1, Math.round(AVERAGE_LINE_WIDTH * this.dpr));
-            ctx.lineJoin = 'round';
-            const start = Math.max(0, range.from - 1);
-            const end = Math.min(this.candles.length, range.from + range.count + 1);
-            this.averages.forEach((values, order) => {
-                ctx.strokeStyle = style.lineColors[order % style.lineColors.length];
-                ctx.beginPath();
-                let started = false;
-                for (let index = start; index < end; index++) {
-                    const value = values[index];
-                    if (value === null || value === undefined) continue;
-                    const x = this.centerX(index, range);
-                    const y = priceY(value) * this.dpr;
-                    if (started) {
-                        ctx.lineTo(x, y);
-                    } else {
-                        ctx.moveTo(x, y);
-                        started = true;
-                    }
+                // 거래량
+                if (candle.volume > 0) {
+                    const top = Math.min(this.px(volumeY(candle.volume)), mainBottomPx - 1);
+                    ctx.fillRect(bodyLeft, top, bodyWidth, mainBottomPx - top);
                 }
-                ctx.stroke();
             });
-        }
-        ctx.restore();
+
+            this.averages.forEach((values, order) => {
+                this.strokeSeries(values, range, priceY, this.lineColor(style, order));
+            });
+        });
 
         // 현재가 선: 마지막 캔들의 종가 높이에 점선을 긋고, 오른쪽 축에 캔들 색 라벨을 붙인다.
         // 과거로 이동해 현재가가 가격축 범위를 벗어나면 그리지 않는다.
@@ -559,17 +636,106 @@ export class CandleChartEngine {
             ctx.fillRect(plotRightPx, Math.round(y - labelHeight / 2), this.px(PRICE_AXIS_WIDTH), labelHeight);
             ctx.fillStyle = style.backgroundColor;
             ctx.textAlign = 'left';
-            ctx.fillText(last.close.toLocaleString('ko-KR'), plotRightPx + this.px(AXIS_LABEL_OFFSET), y);
+            ctx.fillText(last.close.toLocaleString('ko-KR'), axisLabelX, y);
         }
+
+        // 보조지표 영역
+        const indicatorPanes = this.indicators.map((type, order) => {
+            const top = mainBottom + order * INDICATOR_PANE_HEIGHT;
+            return this.drawIndicator(type, top, top + INDICATOR_PANE_HEIGHT, range, style);
+        });
 
         return {
             range, plotWidth, plotBottom,
-            priceTop, priceBottom, priceMin, priceMax, priceDecimals: priceTicks.decimals,
-            volumeTop, volumeMax,
+            priceDecimals: priceTicks.decimals,
+            panes: [
+                {
+                    top: priceTop, bottom: priceBottom, scaleTop: priceTop, scaleBottom: priceBottom,
+                    min: priceMin, max: priceMax,
+                    format: value => formatPrice(value, priceTicks.decimals),
+                },
+                {
+                    top: volumeTop, bottom: mainBottom, scaleTop: volumeTop, scaleBottom: mainBottom,
+                    min: 0, max: volumeMax,
+                    format: value => formatVolume(Math.max(0, value)),
+                },
+                ...indicatorPanes,
+            ],
+            indicators: this.indicators.map((type, order) => ({type, top: mainBottom + order * INDICATOR_PANE_HEIGHT})),
         };
     }
 
-    /** 위 장 전체: 십자선과 값 표시, 이동평균 값 */
+    /** 보조지표 영역 하나를 그린다. 위쪽 한 줄은 값 표시(위 장)가 쓰도록 비워 둔다. */
+    private drawIndicator(type: IndicatorType, top: number, bottom: number, range: VisibleRange, style: ChartStyle): Pane {
+        const ctx = this.mainCtx;
+        const line = this.lineWidth();
+        const plotRightPx = this.px(this.width - PRICE_AXIS_WIDTH);
+        const axisLabelX = plotRightPx + this.px(AXIS_LABEL_OFFSET);
+        const scaleTop = top + LEGEND_HEIGHT;
+        const scaleBottom = bottom - INDICATOR_PADDING_BOTTOM;
+
+        // 위 영역과의 경계선
+        ctx.fillStyle = style.gridColor;
+        ctx.fillRect(0, this.px(top), plotRightPx, line);
+
+        // 기준선 + 오른쪽 라벨
+        ctx.textAlign = 'left';
+        const guide = (y: number, label: string) => {
+            ctx.fillStyle = style.gridColor;
+            ctx.fillRect(0, this.px(y), plotRightPx, line);
+            ctx.fillStyle = style.textColor;
+            ctx.fillText(label, axisLabelX, this.px(y));
+        };
+
+        if (type === 'rsi') {
+            const toY = createLinearScale(0, 100, scaleTop, scaleBottom);
+            RSI_LEVELS.forEach(level => guide(toY(level), String(level)));
+            this.clipped(top, bottom, () => {
+                this.strokeSeries(this.rsi, range, toY, this.lineColor(style, RSI_COLOR));
+            });
+            return {top, bottom, scaleTop, scaleBottom, min: 0, max: 100, format: formatIndicator};
+        }
+
+        // MACD: 보이는 구간에서 0 을 가운데에 두고 위아래 같은 폭으로 잡는다.
+        const {macd: macdLine, signal, histogram} = this.macd;
+        const end = range.from + range.count;
+        const extent = Math.max(
+            0,
+            ...[macdLine, signal, histogram]
+                .flatMap(values => values.slice(range.from, end))
+                .filter(isNumber)
+                .map(Math.abs),
+        ) || 1;
+        const toY = createLinearScale(-extent, extent, scaleTop, scaleBottom);
+        guide(toY(0), '0');
+
+        this.clipped(top, bottom, () => {
+            // 오실레이터 막대: 0 위는 상승색, 아래는 하락색
+            const bodyWidth = this.bodyWidth(range);
+            const zeroY = this.px(toY(0));
+            ctx.globalAlpha = HISTOGRAM_ALPHA;
+            for (let index = range.from; index < end; index++) {
+                const value = histogram[index];
+                if (!isNumber(value)) continue;
+                const valueY = this.px(toY(value));
+                ctx.fillStyle = value >= 0 ? style.upColor : style.downColor;
+                ctx.fillRect(
+                    this.centerX(index, range) - Math.floor(bodyWidth / 2),
+                    Math.min(zeroY, valueY),
+                    bodyWidth,
+                    Math.max(1, Math.abs(valueY - zeroY)),
+                );
+            }
+            ctx.globalAlpha = 1;
+
+            this.strokeSeries(macdLine, range, toY, this.lineColor(style, MACD_COLOR));
+            this.strokeSeries(signal, range, toY, this.lineColor(style, MACD_SIGNAL_COLOR));
+        });
+        return {top, bottom, scaleTop, scaleBottom, min: -extent, max: extent, format: formatIndicator};
+    }
+
+    // ---------- 위 장: 십자선·값 표시 ----------
+
     private drawOverlay() {
         const ctx = this.overlayCtx;
         ctx.clearRect(0, 0, this.overlayCanvas.width, this.overlayCanvas.height);
@@ -580,35 +746,67 @@ export class CandleChartEngine {
         ctx.font = `${this.px(FONT_SIZE)}px ${style.fontFamily}`;
         ctx.textBaseline = 'middle';
 
-        // 마우스가 가리키는 캔들이 없으면 가장 최근 캔들의 이동평균 값을 보여 준다.
-        const hovered = this.drawCrosshair(layout, style);
-        this.drawAverageLegend(layout, style, hovered ?? this.candles.length - 1);
+        // 마우스가 가리키는 캔들이 없으면 가장 최근 캔들의 지표 값을 보여 준다.
+        const index = this.drawCrosshair(layout, style) ?? this.candles.length - 1;
+        this.drawAverageLegend(layout, style, index);
+        this.drawIndicatorLegends(layout, style, index);
     }
 
-    /** 이동평균 값을 값 표시 아랫줄에 선 색으로 적는다. */
-    private drawAverageLegend(layout: Layout, style: ChartStyle, index: number) {
-        if (this.averagePeriods.length === 0 || style.lineColors.length === 0) return;
+    /** 한 줄에 여러 항목을 왼쪽부터 이어 적는다. */
+    private writeLegendLine(middle: number, items: [string, string][]) {
         const ctx = this.overlayCtx;
         const itemGap = this.px(LEGEND_ITEM_GAP);
-        const middle = this.px(PADDING_TOP + LEGEND_HEIGHT) + this.px(LEGEND_HEIGHT) / 2;
         let cursor = this.px(LEGEND_LEFT);
-
         ctx.textAlign = 'left';
-        ctx.fillStyle = style.textColor;
-        ctx.fillText('이평', cursor, middle);
-        cursor += ctx.measureText('이평').width + itemGap;
-
-        this.averagePeriods.forEach((period, order) => {
-            const value = this.averages[order]?.[index];
-            const text = `${period} ${value === null || value === undefined ? '-' : formatPrice(value, layout.priceDecimals)}`;
-            ctx.fillStyle = style.lineColors[order % style.lineColors.length];
+        items.forEach(([text, color]) => {
+            ctx.fillStyle = color;
             ctx.fillText(text, cursor, middle);
             cursor += ctx.measureText(text).width + itemGap;
         });
     }
 
+    /** 이동평균 값을 값 표시 아랫줄에 선 색으로 적는다. */
+    private drawAverageLegend(layout: Layout, style: ChartStyle, index: number) {
+        if (this.averagePeriods.length === 0) return;
+        const middle = this.px(PADDING_TOP + LEGEND_HEIGHT) + this.px(LEGEND_HEIGHT) / 2;
+        this.writeLegendLine(middle, [
+            ['이평', style.textColor],
+            ...this.averagePeriods.map((period, order): [string, string] => {
+                const value = this.averages[order]?.[index];
+                return [
+                    `${period} ${isNumber(value) ? formatPrice(value, layout.priceDecimals) : '-'}`,
+                    this.lineColor(style, order),
+                ];
+            }),
+        ]);
+    }
+
+    /** 보조지표 영역마다 왼쪽 위에 이름과 값을 적는다. */
+    private drawIndicatorLegends(layout: Layout, style: ChartStyle, index: number) {
+        layout.indicators.forEach(({type, top}) => {
+            const middle = this.px(top) + this.px(LEGEND_HEIGHT) / 2 + this.lineWidth();
+            if (type === 'rsi') {
+                this.writeLegendLine(middle, [
+                    [`RSI ${RSI_PERIOD}`, style.textColor],
+                    [formatIndicator(this.rsi[index]), this.lineColor(style, RSI_COLOR)],
+                ]);
+                return;
+            }
+            const histogram = this.macd.histogram[index];
+            this.writeLegendLine(middle, [
+                [`MACD ${MACD_FAST}·${MACD_SLOW}·${MACD_SIGNAL}`, style.textColor],
+                [`MACD ${formatIndicator(this.macd.macd[index])}`, this.lineColor(style, MACD_COLOR)],
+                [`시그널 ${formatIndicator(this.macd.signal[index])}`, this.lineColor(style, MACD_SIGNAL_COLOR)],
+                [
+                    `오실레이터 ${formatIndicator(histogram)}`,
+                    !isNumber(histogram) ? style.textColor : histogram >= 0 ? style.upColor : style.downColor,
+                ],
+            ]);
+        });
+    }
+
     /**
-     * 십자선, 축 위의 가격·날짜 라벨, 마우스가 가리키는 캔들의 값 표시.
+     * 십자선, 축 위의 값·날짜 라벨, 마우스가 가리키는 캔들의 값 표시.
      * 가리키는 캔들의 순번을 돌려주고, 없으면 null
      */
     private drawCrosshair(layout: Layout, style: ChartStyle): number | null {
@@ -648,21 +846,15 @@ export class CandleChartEngine {
         const labelHeight = this.px(CROSSHAIR_LABEL_HEIGHT);
         const labelPadding = this.px(CROSSHAIR_LABEL_PADDING);
 
-        // 오른쪽 축 라벨: 가격 영역이면 가격, 거래량 영역이면 거래량
-        const axisLabel = pointer.y >= layout.priceTop && pointer.y <= layout.priceBottom
-            ? formatPrice(
-                createInverseScale(layout.priceMin, layout.priceMax, layout.priceTop, layout.priceBottom)(pointer.y),
-                layout.priceDecimals,
-            )
-            : pointer.y >= layout.volumeTop
-                ? formatVolume(Math.max(0, createInverseScale(0, layout.volumeMax, layout.volumeTop, plotBottom)(pointer.y)))
-                : null;
-        if (axisLabel !== null) {
+        // 오른쪽 축 라벨: 마우스가 올라간 영역(가격·거래량·보조지표)의 값
+        const pane = layout.panes.find(candidate => pointer.y >= candidate.top && pointer.y <= candidate.bottom);
+        if (pane) {
+            const value = createInverseScale(pane.min, pane.max, pane.scaleTop, pane.scaleBottom)(pointer.y);
             ctx.fillStyle = style.textColor;
             ctx.fillRect(plotRightPx, Math.round(y - labelHeight / 2), this.px(PRICE_AXIS_WIDTH), labelHeight);
             ctx.fillStyle = style.backgroundColor;
             ctx.textAlign = 'left';
-            ctx.fillText(axisLabel, plotRightPx + this.px(AXIS_LABEL_OFFSET), y);
+            ctx.fillText(pane.format(value), plotRightPx + this.px(AXIS_LABEL_OFFSET), y);
         }
 
         // 아래 축 라벨: 캔들 날짜. 그림 영역 밖으로 나가지 않게 밀어 넣는다.

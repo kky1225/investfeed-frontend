@@ -1,21 +1,24 @@
 import {useEffect, useRef} from "react";
 import Box from "@mui/material/Box";
 import {useColorScheme} from "@mui/material/styles";
-import {CandleChartEngine} from "../../lib/chart/CandleChart.ts";
-import {Candle, TimeUnit} from "../../lib/chart/types.ts";
+import {CandleChartEngine, INDICATOR_PANE_HEIGHT} from "../../lib/chart/CandleChart.ts";
+import {Candle, IndicatorType, TimeUnit} from "../../lib/chart/types.ts";
 
 export interface CandleChartProps {
     candles: Candle[],      // 오래된 순
     timeUnit: TimeUnit,
     seriesKey?: string,     // 종목·주기처럼 다른 차트로 바뀌는 기준. 바뀌면 드래그·확대 상태를 기본 보기로 되돌린다
     movingAverages?: number[],  // 이동평균선 기간. 색은 순서대로 success·warning·secondary·text.primary
-    height?: number,
+    indicators?: IndicatorType[],   // 차트 아래에 쌓을 보조지표
+    height?: number,            // 가격+거래량 영역 높이. 보조지표 영역은 이 아래에 더해진다
 }
 
 const DEFAULT_MOVING_AVERAGES = [5, 20, 60, 120];
+const DEFAULT_INDICATORS: IndicatorType[] = ['rsi', 'macd'];
 
 const CandleChart = ({
-    candles, timeUnit, seriesKey, movingAverages = DEFAULT_MOVING_AVERAGES, height = 400,
+    candles, timeUnit, seriesKey,
+    movingAverages = DEFAULT_MOVING_AVERAGES, indicators = DEFAULT_INDICATORS, height = 400,
 }: CandleChartProps) => {
     const containerRef = useRef<HTMLDivElement>(null);
     const engineRef = useRef<CandleChartEngine | null>(null);
@@ -50,6 +53,10 @@ const CandleChart = ({
     }, [movingAverages]);
 
     useEffect(() => {
+        engineRef.current?.setIndicators(indicators);
+    }, [indicators]);
+
+    useEffect(() => {
         engineRef.current?.setData(candles, timeUnit);
     }, [candles, timeUnit]);
 
@@ -80,7 +87,7 @@ const CandleChart = ({
             sx={(theme) => ({
                 position: 'relative',
                 width: '100%',
-                height,
+                height: height + indicators.length * INDICATOR_PANE_HEIGHT,
                 '--chart-up': (theme.vars || theme).palette.error.main,
                 '--chart-down': (theme.vars || theme).palette.info.main,
                 '--chart-text': (theme.vars || theme).palette.text.secondary,

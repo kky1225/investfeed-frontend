@@ -11,6 +11,9 @@ export interface Candle {
 /** 날짜 눈금 표기 단위. minute=HH:mm, day=YYYY.MM.DD, month=YYYY.MM, year=YYYY */
 export type TimeUnit = 'minute' | 'day' | 'month' | 'year';
 
+/** 차트 아래 별도 영역에 그리는 보조지표 */
+export type IndicatorType = 'rsi' | 'macd';
+
 /** 캔들 한 개가 담는 기간. 실시간 체결이 어느 캔들에 들어갈지 정하는 데 쓴다. */
 export type CandleInterval =
     | { unit: 'minute', count: number }     // count 분봉
