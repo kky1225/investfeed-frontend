@@ -31,6 +31,8 @@ import {
     StockVi,
 } from "../../type/StockType.ts";
 import StockDetailLineChart, {CustomStockDetailLineChartProps} from "../../components/StockDetailLineChart.tsx";
+import CandleChart from "../../components/chart/CandleChart.tsx";
+import {Candle, TimeUnit} from "../../lib/chart/types.ts";
 import {fetchStockDetail, fetchStockStream, fetchStockProgramChart} from "../../api/stock/StockApi.ts";
 import {useMarketWebSocket} from "../detail/useMarketWebSocket.ts";
 import {fetchNews} from "../../api/news/NewsApi.ts";
@@ -41,7 +43,7 @@ import PriorityHighIcon from "@mui/icons-material/PriorityHigh";
 import DoNotDisturbIcon from "@mui/icons-material/DoNotDisturb";
 import CustomDataTable from "../../components/CustomDataTable.tsx";
 import FreshnessIndicator from "../../components/FreshnessIndicator.tsx";
-import {GridColDef} from "@mui/x-data-grid";
+import {GridColDef, GridValidRowModel} from "@mui/x-data-grid";
 import {MarketType} from "../../type/timeType.ts";
 import {LineSeriesType} from "@mui/x-charts";
 import { MakeOptional } from '@mui/x-internals/types';
@@ -109,10 +111,10 @@ interface MessageProps {
 }
 
 interface TabDataShape {
-    investor: { col: GridColDef[]; row: any[] };
-    program: { col: GridColDef[]; row: any[] };
-    shortSelling: { col: GridColDef[]; row: any[] };
-    daily: { col: GridColDef[]; row: any[] };
+    investor: { col: GridColDef[]; row: GridValidRowModel[] };
+    program: { col: GridColDef[]; row: GridValidRowModel[] };
+    shortSelling: { col: GridColDef[]; row: GridValidRowModel[] };
+    daily: { col: GridColDef[]; row: GridValidRowModel[] };
 }
 
 interface ExpectedPriceShape {
@@ -310,6 +312,31 @@ const INITIAL_TAB_DATA: TabDataShape = {
     daily: { col: [], row: [] },
 };
 
+// 키움 차트 시각(yyyyMMdd 또는 yyyyMMddHHmmss) → epoch ms. 월·일이 없으면 1로 본다.
+const parseChartTime = (dt: string): number => new Date(
+    Number(dt.slice(0, 4)),
+    (Number(dt.slice(4, 6)) || 1) - 1,
+    Number(dt.slice(6, 8)) || 1,
+    Number(dt.slice(8, 10)),
+    Number(dt.slice(10, 12)),
+).getTime();
+
+// 키움 가격은 등락 부호(+/-)가 앞에 붙어 올 수 있어 떼고 읽는다.
+const parseChartPrice = (price: string | null | undefined): number =>
+    price ? Number(price.replace(/^[+-]/, '')) : NaN;
+
+const CHART_TIME_UNIT: Record<StockChartType, TimeUnit> = {
+    [StockChartType.MINUTE_1]: 'minute',
+    [StockChartType.MINUTE_3]: 'minute',
+    [StockChartType.MINUTE_5]: 'minute',
+    [StockChartType.MINUTE_10]: 'minute',
+    [StockChartType.MINUTE_30]: 'minute',
+    [StockChartType.DAY]: 'day',
+    [StockChartType.WEEK]: 'day',
+    [StockChartType.MONTH]: 'month',
+    [StockChartType.YEAR]: 'year',
+};
+
 const StockDetail = () => {
     const { id } = useParams();
     const stkCd = id || "";
@@ -318,7 +345,7 @@ const StockDetail = () => {
     });
 
     const [toggle, setToggle] = useState('DAY');
-    const [formats, setFormats] = useState('line');
+    const [formats, setFormats] = useState('candle');
     const minute = useRef('1');
 
     // 별도 fetcher (loadProgramChart) + 폴링 누적 패턴이라 useMemo 불가 — useState 유지
@@ -510,6 +537,22 @@ const StockDetail = () => {
             return INITIAL_CHART_DATA;
         }
     }, [result, req.chartType, id]);
+
+    // 캔들 차트용 데이터. 응답은 최신순이라 오래된 순으로 뒤집는다.
+    const candleList = useMemo<Candle[]>(() => {
+        if (!result) return [];
+        return result.stockChartList
+            .map(item => ({
+                time: parseChartTime(item.dt ?? ''),
+                open: parseChartPrice(item.openPric),
+                high: parseChartPrice(item.highPric),
+                low: parseChartPrice(item.lowPric),
+                close: parseChartPrice(item.curPrc),
+                volume: Number(item.trdeQty) || 0,
+            }))
+            .filter(candle => [candle.time, candle.open, candle.high, candle.low, candle.close].every(Number.isFinite))
+            .reverse();
+    }, [result]);
 
     // 폴링 base expectedPrice (expCntrPric 가 있을 때만 객체, 없으면 null)
     const baseExpectedPrice = useMemo<ExpectedPriceShape | null>(() => {
@@ -757,8 +800,8 @@ const StockDetail = () => {
             const data = await fetchStockProgramChart(id);
             if (data.code === "0000" && data.result.length > 0) {
                 const chartList = data.result;
-                setProgramChartData(chartList.map((item: any) => Number(item.prmNetprpsAmt)));
-                setProgramDateData(chartList.map((item: any) => item.tm));
+                setProgramChartData(chartList.map((item: { prmNetprpsAmt: string }) => Number(item.prmNetprpsAmt)));
+                setProgramDateData(chartList.map((item: { tm: string }) => item.tm));
             }
             setProgramChartLoaded(true);
         } catch (e) {
@@ -1002,6 +1045,8 @@ const StockDetail = () => {
                             <Box sx={{ minWidth: 1200 }}>
                                 {loading ? (
                                     <Skeleton variant="rectangular" height={400} sx={{mx: 2, mb: 2, borderRadius: 1}}/>
+                                ) : formats === 'candle' ? (
+                                    <CandleChart candles={candleList} timeUnit={CHART_TIME_UNIT[req.chartType]} />
                                 ) : (
                                     <StockDetailLineChart {...stockChartData} />
                                 )}
@@ -1062,7 +1107,7 @@ const StockDetail = () => {
                                 onChange={handleFormat}
                                 aria-label="text formatting"
                             >
-                                <ToggleButton value="candle" key="candle" aria-label="candle" disabled>
+                                <ToggleButton value="candle" key="candle" aria-label="candle">
                                     <CandlestickChartIcon />
                                 </ToggleButton>
                                 <ToggleButton value="line" key="line" aria-label="line">
