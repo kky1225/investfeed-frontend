@@ -1,4 +1,4 @@
-import type {IndicatorInstance} from "./indicatorPanes.ts";
+import type {OverlayIndicator, PaneIndicator} from "./indicatorPanes.ts";
 
 /**
  * 보기 상태. 가로축은 캔들 순번이고, rightEdge 는 그림 오른쪽 끝에 놓인 순번(소수 가능)이다.
@@ -34,7 +34,9 @@ export interface Layout {
     plotBottom: number,
     priceDecimals: number,
     panes: Pane[],      // 0: 가격, 1: 거래량, 그 뒤: 보조지표
-    indicators: { instance: IndicatorInstance, top: number }[],
+    indicators: { instance: PaneIndicator, top: number }[],    // 별도 영역 지표와 그 영역의 위쪽 높이
+    priceOverlays: OverlayIndicator[],      // 가격 영역에 겹쳐 그린 지표
+    volumeOverlays: OverlayIndicator[],     // 거래량 영역에 겹쳐 그린 지표
 }
 
 export interface Point {

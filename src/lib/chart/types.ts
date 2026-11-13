@@ -31,8 +31,17 @@ export type Drawing =
 
 export type DrawingTool = Drawing['type'];
 
-/** 차트 아래 별도 영역에 그리는 보조지표 */
-export type IndicatorType = 'rsi' | 'macd';
+/**
+ * 보조지표. 그려지는 자리는 지표마다 정해져 있다(indicatorPanes.ts 의 INDICATORS):
+ * bollinger 는 가격 영역, volumeAverage 는 거래량 영역, 나머지는 차트 아래 별도 영역
+ */
+export type IndicatorType = 'bollinger' | 'volumeAverage' | 'rsi' | 'macd' | 'stochastic';
+
+/** 켜 둔 지표 하나와 그 설정값. params 의 순서와 뜻은 INDICATORS 의 params 를 따른다. 비우면 기본값 */
+export interface IndicatorConfig {
+    type: IndicatorType,
+    params?: number[],
+}
 
 /** 캔들 한 개가 담는 기간. 실시간 체결이 어느 캔들에 들어갈지 정하는 데 쓴다. */
 export type CandleInterval =
@@ -53,6 +62,6 @@ export interface ChartStyle {
     textColor: string,   // 축 글자, 보합 캔들
     gridColor: string,   // 격자, 축 경계선
     backgroundColor: string,    // 십자선 라벨 글자, 값 표시 바탕
-    lineColors: string[],       // 이동평균선 색. 기간 순서대로 돌려 쓴다
+    lineColors: string[],       // 선 색. 이동평균선은 기간 순서대로, 지표는 정해진 순번의 색을 쓴다
     fontFamily: string,
 }

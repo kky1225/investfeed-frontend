@@ -7,7 +7,7 @@ import {
 } from "./constants.ts";
 import {clamp, isNumber, Layout, VisibleRange} from "./layout.ts";
 import {candleColor, lineColor, Painter} from "./painter.ts";
-import {drawIndicatorPane, IndicatorInstance} from "./indicatorPanes.ts";
+import {drawIndicatorPane, OverlayIndicator, PaneIndicator} from "./indicatorPanes.ts";
 
 // 아래 장: 캔들·거래량·이동평균선·축·현재가 선·가격선·보조지표 영역
 
@@ -31,7 +31,9 @@ export interface MainInput {
     height: number,
     range: VisibleRange,
     averages: Series[],         // 이동평균선. 색은 순서대로
-    indicators: IndicatorInstance[],    // 위에서 아래로 쌓을 보조지표
+    indicators: PaneIndicator[],        // 위에서 아래로 쌓을 별도 영역 지표
+    priceOverlays: OverlayIndicator[],  // 가격 영역에 겹칠 지표
+    volumeOverlays: OverlayIndicator[], // 거래량 영역에 겹칠 지표
     priceLines: PriceLine[],
     flatByPrevClose: boolean,
 }
@@ -125,12 +127,17 @@ const drawBorders = ({painter, style, volumeTop, line, plotRightPx, plotBottomPx
     ctx.fillRect(0, painter.px(volumeTop - PANE_GAP / 2), plotRightPx, line);
 };
 
-/** 캔들 + 거래량 + 이동평균선. 드래그로 반쯤 걸친 캔들이 축 영역으로 넘어가지 않게 자른다. */
-const drawCandles = (frame: Frame, averages: Series[]) => {
+/**
+ * 캔들 + 거래량 + 이동평균선 + 겹쳐 그리는 지표. 드래그로 반쯤 걸친 캔들이 축 영역으로 넘어가지 않게 자른다.
+ * 가격 영역 지표(볼린저밴드의 채움 등)는 캔들 뒤에, 선들은 캔들 앞에 놓인다.
+ */
+const drawCandles = (frame: Frame, averages: Series[], priceOverlays: OverlayIndicator[], volumeOverlays: OverlayIndicator[]) => {
     const {painter, style, candles, visible, range, flatByPrevClose, plotWidth, mainBottom, volumeTop, priceY, volumeY, line} = frame;
     const ctx = painter.ctx;
     const mainBottomPx = painter.px(mainBottom);
     painter.clipped(0, mainBottom, plotWidth, () => {
+        priceOverlays.forEach(overlay => overlay.draw({painter, range, style, toY: priceY}));
+
         const bodyWidth = painter.bodyWidth(range);
         visible.forEach((candle, offset) => {
             const x = painter.centerX(range.from + offset, range);
@@ -158,6 +165,11 @@ const drawCandles = (frame: Frame, averages: Series[]) => {
         averages.forEach((values, order) => {
             painter.strokeSeries(values, range, priceY, lineColor(style, order));
         });
+    });
+
+    // 거래량 영역 지표는 값이 눈금 상한을 넘어도 가격 영역으로 올라가지 않게 거래량 영역으로 자른다.
+    painter.clipped(volumeTop, mainBottom, plotWidth, () => {
+        volumeOverlays.forEach(overlay => overlay.draw({painter, range, style, toY: volumeY}));
     });
 };
 
@@ -249,7 +261,10 @@ const drawPriceLines = (frame: Frame, priceLines: PriceLine[]) => {
 
 /** 아래 장 전체를 그리고, 그린 배치를 돌려준다. 그릴 자리가 없으면 null. 캔버스는 부르는 쪽에서 지운다. */
 export const renderMain = (painter: Painter, input: MainInput): Layout | null => {
-    const {candles, timeUnit, style, width, height, range, averages, indicators, priceLines, flatByPrevClose} = input;
+    const {
+        candles, timeUnit, style, width, height, range, averages, indicators, priceOverlays, volumeOverlays,
+        priceLines, flatByPrevClose,
+    } = input;
 
     // 위에서부터: 가격 / 거래량 / 보조지표들 / 날짜축
     const plotWidth = width - PRICE_AXIS_WIDTH;
@@ -264,8 +279,8 @@ export const renderMain = (painter: Painter, input: MainInput): Layout | null =>
     const priceBottom = volumeTop - PANE_GAP;
 
     // 보이는 구간의 최고·최저가에 맞춰 가격축을 잡고, 위아래로 5% 여백을 둔다.
-    // 이동평균선이 잘리지 않게 보이는 구간의 평균값도 범위에 넣는다.
-    const visibleAverages = averages
+    // 이동평균선과 가격 영역 지표가 잘리지 않게 보이는 구간의 그 값들도 범위에 넣는다.
+    const visibleAverages = [...averages, ...priceOverlays.flatMap(overlay => overlay.series)]
         .flatMap(values => values.slice(range.from, range.from + range.count))
         .filter(isNumber);
     const highest = Math.max(...visible.map(candle => candle.high), ...visibleAverages);
@@ -298,7 +313,7 @@ export const renderMain = (painter: Painter, input: MainInput): Layout | null =>
     drawVolumeAxis(frame);
     drawTimeAxis(frame);
     drawBorders(frame);
-    drawCandles(frame, averages);
+    drawCandles(frame, averages, priceOverlays, volumeOverlays);
     drawExtremes(frame);
     drawCurrentPrice(frame);
     drawPriceLines(frame, priceLines);
@@ -324,5 +339,7 @@ export const renderMain = (painter: Painter, input: MainInput): Layout | null =>
             ...indicatorPanes,
         ],
         indicators: indicators.map((instance, order) => ({instance, top: indicatorTops[order]})),
+        priceOverlays,
+        volumeOverlays,
     };
 };

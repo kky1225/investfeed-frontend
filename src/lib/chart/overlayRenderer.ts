@@ -128,35 +128,51 @@ export const drawCandleLegend = (
     });
 };
 
-/** 한 줄에 여러 항목을 왼쪽부터 이어 적는다. middle: 줄 가운데 높이 (기기 픽셀) */
-const writeLegendLine = (painter: Painter, layout: Layout, middle: number, items: LegendItem[]) => {
+/**
+ * 한 줄에 여러 항목을 왼쪽부터 이어 적는다. middle: 줄 가운데 높이 (기기 픽셀)
+ * backdrop: 막대나 캔들 위에 겹치는 자리면 글자 뒤에 깔 바탕색
+ */
+const writeLegendLine = (painter: Painter, layout: Layout, middle: number, items: LegendItem[], backdrop?: string) => {
     const ctx = painter.ctx;
     const itemGap = painter.px(LEGEND_ITEM_GAP);
+    const left = painter.px(LEGEND_LEFT);
     // 그림 영역을 넘는 항목부터는 적지 않는다(좁은 화면에서 글자가 잘려 보이지 않게).
     const maxRight = painter.px(layout.plotWidth);
-    let cursor = painter.px(LEGEND_LEFT);
-    let full = false;
-    ctx.textAlign = 'left';
-    items.forEach(([text, color]) => {
+    const placed: { text: string, color: string, x: number }[] = [];
+    let cursor = left;
+    for (const [text, color] of items) {
         const width = ctx.measureText(text).width;
-        if (full || cursor + width > maxRight) {
-            full = true;
-            return;
-        }
-        ctx.fillStyle = color;
-        ctx.fillText(text, cursor, middle);
+        if (cursor + width > maxRight) break;
+        placed.push({text, color, x: cursor});
         cursor += width + itemGap;
+    }
+    if (placed.length === 0) return;
+
+    if (backdrop) {
+        const padding = painter.px(AXIS_TAG_PADDING);
+        const height = painter.px(LEGEND_HEIGHT);
+        ctx.globalAlpha = 0.85;
+        ctx.fillStyle = backdrop;
+        ctx.fillRect(left - padding, Math.round(middle - height / 2), cursor - itemGap - left + padding * 2, height);
+        ctx.globalAlpha = 1;
+    }
+    ctx.textAlign = 'left';
+    placed.forEach(({text, color, x}) => {
+        ctx.fillStyle = color;
+        ctx.fillText(text, x, middle);
     });
 };
 
-/** 이동평균 값을 값 표시 아랫줄에 선 색으로 적는다. */
-export const drawAverageLegend = (
+/**
+ * 겹쳐 그린 선들의 값을 선 색으로 적는다.
+ * 이동평균과 가격 영역 지표는 값 표시 아랫줄에, 거래량 영역 지표는 거래량 영역 왼쪽 위에 적는다.
+ */
+export const drawOverlayLegends = (
     painter: Painter, layout: Layout, style: ChartStyle, periods: number[], averages: Series[], index: number,
 ) => {
-    if (periods.length === 0) return;
-    const middle = painter.px(PADDING_TOP + LEGEND_HEIGHT) + painter.px(LEGEND_HEIGHT) / 2;
-    writeLegendLine(painter, layout, middle, [
-        ['이평', style.textColor],
+    const [pricePane, volumePane] = layout.panes;
+    const priceItems: LegendItem[] = [
+        ...(periods.length > 0 ? [['이평', style.textColor] as LegendItem] : []),
         ...periods.map((period, order): LegendItem => {
             const value = averages[order]?.[index];
             return [
@@ -164,7 +180,19 @@ export const drawAverageLegend = (
                 lineColor(style, order),
             ];
         }),
-    ]);
+        ...layout.priceOverlays.flatMap(overlay => overlay.legend(index, style, pricePane.format)),
+    ];
+    if (priceItems.length > 0) {
+        const middle = painter.px(PADDING_TOP + LEGEND_HEIGHT) + painter.px(LEGEND_HEIGHT) / 2;
+        writeLegendLine(painter, layout, middle, priceItems);
+    }
+
+    const volumeItems = layout.volumeOverlays.flatMap(overlay => overlay.legend(index, style, volumePane.format));
+    if (volumeItems.length > 0) {
+        // 거래량 막대 위에 겹치는 자리라 바탕을 깐다.
+        const middle = painter.px(volumePane.top) + painter.px(LEGEND_HEIGHT) / 2;
+        writeLegendLine(painter, layout, middle, volumeItems, style.backgroundColor);
+    }
 };
 
 /** 보조지표 영역마다 왼쪽 위에 이름과 값을 적는다. */

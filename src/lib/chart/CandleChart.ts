@@ -1,12 +1,12 @@
-import {Candle, ChartStyle, Drawing, DrawingTool, IndicatorType, PriceLine, TimeUnit} from "./types.ts";
+import {Candle, ChartStyle, Drawing, DrawingTool, IndicatorConfig, PriceLine, TimeUnit} from "./types.ts";
 import {movingAverage, Series} from "./indicators.ts";
 import {DRAG_THRESHOLD, PRICE_AXIS_WIDTH} from "./constants.ts";
 import {clamp, Layout, Point, View} from "./layout.ts";
 import {clampView, defaultView, logicalAt, visibleRange, zoomedView} from "./viewport.ts";
 import {candleColor, Painter} from "./painter.ts";
-import {IndicatorInstance, INDICATORS} from "./indicatorPanes.ts";
+import {createIndicator, OverlayIndicator, PaneIndicator} from "./indicatorPanes.ts";
 import {renderMain} from "./mainRenderer.ts";
-import {drawAverageLegend, drawCandleLegend, drawCrosshair, drawIndicatorLegends} from "./overlayRenderer.ts";
+import {drawCandleLegend, drawCrosshair, drawIndicatorLegends, drawOverlayLegends} from "./overlayRenderer.ts";
 import {DrawingLayer} from "./drawingLayer.ts";
 
 export {INDICATOR_PANE_HEIGHT} from "./constants.ts";
@@ -55,8 +55,11 @@ export class CandleChartEngine {
     private flatByPrevClose = false;
     private averagePeriods: number[] = [];
     private averages: Series[] = [];        // averagePeriods 와 같은 순서
-    private indicatorTypes: IndicatorType[] = [];
-    private indicators: IndicatorInstance[] = [];   // indicatorTypes 와 같은 순서
+    private indicatorConfigs: IndicatorConfig[] = [];
+    // indicatorConfigs 를 계산해 그려지는 자리별로 나눈 것
+    private paneIndicators: PaneIndicator[] = [];
+    private priceOverlays: OverlayIndicator[] = [];
+    private volumeOverlays: OverlayIndicator[] = [];
     private priceLines: PriceLine[] = [];
 
     /** 도형이 추가·변경·삭제되면 새 목록을 알린다. */
@@ -158,9 +161,9 @@ export class CandleChartEngine {
         this.scheduleDraw();
     }
 
-    /** 차트 아래에 쌓을 보조지표. 적은 순서대로 위에서 아래로 놓인다. */
-    setIndicators(indicators: IndicatorType[]) {
-        this.indicatorTypes = indicators;
+    /** 켤 보조지표와 설정값. 별도 영역 지표는 적은 순서대로 위에서 아래로 놓인다. */
+    setIndicators(indicators: IndicatorConfig[]) {
+        this.indicatorConfigs = indicators;
         this.computeSeries();
         this.scheduleDraw();
     }
@@ -227,7 +230,11 @@ export class CandleChartEngine {
     /** 캔들이나 지표 설정이 바뀌면 이동평균·보조지표 값을 다시 계산한다. */
     private computeSeries() {
         this.averages = this.averagePeriods.map(period => movingAverage(this.candles, period));
-        this.indicators = this.indicatorTypes.map(type => INDICATORS[type](this.candles));
+        const instances = this.indicatorConfigs.map(config => createIndicator(config, this.candles));
+        this.paneIndicators = instances.filter(instance => instance.placement === 'pane');
+        const overlays = instances.filter((instance): instance is OverlayIndicator => instance.placement !== 'pane');
+        this.priceOverlays = overlays.filter(overlay => overlay.placement === 'price');
+        this.volumeOverlays = overlays.filter(overlay => overlay.placement === 'volume');
     }
 
     // ---------- 입력 ----------
@@ -477,7 +484,9 @@ export class CandleChartEngine {
             height: this.height,
             range: visibleRange(this.resolveView(), this.candles.length, this.plotWidth()),
             averages: this.averages,
-            indicators: this.indicators,
+            indicators: this.paneIndicators,
+            priceOverlays: this.priceOverlays,
+            volumeOverlays: this.volumeOverlays,
             priceLines: this.priceLines,
             flatByPrevClose: this.flatByPrevClose,
         });
@@ -501,7 +510,7 @@ export class CandleChartEngine {
         if (candle) {
             drawCandleLegend(painter, layout, style, candle, candleColor(this.candles, index, style, this.flatByPrevClose));
         }
-        drawAverageLegend(painter, layout, style, this.averagePeriods, this.averages, index);
+        drawOverlayLegends(painter, layout, style, this.averagePeriods, this.averages, index);
         drawIndicatorLegends(painter, layout, style, index);
     }
 }
