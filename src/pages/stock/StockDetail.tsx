@@ -7,22 +7,23 @@ import Chip from "@mui/material/Chip";
 import Divider from "@mui/material/Divider";
 import Card from "@mui/material/Card";
 import Skeleton from "@mui/material/Skeleton";
-import {useState, MouseEvent, useRef, useEffect, useMemo, ReactElement, JSX} from "react";
+import {useState, MouseEvent, useRef, useEffect, useMemo, useCallback, ReactElement, JSX} from "react";
 import CandlestickChartIcon from '@mui/icons-material/CandlestickChart';
 import StackedLineChartIcon from '@mui/icons-material/StackedLineChart';
 import HelpIcon from '@mui/icons-material/Help';
 import ErrorIcon from '@mui/icons-material/Error';
 import ToggleButton from '@mui/material/ToggleButton';
-import ToggleButtonGroup, {
-    toggleButtonGroupClasses,
-} from '@mui/material/ToggleButtonGroup';
+import {ChartToolbarGroup} from "../../components/chart/ChartToolbarControls.tsx";
 import {Accordion, AccordionDetails, AccordionSummary, Select, SelectChangeEvent, Slider, Tab, Tabs, Tooltip} from "@mui/material";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
-import {styled, Theme} from "@mui/material/styles";
+import ArrowDropDownIcon from "@mui/icons-material/ArrowDropDown";
+import {Theme} from "@mui/material/styles";
 import useMediaQuery from "@mui/material/useMediaQuery";
 import MenuItem from "@mui/material/MenuItem";
 import {useParams} from "react-router-dom";
 import {
+    StockCandleRes,
+    StockChart,
     StockChartType,
     StockDetailReq,
     StockDetailRes,
@@ -38,7 +39,9 @@ import {useQuery} from "@tanstack/react-query";
 import {fetchPriceTargets} from "../../api/notification/NotificationApi.ts";
 import type {PriceTarget} from "../../type/NotificationType.ts";
 import {applyTick} from "../../lib/chart/realtime.ts";
-import {fetchStockDetail, fetchStockStream, fetchStockProgramChart} from "../../api/stock/StockApi.ts";
+import {mergeCandles} from "../../lib/chart/merge.ts";
+import {CandlePage, useCandleHistory} from "../../components/chart/useCandleHistory.ts";
+import {fetchStockDetail, fetchStockStream, fetchStockProgramChart, fetchStockCandles} from "../../api/stock/StockApi.ts";
 import {useMarketWebSocket} from "../detail/useMarketWebSocket.ts";
 import {fetchNews} from "../../api/news/NewsApi.ts";
 import InvestorBarChart from "../../components/InvestorBarChart.tsx";
@@ -66,23 +69,6 @@ import {requireOk} from "../../lib/apiResponse.ts";
 import NotificationsActiveIcon from "@mui/icons-material/NotificationsActive";
 import PriceTargetDialog from "../../components/PriceTargetDialog.tsx";
 import WatchlistAddButton from "../../components/WatchlistAddButton.tsx";
-
-const StyledToggleButtonGroup = styled(ToggleButtonGroup)(({ theme }) => ({
-    border: 'none',
-    boxShadow: 'none',
-    [`& .${toggleButtonGroupClasses.grouped}`]: {
-        border: 0,
-        borderRadius: theme.shape.borderRadius,
-        [`&.${toggleButtonGroupClasses.disabled}`]: {
-            border: 0,
-        },
-    },
-    [`& .${toggleButtonGroupClasses.middleButton},& .${toggleButtonGroupClasses.lastButton}`]:
-        {
-            marginLeft: -1,
-            borderLeft: '1px solid transparent',
-        },
-}));
 
 interface StockRangeProps {
     value: number;
@@ -330,12 +316,27 @@ const parseChartTime = (dt: string): number => new Date(
 const parseChartPrice = (price: string | null | undefined): number =>
     price ? Number(price.replace(/^[+-]/, '')) : NaN;
 
+// 서버가 주는 차트 목록(최신→과거)을 캔들(오래된 순)로 바꾼다. 값이 깨진 항목은 버린다.
+const toCandles = (list: StockChart[]): Candle[] => list
+    .map(item => ({
+        time: parseChartTime(item.dt ?? ''),
+        open: parseChartPrice(item.openPric),
+        high: parseChartPrice(item.highPric),
+        low: parseChartPrice(item.lowPric),
+        close: parseChartPrice(item.curPrc),
+        volume: Number(item.trdeQty) || 0,
+    }))
+    .filter(candle => [candle.time, candle.open, candle.high, candle.low, candle.close].every(Number.isFinite))
+    .reverse();
+
 const CHART_TIME_UNIT: Record<StockChartType, TimeUnit> = {
     [StockChartType.MINUTE_1]: 'minute',
     [StockChartType.MINUTE_3]: 'minute',
     [StockChartType.MINUTE_5]: 'minute',
     [StockChartType.MINUTE_10]: 'minute',
+    [StockChartType.MINUTE_15]: 'minute',
     [StockChartType.MINUTE_30]: 'minute',
+    [StockChartType.MINUTE_60]: 'minute',
     [StockChartType.DAY]: 'day',
     [StockChartType.WEEK]: 'day',
     [StockChartType.MONTH]: 'month',
@@ -348,7 +349,9 @@ const CHART_INTERVAL: Record<StockChartType, CandleInterval> = {
     [StockChartType.MINUTE_3]: {unit: 'minute', count: 3},
     [StockChartType.MINUTE_5]: {unit: 'minute', count: 5},
     [StockChartType.MINUTE_10]: {unit: 'minute', count: 10},
+    [StockChartType.MINUTE_15]: {unit: 'minute', count: 15},
     [StockChartType.MINUTE_30]: {unit: 'minute', count: 30},
+    [StockChartType.MINUTE_60]: {unit: 'minute', count: 60},
     [StockChartType.DAY]: {unit: 'day'},
     [StockChartType.WEEK]: {unit: 'week'},
     [StockChartType.MONTH]: {unit: 'month'},
@@ -495,7 +498,9 @@ const StockDetail = () => {
                 case StockChartType.MINUTE_3:
                 case StockChartType.MINUTE_5:
                 case StockChartType.MINUTE_10:
-                case StockChartType.MINUTE_30: {
+                case StockChartType.MINUTE_15:
+                case StockChartType.MINUTE_30:
+                case StockChartType.MINUTE_60: {
                     dateList = stockChartList.map((item: { dt: string }) => `${item.dt.slice(0, 4)}.${item.dt.slice(4, 6)}.${item.dt.slice(6, 8)} ${item.dt.slice(8, 10)}:${item.dt.slice(10, 12)}`).reverse();
                     lineData = stockChartList.map((item: { curPrc: string }) => item.curPrc.replace(/^[+-]/, '')).reverse();
                     barDataList = stockChartList.map((item: { trdeQty: string }) => Number(item.trdeQty)).reverse();
@@ -560,17 +565,7 @@ const StockDetail = () => {
     // 캔들 차트용 데이터. 응답은 최신순이라 오래된 순으로 뒤집는다.
     const candleList = useMemo<Candle[]>(() => {
         if (!result) return [];
-        return result.stockChartList
-            .map(item => ({
-                time: parseChartTime(item.dt ?? ''),
-                open: parseChartPrice(item.openPric),
-                high: parseChartPrice(item.highPric),
-                low: parseChartPrice(item.lowPric),
-                close: parseChartPrice(item.curPrc),
-                volume: Number(item.trdeQty) || 0,
-            }))
-            .filter(candle => [candle.time, candle.open, candle.high, candle.low, candle.close].every(Number.isFinite))
-            .reverse();
+        return toCandles(result.stockChartList);
     }, [result]);
 
     // 이 종목에 등록한 목표가 알림을 차트에 선으로 표시한다. 목표가 알림 창과 같은 조회를 공유해 등록·삭제가 바로 반영된다.
@@ -593,6 +588,19 @@ const StockDetail = () => {
     // 실시간 체결을 반영한 캔들. 폴링으로 새 목록이 오면 버리고 그 목록에서 다시 쌓는다.
     const [liveCandles, setLiveCandles] = useState<{ base: Candle[], candles: Candle[] } | null>(null);
     const chartCandles = liveCandles?.base === candleList ? liveCandles.candles : candleList;
+
+    // 과거 구간. 차트 왼쪽 끝에 가까워지면 이전 구간을 이어 받아 앞에 붙인다.
+    // 분봉은 종목 상세 응답에 당일 것만 오므로, 이전 날짜들도 이쪽에서 채운다.
+    const chartSeriesKey = `${stkCd}-${req.chartType}`;
+    const fetchCandlePage = useCallback(async (cursor: string | null): Promise<CandlePage> => {
+        const page = requireOk<StockCandleRes>(
+            await fetchStockCandles(stkCd, {chartType: req.chartType, cursor: cursor ?? undefined}, {skipGlobalError: true}),
+            '과거 차트 조회',
+        );
+        return {candles: toCandles(page.candles), nextCursor: page.nextCursor ?? null};
+    }, [stkCd, req.chartType]);
+    const {history: candleHistory, loadOlder: loadOlderCandles} = useCandleHistory(chartSeriesKey, fetchCandlePage);
+    const fullCandles = useMemo(() => mergeCandles(candleHistory, chartCandles), [candleHistory, chartCandles]);
 
     // 폴링 응답에 이미 들어 있는 체결(조회 시각 이전)은 다시 더하지 않는다.
     const chartBaseStamp = result?.stockInfo ? parseTradeStamp(result.stockInfo.tm) : 0;
@@ -953,49 +961,49 @@ const StockDetail = () => {
     const isNarrow = useMediaQuery((theme: Theme) => theme.breakpoints.down('md'));
     const chartControls = (
         <>
-            <StyledToggleButtonGroup
+            <ChartToolbarGroup
                 size="small"
                 value={toggle}
                 exclusive
                 onChange={handleAlignment}
                 aria-label="차트 주기"
             >
-                <ToggleButton
-                    value="MINUTE"
-                    key="MINUTE"
-                    aria-label="MINUTE"
-                    sx={{
-                        padding: 1
-                    }}
-                >
+                <ToggleButton value="MINUTE" key="MINUTE" aria-label="MINUTE">
+                    {/* 버튼 안의 선택 상자는 글자 크기·색을 버튼에서 물려받고, 화살표는 작은 아래 화살표 하나만 둔다. */}
                     <Select
                         size="small"
                         value={minute.current}
                         onChange={handleOptionChange}
                         variant="standard"
                         disableUnderline
+                        IconComponent={ArrowDropDownIcon}
                         sx={{
                             boxShadow: 'none',
-                            width: 55,
                             backgroundColor: 'transparent',
                             border: 'none',
-                            padding: '0 8px',
-                            justifyContent: 'center',
+                            padding: 0,
+                            font: 'inherit',
+                            color: 'inherit',
+                            '& .MuiSelect-select': {py: 0, pl: 0, minHeight: 0},
+                            '& .MuiSelect-icon': {color: 'inherit'},
                         }}
                     >
                         <MenuItem value="1">1분</MenuItem>
                         <MenuItem value="3">3분</MenuItem>
                         <MenuItem value="5">5분</MenuItem>
+                        <MenuItem value="10">10분</MenuItem>
+                        <MenuItem value="15">15분</MenuItem>
                         <MenuItem value="30">30분</MenuItem>
+                        <MenuItem value="60">60분</MenuItem>
                     </Select>
                 </ToggleButton>
                 <ToggleButton value="DAY" key="DAY" aria-label="DAY">일</ToggleButton>
                 <ToggleButton value="WEEK" key="WEEK" aria-label="WEEK">주</ToggleButton>
                 <ToggleButton value="MONTH" key="MONTH" aria-label="MONTH">월</ToggleButton>
                 <ToggleButton value="YEAR" key="YEAR" aria-label="YEAR">년</ToggleButton>
-            </StyledToggleButtonGroup>
+            </ChartToolbarGroup>
 
-            <StyledToggleButtonGroup
+            <ChartToolbarGroup
                 size="small"
                 value={formats}
                 exclusive
@@ -1008,7 +1016,7 @@ const StockDetail = () => {
                 <ToggleButton value="line" key="line" aria-label="line">
                     <StackedLineChartIcon />
                 </ToggleButton>
-            </StyledToggleButtonGroup>
+            </ChartToolbarGroup>
         </>
     );
 
@@ -1172,9 +1180,10 @@ const StockDetail = () => {
                                     <Skeleton variant="rectangular" height={400} sx={{mx: 2, mb: 2, borderRadius: 1}}/>
                                 ) : formats === 'candle' ? (
                                     <CandleChart
-                                        candles={chartCandles}
+                                        candles={fullCandles}
                                         timeUnit={CHART_TIME_UNIT[req.chartType]}
-                                        seriesKey={`${stkCd}-${req.chartType}`}
+                                        seriesKey={chartSeriesKey}
+                                        onLoadOlder={loadOlderCandles}
                                         priceLines={targetLines}
                                         assetType="STOCK"
                                         assetCode={stkCd}

@@ -1,5 +1,5 @@
 import ToggleButton from "@mui/material/ToggleButton";
-import ToggleButtonGroup from "@mui/material/ToggleButtonGroup";
+import {ChartToolbarGroup} from "./ChartToolbarControls.tsx";
 import Tooltip from "@mui/material/Tooltip";
 import NearMeOutlinedIcon from "@mui/icons-material/NearMeOutlined";
 import ShowChartIcon from "@mui/icons-material/ShowChart";
@@ -18,7 +18,7 @@ const CURSOR = 'cursor';
  * 도구를 고르면 차트에서 하나를 그린 뒤 다시 선택 상태로 돌아온다.
  */
 const ChartDrawingToolbar = ({tool, onSelectTool}: ChartDrawingToolbarProps) => (
-    <ToggleButtonGroup
+    <ChartToolbarGroup
         size="small"
         exclusive
         value={tool ?? CURSOR}
@@ -26,8 +26,6 @@ const ChartDrawingToolbar = ({tool, onSelectTool}: ChartDrawingToolbarProps) => 
             onSelectTool(next === null || next === CURSOR ? null : next as DrawingTool);
         }}
         aria-label="그리기 도구"
-        // 테마가 버튼 묶음에 입히는 테두리와 그림자를 빼서, 같은 줄의 다른 버튼들과 같은 모양으로 맞춘다.
-        sx={{border: 'none', boxShadow: 'none', '& .MuiToggleButton-root': {border: 0}}}
     >
         <ToggleButton value={CURSOR} aria-label="선택">
             <Tooltip title="선택 · 이동 (Esc)">
@@ -44,7 +42,7 @@ const ChartDrawingToolbar = ({tool, onSelectTool}: ChartDrawingToolbarProps) => 
                 <HorizontalRuleIcon fontSize="small"/>
             </Tooltip>
         </ToggleButton>
-    </ToggleButtonGroup>
+    </ChartToolbarGroup>
 );
 
 export default ChartDrawingToolbar;

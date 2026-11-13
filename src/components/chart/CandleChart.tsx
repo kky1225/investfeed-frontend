@@ -12,6 +12,7 @@ import KeyboardDoubleArrowRightIcon from "@mui/icons-material/KeyboardDoubleArro
 import Paper from "@mui/material/Paper";
 import ChartSettingsDialog, {ChartSettingOption} from "./ChartSettingsDialog.tsx";
 import ChartDrawingToolbar from "./ChartDrawingToolbar.tsx";
+import {ChartToolbarButton} from "./ChartToolbarControls.tsx";
 import {useChartStorage} from "./useChartStorage.ts";
 import {useColorScheme} from "@mui/material/styles";
 import {CandleChartEngine, INDICATOR_PANE_HEIGHT} from "../../lib/chart/CandleChart.ts";
@@ -28,6 +29,9 @@ export interface CandleChartProps {
     movingAverages?: number[],  // 이동평균선 기간. 색은 순서대로 success·warning·secondary·grey
     indicators?: IndicatorType[],   // 차트 아래에 쌓을 보조지표
     priceLines?: PriceLine[],   // 특정 가격에 긋는 가로선 (목표가 등)
+    // 화면 왼쪽 끝이 받아 둔 캔들의 처음에 가까워지면 부른다. 가까운 동안 여러 번 부르므로
+    // 받는 쪽에서 요청 중이거나 더 받을 것이 없으면 무시해야 한다 (useCandleHistory 의 loadOlder)
+    onLoadOlder?: () => void,
     toolbarStart?: ReactNode,   // 위쪽 줄 맨 앞에 놓을 화면별 버튼 (주기, 차트 종류 등)
     height?: number,            // 가격+거래량 영역 높이. 보조지표 영역은 이 아래에 더해진다
 }
@@ -55,7 +59,7 @@ const TOOL_HINTS: Record<DrawingTool, string> = {
 };
 
 const CandleChart = ({
-    candles, timeUnit, seriesKey, assetType, assetCode, toolbarStart,
+    candles, timeUnit, seriesKey, assetType, assetCode, toolbarStart, onLoadOlder,
     movingAverages = DEFAULT_MOVING_AVERAGES, indicators = DEFAULT_INDICATORS, priceLines = NO_PRICE_LINES,
     height = 400,
 }: CandleChartProps) => {
@@ -64,7 +68,9 @@ const CandleChart = ({
     const {mode, systemMode} = useColorScheme();
 
     // 그린 선과 차트 설정(꺼 둔 지표)은 계정에 저장한다.
-    const {drawings, updateDrawings, hidden, setVisible} = useChartStorage(assetType, assetCode);
+    const {
+        drawings, updateDrawings, hidden, setVisible, flatByPrevClose, setFlatByPrevClose,
+    } = useChartStorage(assetType, assetCode);
     const [tool, setTool] = useState<DrawingTool | null>(null);
     const [selectedId, setSelectedId] = useState<string | null>(null);
     const [atLatest, setAtLatest] = useState(true);
@@ -83,9 +89,16 @@ const CandleChart = ({
 
     // 엔진은 한 번만 만들어지므로, 엔진이 부를 함수는 ref 로 최신 것을 가리키게 한다.
     const updateDrawingsRef = useRef(updateDrawings);
+    const loadOlderRef = useRef(onLoadOlder);
     useEffect(() => {
         updateDrawingsRef.current = updateDrawings;
+        loadOlderRef.current = onLoadOlder;
     });
+
+    // 캔들이 하나도 없으면(장 시작 전의 분봉 등) 차트가 그려지지 않아 왼쪽 끝 감지도 안 되므로, 직접 과거 구간을 요청한다.
+    useEffect(() => {
+        if (candles.length === 0) loadOlderRef.current?.();
+    }, [candles.length, seriesKey]);
 
     useEffect(() => {
         const container = containerRef.current;
@@ -97,6 +110,7 @@ const CandleChart = ({
         engine.onToolChange = setTool;
         engine.onSelectionChange = setSelectedId;
         engine.onLatestChange = setAtLatest;
+        engine.onNeedOlder = () => loadOlderRef.current?.();
 
         const observer = new ResizeObserver(entries => {
             const {width, height} = entries[0].contentRect;
@@ -122,6 +136,10 @@ const CandleChart = ({
     useEffect(() => {
         engineRef.current?.setIndicators(activeIndicators);
     }, [activeIndicators]);
+
+    useEffect(() => {
+        engineRef.current?.setFlatByPrevClose(flatByPrevClose);
+    }, [flatByPrevClose]);
 
     useEffect(() => {
         engineRef.current?.setPriceLines(priceLines);
@@ -205,19 +223,18 @@ const CandleChart = ({
                 <Box sx={{flexGrow: 1}}/>
                 {!atLatest && (
                     <Tooltip title="최근으로 이동">
-                        <IconButton
-                            size="small"
+                        <ChartToolbarButton
                             aria-label="최근으로 이동"
                             onClick={() => engineRef.current?.scrollToLatest()}
                         >
-                            <KeyboardDoubleArrowRightIcon fontSize="small"/>
-                        </IconButton>
+                            <KeyboardDoubleArrowRightIcon/>
+                        </ChartToolbarButton>
                     </Tooltip>
                 )}
                 <Tooltip title="차트 설정">
-                    <IconButton size="small" aria-label="차트 설정" onClick={() => setSettingsOpen(true)}>
-                        <SettingsIcon fontSize="small"/>
-                    </IconButton>
+                    <ChartToolbarButton aria-label="차트 설정" onClick={() => setSettingsOpen(true)}>
+                        <SettingsIcon/>
+                    </ChartToolbarButton>
                 </Tooltip>
             </Stack>
             <ChartSettingsDialog
@@ -227,6 +244,8 @@ const CandleChart = ({
                 layoutOptions={LAYOUT_OPTIONS}
                 hidden={hidden}
                 onToggle={setVisible}
+                flatByPrevClose={flatByPrevClose}
+                onFlatByPrevCloseChange={setFlatByPrevClose}
                 drawingCount={drawings.length}
                 onClearDrawings={() => updateDrawings([])}
             />
@@ -256,7 +275,9 @@ const CandleChart = ({
                             width: '100%',
                             height: height + activeIndicators.length * INDICATOR_PANE_HEIGHT,
                             '--chart-up': (theme.vars || theme).palette.error.main,
-                            '--chart-down': (theme.vars || theme).palette.info.main,
+                            // 하락색은 info.main 대신 primary.main 을 쓴다. 라이트 모드의 info.main 은 밝은 하늘색이라
+                            // 진한 빨강(error.main)과 무게가 맞지 않고 캔들이 흐려 보인다
+                            '--chart-down': (theme.vars || theme).palette.primary.main,
                             '--chart-text': (theme.vars || theme).palette.text.secondary,
                             '--chart-grid': (theme.vars || theme).palette.divider,
                             '--chart-background': (theme.vars || theme).palette.background.paper,
