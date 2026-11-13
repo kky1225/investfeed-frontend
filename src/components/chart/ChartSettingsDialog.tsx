@@ -17,51 +17,59 @@ export interface ChartSettingOption {
 interface ChartSettingsDialogProps {
     open: boolean,
     onClose: () => void,
-    options: ChartSettingOption[],      // 켜고 끌 수 있는 지표
-    hidden: string[],                   // 꺼 둔 지표의 key
+    indicatorOptions: ChartSettingOption[],     // 켜고 끌 수 있는 지표
+    layoutOptions: ChartSettingOption[],        // 켜고 끌 수 있는 화면 요소 (그리기 도구 모음 등)
+    hidden: string[],                           // 꺼 둔 항목의 key
     onToggle: (key: string, visible: boolean) => void,
-    drawingCount: number,               // 그려 둔 선의 수
+    drawingCount: number,                       // 그려 둔 선의 수
     onClearDrawings: () => void,
 }
 
 /** 차트 설정 창. 바꾸는 즉시 차트에 반영된다. */
 const ChartSettingsDialog = ({
-    open, onClose, options, hidden, onToggle, drawingCount, onClearDrawings,
-}: ChartSettingsDialogProps) => (
-    <Dialog open={open} onClose={onClose} maxWidth="xs" fullWidth>
-        <DialogTitle>차트 설정</DialogTitle>
-        <DialogContent>
-            <Typography variant="subtitle2" sx={{color: 'text.secondary', mb: 1}}>지표</Typography>
-            <FormGroup>
-                {options.map(option => (
-                    <FormControlLabel
-                        key={option.key}
-                        label={option.label}
-                        control={
-                            <Switch
-                                checked={!hidden.includes(option.key)}
-                                onChange={(_event, checked) => onToggle(option.key, checked)}
-                            />
-                        }
-                    />
-                ))}
-            </FormGroup>
+    open, onClose, indicatorOptions, layoutOptions, hidden, onToggle, drawingCount, onClearDrawings,
+}: ChartSettingsDialogProps) => {
+    const renderSwitches = (options: ChartSettingOption[]) => (
+        <FormGroup>
+            {options.map(option => (
+                <FormControlLabel
+                    key={option.key}
+                    label={option.label}
+                    control={
+                        <Switch
+                            checked={!hidden.includes(option.key)}
+                            onChange={(_event, checked) => onToggle(option.key, checked)}
+                        />
+                    }
+                />
+            ))}
+        </FormGroup>
+    );
 
-            <Divider sx={{my: 2}}/>
+    return (
+        <Dialog open={open} onClose={onClose} maxWidth="xs" fullWidth>
+            <DialogTitle>차트 설정</DialogTitle>
+            <DialogContent>
+                <Typography variant="subtitle2" sx={{color: 'text.secondary', mb: 1}}>지표</Typography>
+                {renderSwitches(indicatorOptions)}
 
-            <Typography variant="subtitle2" sx={{color: 'text.secondary', mb: 1}}>그리기</Typography>
-            {drawingCount > 0 ? (
-                <Button variant="outlined" color="error" size="small" onClick={onClearDrawings}>
-                    그린 선 모두 삭제 ({drawingCount}개)
-                </Button>
-            ) : (
-                <Typography variant="body2" sx={{color: 'text.secondary'}}>그린 선이 없습니다.</Typography>
-            )}
-        </DialogContent>
-        <DialogActions>
-            <Button onClick={onClose}>닫기</Button>
-        </DialogActions>
-    </Dialog>
-);
+                <Divider sx={{my: 2}}/>
+
+                <Typography variant="subtitle2" sx={{color: 'text.secondary', mb: 1}}>그리기</Typography>
+                {renderSwitches(layoutOptions)}
+                {drawingCount > 0 ? (
+                    <Button variant="outlined" color="error" size="small" onClick={onClearDrawings} sx={{mt: 1}}>
+                        그린 선 모두 삭제 ({drawingCount}개)
+                    </Button>
+                ) : (
+                    <Typography variant="body2" sx={{color: 'text.secondary', mt: 1}}>그린 선이 없습니다.</Typography>
+                )}
+            </DialogContent>
+            <DialogActions>
+                <Button onClick={onClose}>닫기</Button>
+            </DialogActions>
+        </Dialog>
+    );
+};
 
 export default ChartSettingsDialog;

@@ -2,26 +2,28 @@ import {useEffect, useMemo, useRef, useState} from "react";
 import Box from "@mui/material/Box";
 import Stack from "@mui/material/Stack";
 import IconButton from "@mui/material/IconButton";
-import ToggleButton from "@mui/material/ToggleButton";
-import ToggleButtonGroup from "@mui/material/ToggleButtonGroup";
+import Button from "@mui/material/Button";
+import Typography from "@mui/material/Typography";
 import Tooltip from "@mui/material/Tooltip";
-import ShowChartIcon from "@mui/icons-material/ShowChart";
-import HorizontalRuleIcon from "@mui/icons-material/HorizontalRule";
 import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
 import SettingsIcon from "@mui/icons-material/Settings";
 import KeyboardDoubleArrowRightIcon from "@mui/icons-material/KeyboardDoubleArrowRight";
+import Paper from "@mui/material/Paper";
 import ChartSettingsDialog, {ChartSettingOption} from "./ChartSettingsDialog.tsx";
-import {loadChartSettings, saveChartSettings} from "../../lib/chart/settingsStorage.ts";
+import ChartDrawingToolbar from "./ChartDrawingToolbar.tsx";
+import {useChartStorage} from "./useChartStorage.ts";
 import {useColorScheme} from "@mui/material/styles";
 import {CandleChartEngine, INDICATOR_PANE_HEIGHT} from "../../lib/chart/CandleChart.ts";
-import {Candle, Drawing, DrawingTool, IndicatorType, PriceLine, TimeUnit} from "../../lib/chart/types.ts";
-import {loadDrawings, saveDrawings} from "../../lib/chart/drawingStorage.ts";
+import {Candle, DrawingTool, IndicatorType, PriceLine, TimeUnit} from "../../lib/chart/types.ts";
+import type {AssetType} from "../../type/NotificationType.ts";
 
 export interface CandleChartProps {
     candles: Candle[],      // 오래된 순
     timeUnit: TimeUnit,
     seriesKey?: string,     // 종목·주기처럼 다른 차트로 바뀌는 기준. 바뀌면 드래그·확대 상태를 기본 보기로 되돌린다
-    drawingKey?: string,    // 그린 도형을 저장하는 기준(종목 코드 등). 주기를 바꿔도 같은 도형을 보여 준다. 없으면 저장하지 않는다
+    // 그린 선을 계정에 저장하는 기준. 주기를 바꿔도 같은 선을 보여 준다. 둘 다 주지 않으면 저장하지 않는다
+    assetType?: AssetType,
+    assetCode?: string,
     movingAverages?: number[],  // 이동평균선 기간. 색은 순서대로 success·warning·secondary·text.primary
     indicators?: IndicatorType[],   // 차트 아래에 쌓을 보조지표
     priceLines?: PriceLine[],   // 특정 가격에 긋는 가로선 (목표가 등)
@@ -37,8 +39,21 @@ const NO_MOVING_AVERAGES: number[] = [];
 const AVERAGE_TOGGLE = 'average';
 const INDICATOR_LABELS: Record<IndicatorType, string> = {rsi: 'RSI', macd: 'MACD'};
 
+// 설정 창의 화면 요소 스위치. 꺼 둔 지표와 같은 목록(hidden)에 저장한다
+const TOOLBAR_TOGGLE = 'drawingToolbar';
+const LAYOUT_OPTIONS: ChartSettingOption[] = [{key: TOOLBAR_TOGGLE, label: '그리기 도구 모음 표시'}];
+
+// Alt 와 함께 누르는 그리기 단축키 (KeyboardEvent.code)
+const TOOL_SHORTCUTS: Record<string, DrawingTool | undefined> = {KeyT: 'trend', KeyH: 'horizontal'};
+
+// 그리기 도구를 고른 뒤 차트 위에 보여 주는 안내
+const TOOL_HINTS: Record<DrawingTool, string> = {
+    trend: '추세선: 차트에서 시작점을 누른 채 끌었다가 놓으세요.',
+    horizontal: '수평선: 차트에서 원하는 가격을 누르세요.',
+};
+
 const CandleChart = ({
-    candles, timeUnit, seriesKey, drawingKey,
+    candles, timeUnit, seriesKey, assetType, assetCode,
     movingAverages = DEFAULT_MOVING_AVERAGES, indicators = DEFAULT_INDICATORS, priceLines = NO_PRICE_LINES,
     height = 400,
 }: CandleChartProps) => {
@@ -46,24 +61,12 @@ const CandleChart = ({
     const engineRef = useRef<CandleChartEngine | null>(null);
     const {mode, systemMode} = useColorScheme();
 
-    // 그린 도형. drawingKey 가 바뀌면(다른 종목) 그 종목에 저장해 둔 도형을 불러온다.
-    const [stored, setStored] = useState(() => ({key: drawingKey, drawings: loadDrawings(drawingKey)}));
-    if (stored.key !== drawingKey) {
-        setStored({key: drawingKey, drawings: loadDrawings(drawingKey)});
-    }
-    const drawings = stored.drawings;
+    // 그린 선과 차트 설정(꺼 둔 지표)은 계정에 저장한다.
+    const {drawings, updateDrawings, hidden, setVisible} = useChartStorage(assetType, assetCode);
     const [tool, setTool] = useState<DrawingTool | null>(null);
     const [selectedId, setSelectedId] = useState<string | null>(null);
     const [atLatest, setAtLatest] = useState(true);
-
-    // 차트 설정: 꺼 둔 지표. 브라우저에 저장해 다시 열어도 유지한다.
     const [settingsOpen, setSettingsOpen] = useState(false);
-    const [hidden, setHidden] = useState<string[]>(() => loadChartSettings().hidden);
-    const toggleSetting = (key: string, visible: boolean) => {
-        const next = visible ? hidden.filter(item => item !== key) : [...hidden, key];
-        setHidden(next);
-        saveChartSettings({hidden: next});
-    };
     const settingOptions = useMemo<ChartSettingOption[]>(() => [
         ...(movingAverages.length > 0
             ? [{key: AVERAGE_TOGGLE, label: `이동평균선 (${movingAverages.join('·')})`}]
@@ -76,10 +79,6 @@ const CandleChart = ({
         [indicators, hidden],
     );
 
-    const updateDrawings = (next: Drawing[]) => {
-        setStored({key: drawingKey, drawings: next});
-        saveDrawings(drawingKey, next);
-    };
     // 엔진은 한 번만 만들어지므로, 엔진이 부를 함수는 ref 로 최신 것을 가리키게 한다.
     const updateDrawingsRef = useRef(updateDrawings);
     useEffect(() => {
@@ -159,38 +158,41 @@ const CandleChart = ({
         return () => cancelAnimationFrame(frame);
     }, [mode, systemMode]);
 
+    // 단축키: Alt+T 추세선, Alt+H 수평선, Esc 취소. 글자를 입력하는 중에는 동작하지 않는다.
+    useEffect(() => {
+        const handleKeyDown = (event: KeyboardEvent) => {
+            const target = event.target instanceof HTMLElement ? event.target : null;
+            if (target?.closest('input, textarea, select, [contenteditable="true"]')) return;
+            if (event.key === 'Escape') {
+                setTool(null);
+                return;
+            }
+            if (!event.altKey || event.ctrlKey || event.metaKey) return;
+            const next = TOOL_SHORTCUTS[event.code];
+            if (!next) return;
+            event.preventDefault();
+            setTool(next);
+        };
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+    }, []);
+
+    const toolbarVisible = !hidden.includes(TOOLBAR_TOGGLE);
+
     return (
         <Box>
-            {/* 그리기 도구: 도구를 고르고 차트에 그린다. 하나를 그리면 도구가 풀린다. */}
+            {/* 위쪽 줄: 그리기 도구 모음(설정에서 숨길 수 있다), 그리는 중일 때의 안내, 최근으로 이동, 차트 설정 */}
             <Stack direction="row" spacing={1} sx={{px: 2, pb: 1, alignItems: 'center', minHeight: 40}}>
-                <ToggleButtonGroup
-                    size="small"
-                    exclusive
-                    value={tool}
-                    onChange={(_event, next: DrawingTool | null) => setTool(next)}
-                    aria-label="그리기 도구"
-                >
-                    <ToggleButton value="trend" aria-label="추세선">
-                        <Tooltip title="추세선">
-                            <ShowChartIcon fontSize="small"/>
-                        </Tooltip>
-                    </ToggleButton>
-                    <ToggleButton value="horizontal" aria-label="수평선">
-                        <Tooltip title="수평선">
-                            <HorizontalRuleIcon fontSize="small"/>
-                        </Tooltip>
-                    </ToggleButton>
-                </ToggleButtonGroup>
-                {selectedId && (
-                    <Tooltip title="선택한 선 삭제">
-                        <IconButton
-                            size="small"
-                            aria-label="선택한 선 삭제"
-                            onClick={() => updateDrawings(drawings.filter(drawing => drawing.id !== selectedId))}
-                        >
-                            <DeleteOutlineIcon fontSize="small"/>
-                        </IconButton>
-                    </Tooltip>
+                {toolbarVisible && <ChartDrawingToolbar tool={tool} onSelectTool={setTool}/>}
+                {tool && (
+                    <>
+                        {/* 좁은 화면에서는 안내 문구를 생략해 버튼이 한 줄에 들어가게 한다. */}
+                        <Typography variant="body2" noWrap sx={{color: 'text.secondary', display: {xs: 'none', sm: 'block'}}}>
+                            {TOOL_HINTS[tool]}
+                        </Typography>
+                        {/* 도구 모음을 숨긴 채 단축키로 그릴 때는 취소할 버튼이 없으므로 따로 보여 준다. */}
+                        {!toolbarVisible && <Button size="small" onClick={() => setTool(null)}>취소</Button>}
+                    </>
                 )}
 
                 {/* 오른쪽: 최근으로 이동(과거를 보고 있을 때만), 차트 설정 */}
@@ -215,29 +217,51 @@ const CandleChart = ({
             <ChartSettingsDialog
                 open={settingsOpen}
                 onClose={() => setSettingsOpen(false)}
-                options={settingOptions}
+                indicatorOptions={settingOptions}
+                layoutOptions={LAYOUT_OPTIONS}
                 hidden={hidden}
-                onToggle={toggleSetting}
+                onToggle={setVisible}
                 drawingCount={drawings.length}
                 onClearDrawings={() => updateDrawings([])}
             />
-            <Box
-                ref={containerRef}
-                sx={(theme) => ({
-                    position: 'relative',
-                    width: '100%',
-                    height: height + activeIndicators.length * INDICATOR_PANE_HEIGHT,
-                    '--chart-up': (theme.vars || theme).palette.error.main,
-                    '--chart-down': (theme.vars || theme).palette.info.main,
-                    '--chart-text': (theme.vars || theme).palette.text.secondary,
-                    '--chart-grid': (theme.vars || theme).palette.divider,
-                    '--chart-background': (theme.vars || theme).palette.background.paper,
-                    '--chart-line-1': (theme.vars || theme).palette.success.main,
-                    '--chart-line-2': (theme.vars || theme).palette.warning.main,
-                    '--chart-line-3': (theme.vars || theme).palette.secondary.main,
-                    '--chart-line-4': (theme.vars || theme).palette.text.primary,
-                })}
-            />
+            <Stack direction="row">
+                <Box sx={{position: 'relative', flexGrow: 1, minWidth: 0}}>
+                    {/* 선을 선택하면 차트 위쪽 가운데에 그 선에 대한 버튼이 뜬다. */}
+                    {selectedId && !tool && (
+                        <Paper
+                            elevation={3}
+                            sx={{position: 'absolute', top: 8, left: '50%', transform: 'translateX(-50%)', zIndex: 2}}
+                        >
+                            <Tooltip title="선택한 선 삭제 (Delete)">
+                                <IconButton
+                                    size="small"
+                                    aria-label="선택한 선 삭제"
+                                    onClick={() => updateDrawings(drawings.filter(drawing => drawing.id !== selectedId))}
+                                >
+                                    <DeleteOutlineIcon fontSize="small"/>
+                                </IconButton>
+                            </Tooltip>
+                        </Paper>
+                    )}
+                    <Box
+                        ref={containerRef}
+                        sx={(theme) => ({
+                            position: 'relative',
+                            width: '100%',
+                            height: height + activeIndicators.length * INDICATOR_PANE_HEIGHT,
+                            '--chart-up': (theme.vars || theme).palette.error.main,
+                            '--chart-down': (theme.vars || theme).palette.info.main,
+                            '--chart-text': (theme.vars || theme).palette.text.secondary,
+                            '--chart-grid': (theme.vars || theme).palette.divider,
+                            '--chart-background': (theme.vars || theme).palette.background.paper,
+                            '--chart-line-1': (theme.vars || theme).palette.success.main,
+                            '--chart-line-2': (theme.vars || theme).palette.warning.main,
+                            '--chart-line-3': (theme.vars || theme).palette.secondary.main,
+                            '--chart-line-4': (theme.vars || theme).palette.text.primary,
+                        })}
+                    />
+                </Box>
+            </Stack>
         </Box>
     );
 };

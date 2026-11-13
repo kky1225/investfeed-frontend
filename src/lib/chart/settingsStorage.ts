@@ -18,6 +18,14 @@ export const loadChartSettings = (): ChartSettings => {
     }
 };
 
+export const clearChartSettings = () => {
+    try {
+        localStorage.removeItem(STORAGE_KEY);
+    } catch {
+        // 삭제 실패는 무시한다.
+    }
+};
+
 /** 저장에 실패해도(공간 부족·사생활 보호 모드) 화면 동작은 계속한다. */
 export const saveChartSettings = (settings: ChartSettings) => {
     try {
