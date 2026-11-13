@@ -29,11 +29,18 @@ const PRICE_LINE_DASH = [6, 4];
 const PRICE_LINE_TITLE_OFFSET = 8;  // 선과 그 위 이름 사이
 const EXTREME_LABEL_GAP = 4;        // 최고·최저가 표시와 캔들 사이 (가로)
 const EXTREME_LABEL_OFFSET = 8;     // 최고·최저가 표시와 캔들 끝 사이 (세로)
-const SERIES_LINE_WIDTH = 1.5;  // 이동평균선·지표선 굵기
+const SERIES_LINE_WIDTH = 1;    // 이동평균선·지표선 굵기. 캔들을 가리지 않게 가늘게 둔다
 const LEGEND_LEFT = 8;
 const LEGEND_HEIGHT = 18;
 const LEGEND_GAP = 4;           // 이름과 값 사이
 const LEGEND_ITEM_GAP = 10;     // 항목 사이
+// 가격 영역이 시작하는 높이. 그 위는 값 표시 두 줄(시고저종, 이동평균) 전용이라 캔들이 들어오지 않는다
+const PRICE_PANE_TOP = PADDING_TOP + LEGEND_HEIGHT * 2 + 4;
+const DRAWING_LINE_WIDTH = 1.5; // 사용자가 그린 선 굵기
+// 거래량 눈금: 보이는 구간의 상위 2% 를 뺀 값의 2배까지만 잡는다. 튀는 막대 하나가 나머지를 납작하게 누르지 않게 한다
+const VOLUME_PERCENTILE = 0.98;
+const VOLUME_OUTLIER_RATIO = 2;
+const PINCH_DELTA_LIMIT = 30;   // 휠 한 번의 이동량이 이보다 작으면 트랙패드 두 손가락 벌리기로 본다
 const INDICATOR_PADDING_BOTTOM = 6;
 const HISTOGRAM_ALPHA = 0.5;
 const DRAG_THRESHOLD = 3;       // 이만큼 움직여야 드래그로 본다
@@ -54,9 +61,9 @@ const HANDLE_SIZE = 7;          // 선택한 추세선 양 끝의 손잡이 크�
 const DRAFT_ID = 'draft';       // 그리는 중인 도형
 
 // style.lineColors 안에서의 색 순서
-const DRAWING_COLOR = 3;
+const DRAWING_COLOR = 4;
 const RSI_COLOR = 2;
-const MACD_COLOR = 3;
+const MACD_COLOR = 4;
 const MACD_SIGNAL_COLOR = 1;
 
 /**
@@ -403,6 +410,11 @@ export class CandleChartEngine {
 
     private readonly handleWheel = (event: WheelEvent) => {
         if (this.candles.length === 0) return;
+        // 그냥 세로 휠은 페이지 스크롤에 맡긴다. 페이지를 내리다 차트가 의도치 않게 축소되는 것을 막는다.
+        // 확대·축소는 Ctrl(Mac 은 ⌘)+휠 또는 트랙패드 두 손가락 벌리기, 이동은 트랙패드 가로 밀기.
+        const zooming = event.ctrlKey || event.metaKey;
+        const horizontal = Math.abs(event.deltaX) > Math.abs(event.deltaY);
+        if (!zooming && !horizontal) return;
         event.preventDefault();
 
         const unit = event.deltaMode === WheelEvent.DOM_DELTA_LINE ? WHEEL_LINE_HEIGHT
@@ -412,12 +424,12 @@ export class CandleChartEngine {
         const deltaY = event.deltaY * unit;
         const view = this.resolveView();
 
-        if (!event.ctrlKey && Math.abs(deltaX) > Math.abs(deltaY)) {
+        if (!zooming) {
             // 트랙패드 가로 밀기: 이동
             this.setView({...view, rightEdge: view.rightEdge + deltaX / view.spacing});
         } else {
-            // 휠: 마우스 위치를 기준으로 확대·축소
-            const rate = event.ctrlKey ? PINCH_WHEEL_ZOOM_RATE : WHEEL_ZOOM_RATE;
+            // 마우스 위치를 기준으로 확대·축소. 두 손가락 벌리기는 이동량이 작게 들어와 더 민감하게 받는다.
+            const rate = Math.abs(deltaY) < PINCH_DELTA_LIMIT ? PINCH_WHEEL_ZOOM_RATE : WHEEL_ZOOM_RATE;
             const x = clamp(this.localPoint(event).x, 0, this.plotWidth());
             this.zoomAt(view, x, this.logicalAt(view, x), view.spacing * Math.exp(-deltaY * rate));
         }
@@ -649,7 +661,7 @@ export class CandleChartEngine {
         const color = this.lineColor(style, DRAWING_COLOR);
         const line = this.lineWidth();
         const plotRightPx = this.px(layout.plotWidth);
-        const baseWidth = Math.max(1, Math.round(SERIES_LINE_WIDTH * this.dpr));
+        const baseWidth = Math.max(1, Math.round(DRAWING_LINE_WIDTH * this.dpr));
         const handle = this.px(HANDLE_SIZE);
 
         ctx.save();
@@ -887,7 +899,7 @@ export class CandleChartEngine {
         const plotWidth = this.width - PRICE_AXIS_WIDTH;
         const plotBottom = this.height - TIME_AXIS_HEIGHT;
         const mainBottom = plotBottom - this.indicators.length * INDICATOR_PANE_HEIGHT;
-        const mainHeight = mainBottom - PADDING_TOP;
+        const mainHeight = mainBottom - PRICE_PANE_TOP;
         if (!style || this.candles.length === 0 || plotWidth <= 0 || mainHeight <= 0) return null;
 
         const range = this.visibleRange();
@@ -895,7 +907,7 @@ export class CandleChartEngine {
         const visible = this.candles.slice(range.from, range.from + range.count);
 
         const volumeTop = mainBottom - mainHeight * VOLUME_RATIO;
-        const priceTop = PADDING_TOP;
+        const priceTop = PRICE_PANE_TOP;
         const priceBottom = volumeTop - PANE_GAP;
 
         // 보이는 구간의 최고·최저가에 맞춰 가격축을 잡고, 위아래로 5% 여백을 둔다.
@@ -910,7 +922,11 @@ export class CandleChartEngine {
         const priceMax = highest + padding;
         const priceY = createLinearScale(priceMin, priceMax, priceTop, priceBottom);
 
-        const volumeMax = Math.max(...visible.map(candle => candle.volume)) || 1;
+        // 거래량 눈금 상한. 유난히 큰 막대는 영역 꼭대기에서 잘리고, 실제 값은 값 표시에서 확인한다.
+        const volumes = visible.map(candle => candle.volume);
+        const highestVolume = Math.max(...volumes);
+        const typicalHigh = [...volumes].sort((a, b) => a - b)[Math.floor((volumes.length - 1) * VOLUME_PERCENTILE)];
+        const volumeMax = Math.min(highestVolume, typicalHigh * VOLUME_OUTLIER_RATIO) || highestVolume || 1;
         const volumeY = createLinearScale(0, volumeMax, volumeTop, mainBottom);
 
         const line = this.lineWidth();
@@ -984,7 +1000,7 @@ export class CandleChartEngine {
 
                 // 거래량
                 if (candle.volume > 0) {
-                    const top = Math.min(this.px(volumeY(candle.volume)), mainBottomPx - 1);
+                    const top = clamp(this.px(volumeY(candle.volume)), this.px(volumeTop), mainBottomPx - 1);
                     ctx.fillRect(bodyLeft, top, bodyWidth, mainBottomPx - top);
                 }
             });

@@ -18,7 +18,8 @@ import ToggleButtonGroup, {
 } from '@mui/material/ToggleButtonGroup';
 import {Accordion, AccordionDetails, AccordionSummary, Select, SelectChangeEvent, Slider, Tab, Tabs, Tooltip} from "@mui/material";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
-import {styled} from "@mui/material/styles";
+import {styled, Theme} from "@mui/material/styles";
+import useMediaQuery from "@mui/material/useMediaQuery";
 import MenuItem from "@mui/material/MenuItem";
 import {useParams} from "react-router-dom";
 import {
@@ -945,6 +946,71 @@ const StockDetail = () => {
         }
     };
 
+    // 주기(분·일·주·월·년)와 캔들/선 전환 버튼. 화면 폭에 따라 놓는 자리가 다르다.
+    // - 넓은 화면: 차트 위쪽 줄 (캔들 차트면 차트의 위쪽 줄 안, 선 차트·로딩 중이면 같은 자리의 줄)
+    // - 좁은 화면(모바일): 차트 아래. 한 손으로 쥐었을 때 엄지가 닿는 자리다
+    const isNarrow = useMediaQuery((theme: Theme) => theme.breakpoints.down('sm'));
+    const chartControls = (
+        <>
+            <StyledToggleButtonGroup
+                size="small"
+                value={toggle}
+                exclusive
+                onChange={handleAlignment}
+                aria-label="차트 주기"
+            >
+                <ToggleButton
+                    value="MINUTE"
+                    key="MINUTE"
+                    aria-label="MINUTE"
+                    sx={{
+                        padding: 1
+                    }}
+                >
+                    <Select
+                        size="small"
+                        value={minute.current}
+                        onChange={handleOptionChange}
+                        variant="standard"
+                        disableUnderline
+                        sx={{
+                            boxShadow: 'none',
+                            width: 55,
+                            backgroundColor: 'transparent',
+                            border: 'none',
+                            padding: '0 8px',
+                            justifyContent: 'center',
+                        }}
+                    >
+                        <MenuItem value="1">1분</MenuItem>
+                        <MenuItem value="3">3분</MenuItem>
+                        <MenuItem value="5">5분</MenuItem>
+                        <MenuItem value="30">30분</MenuItem>
+                    </Select>
+                </ToggleButton>
+                <ToggleButton value="DAY" key="DAY" aria-label="DAY">일</ToggleButton>
+                <ToggleButton value="WEEK" key="WEEK" aria-label="WEEK">주</ToggleButton>
+                <ToggleButton value="MONTH" key="MONTH" aria-label="MONTH">월</ToggleButton>
+                <ToggleButton value="YEAR" key="YEAR" aria-label="YEAR">년</ToggleButton>
+            </StyledToggleButtonGroup>
+
+            <StyledToggleButtonGroup
+                size="small"
+                value={formats}
+                exclusive
+                onChange={handleFormat}
+                aria-label="차트 종류"
+            >
+                <ToggleButton value="candle" key="candle" aria-label="candle">
+                    <CandlestickChartIcon />
+                </ToggleButton>
+                <ToggleButton value="line" key="line" aria-label="line">
+                    <StackedLineChartIcon />
+                </ToggleButton>
+            </StyledToggleButtonGroup>
+        </>
+    );
+
     return (
         <Box sx={{ width: '100%', maxWidth: { sm: '100%', md: '1700px' } }}>
             <Box sx={{ display: 'flex', alignItems: 'center', mb: 2, gap: 2 }}>
@@ -952,7 +1018,12 @@ const StockDetail = () => {
                     주식 상세
                 </Typography>
                 <Box sx={{ flex: 1 }}/>
-                <FreshnessIndicator lastUpdated={lastUpdated} error={pollError}/>
+                {/* 날짜·시각은 여기 한 곳에만 표시한다. 예: "2026.11.13 09:42 기준", 장 마감 후 "2026.11.13 장마감 기준" */}
+                <FreshnessIndicator
+                    lastUpdated={lastUpdated}
+                    error={pollError}
+                    label={loading || stockChartData.interval === '-' ? undefined : stockChartData.interval}
+                />
             </Box>
             <Grid
                 container
@@ -1086,11 +1157,13 @@ const StockDetail = () => {
                                         </>
                                     )}
                                 </Stack>
-                                <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-                                    {loading ? <Skeleton width={140}/> : stockChartData.interval}
-                                </Typography>
                             </Stack>
                         </CardContent>
+                        {!isNarrow && (loading || formats !== 'candle') && (
+                            <Stack direction="row" spacing={1} sx={{px: 2, pb: 1, alignItems: 'center', minHeight: 40}}>
+                                {chartControls}
+                            </Stack>
+                        )}
                         <Box sx={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
                             {/* 캔들 차트는 스스로 이동·확대하므로 화면 너비에 맞춘다. 선 차트만 최소 너비를 둔다. */}
                             <Box sx={{ minWidth: formats === 'candle' ? 0 : 1200 }}>
@@ -1104,75 +1177,23 @@ const StockDetail = () => {
                                         priceLines={targetLines}
                                         assetType="STOCK"
                                         assetCode={stkCd}
+                                        toolbarStart={isNarrow ? undefined : chartControls}
                                     />
                                 ) : (
                                     <StockDetailLineChart {...stockChartData} />
                                 )}
                             </Box>
                         </Box>
-                        <Box
-                            display="flex"
-                            justifyContent="space-between"
-                            alignItems="center"
-                            flexWrap="wrap"
-                        >
-                            <StyledToggleButtonGroup
-                                size="small"
-                                value={toggle}
-                                exclusive
-                                onChange={handleAlignment}
-                                aria-label="text alignment"
+                        {isNarrow && (
+                            <Box
+                                display="flex"
+                                justifyContent="space-between"
+                                alignItems="center"
+                                flexWrap="wrap"
                             >
-                                <ToggleButton
-                                    value="MINUTE"
-                                    key="MINUTE"
-                                    aria-label="MINUTE"
-                                    sx={{
-                                        padding: 1
-                                    }}
-                                >
-                                    <Select
-                                        size="small"
-                                        value={minute.current}
-                                        onChange={handleOptionChange}
-                                        variant="standard"
-                                        disableUnderline
-                                        sx={{
-                                            boxShadow: 'none',
-                                            width: 55,
-                                            backgroundColor: 'transparent',
-                                            border: 'none',
-                                            padding: '0 8px',
-                                            justifyContent: 'center',
-                                        }}
-                                    >
-                                        <MenuItem value="1">1분</MenuItem>
-                                        <MenuItem value="3">3분</MenuItem>
-                                        <MenuItem value="5">5분</MenuItem>
-                                        <MenuItem value="30">30분</MenuItem>
-                                    </Select>
-                                </ToggleButton>
-                                <ToggleButton value="DAY" key="DAY" aria-label="DAY">일</ToggleButton>
-                                <ToggleButton value="WEEK" key="WEEK" aria-label="WEEK">주</ToggleButton>
-                                <ToggleButton value="MONTH" key="MONTH" aria-label="MONTH">월</ToggleButton>
-                                <ToggleButton value="YEAR" key="YEAR" aria-label="YEAR">년</ToggleButton>
-                            </StyledToggleButtonGroup>
-
-                            <StyledToggleButtonGroup
-                                size="small"
-                                value={formats}
-                                exclusive
-                                onChange={handleFormat}
-                                aria-label="text formatting"
-                            >
-                                <ToggleButton value="candle" key="candle" aria-label="candle">
-                                    <CandlestickChartIcon />
-                                </ToggleButton>
-                                <ToggleButton value="line" key="line" aria-label="line">
-                                    <StackedLineChartIcon />
-                                </ToggleButton>
-                            </StyledToggleButtonGroup>
-                        </Box>
+                                {chartControls}
+                            </Box>
+                        )}
                     </Card>
                 </Grid>
             </Grid>

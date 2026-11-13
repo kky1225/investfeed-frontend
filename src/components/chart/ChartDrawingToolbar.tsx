@@ -26,7 +26,8 @@ const ChartDrawingToolbar = ({tool, onSelectTool}: ChartDrawingToolbarProps) => 
             onSelectTool(next === null || next === CURSOR ? null : next as DrawingTool);
         }}
         aria-label="그리기 도구"
-        sx={{'& .MuiToggleButton-root': {border: 0}}}
+        // 테마가 버튼 묶음에 입히는 테두리와 그림자를 빼서, 같은 줄의 다른 버튼들과 같은 모양으로 맞춘다.
+        sx={{border: 'none', boxShadow: 'none', '& .MuiToggleButton-root': {border: 0}}}
     >
         <ToggleButton value={CURSOR} aria-label="선택">
             <Tooltip title="선택 · 이동 (Esc)">

@@ -1,5 +1,6 @@
-import {useEffect, useMemo, useRef, useState} from "react";
+import {ReactNode, useEffect, useMemo, useRef, useState} from "react";
 import Box from "@mui/material/Box";
+import Divider from "@mui/material/Divider";
 import Stack from "@mui/material/Stack";
 import IconButton from "@mui/material/IconButton";
 import Button from "@mui/material/Button";
@@ -24,9 +25,10 @@ export interface CandleChartProps {
     // 그린 선을 계정에 저장하는 기준. 주기를 바꿔도 같은 선을 보여 준다. 둘 다 주지 않으면 저장하지 않는다
     assetType?: AssetType,
     assetCode?: string,
-    movingAverages?: number[],  // 이동평균선 기간. 색은 순서대로 success·warning·secondary·text.primary
+    movingAverages?: number[],  // 이동평균선 기간. 색은 순서대로 success·warning·secondary·grey
     indicators?: IndicatorType[],   // 차트 아래에 쌓을 보조지표
     priceLines?: PriceLine[],   // 특정 가격에 긋는 가로선 (목표가 등)
+    toolbarStart?: ReactNode,   // 위쪽 줄 맨 앞에 놓을 화면별 버튼 (주기, 차트 종류 등)
     height?: number,            // 가격+거래량 영역 높이. 보조지표 영역은 이 아래에 더해진다
 }
 
@@ -53,7 +55,7 @@ const TOOL_HINTS: Record<DrawingTool, string> = {
 };
 
 const CandleChart = ({
-    candles, timeUnit, seriesKey, assetType, assetCode,
+    candles, timeUnit, seriesKey, assetType, assetCode, toolbarStart,
     movingAverages = DEFAULT_MOVING_AVERAGES, indicators = DEFAULT_INDICATORS, priceLines = NO_PRICE_LINES,
     height = 400,
 }: CandleChartProps) => {
@@ -151,7 +153,9 @@ const CandleChart = ({
                 textColor: color('--chart-text'),
                 gridColor: color('--chart-grid'),
                 backgroundColor: color('--chart-background'),
-                lineColors: ['--chart-line-1', '--chart-line-2', '--chart-line-3', '--chart-line-4'].map(color),
+                lineColors: [
+                    '--chart-line-1', '--chart-line-2', '--chart-line-3', '--chart-line-4', '--chart-line-5',
+                ].map(color),
                 fontFamily: computed.fontFamily,
             });
         });
@@ -181,8 +185,10 @@ const CandleChart = ({
 
     return (
         <Box>
-            {/* 위쪽 줄: 그리기 도구 모음(설정에서 숨길 수 있다), 그리는 중일 때의 안내, 최근으로 이동, 차트 설정 */}
+            {/* 위쪽 한 줄에 모든 버튼을 모은다: 화면별 버튼(주기 등) · 그리기 도구 모음 · 안내 … 최근으로 이동 · 차트 설정 */}
             <Stack direction="row" spacing={1} sx={{px: 2, pb: 1, alignItems: 'center', minHeight: 40}}>
+                {toolbarStart}
+                {toolbarStart && toolbarVisible && <Divider orientation="vertical" flexItem sx={{my: 1}}/>}
                 {toolbarVisible && <ChartDrawingToolbar tool={tool} onSelectTool={setTool}/>}
                 {tool && (
                     <>
@@ -257,7 +263,8 @@ const CandleChart = ({
                             '--chart-line-1': (theme.vars || theme).palette.success.main,
                             '--chart-line-2': (theme.vars || theme).palette.warning.main,
                             '--chart-line-3': (theme.vars || theme).palette.secondary.main,
-                            '--chart-line-4': (theme.vars || theme).palette.text.primary,
+                            '--chart-line-4': (theme.vars || theme).palette.grey[500],
+                            '--chart-line-5': (theme.vars || theme).palette.text.primary,
                         })}
                     />
                 </Box>

@@ -478,7 +478,12 @@ const CommodityDetail = () => {
                     원자재 상세
                 </Typography>
                 <Box sx={{ flex: 1 }}/>
-                <FreshnessIndicator lastUpdated={lastUpdated} error={pollError}/>
+                {/* 날짜·시각은 여기 한 곳에만 표시한다. 예: "2026.11.13 09:42 기준", 장 마감 후 "2026.11.13 장마감 기준" */}
+                <FreshnessIndicator
+                    lastUpdated={lastUpdated}
+                    error={pollError}
+                    label={loading || commodityChartData.interval === '-' ? undefined : commodityChartData.interval}
+                />
             </Box>
             <Grid
                 container
@@ -528,9 +533,6 @@ const CommodityDetail = () => {
                                         ? <Skeleton variant="rounded" width={60} height={24}/>
                                         : <Chip size="small" color={color} label={trendValues[commodityChartData.trend]} />}
                                 </Stack>
-                                <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-                                    {loading ? <Skeleton width={140}/> : commodityChartData.interval}
-                                </Typography>
                             </Stack>
                         </CardContent>
                         <Box sx={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>

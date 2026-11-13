@@ -430,7 +430,12 @@ const CryptoDetail = () => {
                     암호화폐 상세
                 </Typography>
                 <Box sx={{ flex: 1 }}/>
-                <FreshnessIndicator lastUpdated={lastUpdated} error={pollError}/>
+                {/* 날짜·시각은 여기 한 곳에만 표시한다. 마지막 체결 시각 + "기준" */}
+                <FreshnessIndicator
+                    lastUpdated={lastUpdated}
+                    error={pollError}
+                    label={loading || !chartData.interval || chartData.interval === '-' ? undefined : chartData.interval}
+                />
             </Box>
             <Grid
                 container
@@ -468,9 +473,6 @@ const CryptoDetail = () => {
                                         ? <Skeleton variant="rounded" width={60} height={24}/>
                                         : <Chip size="small" color={color} label={trendValues[chartData.trend]} />}
                                 </Stack>
-                                <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-                                    {loading ? <Skeleton width={140}/> : chartData.interval}
-                                </Typography>
                             </Stack>
                         </CardContent>
                         <Box sx={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
