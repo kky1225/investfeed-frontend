@@ -948,8 +948,9 @@ const StockDetail = () => {
 
     // 주기(분·일·주·월·년)와 캔들/선 전환 버튼. 화면 폭에 따라 놓는 자리가 다르다.
     // - 넓은 화면: 차트 위쪽 줄 (캔들 차트면 차트의 위쪽 줄 안, 선 차트·로딩 중이면 같은 자리의 줄)
-    // - 좁은 화면(모바일): 차트 아래. 한 손으로 쥐었을 때 엄지가 닿는 자리다
-    const isNarrow = useMediaQuery((theme: Theme) => theme.breakpoints.down('sm'));
+    // - 좁은 화면(모바일·태블릿 세로): 차트 아래. 한 손으로 쥐었을 때 엄지가 닿는 자리다
+    // 기준은 md(900px). 그보다 좁으면 위쪽 한 줄에 버튼이 다 들어가지 않아 설정 버튼이 잘린다.
+    const isNarrow = useMediaQuery((theme: Theme) => theme.breakpoints.down('md'));
     const chartControls = (
         <>
             <StyledToggleButtonGroup

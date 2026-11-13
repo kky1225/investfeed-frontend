@@ -17,7 +17,7 @@ const MIN_BAR_SPACING = 1;      // 축소 한계
 const MAX_BAR_SPACING = 48;     // 확대 한계
 const MIN_VISIBLE_BARS = 5;     // 끝까지 밀어도 화면에 남기는 캔들 수
 const BODY_RATIO = 0.7;         // 한 칸 중 캔들 몸통이 차지하는 비율
-const PRICE_TICK_GAP = 48;      // 가격 눈금 사이 최소 간격
+const PRICE_TICK_GAP = 32;      // 가격 눈금 사이 최소 간격
 const TIME_TICK_GAP = 96;       // 날짜 눈금 사이 최소 간격
 const FONT_SIZE = 11;
 const AXIS_LABEL_OFFSET = 6;
@@ -36,7 +36,7 @@ const LEGEND_GAP = 4;           // 이름과 값 사이
 const LEGEND_ITEM_GAP = 10;     // 항목 사이
 // 가격 영역이 시작하는 높이. 그 위는 값 표시 두 줄(시고저종, 이동평균) 전용이라 캔들이 들어오지 않는다
 const PRICE_PANE_TOP = PADDING_TOP + LEGEND_HEIGHT * 2 + 4;
-const DRAWING_LINE_WIDTH = 1.5; // 사용자가 그린 선 굵기
+const DRAWING_LINE_WIDTH = 1;   // 사용자가 그린 선 굵기. 선택하면 한 단계 굵어진다
 // 거래량 눈금: 보이는 구간의 상위 2% 를 뺀 값의 2배까지만 잡는다. 튀는 막대 하나가 나머지를 납작하게 누르지 않게 한다
 const VOLUME_PERCENTILE = 0.98;
 const VOLUME_OUTLIER_RATIO = 2;
@@ -941,10 +941,14 @@ export class CandleChartEngine {
         // 가격 눈금: 가로 격자 + 오른쪽 라벨
         const priceTicks = niceTicks(priceMin, priceMax, Math.floor((priceBottom - priceTop) / PRICE_TICK_GAP));
         ctx.textAlign = 'left';
+        // 현재가 라벨에 가려질 눈금 글자는 적지 않는다(격자선은 그린다).
+        const currentPriceY = this.px(priceY(this.candles[this.candles.length - 1].close));
+        const labelClearance = this.px(CROSSHAIR_LABEL_HEIGHT);
         priceTicks.values.forEach(value => {
             const y = this.px(priceY(value));
             ctx.fillStyle = style.gridColor;
             ctx.fillRect(0, y, plotRightPx, line);
+            if (Math.abs(y - currentPriceY) < labelClearance) return;
             ctx.fillStyle = style.textColor;
             ctx.fillText(formatPrice(value, priceTicks.decimals), axisLabelX, y);
         });
@@ -1205,12 +1209,20 @@ export class CandleChartEngine {
     private writeLegendLine(middle: number, items: [string, string][]) {
         const ctx = this.overlayCtx;
         const itemGap = this.px(LEGEND_ITEM_GAP);
+        // 그림 영역을 넘는 항목부터는 적지 않는다(좁은 화면에서 글자가 잘려 보이지 않게).
+        const maxRight = this.px(this.width - PRICE_AXIS_WIDTH);
         let cursor = this.px(LEGEND_LEFT);
+        let full = false;
         ctx.textAlign = 'left';
         items.forEach(([text, color]) => {
+            const width = ctx.measureText(text).width;
+            if (full || cursor + width > maxRight) {
+                full = true;
+                return;
+            }
             ctx.fillStyle = color;
             ctx.fillText(text, cursor, middle);
-            cursor += ctx.measureText(text).width + itemGap;
+            cursor += width + itemGap;
         });
     }
 
@@ -1333,13 +1345,18 @@ export class CandleChartEngine {
         const gap = this.px(LEGEND_GAP);
         const itemGap = this.px(LEGEND_ITEM_GAP);
         const widths = items.map(([name, value]) => [ctx.measureText(name).width, ctx.measureText(value).width]);
-        const totalWidth = widths.reduce((sum, [nameWidth, valueWidth]) => sum + nameWidth + gap + valueWidth, 0)
-            + itemGap * (items.length - 1);
-
         const left = this.px(LEGEND_LEFT);
         const top = this.px(PADDING_TOP);
         const height = this.px(LEGEND_HEIGHT);
         const padding = this.px(CROSSHAIR_LABEL_PADDING);
+
+        // 좁은 화면에서는 뒤쪽 항목(거래량부터)을 빼서 그림 영역 안에 들어가게 한다.
+        const maxWidth = this.px(this.width - PRICE_AXIS_WIDTH) - left - padding;
+        const widthOf = (count: number) => widths.slice(0, count)
+            .reduce((sum, [nameWidth, valueWidth]) => sum + nameWidth + gap + valueWidth, 0) + itemGap * (count - 1);
+        let shown = items.length;
+        while (shown > 1 && widthOf(shown) > maxWidth) shown--;
+        const totalWidth = widthOf(shown);
 
         // 캔들 위에 겹쳐도 읽히도록 바탕을 깐다.
         ctx.globalAlpha = 0.85;
@@ -1351,7 +1368,7 @@ export class CandleChartEngine {
         const middle = top + height / 2;
         ctx.textAlign = 'left';
         let cursor = left;
-        items.forEach(([name, value], index) => {
+        items.slice(0, shown).forEach(([name, value], index) => {
             const [nameWidth, valueWidth] = widths[index];
             ctx.fillStyle = style.textColor;
             ctx.fillText(name, cursor, middle);
