@@ -17,11 +17,24 @@ export enum StockChartType {
     MINUTE_3 = "MINUTE_3",
     MINUTE_5 = "MINUTE_5",
     MINUTE_10 = "MINUTE_10",
+    MINUTE_15 = "MINUTE_15",
     MINUTE_30 = "MINUTE_30",
+    MINUTE_60 = "MINUTE_60",
     DAY = "DAY",
     WEEK = "WEEK",
     MONTH = "MONTH",
     YEAR = "YEAR"
+}
+
+export interface StockCandleReq {
+    chartType: StockChartType,
+    cursor?: string,    // 앞선 응답의 nextCursor. 없으면 가장 최근 구간부터
+}
+
+/** 차트의 과거 구간 한 페이지. 최신→과거 순 */
+export interface StockCandleRes {
+    candles: StockChart[],
+    nextCursor: string | null,  // null 이면 더 받을 과거가 없다
 }
 
 export interface StockStreamReq {

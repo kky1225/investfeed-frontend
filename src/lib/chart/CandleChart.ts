@@ -28,7 +28,6 @@ const CURRENT_PRICE_DASH = [2, 2];
 const PRICE_LINE_DASH = [6, 4];
 const PRICE_LINE_TITLE_OFFSET = 8;  // 선과 그 위 이름 사이
 const EXTREME_LABEL_GAP = 4;        // 최고·최저가 표시와 캔들 사이 (가로)
-const EXTREME_LABEL_OFFSET = 8;     // 최고·최저가 표시와 캔들 끝 사이 (세로)
 const SERIES_LINE_WIDTH = 1;    // 이동평균선·지표선 굵기. 캔들을 가리지 않게 가늘게 둔다
 const LEGEND_LEFT = 8;
 const LEGEND_HEIGHT = 18;
@@ -40,6 +39,7 @@ const DRAWING_LINE_WIDTH = 1;   // 사용자가 그린 선 굵기. 선택하면 
 // 거래량 눈금: 보이는 구간의 상위 2% 를 뺀 값의 2배까지만 잡는다. 튀는 막대 하나가 나머지를 납작하게 누르지 않게 한다
 const VOLUME_PERCENTILE = 0.98;
 const VOLUME_OUTLIER_RATIO = 2;
+const LOAD_OLDER_THRESHOLD = 50;    // 화면 왼쪽 끝에서 받아 둔 첫 캔들까지 이만큼 이하로 남으면 과거 구간을 요청한다
 const PINCH_DELTA_LIMIT = 30;   // 휠 한 번의 이동량이 이보다 작으면 트랙패드 두 손가락 벌리기로 본다
 const INDICATOR_PADDING_BOTTOM = 6;
 const HISTOGRAM_ALPHA = 0.5;
@@ -170,6 +170,7 @@ export class CandleChartEngine {
     private gesture: Gesture | null = null;
     private readonly activePointers = new Map<number, Point>();    // 누르고 있는 포인터
 
+    private flatByPrevClose = false;
     private averagePeriods: number[] = [];
     private averages: Series[] = [];        // averagePeriods 와 같은 순서
     private indicators: IndicatorType[] = [];
@@ -192,6 +193,11 @@ export class CandleChartEngine {
     onSelectionChange: ((id: string | null) => void) | null = null;
     /** 가장 최근 캔들이 화면에 보이는지가 바뀌면 알린다. (최근으로 이동 버튼 표시용) */
     onLatestChange: ((atLatest: boolean) => void) | null = null;
+    /**
+     * 화면 왼쪽 끝이 받아 둔 캔들의 처음에 가까워지면 부른다. 가까운 동안 계속 부르므로,
+     * 받는 쪽에서 이미 요청 중이거나 더 받을 것이 없으면 무시해야 한다.
+     */
+    onNeedOlder: (() => void) | null = null;
     private atLatest = true;
     private macd: MacdSeries = {macd: [], signal: [], histogram: []};
 
@@ -221,9 +227,27 @@ export class CandleChartEngine {
     }
 
     setData(candles: Candle[], timeUnit: TimeUnit) {
+        // 과거 캔들이 앞에 붙으면 순번이 그만큼 밀린다. 사용자가 보던 자리가 그대로 있도록 보기도 같이 민다.
+        // (사용자가 아직 움직이지 않았다면 기본 보기라서 최근 캔들 기준으로 다시 잡힌다.)
+        const previous = this.candles;
+        let prepended = 0;
+        if (previous.length > 0 && candles.length > 0 && candles[0].time < previous[0].time) {
+            const oldFirst = previous[0].time;
+            while (prepended < candles.length && candles[prepended].time < oldFirst) prepended++;
+        }
+        if (this.view && prepended > 0) {
+            this.view = {...this.view, rightEdge: this.view.rightEdge + prepended};
+        }
+        // 끌거나 벌리는 도중에 붙었다면, 그 동작이 기억해 둔 시작 위치도 같이 밀어야 한다.
+        // 밀지 않으면 다음 움직임에서 옛 순번으로 되돌아가 화면이 맨 왼쪽으로 튄다.
+        if (this.gesture && prepended > 0) {
+            if (this.gesture.type === 'pan') this.gesture.startRightEdge += prepended;
+            else this.gesture.anchor += prepended;
+        }
+
         // 최근 캔들을 보고 있었다면 새 캔들이 붙어도 계속 최근을 보게 따라간다.
-        const previousTotal = this.candles.length;
-        if (this.view && previousTotal > 0 && this.view.rightEdge >= previousTotal - 0.5) {
+        const previousTotal = previous.length + prepended;
+        if (this.view && previous.length > 0 && this.view.rightEdge >= previousTotal - 0.5) {
             this.view = {...this.view, rightEdge: this.view.rightEdge + candles.length - previousTotal};
         }
         this.candles = candles;
@@ -234,6 +258,12 @@ export class CandleChartEngine {
 
     setStyle(style: ChartStyle) {
         this.style = style;
+        this.scheduleDraw();
+    }
+
+    /** 시가와 종가가 같은 캔들의 색을 전일 종가와 비교해 정할지 (국내 HTS 방식). 기본은 상승색 */
+    setFlatByPrevClose(enabled: boolean) {
+        this.flatByPrevClose = enabled;
         this.scheduleDraw();
     }
 
@@ -809,6 +839,9 @@ export class CandleChartEngine {
                 this.atLatest = atLatest;
                 this.onLatestChange?.(atLatest);
             }
+
+            // 받아 둔 캔들의 왼쪽 끝이 가까우면 과거 구간을 더 달라고 알린다.
+            if (this.layout && this.layout.range.leftEdge < LOAD_OLDER_THRESHOLD) this.onNeedOlder?.();
         });
     }
 
@@ -841,9 +874,18 @@ export class CandleChartEngine {
         return Math.max(1, this.px(range.spacing * BODY_RATIO));
     }
 
-    private candleColor(candle: Candle, style: ChartStyle): string {
-        return candle.close > candle.open ? style.upColor
-            : candle.close < candle.open ? style.downColor
+    /**
+     * index 번째 캔들의 색. 종가가 시가보다 낮을 때만 하락색이고, 시가와 같으면 상승색이다.
+     * flatByPrevClose 를 켜면 시가와 종가가 같은 캔들만 전일 종가와 비교한다
+     * (점하한가는 하락색, 전일 종가와도 같으면 보합색).
+     */
+    private candleColor(index: number, style: ChartStyle): string {
+        const candle = this.candles[index];
+        if (candle.close !== candle.open) return candle.close > candle.open ? style.upColor : style.downColor;
+        const prev = this.flatByPrevClose ? this.candles[index - 1] : undefined;
+        if (!prev) return style.upColor;
+        return candle.close > prev.close ? style.upColor
+            : candle.close < prev.close ? style.downColor
             : style.textColor;
     }
 
@@ -963,12 +1005,16 @@ export class CandleChartEngine {
 
         // 날짜 눈금: 세로 격자 + 아래 라벨. 전체 순번 기준이라 보이는 구간이 바뀌어도 같은 캔들에 붙는다.
         const tickStep = Math.max(1, Math.ceil(TIME_TICK_GAP / range.spacing));
+        // 분봉은 여러 날에 걸치므로, 날짜가 바뀐 뒤 첫 눈금에는 날짜를 함께 적는다.
+        let labeledDay = '';
         ctx.textAlign = 'center';
         visible.forEach((candle, offset) => {
             const index = range.from + offset;
             if (index % tickStep !== 0) return;
             const x = this.centerX(index, range);
-            const label = formatTime(candle.time, this.timeUnit);
+            const day = this.timeUnit === 'minute' ? new Date(candle.time).toDateString() : '';
+            const label = formatTime(candle.time, this.timeUnit, day !== labeledDay);
+            labeledDay = day;
             const half = ctx.measureText(label).width / 2;
             if (x - half < 0 || x + half > plotRightPx) return;
             ctx.fillStyle = style.gridColor;
@@ -989,7 +1035,7 @@ export class CandleChartEngine {
             visible.forEach((candle, offset) => {
                 const x = this.centerX(range.from + offset, range);
                 const bodyLeft = x - Math.floor(bodyWidth / 2);
-                ctx.fillStyle = this.candleColor(candle, style);
+                ctx.fillStyle = this.candleColor(range.from + offset, style);
 
                 // 꼬리
                 const highY = this.px(priceY(candle.high));
@@ -1015,31 +1061,28 @@ export class CandleChartEngine {
         });
 
         // 보이는 구간의 최고가·최저가를 그 캔들 옆에 적는다. 오른쪽에 자리가 없으면 왼쪽에 적는다.
-        const markExtreme = (offset: number, price: number, name: string, color: string, above: boolean) => {
+        // 글자를 그 가격 높이에 맞춰, 화살표가 꼬리 끝(최고가·최저가 지점)을 바로 가리키게 한다.
+        const markExtreme = (offset: number, price: number, name: string, color: string) => {
             const x = this.centerX(range.from + offset, range);
             const label = `${name} ${price.toLocaleString('ko-KR')}`;
             const gap = this.px(EXTREME_LABEL_GAP);
             const toRight = x + gap + ctx.measureText(`← ${label}`).width <= plotRightPx;
             const half = this.px(FONT_SIZE) / 2;
-            const y = clamp(
-                this.px(priceY(price)) + (above ? -1 : 1) * this.px(EXTREME_LABEL_OFFSET),
-                this.px(priceTop) + half,
-                this.px(priceBottom) - half,
-            );
+            const y = clamp(this.px(priceY(price)), this.px(priceTop) + half, this.px(priceBottom) - half);
             ctx.fillStyle = color;
             ctx.textAlign = toRight ? 'left' : 'right';
             ctx.fillText(toRight ? `← ${label}` : `${label} →`, toRight ? x + gap : x - gap, y);
         };
         const highOffset = visible.reduce((best, candle, offset) => candle.high > visible[best].high ? offset : best, 0);
         const lowOffset = visible.reduce((best, candle, offset) => candle.low < visible[best].low ? offset : best, 0);
-        markExtreme(highOffset, visible[highOffset].high, '최고', style.upColor, true);
-        markExtreme(lowOffset, visible[lowOffset].low, '최저', style.downColor, false);
+        markExtreme(highOffset, visible[highOffset].high, '최고', style.upColor);
+        markExtreme(lowOffset, visible[lowOffset].low, '최저', style.downColor);
 
         // 현재가 선: 마지막 캔들의 종가 높이에 점선을 긋고, 오른쪽 축에 캔들 색 라벨을 붙인다.
         // 과거로 이동해 현재가가 가격축 범위를 벗어나면 그리지 않는다.
         const last = this.candles[this.candles.length - 1];
         if (last.close >= priceMin && last.close <= priceMax) {
-            const color = this.candleColor(last, style);
+            const color = this.candleColor(this.candles.length - 1, style);
             const y = this.px(priceY(last.close));
             const labelHeight = this.px(CROSSHAIR_LABEL_HEIGHT);
             ctx.strokeStyle = color;
@@ -1200,7 +1243,7 @@ export class CandleChartEngine {
         // 마우스가 가리키는 캔들이 없으면 가장 최근 캔들의 값을 보여 준다.
         const index = this.drawCrosshair(layout, style) ?? this.candles.length - 1;
         const candle = this.candles[index];
-        if (candle) this.drawLegend(candle, style);
+        if (candle) this.drawLegend(candle, this.candleColor(index, style), style);
         this.drawAverageLegend(layout, style, index);
         this.drawIndicatorLegends(layout, style, index);
     }
@@ -1319,7 +1362,7 @@ export class CandleChartEngine {
         }
 
         // 아래 축 라벨: 캔들 날짜. 그림 영역 밖으로 나가지 않게 밀어 넣는다.
-        const timeLabel = formatTime(candle.time, this.timeUnit);
+        const timeLabel = formatTime(candle.time, this.timeUnit, true);
         const timeWidth = ctx.measureText(timeLabel).width + labelPadding * 2;
         const timeLeft = Math.round(clamp(x - timeWidth / 2, 0, Math.max(0, plotRightPx - timeWidth)));
         const timeTop = plotBottomPx + line;
@@ -1333,7 +1376,7 @@ export class CandleChartEngine {
     }
 
     /** 왼쪽 위에 시가·고가·저가·종가·거래량을 한 줄로 표시한다. 값은 캔들 색을 따른다. */
-    private drawLegend(candle: Candle, style: ChartStyle) {
+    private drawLegend(candle: Candle, valueColor: string, style: ChartStyle) {
         const ctx = this.overlayCtx;
         const items: [string, string][] = [
             ['시', candle.open.toLocaleString('ko-KR')],
@@ -1364,7 +1407,6 @@ export class CandleChartEngine {
         ctx.fillRect(left - padding, top, totalWidth + padding * 2, height);
         ctx.globalAlpha = 1;
 
-        const valueColor = this.candleColor(candle, style);
         const middle = top + height / 2;
         ctx.textAlign = 'left';
         let cursor = left;

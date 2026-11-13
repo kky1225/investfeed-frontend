@@ -21,13 +21,16 @@ interface ChartSettingsDialogProps {
     layoutOptions: ChartSettingOption[],        // 켜고 끌 수 있는 화면 요소 (그리기 도구 모음 등)
     hidden: string[],                           // 꺼 둔 항목의 key
     onToggle: (key: string, visible: boolean) => void,
+    flatByPrevClose: boolean,                   // 시가와 종가가 같은 캔들을 전일 종가 기준으로 색칠할지
+    onFlatByPrevCloseChange: (enabled: boolean) => void,
     drawingCount: number,                       // 그려 둔 선의 수
     onClearDrawings: () => void,
 }
 
 /** 차트 설정 창. 바꾸는 즉시 차트에 반영된다. */
 const ChartSettingsDialog = ({
-    open, onClose, indicatorOptions, layoutOptions, hidden, onToggle, drawingCount, onClearDrawings,
+    open, onClose, indicatorOptions, layoutOptions, hidden, onToggle,
+    flatByPrevClose, onFlatByPrevCloseChange, drawingCount, onClearDrawings,
 }: ChartSettingsDialogProps) => {
     const renderSwitches = (options: ChartSettingOption[]) => (
         <FormGroup>
@@ -52,6 +55,25 @@ const ChartSettingsDialog = ({
             <DialogContent>
                 <Typography variant="subtitle2" sx={{color: 'text.secondary', mb: 1}}>지표</Typography>
                 {renderSwitches(indicatorOptions)}
+
+                <Divider sx={{my: 2}}/>
+
+                <Typography variant="subtitle2" sx={{color: 'text.secondary', mb: 1}}>캔들</Typography>
+                <FormGroup>
+                    <FormControlLabel
+                        label="보합 캔들을 전일 종가 기준으로 색칠"
+                        control={
+                            <Switch
+                                checked={flatByPrevClose}
+                                onChange={(_event, checked) => onFlatByPrevCloseChange(checked)}
+                            />
+                        }
+                    />
+                </FormGroup>
+                <Typography variant="body2" sx={{color: 'text.secondary'}}>
+                    시가와 종가가 같은 날에만 적용됩니다.
+                    끄면 트레이딩뷰 방식(상승색), 켜면 국내 HTS 방식(전일 종가보다 오르면 상승색, 내리면 하락색)입니다.
+                </Typography>
 
                 <Divider sx={{my: 2}}/>
 

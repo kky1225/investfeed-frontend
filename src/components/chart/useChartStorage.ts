@@ -99,12 +99,21 @@ export const useChartStorage = (assetType: AssetType | undefined, assetCode: str
     const hidden = settingQuery.data?.hidden ?? NO_HIDDEN;
     const settingReady = settingQuery.isSuccess;
 
-    const setVisible = (key: string, visible: boolean) => {
+    const flatByPrevClose = settingQuery.data?.flatByPrevClose ?? false;
+
+    // 설정은 통째로 저장하므로, 바꾸는 항목 말고는 지금 값을 그대로 실어 보낸다.
+    const saveSetting = (change: Partial<ChartSetting>) => {
         if (!settingReady) return;
-        const next: ChartSetting = {hidden: visible ? hidden.filter(item => item !== key) : [...hidden, key]};
+        const next: ChartSetting = {hidden, flatByPrevClose, ...change};
         queryClient.setQueryData(SETTINGS_KEY, next);
         saveChartSetting(next).catch(reportSaveError);
     };
+
+    const setVisible = (key: string, visible: boolean) => {
+        saveSetting({hidden: visible ? hidden.filter(item => item !== key) : [...hidden, key]});
+    };
+
+    const setFlatByPrevClose = (enabled: boolean) => saveSetting({flatByPrevClose: enabled});
 
     // 예전에 브라우저에 저장해 둔 설정을 계정으로 한 번 옮긴다. 서버에 이미 설정이 있으면 서버 것을 쓴다.
     const serverSetting = settingQuery.data;
@@ -114,10 +123,10 @@ export const useChartStorage = (assetType: AssetType | undefined, assetCode: str
         if (legacy.length === 0) return;
         clearChartSettings();
         if (serverSetting.hidden.length > 0) return;
-        const next: ChartSetting = {hidden: legacy};
+        const next: ChartSetting = {...serverSetting, hidden: legacy};
         queryClient.setQueryData(SETTINGS_KEY, next);
         saveChartSetting(next).catch(reportSaveError);
     }, [serverSetting, queryClient]);
 
-    return {drawings, updateDrawings, hidden, setVisible};
+    return {drawings, updateDrawings, hidden, setVisible, flatByPrevClose, setFlatByPrevClose};
 };
