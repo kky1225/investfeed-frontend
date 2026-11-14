@@ -7,14 +7,16 @@ import Chip from "@mui/material/Chip";
 import Card from "@mui/material/Card";
 import Skeleton from "@mui/material/Skeleton";
 import {MouseEvent, ReactElement, useEffect, useMemo, useRef, useState} from "react";
-import CandlestickChartIcon from '@mui/icons-material/CandlestickChart';
-import StackedLineChartIcon from '@mui/icons-material/StackedLineChart';
+import ArrowDropDownIcon from "@mui/icons-material/ArrowDropDown";
 import ToggleButton from '@mui/material/ToggleButton';
-import ToggleButtonGroup, {toggleButtonGroupClasses,} from '@mui/material/ToggleButtonGroup';
-import {styled} from "@mui/material/styles";
+import {Theme} from "@mui/material/styles";
+import useMediaQuery from "@mui/material/useMediaQuery";
 import {Select, SelectChangeEvent, Slider, Tooltip} from "@mui/material";
 import MenuItem from "@mui/material/MenuItem";
-import CryptoDetailLineChart, {CryptoDetailLineChartProps} from "../../components/CryptoDetailLineChart.tsx";
+import {CryptoDetailLineChartProps} from "../../components/CryptoDetailLineChart.tsx";
+import CandleChart from "../../components/chart/CandleChart.tsx";
+import {ChartToolbarGroup} from "../../components/chart/ChartToolbarControls.tsx";
+import {Candle, TimeUnit} from "../../lib/chart/types.ts";
 import {fetchCryptoDetail, fetchCryptoStream} from "../../api/crypto/CryptoApi.ts";
 import {useRealtimeWebSocket} from "../detail/useRealtimeWebSocket.ts";
 import {CryptoChart, CryptoChartType, CryptoDetailReq, CryptoDetailRes} from "../../type/CryptoType.ts";
@@ -40,22 +42,31 @@ interface CryptoTickerData {
     tradeDateTimeKst: string;
 }
 
-const StyledToggleButtonGroup = styled(ToggleButtonGroup)(({ theme }) => ({
-    border: 'none',
-    boxShadow: 'none',
-    [`& .${toggleButtonGroupClasses.grouped}`]: {
-        border: 0,
-        borderRadius: theme.shape.borderRadius,
-        [`&.${toggleButtonGroupClasses.disabled}`]: {
-            border: 0,
-        },
-    },
-    [`& .${toggleButtonGroupClasses.middleButton},& .${toggleButtonGroupClasses.lastButton}`]:
-        {
-            marginLeft: -1,
-            borderLeft: '1px solid transparent',
-        },
-}));
+/** 차트 응답을 캔들로 바꾼다. 오래된 것부터 놓고, 숫자가 아닌 행은 뺀다. */
+const toCandles = (list: CryptoChart[]): Candle[] => list
+    .map(item => ({
+        time: new Date(item.dt).getTime(),
+        open: item.openingPrice,
+        high: item.highPrice,
+        low: item.lowPrice,
+        close: item.tradePrice,
+        volume: item.candleAccTradeVolume || 0,
+    }))
+    .filter(candle => [candle.time, candle.open, candle.high, candle.low, candle.close].every(Number.isFinite))
+    .sort((a, b) => a.time - b.time);
+
+// 날짜 눈금 표기 단위. 주봉은 날짜까지 적는다
+const CHART_TIME_UNIT: Record<CryptoChartType, TimeUnit> = {
+    [CryptoChartType.MINUTE_1]: 'minute',
+    [CryptoChartType.MINUTE_3]: 'minute',
+    [CryptoChartType.MINUTE_5]: 'minute',
+    [CryptoChartType.MINUTE_10]: 'minute',
+    [CryptoChartType.MINUTE_30]: 'minute',
+    [CryptoChartType.DAY]: 'day',
+    [CryptoChartType.WEEK]: 'day',
+    [CryptoChartType.MONTH]: 'month',
+    [CryptoChartType.YEAR]: 'year',
+};
 
 interface CryptoRangeProps {
     value: number;
@@ -368,18 +379,21 @@ const CryptoDetail = () => {
         },
     });
 
-    const [toggle, setToggle] = useState('DAY');
-    const [formats, setFormats] = useState('line');
-    const minute = useRef('3');
+    // 차트 캔들. 실시간 체결가는 마지막 캔들의 종가·고가·저가에만 반영하고, 새 캔들은 주기적 조회로 받는다.
+    // (코인 캔들은 거래소가 정한 시각에 나뉘므로, 화면에서 새 캔들을 직접 만들지 않는다.)
+    const candleList = useMemo(() => toCandles(result?.chartList ?? []), [result]);
+    const candles = useMemo(() => {
+        const last = candleList[candleList.length - 1];
+        if (!last || !livePrice || livePrice.stamp < last.time) return candleList;
+        const price = livePrice.tradePrice;
+        return [
+            ...candleList.slice(0, -1),
+            {...last, close: price, high: Math.max(last.high, price), low: Math.min(last.low, price)},
+        ];
+    }, [candleList, livePrice]);
 
-    const handleFormat = (
-        _event: MouseEvent<HTMLElement>,
-        newFormats: string,
-    ) => {
-        if (newFormats !== null) {
-            setFormats(newFormats);
-        }
-    };
+    const [toggle, setToggle] = useState('DAY');
+    const minute = useRef('3');
 
     const handleAlignment = (
         _event: MouseEvent<HTMLElement>,
@@ -409,6 +423,50 @@ const CryptoDetail = () => {
             chartType: value as CryptoChartType
         })
     }
+
+    // 주기(분·일·주·월·년) 버튼. 넓은 화면에서는 차트 위쪽 줄에, 좁은 화면(md 미만)에서는 차트 아래에 놓는다.
+    const isNarrow = useMediaQuery((theme: Theme) => theme.breakpoints.down('md'));
+    const chartControls = (
+        <ChartToolbarGroup
+            size="small"
+            value={toggle}
+            exclusive
+            onChange={handleAlignment}
+            aria-label="차트 주기"
+        >
+            <ToggleButton value="MINUTE" key="MINUTE" aria-label="MINUTE">
+                {/* 버튼 안의 선택 상자는 글자 크기·색을 버튼에서 물려받고, 화살표는 작은 아래 화살표 하나만 둔다. */}
+                <Select
+                    size="small"
+                    value={minute.current}
+                    onChange={handleOptionChange}
+                    variant="standard"
+                    disableUnderline
+                    IconComponent={ArrowDropDownIcon}
+                    sx={{
+                        boxShadow: 'none',
+                        backgroundColor: 'transparent',
+                        border: 'none',
+                        padding: 0,
+                        font: 'inherit',
+                        color: 'inherit',
+                        '& .MuiSelect-select': {py: 0, pl: 0, minHeight: 0},
+                        '& .MuiSelect-icon': {color: 'inherit'},
+                    }}
+                >
+                    <MenuItem value="1">1분</MenuItem>
+                    <MenuItem value="3">3분</MenuItem>
+                    <MenuItem value="5">5분</MenuItem>
+                    <MenuItem value="10">10분</MenuItem>
+                    <MenuItem value="30">30분</MenuItem>
+                </Select>
+            </ToggleButton>
+            <ToggleButton value="DAY" key="DAY" aria-label="DAY">일</ToggleButton>
+            <ToggleButton value="WEEK" key="WEEK" aria-label="WEEK">주</ToggleButton>
+            <ToggleButton value="MONTH" key="MONTH" aria-label="MONTH">월</ToggleButton>
+            <ToggleButton value="YEAR" key="YEAR" aria-label="YEAR">년</ToggleButton>
+        </ChartToolbarGroup>
+    );
 
     const labelColors = {
         up: 'error' as const,
@@ -475,79 +533,34 @@ const CryptoDetail = () => {
                                 </Stack>
                             </Stack>
                         </CardContent>
-                        <Box sx={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
-                            <Box sx={{ minWidth: 1200 }}>
-                                {loading ? (
-                                    <Skeleton variant="rectangular" height={400} sx={{mx: 2, mb: 2, borderRadius: 1}}/>
-                                ) : (
-                                    <CryptoDetailLineChart {...chartData} />
-                                )}
+                        {!isNarrow && loading && (
+                            <Stack direction="row" spacing={1} sx={{px: 2, pb: 1, alignItems: 'center', minHeight: 40}}>
+                                {chartControls}
+                            </Stack>
+                        )}
+                        {/* 차트는 스스로 이동·확대하므로 화면 너비에 맞춘다. 선·영역 등 차트 종류는 차트 안에서 고른다. */}
+                        {loading ? (
+                            <Skeleton variant="rectangular" height={400} sx={{mx: 2, mb: 2, borderRadius: 1}}/>
+                        ) : (
+                            <CandleChart
+                                candles={candles}
+                                timeUnit={CHART_TIME_UNIT[req.chartType]}
+                                seriesKey={`${market}-${req.chartType}`}
+                                assetType="CRYPTO"
+                                assetCode={market}
+                                toolbarStart={isNarrow ? undefined : chartControls}
+                            />
+                        )}
+                        {isNarrow && (
+                            <Box
+                                display="flex"
+                                justifyContent="space-between"
+                                alignItems="center"
+                                flexWrap="wrap"
+                            >
+                                {chartControls}
                             </Box>
-                        </Box>
-                        <Box
-                            display="flex"
-                            justifyContent="space-between"
-                            alignItems="center"
-                            flexWrap="wrap"
-                        >
-                            <StyledToggleButtonGroup
-                                size="small"
-                                value={toggle}
-                                exclusive
-                                onChange={handleAlignment}
-                                aria-label="text alignment"
-                            >
-                                <ToggleButton
-                                    value="MINUTE"
-                                    key="MINUTE"
-                                    aria-label="MINUTE"
-                                    sx={{
-                                        padding: 1
-                                    }}
-                                >
-                                    <Select
-                                        size="small"
-                                        value={minute.current}
-                                        onChange={handleOptionChange}
-                                        variant="standard"
-                                        disableUnderline
-                                        sx={{
-                                            boxShadow: 'none',
-                                            width: 55,
-                                            backgroundColor: 'transparent',
-                                            border: 'none',
-                                            padding: '0 8px',
-                                            justifyContent: 'center',
-                                        }}
-                                    >
-                                        <MenuItem value="1">1분</MenuItem>
-                                        <MenuItem value="3">3분</MenuItem>
-                                        <MenuItem value="5">5분</MenuItem>
-                                        <MenuItem value="10">10분</MenuItem>
-                                        <MenuItem value="30">30분</MenuItem>
-                                    </Select>
-                                </ToggleButton>
-                                <ToggleButton value="DAY" key="DAY" aria-label="DAY">일</ToggleButton>
-                                <ToggleButton value="WEEK" key="WEEK" aria-label="WEEK">주</ToggleButton>
-                                <ToggleButton value="MONTH" key="MONTH" aria-label="MONTH">월</ToggleButton>
-                                <ToggleButton value="YEAR" key="YEAR" aria-label="YEAR">년</ToggleButton>
-                            </StyledToggleButtonGroup>
-
-                            <StyledToggleButtonGroup
-                                size="small"
-                                value={formats}
-                                exclusive
-                                onChange={handleFormat}
-                                aria-label="text formatting"
-                            >
-                                <ToggleButton value="candle" key="candle" aria-label="candle" disabled>
-                                    <CandlestickChartIcon />
-                                </ToggleButton>
-                                <ToggleButton value="line" key="line" aria-label="line">
-                                    <StackedLineChartIcon />
-                                </ToggleButton>
-                            </StyledToggleButtonGroup>
-                        </Box>
+                        )}
                     </Card>
                 </Grid>
             </Grid>

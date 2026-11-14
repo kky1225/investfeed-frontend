@@ -99,6 +99,17 @@ export const formatTime = (time: number, unit: TimeUnit, withDate = false): stri
     }
 };
 
+const MAX_PRICE_DECIMALS = 8;
+
+/** 값을 그대로 적는 데 필요한 소수 자릿수 (최대 8). 정수면 0 */
+export const decimalsOf = (value: number): number => {
+    for (let decimals = 0; decimals < MAX_PRICE_DECIMALS; decimals++) {
+        const scaled = value * 10 ** decimals;
+        if (Math.abs(scaled - Math.round(scaled)) < 1e-7) return decimals;
+    }
+    return MAX_PRICE_DECIMALS;
+};
+
 const compactFormatter = new Intl.NumberFormat('ko-KR', {notation: 'compact', maximumFractionDigits: 1});
 
 export const formatVolume = (value: number): string => compactFormatter.format(value);

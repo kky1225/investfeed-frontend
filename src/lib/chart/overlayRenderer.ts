@@ -3,7 +3,7 @@ import {Series} from "./indicators.ts";
 import {formatPrice, formatTime} from "./scale.ts";
 import {
     AXIS_LABEL_OFFSET, AXIS_TAG_HEIGHT, AXIS_TAG_PADDING, LEGEND_GAP, LEGEND_HEIGHT, LEGEND_ITEM_GAP, LEGEND_LEFT,
-    PADDING_TOP, PRICE_AXIS_WIDTH,
+    PADDING_TOP,
 } from "./constants.ts";
 import {clamp, isNumber, Layout, paneToValue, Point} from "./layout.ts";
 import {lineColor, Painter} from "./painter.ts";
@@ -61,7 +61,7 @@ export const drawCrosshair = (
     if (pane) {
         const value = paneToValue(pane)(pointer.y);
         ctx.fillStyle = style.textColor;
-        ctx.fillRect(plotRightPx, Math.round(y - labelHeight / 2), painter.px(PRICE_AXIS_WIDTH), labelHeight);
+        ctx.fillRect(plotRightPx, Math.round(y - labelHeight / 2), painter.px(layout.axisWidth), labelHeight);
         ctx.fillStyle = style.backgroundColor;
         ctx.textAlign = 'left';
         ctx.fillText(pane.format(value), plotRightPx + painter.px(AXIS_LABEL_OFFSET), y);
@@ -87,10 +87,10 @@ export const drawCandleLegend = (
 ) => {
     const ctx = painter.ctx;
     const items: [string, string][] = [
-        ['시', candle.open.toLocaleString('ko-KR')],
-        ['고', candle.high.toLocaleString('ko-KR')],
-        ['저', candle.low.toLocaleString('ko-KR')],
-        ['종', candle.close.toLocaleString('ko-KR')],
+        ['시', formatPrice(candle.open, layout.valueDecimals)],
+        ['고', formatPrice(candle.high, layout.valueDecimals)],
+        ['저', formatPrice(candle.low, layout.valueDecimals)],
+        ['종', formatPrice(candle.close, layout.valueDecimals)],
         ['거래량', candle.volume.toLocaleString('ko-KR')],
     ];
     const gap = painter.px(LEGEND_GAP);

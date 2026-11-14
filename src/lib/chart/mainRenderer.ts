@@ -1,9 +1,9 @@
 import {Candle, ChartStyle, ChartType, PriceLine, TimeUnit} from "./types.ts";
 import {Series} from "./indicators.ts";
-import {createLinearScale, createLogScale, formatPrice, formatTime, formatVolume, logTicks, niceTicks} from "./scale.ts";
+import {createLinearScale, createLogScale, decimalsOf, formatPrice, formatTime, formatVolume, logTicks, niceTicks} from "./scale.ts";
 import {
     AXIS_LABEL_OFFSET, AXIS_TAG_HEIGHT, FONT_SIZE, INDICATOR_PANE_HEIGHT, LEGEND_LEFT,
-    PRICE_AXIS_WIDTH, PRICE_PANE_TOP, TIME_AXIS_HEIGHT,
+    PRICE_PANE_TOP, TIME_AXIS_HEIGHT,
 } from "./constants.ts";
 import {clamp, isNumber, Layout, VisibleRange} from "./layout.ts";
 import {candleColor, lineColor, Painter} from "./painter.ts";
@@ -43,6 +43,8 @@ export interface MainInput {
     volumeOverlays: OverlayIndicator[], // 거래량 영역에 겹칠 지표
     priceLines: PriceLine[],
     flatByPrevClose: boolean,
+    axisWidth: number,          // 오른쪽 가격축 너비 (CSS px)
+    valueDecimals: number,      // 캔들 가격의 소수 자릿수
 }
 
 /** 한 번 그리는 동안 여러 함수가 함께 쓰는 값. 높이·너비는 CSS px, 이름이 Px 로 끝나면 기기 픽셀 */
@@ -72,6 +74,8 @@ interface Frame {
     plotRightPx: number,
     plotBottomPx: number,
     axisLabelX: number,
+    axisWidthPx: number,
+    valueDecimals: number,
 }
 
 /** 가격 눈금: 가로 격자 + 오른쪽 라벨. 눈금의 소수 자릿수를 돌려준다. */
@@ -242,11 +246,12 @@ const drawCandles = (frame: Frame, averages: Series[], priceOverlays: OverlayInd
  * 보이는 구간의 최고가·최저가를 그 캔들 옆에 적는다. 오른쪽에 자리가 없으면 왼쪽에 적는다.
  * 글자를 그 가격 높이에 맞춰, 화살표가 꼬리 끝(최고가·최저가 지점)을 바로 가리키게 한다.
  */
-const drawExtremes = ({painter, style, chartType, visible, range, priceTop, priceBottom, priceY, plotRightPx}: Frame) => {
+const drawExtremes = (frame: Frame) => {
+    const {painter, style, chartType, visible, range, priceTop, priceBottom, priceY, plotRightPx, valueDecimals} = frame;
     const ctx = painter.ctx;
     const mark = (offset: number, price: number, name: string, color: string) => {
         const x = painter.centerX(range.from + offset, range);
-        const label = `${name} ${price.toLocaleString('ko-KR')}`;
+        const label = `${name} ${formatPrice(price, valueDecimals)}`;
         const gap = painter.px(EXTREME_LABEL_GAP);
         const toRight = x + gap + ctx.measureText(`← ${label}`).width <= plotRightPx;
         const half = painter.px(FONT_SIZE) / 2;
@@ -287,10 +292,10 @@ const drawCurrentPrice = (frame: Frame) => {
     ctx.stroke();
     ctx.setLineDash([]);
     ctx.fillStyle = color;
-    ctx.fillRect(plotRightPx, Math.round(y - labelHeight / 2), painter.px(PRICE_AXIS_WIDTH), labelHeight);
+    ctx.fillRect(plotRightPx, Math.round(y - labelHeight / 2), frame.axisWidthPx, labelHeight);
     ctx.fillStyle = style.backgroundColor;
     ctx.textAlign = 'left';
-    ctx.fillText(last.close.toLocaleString('ko-KR'), axisLabelX, y);
+    ctx.fillText(formatPrice(last.close, frame.valueDecimals), axisLabelX, y);
 };
 
 /** 가격선(목표가 등): 점선 + 선 위 이름 + 오른쪽 축에 테두리 라벨. 현재가 라벨(채움)과 구분된다. */
@@ -316,14 +321,17 @@ const drawPriceLines = (frame: Frame, priceLines: PriceLine[]) => {
             ctx.setLineDash([]);
 
             ctx.fillStyle = style.backgroundColor;
-            ctx.fillRect(plotRightPx, labelTop, painter.px(PRICE_AXIS_WIDTH), labelHeight);
+            ctx.fillRect(plotRightPx, labelTop, frame.axisWidthPx, labelHeight);
             ctx.strokeRect(
                 plotRightPx + line / 2, labelTop + line / 2,
-                painter.px(PRICE_AXIS_WIDTH) - line, labelHeight - line,
+                frame.axisWidthPx - line, labelHeight - line,
             );
             ctx.fillStyle = color;
             ctx.textAlign = 'left';
-            ctx.fillText(priceLine.price.toLocaleString('ko-KR'), axisLabelX, y);
+            // 목표가는 캔들보다 잘게 정해 둘 수 있으므로 필요한 자릿수만큼 더 적는다.
+            ctx.fillText(
+                formatPrice(priceLine.price, Math.max(frame.valueDecimals, decimalsOf(priceLine.price))), axisLabelX, y,
+            );
             ctx.fillText(priceLine.title, painter.px(LEGEND_LEFT), y - painter.px(PRICE_LINE_TITLE_OFFSET));
         });
 };
@@ -332,11 +340,11 @@ const drawPriceLines = (frame: Frame, priceLines: PriceLine[]) => {
 export const renderMain = (painter: Painter, input: MainInput): Layout | null => {
     const {
         candles, chartType, shapes, logScale, priceZoom, timeUnit, style, width, height, range,
-        averages, indicators, priceOverlays, volumeOverlays, priceLines, flatByPrevClose,
+        averages, indicators, priceOverlays, volumeOverlays, priceLines, flatByPrevClose, axisWidth, valueDecimals,
     } = input;
 
     // 위에서부터: 가격 / 거래량 / 보조지표들 / 날짜축
-    const plotWidth = width - PRICE_AXIS_WIDTH;
+    const plotWidth = width - axisWidth;
     const plotBottom = height - TIME_AXIS_HEIGHT;
     const mainBottom = plotBottom - indicators.length * INDICATOR_PANE_HEIGHT;
     const mainHeight = mainBottom - PRICE_PANE_TOP;
@@ -396,10 +404,13 @@ export const renderMain = (painter: Painter, input: MainInput): Layout | null =>
         plotRightPx,
         plotBottomPx: painter.px(plotBottom),
         axisLabelX: plotRightPx + painter.px(AXIS_LABEL_OFFSET),
+        axisWidthPx: painter.px(axisWidth),
+        valueDecimals,
     };
 
     painter.useFont(style);
-    const priceDecimals = drawPriceAxis(frame);
+    // 눈금은 간격에 맞는 자릿수로 적지만, 그 밖의 값(십자선·이동평균·수평선 라벨)은 캔들 가격의 자릿수보다 거칠면 안 된다.
+    const priceDecimals = Math.max(drawPriceAxis(frame), valueDecimals);
     drawVolumeAxis(frame);
     drawTimeAxis(frame);
     drawBorders(frame);
@@ -414,7 +425,7 @@ export const renderMain = (painter: Painter, input: MainInput): Layout | null =>
     ));
 
     return {
-        range, plotWidth, plotBottom, priceDecimals,
+        range, plotWidth, plotBottom, axisWidth, priceDecimals, valueDecimals,
         panes: [
             {
                 top: priceTop, bottom: priceBottom, scaleTop: priceTop, scaleBottom: priceBottom,

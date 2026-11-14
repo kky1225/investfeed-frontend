@@ -44,7 +44,9 @@ export interface Layout {
     range: VisibleRange,
     plotWidth: number,
     plotBottom: number,
-    priceDecimals: number,
+    axisWidth: number,      // 오른쪽 가격축의 너비. 가장 긴 가격이 들어가도록 캔들에 따라 달라진다
+    priceDecimals: number,  // 십자선·이동평균·수평선 라벨의 소수 자릿수. 눈금 간격과 캔들 가격 중 더 잘게 나뉜 쪽
+    valueDecimals: number,  // 캔들 가격 자체의 소수 자릿수 (시고저종·현재가·최고 최저 표기)
     panes: Pane[],      // 0: 가격, 1: 거래량, 그 뒤: 보조지표
     indicators: { instance: PaneIndicator, top: number }[],    // 별도 영역 지표와 그 영역의 위쪽 높이
     priceOverlays: OverlayIndicator[],      // 가격 영역에 겹쳐 그린 지표

@@ -1,5 +1,5 @@
 import {Anchor, Candle, ChartStyle, Drawing, DrawingTool} from "./types.ts";
-import {AXIS_LABEL_OFFSET, AXIS_TAG_HEIGHT, DRAG_THRESHOLD, PRICE_AXIS_WIDTH} from "./constants.ts";
+import {AXIS_LABEL_OFFSET, AXIS_TAG_HEIGHT, DRAG_THRESHOLD} from "./constants.ts";
 import {clamp, distanceToSegment, Layout, paneToValue, paneToY, Point} from "./layout.ts";
 import {lineColor, Painter} from "./painter.ts";
 
@@ -248,9 +248,9 @@ export class DrawingLayer {
             const y = painter.px(toY(drawing.price));
             const labelTop = Math.round(y - labelHeight / 2);
             ctx.fillStyle = style.backgroundColor;
-            ctx.fillRect(plotRightPx, labelTop, painter.px(PRICE_AXIS_WIDTH), labelHeight);
+            ctx.fillRect(plotRightPx, labelTop, painter.px(layout.axisWidth), labelHeight);
             ctx.strokeStyle = color;
-            ctx.strokeRect(plotRightPx + line / 2, labelTop + line / 2, painter.px(PRICE_AXIS_WIDTH) - line, labelHeight - line);
+            ctx.strokeRect(plotRightPx + line / 2, labelTop + line / 2, painter.px(layout.axisWidth) - line, labelHeight - line);
             ctx.fillStyle = color;
             ctx.fillText(pane.format(drawing.price), plotRightPx + painter.px(AXIS_LABEL_OFFSET), y);
         });

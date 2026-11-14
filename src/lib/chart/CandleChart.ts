@@ -1,6 +1,7 @@
 import {Candle, ChartStyle, ChartType, Drawing, DrawingTool, IndicatorConfig, PriceLine, TimeUnit} from "./types.ts";
 import {heikinAshi, movingAverage, Series} from "./indicators.ts";
-import {DRAG_THRESHOLD, PRICE_AXIS_WIDTH} from "./constants.ts";
+import {AXIS_LABEL_OFFSET, DRAG_THRESHOLD, PRICE_AXIS_WIDTH} from "./constants.ts";
+import {decimalsOf, formatPrice} from "./scale.ts";
 import {clamp, Layout, Point, View} from "./layout.ts";
 import {clampView, defaultView, logicalAt, visibleRange, zoomedView} from "./viewport.ts";
 import {candleColor, Painter} from "./painter.ts";
@@ -16,6 +17,7 @@ const PINCH_DELTA_LIMIT = 30;   // 휠 한 번의 이동량이 이보다 작으�
 const WHEEL_ZOOM_RATE = 0.0015;
 const PINCH_WHEEL_ZOOM_RATE = 0.01; // 트랙패드 두 손가락 벌리기 (ctrl + wheel 로 들어옴)
 const WHEEL_LINE_HEIGHT = 16;
+const DECIMAL_SAMPLE_SIZE = 300;    // 가격의 소수 자릿수를 알아낼 때 살펴보는 최근 캔들 수
 // 가격축을 끌어 세로 배율을 바꿀 때: 1px 에 이 비율만큼, 아래 범위 안에서
 const PRICE_ZOOM_RATE = 0.005;
 const MIN_PRICE_ZOOM = 0.2;
@@ -61,6 +63,10 @@ export class CandleChartEngine {
     private logScale = false;
     private priceZoom = 1;                  // 가격축 세로 배율. 1 이면 보이는 구간에 맞춤
     private scaleDrag: { pointerId: number, startY: number, startZoom: number } | null = null;  // 가격축을 끄는 중
+
+    private valueDecimals = 0;              // 캔들 가격의 소수 자릿수
+    private widestPrice = '';               // 가장 긴 가격 표기 (가격축 너비를 정하는 데 쓴다)
+    private axisWidth = PRICE_AXIS_WIDTH;   // 오른쪽 가격축 너비 (CSS px)
 
     private flatByPrevClose = false;
     private averagePeriods: number[] = [];
@@ -150,6 +156,7 @@ export class CandleChartEngine {
         }
         this.candles = candles;
         this.timeUnit = timeUnit;
+        this.measurePrices();
         this.computeSeries();
         this.scheduleDraw();
     }
@@ -476,7 +483,28 @@ export class CandleChartEngine {
     // ---------- 보기 상태 ----------
 
     private plotWidth(): number {
-        return Math.max(1, this.width - PRICE_AXIS_WIDTH);
+        return Math.max(1, this.width - this.axisWidth);
+    }
+
+    /**
+     * 캔들 가격을 적는 데 필요한 소수 자릿수와 가장 긴 가격 표기를 구해 둔다.
+     * 주식은 정수지만 코인은 1억 원대부터 소수점 아래 여러 자리까지 있어, 축 너비와 표기를 캔들에 맞춘다.
+     */
+    private measurePrices() {
+        const recent = this.candles.slice(-DECIMAL_SAMPLE_SIZE);
+        this.valueDecimals = recent.reduce((most, candle) => Math.max(
+            most, decimalsOf(candle.open), decimalsOf(candle.high), decimalsOf(candle.low), decimalsOf(candle.close),
+        ), 0);
+        const highest = this.candles.reduce((most, candle) => Math.max(most, candle.high), 0);
+        this.widestPrice = formatPrice(highest, this.valueDecimals);
+    }
+
+    /** 가장 긴 가격 표기가 들어가도록 가격축 너비를 잡는다. 기본 너비보다 좁아지지는 않는다. */
+    private updateAxisWidth(style: ChartStyle) {
+        const painter = this.mainPainter;
+        painter.useFont(style);
+        const textWidth = painter.ctx.measureText(this.widestPrice).width / painter.dpr;
+        this.axisWidth = Math.max(PRICE_AXIS_WIDTH, Math.ceil(textWidth) + AXIS_LABEL_OFFSET * 2);
     }
 
     /** 지금 적용할 보기. 사용자가 움직인 적이 없으면 기본 보기를 계산한다. */
@@ -541,6 +569,7 @@ export class CandleChartEngine {
         this.mainPainter.ctx.clearRect(0, 0, this.mainCanvas.width, this.mainCanvas.height);
         const style = this.style;
         if (!style || this.candles.length === 0) return null;
+        this.updateAxisWidth(style);
 
         return renderMain(this.mainPainter, {
             candles: this.candles,
@@ -559,6 +588,8 @@ export class CandleChartEngine {
             volumeOverlays: this.volumeOverlays,
             priceLines: this.priceLines,
             flatByPrevClose: this.flatByPrevClose,
+            axisWidth: this.axisWidth,
+            valueDecimals: this.valueDecimals,
         });
     }
 
