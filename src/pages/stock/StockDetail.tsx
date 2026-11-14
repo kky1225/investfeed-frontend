@@ -8,8 +8,6 @@ import Divider from "@mui/material/Divider";
 import Card from "@mui/material/Card";
 import Skeleton from "@mui/material/Skeleton";
 import {useState, MouseEvent, useRef, useEffect, useMemo, useCallback, ReactElement, JSX} from "react";
-import CandlestickChartIcon from '@mui/icons-material/CandlestickChart';
-import StackedLineChartIcon from '@mui/icons-material/StackedLineChart';
 import HelpIcon from '@mui/icons-material/Help';
 import ErrorIcon from '@mui/icons-material/Error';
 import ToggleButton from '@mui/material/ToggleButton';
@@ -32,7 +30,7 @@ import {
     StockDividendItem,
     StockVi,
 } from "../../type/StockType.ts";
-import StockDetailLineChart, {CustomStockDetailLineChartProps} from "../../components/StockDetailLineChart.tsx";
+import {CustomStockDetailLineChartProps} from "../../components/StockDetailLineChart.tsx";
 import CandleChart from "../../components/chart/CandleChart.tsx";
 import {Candle, CandleInterval, PriceLine, TimeUnit} from "../../lib/chart/types.ts";
 import {useQuery} from "@tanstack/react-query";
@@ -366,7 +364,6 @@ const StockDetail = () => {
     });
 
     const [toggle, setToggle] = useState('DAY');
-    const [formats, setFormats] = useState('candle');
     const minute = useRef('1');
 
     // 별도 fetcher (loadProgramChart) + 폴링 누적 패턴이라 useMemo 불가 — useState 유지
@@ -918,15 +915,6 @@ const StockDetail = () => {
         })
     }
 
-    const handleFormat = (
-        _event: MouseEvent<HTMLElement>,
-        newFormats: string,
-    ) => {
-        if(newFormats !== null) {
-            setFormats(newFormats);
-        }
-    };
-
 
     const handleChange = (_event: React.SyntheticEvent, newValue: string) => {
         if (newValue === 'investor' || newValue === 'program' || newValue === 'shortSelling' || newValue === 'daily' || newValue === 'news') {
@@ -960,7 +948,6 @@ const StockDetail = () => {
     // 기준은 md(900px). 그보다 좁으면 위쪽 한 줄에 버튼이 다 들어가지 않아 설정 버튼이 잘린다.
     const isNarrow = useMediaQuery((theme: Theme) => theme.breakpoints.down('md'));
     const chartControls = (
-        <>
             <ChartToolbarGroup
                 size="small"
                 value={toggle}
@@ -1002,22 +989,6 @@ const StockDetail = () => {
                 <ToggleButton value="MONTH" key="MONTH" aria-label="MONTH">월</ToggleButton>
                 <ToggleButton value="YEAR" key="YEAR" aria-label="YEAR">년</ToggleButton>
             </ChartToolbarGroup>
-
-            <ChartToolbarGroup
-                size="small"
-                value={formats}
-                exclusive
-                onChange={handleFormat}
-                aria-label="차트 종류"
-            >
-                <ToggleButton value="candle" key="candle" aria-label="candle">
-                    <CandlestickChartIcon />
-                </ToggleButton>
-                <ToggleButton value="line" key="line" aria-label="line">
-                    <StackedLineChartIcon />
-                </ToggleButton>
-            </ChartToolbarGroup>
-        </>
     );
 
     return (
@@ -1168,32 +1139,26 @@ const StockDetail = () => {
                                 </Stack>
                             </Stack>
                         </CardContent>
-                        {!isNarrow && (loading || formats !== 'candle') && (
+                        {!isNarrow && loading && (
                             <Stack direction="row" spacing={1} sx={{px: 2, pb: 1, alignItems: 'center', minHeight: 40}}>
                                 {chartControls}
                             </Stack>
                         )}
-                        <Box sx={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
-                            {/* 캔들 차트는 스스로 이동·확대하므로 화면 너비에 맞춘다. 선 차트만 최소 너비를 둔다. */}
-                            <Box sx={{ minWidth: formats === 'candle' ? 0 : 1200 }}>
-                                {loading ? (
-                                    <Skeleton variant="rectangular" height={400} sx={{mx: 2, mb: 2, borderRadius: 1}}/>
-                                ) : formats === 'candle' ? (
-                                    <CandleChart
-                                        candles={fullCandles}
-                                        timeUnit={CHART_TIME_UNIT[req.chartType]}
-                                        seriesKey={chartSeriesKey}
-                                        onLoadOlder={loadOlderCandles}
-                                        priceLines={targetLines}
-                                        assetType="STOCK"
-                                        assetCode={stkCd}
-                                        toolbarStart={isNarrow ? undefined : chartControls}
-                                    />
-                                ) : (
-                                    <StockDetailLineChart {...stockChartData} />
-                                )}
-                            </Box>
-                        </Box>
+                        {/* 차트는 스스로 이동·확대하므로 화면 너비에 맞춘다. 선·영역 등 차트 종류는 차트 안에서 고른다. */}
+                        {loading ? (
+                            <Skeleton variant="rectangular" height={400} sx={{mx: 2, mb: 2, borderRadius: 1}}/>
+                        ) : (
+                            <CandleChart
+                                candles={fullCandles}
+                                timeUnit={CHART_TIME_UNIT[req.chartType]}
+                                seriesKey={chartSeriesKey}
+                                onLoadOlder={loadOlderCandles}
+                                priceLines={targetLines}
+                                assetType="STOCK"
+                                assetCode={stkCd}
+                                toolbarStart={isNarrow ? undefined : chartControls}
+                            />
+                        )}
                         {isNarrow && (
                             <Box
                                 display="flex"

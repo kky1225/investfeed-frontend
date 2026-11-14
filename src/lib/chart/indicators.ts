@@ -113,6 +113,27 @@ export const stochastic = (candles: Candle[], period: number, smoothK: number, s
     return {k, d: simpleAverage(k, smoothD)};
 };
 
+/**
+ * 하이킨아시: 평균값으로 다시 만든 캔들. 잔 움직임이 줄어 추세가 매끄럽게 보인다.
+ * 종가 = 시고저종 평균, 시가 = 앞 하이킨아시 캔들의 시가·종가 평균. 거래량과 시각은 그대로다.
+ */
+export const heikinAshi = (candles: Candle[]): Candle[] => {
+    const result: Candle[] = [];
+    candles.forEach((candle, index) => {
+        const close = (candle.open + candle.high + candle.low + candle.close) / 4;
+        const previous = result[index - 1];
+        const open = previous ? (previous.open + previous.close) / 2 : (candle.open + candle.close) / 2;
+        result.push({
+            ...candle,
+            open,
+            close,
+            high: Math.max(candle.high, open, close),
+            low: Math.min(candle.low, open, close),
+        });
+    });
+    return result;
+};
+
 /** 거래량 단순 이동평균 */
 export const volumeAverage = (candles: Candle[], period: number): Series =>
     simpleAverage(candles.map(candle => candle.volume), period);

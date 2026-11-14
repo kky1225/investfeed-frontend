@@ -40,6 +40,8 @@ interface ChartSettingsDialogProps {
     onParamsReset: (key: string) => void,
     drawingToolbar: boolean,                    // 그리기 도구 모음을 보일지
     onDrawingToolbarChange: (visible: boolean) => void,
+    logScale: boolean,                          // 가격축을 로그로 할지
+    onLogScaleChange: (enabled: boolean) => void,
     flatByPrevClose: boolean,                   // 시가와 종가가 같은 캔들을 전일 종가 기준으로 색칠할지
     onFlatByPrevCloseChange: (enabled: boolean) => void,
     drawingCount: number,                       // 그려 둔 선의 수
@@ -91,6 +93,7 @@ const ParamField = ({param, onCommit}: ParamFieldProps) => {
 const ChartSettingsDialog = ({
     open, onClose, indicatorOptions, onToggleIndicator, onParamsChange, onParamsReset,
     drawingToolbar, onDrawingToolbarChange,
+    logScale, onLogScaleChange,
     flatByPrevClose, onFlatByPrevCloseChange, drawingCount, onClearDrawings,
 }: ChartSettingsDialogProps) => (
     <Dialog open={open} onClose={onClose} maxWidth="xs" fullWidth>
@@ -130,6 +133,20 @@ const ChartSettingsDialog = ({
                     </Box>
                 ))}
             </Stack>
+
+            <Divider sx={{my: 2}}/>
+
+            <Typography variant="subtitle2" sx={{color: 'text.secondary', mb: 1}}>축</Typography>
+            <FormGroup>
+                <FormControlLabel
+                    label="로그 축"
+                    control={<Switch checked={logScale} onChange={(_event, checked) => onLogScaleChange(checked)}/>}
+                />
+            </FormGroup>
+            <Typography variant="body2" sx={{color: 'text.secondary'}}>
+                켜면 같은 등락률이 같은 높이로 그려집니다. 가격이 크게 오르내린 긴 구간을 볼 때 초반 움직임이 잘 보입니다.
+                오른쪽 가격축을 위아래로 끌면 세로 크기를 바꿀 수 있고, 더블클릭하면 원래대로 돌아옵니다.
+            </Typography>
 
             <Divider sx={{my: 2}}/>
 

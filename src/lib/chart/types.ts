@@ -32,6 +32,15 @@ export type Drawing =
 export type DrawingTool = Drawing['type'];
 
 /**
+ * 가격을 그리는 방식. 어느 것이든 거래량·지표·십자선·그리기는 똑같이 동작한다.
+ * candle 캔들 / bar 봉(세로선 + 왼쪽 시가·오른쪽 종가 눈금) / line 종가 선 / area 선 아래를 채움
+ * / heikinAshi 평균값으로 다시 만든 캔들(값 표시와 현재가 선은 실제 가격)
+ */
+export type ChartType = 'candle' | 'bar' | 'line' | 'area' | 'heikinAshi';
+
+export const CHART_TYPES: ChartType[] = ['candle', 'bar', 'line', 'area', 'heikinAshi'];
+
+/**
  * 보조지표. 그려지는 자리는 지표마다 정해져 있다(indicatorPanes.ts 의 INDICATORS):
  * bollinger 는 가격 영역, volumeAverage 는 거래량 영역, 나머지는 차트 아래 별도 영역
  */

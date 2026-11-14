@@ -12,6 +12,24 @@ export const createInverseScale = (min: number, max: number, top: number, bottom
     return (y: number) => min + ((bottom - y) / span) * (max - min);
 };
 
+// 로그 축: 같은 비율(등락률)이 같은 높이를 차지한다. 0 이하의 값은 축 아래로 한참 벗어난 자리로 보낸다.
+const safeLog = (value: number) => Math.log(Math.max(value, Number.MIN_VALUE));
+
+/** 값 → 세로 위치 (로그 축). min, max 는 0 보다 커야 한다. */
+export const createLogScale = (min: number, max: number, top: number, bottom: number) => {
+    const low = safeLog(min);
+    const range = safeLog(max) - low || 1;
+    return (value: number) => bottom - ((safeLog(value) - low) / range) * (bottom - top);
+};
+
+/** 세로 위치 → 값 (로그 축). createLogScale 의 반대 방향. */
+export const createInverseLogScale = (min: number, max: number, top: number, bottom: number) => {
+    const low = safeLog(min);
+    const range = safeLog(max) - low;
+    const span = bottom - top || 1;
+    return (y: number) => Math.exp(low + ((bottom - y) / span) * range);
+};
+
 export interface Ticks {
     values: number[],
     decimals: number,   // 눈금 간격에 맞는 소수 자릿수
@@ -37,6 +55,27 @@ export const niceTicks = (min: number, max: number, maxCount: number): Ticks => 
         values.push(Number((n * step).toFixed(decimals)));
     }
     return {values, decimals};
+};
+
+const LOG_TICK_MULTIPLES = [1, 2, 3, 5];
+const MIN_LOG_TICKS = 3;
+
+/**
+ * 로그 축의 눈금 후보: min~max 안의 1·2·3·5 × 10ⁿ. 자리가 좁아 겹치는 것은 그리는 쪽에서 거른다.
+ * 범위가 좁아 후보가 몇 개 안 나오면(한 자릿수 안에서 움직이는 경우) 일정 간격 눈금으로 대신한다.
+ */
+export const logTicks = (min: number, max: number, maxCount: number): Ticks => {
+    if (!(min > 0) || !(max > min)) return {values: [], decimals: 0};
+    const values: number[] = [];
+    for (let exponent = Math.floor(Math.log10(min)); exponent <= Math.ceil(Math.log10(max)); exponent++) {
+        LOG_TICK_MULTIPLES.forEach(multiple => {
+            const decimals = Math.max(0, -exponent);
+            const value = Number((multiple * 10 ** exponent).toFixed(decimals));
+            if (value >= min && value <= max) values.push(value);
+        });
+    }
+    if (values.length < MIN_LOG_TICKS) return niceTicks(min, max, maxCount);
+    return {values, decimals: Math.max(0, -Math.floor(Math.log10(values[0])))};
 };
 
 const pad2 = (value: number) => String(value).padStart(2, '0');

@@ -17,7 +17,10 @@ import {ChartToolbarButton} from "./ChartToolbarControls.tsx";
 import {useChartStorage} from "./useChartStorage.ts";
 import {useColorScheme} from "@mui/material/styles";
 import {CandleChartEngine, INDICATOR_PANE_HEIGHT} from "../../lib/chart/CandleChart.ts";
-import {Candle, DrawingTool, IndicatorConfig, IndicatorType, PriceLine, TimeUnit} from "../../lib/chart/types.ts";
+import {
+    Candle, CHART_TYPES, ChartType, DrawingTool, IndicatorConfig, IndicatorType, PriceLine, TimeUnit,
+} from "../../lib/chart/types.ts";
+import ChartTypeSelect from "./ChartTypeSelect.tsx";
 import type {AssetType} from "../../type/NotificationType.ts";
 
 export interface CandleChartProps {
@@ -76,9 +79,13 @@ const CandleChart = ({
     const {
         drawings, updateDrawings,
         indicators: indicatorSettings, setIndicatorOn, setIndicatorParams,
+        chartType: savedChartType, setChartType,
+        logScale, setLogScale,
         drawingToolbar: toolbarVisible, setDrawingToolbar,
         flatByPrevClose, setFlatByPrevClose,
     } = useChartStorage(assetType, assetCode);
+    // 저장된 값이 이 버전이 모르는 종류면 캔들로 그린다.
+    const chartType: ChartType = CHART_TYPES.find(type => type === savedChartType) ?? 'candle';
     const [tool, setTool] = useState<DrawingTool | null>(null);
     const [selectedId, setSelectedId] = useState<string | null>(null);
     const [atLatest, setAtLatest] = useState(true);
@@ -183,6 +190,14 @@ const CandleChart = ({
     }, [flatByPrevClose]);
 
     useEffect(() => {
+        engineRef.current?.setChartType(chartType);
+    }, [chartType]);
+
+    useEffect(() => {
+        engineRef.current?.setLogScale(logScale);
+    }, [logScale]);
+
+    useEffect(() => {
         engineRef.current?.setPriceLines(priceLines);
     }, [priceLines]);
 
@@ -243,10 +258,11 @@ const CandleChart = ({
 
     return (
         <Box>
-            {/* 위쪽 한 줄에 모든 버튼을 모은다: 화면별 버튼(주기 등) · 그리기 도구 모음 · 안내 … 최근으로 이동 · 차트 설정 */}
+            {/* 위쪽 한 줄에 모든 버튼을 모은다: 화면별 버튼(주기 등) · 차트 종류 · 그리기 도구 모음 · 안내 … 최근으로 이동 · 차트 설정 */}
             <Stack direction="row" spacing={1} sx={{px: 2, pb: 1, alignItems: 'center', minHeight: 40}}>
                 {toolbarStart}
-                {toolbarStart && toolbarVisible && <Divider orientation="vertical" flexItem sx={{my: 1}}/>}
+                <ChartTypeSelect value={chartType} onChange={setChartType}/>
+                {toolbarVisible && <Divider orientation="vertical" flexItem sx={{my: 1}}/>}
                 {toolbarVisible && <ChartDrawingToolbar tool={tool} onSelectTool={setTool}/>}
                 {tool && (
                     <>
@@ -286,6 +302,8 @@ const CandleChart = ({
                 onParamsReset={key => setIndicatorParams(key, null)}
                 drawingToolbar={toolbarVisible}
                 onDrawingToolbarChange={setDrawingToolbar}
+                logScale={logScale}
+                onLogScaleChange={setLogScale}
                 flatByPrevClose={flatByPrevClose}
                 onFlatByPrevCloseChange={setFlatByPrevClose}
                 drawingCount={drawings.length}

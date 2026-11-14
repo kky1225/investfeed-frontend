@@ -1,6 +1,6 @@
-import {Candle, ChartStyle, PriceLine, TimeUnit} from "./types.ts";
+import {Candle, ChartStyle, ChartType, PriceLine, TimeUnit} from "./types.ts";
 import {Series} from "./indicators.ts";
-import {createLinearScale, formatPrice, formatTime, formatVolume, niceTicks} from "./scale.ts";
+import {createLinearScale, createLogScale, formatPrice, formatTime, formatVolume, logTicks, niceTicks} from "./scale.ts";
 import {
     AXIS_LABEL_OFFSET, AXIS_TAG_HEIGHT, FONT_SIZE, INDICATOR_PANE_HEIGHT, LEGEND_LEFT,
     PRICE_AXIS_WIDTH, PRICE_PANE_TOP, TIME_AXIS_HEIGHT,
@@ -22,9 +22,16 @@ const EXTREME_LABEL_GAP = 4;        // 최고·최저가 표시와 캔들 사이
 // 거래량 눈금: 보이는 구간의 상위 2% 를 뺀 값의 2배까지만 잡는다. 튀는 막대 하나가 나머지를 납작하게 누르지 않게 한다
 const VOLUME_PERCENTILE = 0.98;
 const VOLUME_OUTLIER_RATIO = 2;
+const MIN_PRICE_TICK_GAP = 20;      // 가격 눈금 글자가 겹치지 않는 최소 간격 (로그 축에서 촘촘한 눈금을 거를 때)
+const CLOSE_LINE_COLOR = 4;         // 선·영역 차트의 선 색 (style.lineColors 안에서의 순서)
+const AREA_FILL_ALPHA = 0.12;
 
 export interface MainInput {
     candles: Candle[],          // 한 개 이상
+    chartType: ChartType,
+    shapes: Candle[],           // 모양을 그릴 캔들. 하이킨아시면 다시 만든 캔들이고, 그 밖에는 candles 와 같다
+    logScale: boolean,          // 가격축을 로그로
+    priceZoom: number,          // 가격축 세로 배율. 1 이면 보이는 구간에 딱 맞추고, 클수록 범위가 넓어져 캔들이 납작해진다
     timeUnit: TimeUnit,
     style: ChartStyle,
     width: number,              // 캔버스 크기 (CSS px)
@@ -43,6 +50,9 @@ interface Frame {
     painter: Painter,
     style: ChartStyle,
     candles: Candle[],
+    shapes: Candle[],
+    chartType: ChartType,
+    logScale: boolean,
     visible: Candle[],      // 보이는 캔들
     range: VisibleRange,
     timeUnit: TimeUnit,
@@ -68,13 +78,19 @@ interface Frame {
 const drawPriceAxis = (frame: Frame): number => {
     const {painter, style, candles, priceMin, priceMax, priceTop, priceBottom, priceY, line, plotRightPx, axisLabelX} = frame;
     const ctx = painter.ctx;
-    const priceTicks = niceTicks(priceMin, priceMax, Math.floor((priceBottom - priceTop) / PRICE_TICK_GAP));
+    const maxCount = Math.floor((priceBottom - priceTop) / PRICE_TICK_GAP);
+    const priceTicks = frame.logScale ? logTicks(priceMin, priceMax, maxCount) : niceTicks(priceMin, priceMax, maxCount);
     ctx.textAlign = 'left';
     // 현재가 라벨에 가려질 눈금 글자는 적지 않는다(격자선은 그린다).
     const currentPriceY = painter.px(priceY(candles[candles.length - 1].close));
     const labelClearance = painter.px(AXIS_TAG_HEIGHT);
-    priceTicks.values.forEach(value => {
+    // 로그 축의 눈금은 아래쪽으로 갈수록 촘촘해지므로, 위에서부터 보며 바로 위 눈금과 너무 붙은 것은 건너뛴다.
+    const minGap = painter.px(MIN_PRICE_TICK_GAP);
+    let previousY = -Infinity;
+    [...priceTicks.values].reverse().forEach(value => {
         const y = painter.px(priceY(value));
+        if (y - previousY < minGap) return;
+        previousY = y;
         ctx.fillStyle = style.gridColor;
         ctx.fillRect(0, y, plotRightPx, line);
         if (Math.abs(y - currentPriceY) < labelClearance) return;
@@ -127,36 +143,85 @@ const drawBorders = ({painter, style, volumeTop, line, plotRightPx, plotBottomPx
     ctx.fillRect(0, painter.px(volumeTop - PANE_GAP / 2), plotRightPx, line);
 };
 
+/** 선·영역 차트: 종가를 선으로 잇고, 영역이면 선 아래를 가격 영역 바닥까지 옅게 채운다. */
+const drawCloseLine = ({painter, style, candles, chartType, range, priceBottom, priceY}: Frame) => {
+    const ctx = painter.ctx;
+    const color = lineColor(style, CLOSE_LINE_COLOR);
+    const closes: Series = candles.map(candle => candle.close);
+
+    if (chartType === 'area') {
+        // 선과 같이 양옆 한 칸씩 더 잡아 가장자리에서 끊겨 보이지 않게 한다.
+        const start = Math.max(0, range.from - 1);
+        const end = Math.min(candles.length, range.from + range.count + 1);
+        if (end - start > 1) {
+            const bottomPx = painter.px(priceBottom);
+            ctx.beginPath();
+            ctx.moveTo(painter.centerX(start, range), bottomPx);
+            for (let index = start; index < end; index++) {
+                ctx.lineTo(painter.centerX(index, range), priceY(candles[index].close) * painter.dpr);
+            }
+            ctx.lineTo(painter.centerX(end - 1, range), bottomPx);
+            ctx.closePath();
+            ctx.globalAlpha = AREA_FILL_ALPHA;
+            ctx.fillStyle = color;
+            ctx.fill();
+            ctx.globalAlpha = 1;
+        }
+    }
+    painter.strokeSeries(closes, range, priceY, color);
+};
+
 /**
  * 캔들 + 거래량 + 이동평균선 + 겹쳐 그리는 지표. 드래그로 반쯤 걸친 캔들이 축 영역으로 넘어가지 않게 자른다.
  * 가격 영역 지표(볼린저밴드의 채움 등)는 캔들 뒤에, 선들은 캔들 앞에 놓인다.
  */
 const drawCandles = (frame: Frame, averages: Series[], priceOverlays: OverlayIndicator[], volumeOverlays: OverlayIndicator[]) => {
-    const {painter, style, candles, visible, range, flatByPrevClose, plotWidth, mainBottom, volumeTop, priceY, volumeY, line} = frame;
+    const {
+        painter, style, candles, shapes, chartType, visible, range, flatByPrevClose,
+        plotWidth, mainBottom, volumeTop, priceY, volumeY, line,
+    } = frame;
     const ctx = painter.ctx;
     const mainBottomPx = painter.px(mainBottom);
     painter.clipped(0, mainBottom, plotWidth, () => {
         priceOverlays.forEach(overlay => overlay.draw({painter, range, style, toY: priceY}));
 
+        if (chartType === 'line' || chartType === 'area') drawCloseLine(frame);
+
         const bodyWidth = painter.bodyWidth(range);
+        const halfWidth = Math.floor(bodyWidth / 2);
         visible.forEach((candle, offset) => {
-            const x = painter.centerX(range.from + offset, range);
-            const bodyLeft = x - Math.floor(bodyWidth / 2);
-            ctx.fillStyle = candleColor(candles, range.from + offset, style, flatByPrevClose);
+            const index = range.from + offset;
+            const x = painter.centerX(index, range);
+            const bodyLeft = x - halfWidth;
+            // 거래량 막대는 차트 종류와 상관없이 실제 캔들의 색을 따른다.
+            const candleFill = candleColor(candles, index, style, flatByPrevClose);
 
-            // 꼬리
-            const highY = painter.px(priceY(candle.high));
-            const lowY = painter.px(priceY(candle.low));
-            ctx.fillRect(x - Math.floor(line / 2), highY, line, Math.max(1, lowY - highY));
+            if (chartType === 'candle' || chartType === 'heikinAshi' || chartType === 'bar') {
+                // 하이킨아시는 평균값으로 다시 만든 캔들을 그리고, 색도 그 캔들의 시가·종가로 정한다.
+                const shape = shapes[index];
+                ctx.fillStyle = chartType === 'heikinAshi' ? candleColor(shapes, index, style, false) : candleFill;
 
-            // 몸통 (시가 = 종가면 1픽셀 선)
-            const openY = painter.px(priceY(candle.open));
-            const closeY = painter.px(priceY(candle.close));
-            const bodyTop = Math.min(openY, closeY);
-            ctx.fillRect(bodyLeft, bodyTop, bodyWidth, Math.max(1, Math.abs(closeY - openY)));
+                // 꼬리 (봉에서는 세로선)
+                const highY = painter.px(priceY(shape.high));
+                const lowY = painter.px(priceY(shape.low));
+                ctx.fillRect(x - Math.floor(line / 2), highY, line, Math.max(1, lowY - highY));
+
+                const openY = painter.px(priceY(shape.open));
+                const closeY = painter.px(priceY(shape.close));
+                if (chartType === 'bar') {
+                    // 봉: 왼쪽 눈금이 시가, 오른쪽 눈금이 종가
+                    const tick = Math.max(1, halfWidth);
+                    ctx.fillRect(x - tick, openY - Math.floor(line / 2), tick, line);
+                    ctx.fillRect(x, closeY - Math.floor(line / 2), tick + line, line);
+                } else {
+                    // 몸통 (시가 = 종가면 1픽셀 선)
+                    ctx.fillRect(bodyLeft, Math.min(openY, closeY), bodyWidth, Math.max(1, Math.abs(closeY - openY)));
+                }
+            }
 
             // 거래량
             if (candle.volume > 0) {
+                ctx.fillStyle = candleFill;
                 const top = clamp(painter.px(volumeY(candle.volume)), painter.px(volumeTop), mainBottomPx - 1);
                 ctx.fillRect(bodyLeft, top, bodyWidth, mainBottomPx - top);
             }
@@ -177,7 +242,7 @@ const drawCandles = (frame: Frame, averages: Series[], priceOverlays: OverlayInd
  * 보이는 구간의 최고가·최저가를 그 캔들 옆에 적는다. 오른쪽에 자리가 없으면 왼쪽에 적는다.
  * 글자를 그 가격 높이에 맞춰, 화살표가 꼬리 끝(최고가·최저가 지점)을 바로 가리키게 한다.
  */
-const drawExtremes = ({painter, style, visible, range, priceTop, priceBottom, priceY, plotRightPx}: Frame) => {
+const drawExtremes = ({painter, style, chartType, visible, range, priceTop, priceBottom, priceY, plotRightPx}: Frame) => {
     const ctx = painter.ctx;
     const mark = (offset: number, price: number, name: string, color: string) => {
         const x = painter.centerX(range.from + offset, range);
@@ -190,10 +255,14 @@ const drawExtremes = ({painter, style, visible, range, priceTop, priceBottom, pr
         ctx.textAlign = toRight ? 'left' : 'right';
         ctx.fillText(toRight ? `← ${label}` : `${label} →`, toRight ? x + gap : x - gap, y);
     };
-    const highOffset = visible.reduce((best, candle, offset) => candle.high > visible[best].high ? offset : best, 0);
-    const lowOffset = visible.reduce((best, candle, offset) => candle.low < visible[best].low ? offset : best, 0);
-    mark(highOffset, visible[highOffset].high, '최고', style.upColor);
-    mark(lowOffset, visible[lowOffset].low, '최저', style.downColor);
+    // 선·영역 차트는 꼬리가 없으므로 종가 기준으로 찾는다. 하이킨아시는 실제 고가·저가를 적는다.
+    const closeOnly = chartType === 'line' || chartType === 'area';
+    const highOf = (candle: Candle) => closeOnly ? candle.close : candle.high;
+    const lowOf = (candle: Candle) => closeOnly ? candle.close : candle.low;
+    const highOffset = visible.reduce((best, candle, offset) => highOf(candle) > highOf(visible[best]) ? offset : best, 0);
+    const lowOffset = visible.reduce((best, candle, offset) => lowOf(candle) < lowOf(visible[best]) ? offset : best, 0);
+    mark(highOffset, highOf(visible[highOffset]), '최고', style.upColor);
+    mark(lowOffset, lowOf(visible[lowOffset]), '최저', style.downColor);
 };
 
 /**
@@ -262,8 +331,8 @@ const drawPriceLines = (frame: Frame, priceLines: PriceLine[]) => {
 /** 아래 장 전체를 그리고, 그린 배치를 돌려준다. 그릴 자리가 없으면 null. 캔버스는 부르는 쪽에서 지운다. */
 export const renderMain = (painter: Painter, input: MainInput): Layout | null => {
     const {
-        candles, timeUnit, style, width, height, range, averages, indicators, priceOverlays, volumeOverlays,
-        priceLines, flatByPrevClose,
+        candles, chartType, shapes, logScale, priceZoom, timeUnit, style, width, height, range,
+        averages, indicators, priceOverlays, volumeOverlays, priceLines, flatByPrevClose,
     } = input;
 
     // 위에서부터: 가격 / 거래량 / 보조지표들 / 날짜축
@@ -280,14 +349,35 @@ export const renderMain = (painter: Painter, input: MainInput): Layout | null =>
 
     // 보이는 구간의 최고·최저가에 맞춰 가격축을 잡고, 위아래로 5% 여백을 둔다.
     // 이동평균선과 가격 영역 지표가 잘리지 않게 보이는 구간의 그 값들도 범위에 넣는다.
+    const end = range.from + range.count;
     const visibleAverages = [...averages, ...priceOverlays.flatMap(overlay => overlay.series)]
-        .flatMap(values => values.slice(range.from, range.from + range.count))
-        .filter(isNumber);
-    const highest = Math.max(...visible.map(candle => candle.high), ...visibleAverages);
-    const lowest = Math.min(...visible.map(candle => candle.low), ...visibleAverages);
-    const padding = (highest - lowest) * 0.05 || highest * 0.01 || 1;
-    const priceMin = lowest - padding;
-    const priceMax = highest + padding;
+        .flatMap(values => values.slice(range.from, end))
+        .filter(isNumber)
+        // 로그 축에는 0 이하의 값이 놓일 자리가 없다(볼린저밴드 하단이 음수로 내려간 경우 등).
+        .filter(value => !logScale || value > 0);
+    // 선·영역 차트는 종가만 그리므로 종가 범위에 맞춘다. 하이킨아시는 다시 만든 캔들과 실제 고가·저가를 모두 담는다.
+    const closeOnly = chartType === 'line' || chartType === 'area';
+    const visibleShapes = chartType === 'heikinAshi' ? shapes.slice(range.from, end) : [];
+    const highest = Math.max(
+        ...visible.map(candle => closeOnly ? candle.close : candle.high),
+        ...visibleShapes.map(candle => candle.high),
+        ...visibleAverages,
+    );
+    const lowest = Math.min(
+        ...visible.map(candle => closeOnly ? candle.close : candle.low),
+        ...visibleShapes.map(candle => candle.low),
+        ...visibleAverages,
+    );
+    // 로그 축이면 로그 값으로 바꿔 놓고 같은 계산을 한다. priceZoom 은 가운데를 기준으로 범위를 늘리거나 줄인다.
+    const toAxis = logScale ? Math.log : (value: number) => value;
+    const fromAxis = logScale ? Math.exp : (value: number) => value;
+    const axisHigh = toAxis(highest);
+    const axisLow = toAxis(lowest);
+    const padding = (axisHigh - axisLow) * 0.05 || (logScale ? 0.01 : highest * 0.01 || 1);
+    const center = (axisHigh + axisLow) / 2;
+    const half = ((axisHigh - axisLow) / 2 + padding) * priceZoom;
+    const priceMin = fromAxis(center - half);
+    const priceMax = fromAxis(center + half);
 
     // 거래량 눈금 상한. 유난히 큰 막대는 영역 꼭대기에서 잘리고, 실제 값은 값 표시에서 확인한다.
     const volumes = visible.map(candle => candle.volume);
@@ -297,10 +387,10 @@ export const renderMain = (painter: Painter, input: MainInput): Layout | null =>
 
     const plotRightPx = painter.px(plotWidth);
     const frame: Frame = {
-        painter, style, candles, visible, range, timeUnit, flatByPrevClose,
+        painter, style, candles, shapes, chartType, logScale, visible, range, timeUnit, flatByPrevClose,
         plotWidth, plotBottom, mainBottom, priceTop, priceBottom, volumeTop,
         priceMin, priceMax, volumeMax,
-        priceY: createLinearScale(priceMin, priceMax, priceTop, priceBottom),
+        priceY: (logScale ? createLogScale : createLinearScale)(priceMin, priceMax, priceTop, priceBottom),
         volumeY: createLinearScale(0, volumeMax, volumeTop, mainBottom),
         line: painter.lineWidth(),
         plotRightPx,
@@ -328,7 +418,7 @@ export const renderMain = (painter: Painter, input: MainInput): Layout | null =>
         panes: [
             {
                 top: priceTop, bottom: priceBottom, scaleTop: priceTop, scaleBottom: priceBottom,
-                min: priceMin, max: priceMax,
+                min: priceMin, max: priceMax, log: logScale,
                 format: value => formatPrice(value, priceDecimals),
             },
             {

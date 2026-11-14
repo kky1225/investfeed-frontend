@@ -14,7 +14,9 @@ const SAVE_DELAY_MS = 500;      // 선을 끌어 옮기는 동안 매번 저장�
 const SETTINGS_KEY = ['chartSettings'];
 const NO_DRAWINGS: Drawing[] = [];
 // 아무것도 바꾸지 않은 상태
-const DEFAULT_SETTING: ChartSetting = {indicators: {}, drawingToolbar: true, flatByPrevClose: false};
+const DEFAULT_SETTING: ChartSetting = {
+    indicators: {}, chartType: 'candle', logScale: false, drawingToolbar: true, flatByPrevClose: false,
+};
 const LEGACY_TOOLBAR_KEY = 'drawingToolbar';    // 예전 브라우저 저장분에서 그리기 도구 모음을 숨겼다는 표시
 
 const reportSaveError = (error: unknown) => console.error(error);
@@ -101,13 +103,15 @@ export const useChartStorage = (assetType: AssetType | undefined, assetCode: str
     const settingReady = settingQuery.isSuccess;
     // 지표별로 기본 상태에서 바꾼 것. 바꾸지 않은 지표는 없다
     const indicators = settingQuery.data?.indicators ?? DEFAULT_SETTING.indicators;
+    const chartType = settingQuery.data?.chartType ?? DEFAULT_SETTING.chartType;
+    const logScale = settingQuery.data?.logScale ?? DEFAULT_SETTING.logScale;
     const drawingToolbar = settingQuery.data?.drawingToolbar ?? DEFAULT_SETTING.drawingToolbar;
     const flatByPrevClose = settingQuery.data?.flatByPrevClose ?? DEFAULT_SETTING.flatByPrevClose;
 
     // 설정은 통째로 저장하므로, 바꾸는 항목 말고는 지금 값을 그대로 실어 보낸다.
     const saveSetting = (change: Partial<ChartSetting>) => {
         if (!settingReady) return;
-        const next: ChartSetting = {indicators, drawingToolbar, flatByPrevClose, ...change};
+        const next: ChartSetting = {indicators, chartType, logScale, drawingToolbar, flatByPrevClose, ...change};
         queryClient.setQueryData(SETTINGS_KEY, next);
         saveChartSetting(next).catch(reportSaveError);
     };
@@ -130,6 +134,8 @@ export const useChartStorage = (assetType: AssetType | undefined, assetCode: str
         changeIndicator(key, {params: values});
     };
 
+    const setChartType = (type: string) => saveSetting({chartType: type});
+    const setLogScale = (enabled: boolean) => saveSetting({logScale: enabled});
     const setDrawingToolbar = (visible: boolean) => saveSetting({drawingToolbar: visible});
     const setFlatByPrevClose = (enabled: boolean) => saveSetting({flatByPrevClose: enabled});
 
@@ -158,6 +164,8 @@ export const useChartStorage = (assetType: AssetType | undefined, assetCode: str
     return {
         drawings, updateDrawings,
         indicators, setIndicatorOn, setIndicatorParams,
+        chartType, setChartType,
+        logScale, setLogScale,
         drawingToolbar, setDrawingToolbar,
         flatByPrevClose, setFlatByPrevClose,
     };

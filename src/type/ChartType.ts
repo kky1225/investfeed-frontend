@@ -10,6 +10,8 @@ export interface ChartIndicatorSetting {
 export interface ChartSetting {
     // 지표별로 바꾼 것. key 는 지표 이름(average, rsi, macd, bollinger 등). 바꾸지 않은 지표는 없다
     indicators: Record<string, ChartIndicatorSetting>;
+    chartType: string;          // 가격을 그리는 방식 (candle, bar, line, area, heikinAshi)
+    logScale: boolean;          // 가격축을 로그로
     drawingToolbar: boolean;    // 그리기 도구 모음 표시
     flatByPrevClose: boolean;   // 시가와 종가가 같은 캔들의 색을 전일 종가와 비교해 정한다. false 면 상승색
 }

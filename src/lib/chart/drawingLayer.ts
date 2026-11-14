@@ -1,7 +1,6 @@
 import {Anchor, Candle, ChartStyle, Drawing, DrawingTool} from "./types.ts";
-import {createInverseScale, createLinearScale} from "./scale.ts";
 import {AXIS_LABEL_OFFSET, AXIS_TAG_HEIGHT, DRAG_THRESHOLD, PRICE_AXIS_WIDTH} from "./constants.ts";
-import {clamp, distanceToSegment, Layout, Point} from "./layout.ts";
+import {clamp, distanceToSegment, Layout, paneToValue, paneToY, Point} from "./layout.ts";
 import {lineColor, Painter} from "./painter.ts";
 
 // 사용자가 그리는 도형(추세선·수평선): 그리기, 선택, 옮기기, 지우기, 화면에 그리기
@@ -202,7 +201,7 @@ export class DrawingLayer {
 
         const ctx = painter.ctx;
         const pane = layout.panes[0];
-        const toY = createLinearScale(pane.min, pane.max, pane.scaleTop, pane.scaleBottom);
+        const toY = paneToY(pane);
         const color = lineColor(style, DRAWING_COLOR);
         const line = painter.lineWidth();
         const plotRightPx = painter.px(layout.plotWidth);
@@ -296,7 +295,7 @@ export class DrawingLayer {
         const y = clamp(point.y, pane.top, pane.bottom);
         return {
             time: candles[index].time,
-            price: createInverseScale(pane.min, pane.max, pane.scaleTop, pane.scaleBottom)(y),
+            price: paneToValue(pane)(y),
         };
     }
 
@@ -305,7 +304,7 @@ export class DrawingLayer {
         const pane = layout.panes[0];
         return {
             x: (timeToIndex(this.host.candles(), anchor.time) + 0.5 - layout.range.leftEdge) * layout.range.spacing,
-            y: createLinearScale(pane.min, pane.max, pane.scaleTop, pane.scaleBottom)(anchor.price),
+            y: paneToY(pane)(anchor.price),
         };
     }
 
@@ -319,7 +318,7 @@ export class DrawingLayer {
         for (let order = this.drawings.length - 1; order >= 0; order--) {
             const drawing = this.drawings[order];
             if (drawing.type === 'horizontal') {
-                const y = createLinearScale(pane.min, pane.max, pane.scaleTop, pane.scaleBottom)(drawing.price);
+                const y = paneToY(pane)(drawing.price);
                 if (Math.abs(point.y - y) <= HIT_TOLERANCE) return {drawing, part: 'body'};
                 continue;
             }

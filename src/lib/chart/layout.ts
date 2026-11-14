@@ -1,4 +1,5 @@
 import type {OverlayIndicator, PaneIndicator} from "./indicatorPanes.ts";
+import {createInverseLogScale, createInverseScale, createLinearScale, createLogScale} from "./scale.ts";
 
 /**
  * 보기 상태. 가로축은 캔들 순번이고, rightEdge 는 그림 오른쪽 끝에 놓인 순번(소수 가능)이다.
@@ -24,8 +25,19 @@ export interface Pane {
     scaleBottom: number,    // min 이 놓이는 높이
     min: number,
     max: number,
+    log?: boolean,          // 로그 축인지 (가격 영역만 해당). 값과 높이는 paneToY·paneToValue 로 바꾼다
     format: (value: number) => string,
 }
+
+/** 영역의 값 → 높이 (CSS px). 선형·로그 축을 가려 준다. */
+export const paneToY = (pane: Pane): (value: number) => number => pane.log
+    ? createLogScale(pane.min, pane.max, pane.scaleTop, pane.scaleBottom)
+    : createLinearScale(pane.min, pane.max, pane.scaleTop, pane.scaleBottom);
+
+/** 영역의 높이 (CSS px) → 값. paneToY 의 반대 방향. */
+export const paneToValue = (pane: Pane): (y: number) => number => pane.log
+    ? createInverseLogScale(pane.min, pane.max, pane.scaleTop, pane.scaleBottom)
+    : createInverseScale(pane.min, pane.max, pane.scaleTop, pane.scaleBottom);
 
 /** 마지막으로 그린 화면의 배치. 위 장(십자선·도형·값 표시)이 같은 좌표계를 쓰도록 남겨 둔다. (CSS px) */
 export interface Layout {

@@ -1,5 +1,5 @@
-import {Candle, ChartStyle, Drawing, DrawingTool, IndicatorConfig, PriceLine, TimeUnit} from "./types.ts";
-import {movingAverage, Series} from "./indicators.ts";
+import {Candle, ChartStyle, ChartType, Drawing, DrawingTool, IndicatorConfig, PriceLine, TimeUnit} from "./types.ts";
+import {heikinAshi, movingAverage, Series} from "./indicators.ts";
 import {DRAG_THRESHOLD, PRICE_AXIS_WIDTH} from "./constants.ts";
 import {clamp, Layout, Point, View} from "./layout.ts";
 import {clampView, defaultView, logicalAt, visibleRange, zoomedView} from "./viewport.ts";
@@ -16,6 +16,10 @@ const PINCH_DELTA_LIMIT = 30;   // 휠 한 번의 이동량이 이보다 작으�
 const WHEEL_ZOOM_RATE = 0.0015;
 const PINCH_WHEEL_ZOOM_RATE = 0.01; // 트랙패드 두 손가락 벌리기 (ctrl + wheel 로 들어옴)
 const WHEEL_LINE_HEIGHT = 16;
+// 가격축을 끌어 세로 배율을 바꿀 때: 1px 에 이 비율만큼, 아래 범위 안에서
+const PRICE_ZOOM_RATE = 0.005;
+const MIN_PRICE_ZOOM = 0.2;
+const MAX_PRICE_ZOOM = 10;
 
 type Gesture =
     | { type: 'pan', startX: number, startRightEdge: number, moved: boolean }
@@ -51,6 +55,12 @@ export class CandleChartEngine {
     private readonly activePointers = new Map<number, Point>();    // 누르고 있는 포인터
     private editPointerId: number | null = null;    // 그리기·옮기기에 쓰이는 포인터. 이 포인터는 차트를 이동시키지 않는다
     private atLatest = true;
+
+    private chartType: ChartType = 'candle';
+    private shapes: Candle[] = [];          // 모양을 그릴 캔들. 하이킨아시면 다시 만든 것, 그 밖에는 candles 그대로
+    private logScale = false;
+    private priceZoom = 1;                  // 가격축 세로 배율. 1 이면 보이는 구간에 맞춤
+    private scaleDrag: { pointerId: number, startY: number, startZoom: number } | null = null;  // 가격축을 끄는 중
 
     private flatByPrevClose = false;
     private averagePeriods: number[] = [];
@@ -109,6 +119,7 @@ export class CandleChartEngine {
         container.addEventListener('pointercancel', this.handlePointerUp);
         container.addEventListener('pointerleave', this.handlePointerLeave);
         container.addEventListener('wheel', this.handleWheel, {passive: false});
+        container.addEventListener('dblclick', this.handleDoubleClick);
     }
 
     // ---------- 바깥에서 부르는 것 ----------
@@ -145,6 +156,19 @@ export class CandleChartEngine {
 
     setStyle(style: ChartStyle) {
         this.style = style;
+        this.scheduleDraw();
+    }
+
+    /** 가격을 그리는 방식 (캔들·봉·선·영역·하이킨아시) */
+    setChartType(chartType: ChartType) {
+        this.chartType = chartType;
+        this.computeSeries();
+        this.scheduleDraw();
+    }
+
+    /** 가격축을 로그로 할지. 로그 축에서는 같은 등락률이 같은 높이를 차지한다. */
+    setLogScale(enabled: boolean) {
+        this.logScale = enabled;
         this.scheduleDraw();
     }
 
@@ -193,6 +217,7 @@ export class CandleChartEngine {
     /** 드래그·확대한 상태를 버리고 기본 보기로 돌아간다. 다른 종목·주기로 바뀔 때 부른다. */
     resetView() {
         this.view = null;
+        this.priceZoom = 1;
         this.scheduleDraw();
     }
 
@@ -223,12 +248,14 @@ export class CandleChartEngine {
         this.container.removeEventListener('pointercancel', this.handlePointerUp);
         this.container.removeEventListener('pointerleave', this.handlePointerLeave);
         this.container.removeEventListener('wheel', this.handleWheel);
+        this.container.removeEventListener('dblclick', this.handleDoubleClick);
         this.mainCanvas.remove();
         this.overlayCanvas.remove();
     }
 
     /** 캔들이나 지표 설정이 바뀌면 이동평균·보조지표 값을 다시 계산한다. */
     private computeSeries() {
+        this.shapes = this.chartType === 'heikinAshi' ? heikinAshi(this.candles) : this.candles;
         this.averages = this.averagePeriods.map(period => movingAverage(this.candles, period));
         const instances = this.indicatorConfigs.map(config => createIndicator(config, this.candles));
         this.paneIndicators = instances.filter(instance => instance.placement === 'pane');
@@ -249,6 +276,14 @@ export class CandleChartEngine {
         const point = this.localPoint(event);
         this.container.focus({preventScroll: true});
 
+        // 가격축을 누르면 세로 배율 조절을 시작한다. 차트 이동·그리기와는 따로 처리한다.
+        if (this.activePointers.size === 0 && this.editPointerId === null && this.scaleDrag === null
+            && this.isOnPriceAxis(point)) {
+            this.scaleDrag = {pointerId: event.pointerId, startY: point.y, startZoom: this.priceZoom};
+            this.container.setPointerCapture(event.pointerId);
+            return;
+        }
+
         // 도구를 골랐거나 도형 위를 눌렀으면 그리기·옮기기로 처리하고, 차트는 이동시키지 않는다.
         if (this.activePointers.size === 0 && this.editPointerId === null && this.drawingLayer.beginEdit(point)) {
             this.editPointerId = event.pointerId;
@@ -268,6 +303,15 @@ export class CandleChartEngine {
 
     private readonly handlePointerMove = (event: PointerEvent) => {
         const point = this.localPoint(event);
+        if (event.pointerId === this.scaleDrag?.pointerId) {
+            // 아래로 끌면 범위가 넓어져 캔들이 납작해지고, 위로 끌면 좁아져 길어진다.
+            const {startY, startZoom} = this.scaleDrag;
+            this.priceZoom = clamp(
+                startZoom * Math.exp((point.y - startY) * PRICE_ZOOM_RATE), MIN_PRICE_ZOOM, MAX_PRICE_ZOOM,
+            );
+            this.scheduleDraw();
+            return;
+        }
         if (event.pointerId === this.editPointerId) {
             this.pointer = point;
             this.drawingLayer.updateEdit(point);
@@ -296,6 +340,13 @@ export class CandleChartEngine {
     };
 
     private readonly handlePointerUp = (event: PointerEvent) => {
+        if (event.pointerId === this.scaleDrag?.pointerId) {
+            this.scaleDrag = null;
+            if (this.container.hasPointerCapture(event.pointerId)) {
+                this.container.releasePointerCapture(event.pointerId);
+            }
+            return;
+        }
         if (event.pointerId === this.editPointerId) {
             this.editPointerId = null;
             if (this.container.hasPointerCapture(event.pointerId)) {
@@ -312,6 +363,20 @@ export class CandleChartEngine {
         // 손가락 하나가 남았으면 그 자리에서 드래그를 이어 간다.
         this.beginGesture();
     };
+
+    /** 가격축을 더블클릭하면 세로 배율을 되돌려 보이는 구간에 다시 맞춘다. */
+    private readonly handleDoubleClick = (event: MouseEvent) => {
+        if (!this.isOnPriceAxis(this.localPoint(event)) || this.priceZoom === 1) return;
+        this.priceZoom = 1;
+        this.scheduleDraw();
+    };
+
+    /** 가격 영역 오른쪽의 가격축 위인지 */
+    private isOnPriceAxis(point: Point): boolean {
+        const pane = this.layout?.panes[0];
+        return Boolean(this.layout && pane)
+            && point.x >= this.layout!.plotWidth && point.y >= pane!.top && point.y <= pane!.bottom;
+    }
 
     private readonly handlePointerLeave = (event: PointerEvent) => {
         // 터치는 손을 떼도 십자선을 남겨 값을 읽을 수 있게 한다.
@@ -399,9 +464,10 @@ export class CandleChartEngine {
         return false;
     }
 
-    /** 상황에 맞는 마우스 커서: 끄는 중 / 도구 고름 / 도형 위 / 기본 */
+    /** 상황에 맞는 마우스 커서: 끄는 중 / 가격축 위 / 도구 고름 / 도형 위 / 기본 */
     private updateCursor(hover?: Point) {
         this.container.style.cursor = this.gesture ? 'grabbing'
+            : hover && this.isOnPriceAxis(hover) ? 'ns-resize'
             : this.drawingLayer.activeTool ? 'crosshair'
             : hover && this.drawingLayer.isOver(hover) ? 'pointer'
             : '';
@@ -478,6 +544,10 @@ export class CandleChartEngine {
 
         return renderMain(this.mainPainter, {
             candles: this.candles,
+            chartType: this.chartType,
+            shapes: this.shapes,
+            logScale: this.logScale,
+            priceZoom: this.priceZoom,
             timeUnit: this.timeUnit,
             style,
             width: this.width,

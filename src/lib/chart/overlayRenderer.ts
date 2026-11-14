@@ -1,11 +1,11 @@
 import {Candle, ChartStyle, TimeUnit} from "./types.ts";
 import {Series} from "./indicators.ts";
-import {createInverseScale, formatPrice, formatTime} from "./scale.ts";
+import {formatPrice, formatTime} from "./scale.ts";
 import {
     AXIS_LABEL_OFFSET, AXIS_TAG_HEIGHT, AXIS_TAG_PADDING, LEGEND_GAP, LEGEND_HEIGHT, LEGEND_ITEM_GAP, LEGEND_LEFT,
     PADDING_TOP, PRICE_AXIS_WIDTH,
 } from "./constants.ts";
-import {clamp, isNumber, Layout, Point} from "./layout.ts";
+import {clamp, isNumber, Layout, paneToValue, Point} from "./layout.ts";
 import {lineColor, Painter} from "./painter.ts";
 import {LegendItem} from "./indicatorPanes.ts";
 
@@ -59,7 +59,7 @@ export const drawCrosshair = (
     // 오른쪽 축 라벨: 마우스가 올라간 영역(가격·거래량·보조지표)의 값
     const pane = layout.panes.find(candidate => pointer.y >= candidate.top && pointer.y <= candidate.bottom);
     if (pane) {
-        const value = createInverseScale(pane.min, pane.max, pane.scaleTop, pane.scaleBottom)(pointer.y);
+        const value = paneToValue(pane)(pointer.y);
         ctx.fillStyle = style.textColor;
         ctx.fillRect(plotRightPx, Math.round(y - labelHeight / 2), painter.px(PRICE_AXIS_WIDTH), labelHeight);
         ctx.fillStyle = style.backgroundColor;
