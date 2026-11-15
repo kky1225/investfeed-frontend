@@ -1,6 +1,9 @@
 import {Candle} from "./types.ts";
 
-/** 캔들과 같은 길이의 지표 값. 아직 계산할 수 없는 앞부분은 null */
+/**
+ * 캔들과 같은 순번의 지표 값. 아직 계산할 수 없는 앞부분은 null.
+ * 앞으로 밀어 그리는 지표(일목균형표의 선행스팬)는 캔들보다 길어, 마지막 캔들 뒤의 순번까지 값이 있다.
+ */
 export type Series = (number | null)[];
 
 export interface MacdSeries {
@@ -137,6 +140,106 @@ export const heikinAshi = (candles: Candle[]): Candle[] => {
 /** 거래량 단순 이동평균 */
 export const volumeAverage = (candles: Candle[], period: number): Series =>
     simpleAverage(candles.map(candle => candle.volume), period);
+
+/** 종가 지수 이동평균. 최근 값에 더 큰 비중을 준다. 처음 period 개의 단순 평균에서 시작한다. */
+export const exponentialMovingAverage = (candles: Candle[], period: number): Series =>
+    exponentialAverage(candles.map(candle => candle.close), period);
+
+export interface IchimokuSeries {
+    conversion: Series,     // 전환선: 최근 conversionPeriod 개의 (최고가 + 최저가) / 2
+    base: Series,           // 기준선: 최근 basePeriod 개의 (최고가 + 최저가) / 2
+    spanA: Series,          // 선행스팬1: (전환선 + 기준선) / 2 를 shift 칸 앞으로. 캔들보다 shift 만큼 길다
+    spanB: Series,          // 선행스팬2: 최근 spanPeriod 개의 (최고가 + 최저가) / 2 를 shift 칸 앞으로. 캔들보다 shift 만큼 길다
+    lagging: Series,        // 후행스팬: 종가를 shift 칸 뒤로
+    shift: number,          // 밀어 그리는 칸 수. 당일을 포함해 basePeriod 번째라 basePeriod - 1
+}
+
+/** 최근 period 개 캔들의 최고가와 최저가의 가운데 */
+const midpoint = (candles: Candle[], period: number): Series => candles.map((_, index) => {
+    if (index < period - 1) return null;
+    let highest = -Infinity;
+    let lowest = Infinity;
+    for (let offset = index - period + 1; offset <= index; offset++) {
+        highest = Math.max(highest, candles[offset].high);
+        lowest = Math.min(lowest, candles[offset].low);
+    }
+    return (highest + lowest) / 2;
+});
+
+/** 일목균형표. 선행스팬은 마지막 캔들 뒤(미래 구간)까지 이어진다. */
+export const ichimoku = (
+    candles: Candle[], conversionPeriod: number, basePeriod: number, spanPeriod: number,
+): IchimokuSeries => {
+    const shift = basePeriod - 1;
+    const conversion = midpoint(candles, conversionPeriod);
+    const base = midpoint(candles, basePeriod);
+    const longMiddle = midpoint(candles, spanPeriod);
+    const spanA = emptySeries(candles.length + shift);
+    const spanB = emptySeries(candles.length + shift);
+    const lagging = emptySeries(candles.length);
+    candles.forEach((candle, index) => {
+        const conversionValue = conversion[index];
+        const baseValue = base[index];
+        if (conversionValue !== null && baseValue !== null) spanA[index + shift] = (conversionValue + baseValue) / 2;
+        spanB[index + shift] = longMiddle[index];
+        if (index >= shift) lagging[index - shift] = candle.close;
+    });
+    return {conversion, base, spanA, spanB, lagging, shift};
+};
+
+/**
+ * VWAP(거래량 가중 평균가): 그날 처음부터의 (대표가 × 거래량) 합 / 거래량 합. 대표가 = (고가 + 저가 + 종가) / 3.
+ * 날짜(브라우저 시간대)가 바뀌면 새로 시작한다. 하루가 캔들 여러 개로 나뉘는 분봉에서만 뜻이 있다.
+ */
+export const volumeWeightedAverage = (candles: Candle[]): Series => {
+    let day = '';
+    let amount = 0;
+    let volume = 0;
+    return candles.map(candle => {
+        const candleDay = new Date(candle.time).toDateString();
+        if (candleDay !== day) {
+            day = candleDay;
+            amount = 0;
+            volume = 0;
+        }
+        amount += (candle.high + candle.low + candle.close) / 3 * candle.volume;
+        volume += candle.volume;
+        return volume > 0 ? amount / volume : null;
+    });
+};
+
+/** OBV: 종가가 오른 캔들의 거래량은 더하고 내린 캔들의 거래량은 빼서 쌓은 값. 첫 캔들은 0 */
+export const onBalanceVolume = (candles: Candle[]): Series => {
+    let total = 0;
+    return candles.map((candle, index) => {
+        const previous = candles[index - 1];
+        if (previous) total += Math.sign(candle.close - previous.close) * candle.volume;
+        return total;
+    });
+};
+
+/**
+ * ATR(평균 변동 폭, 와일더 평활). 한 캔들의 변동 폭은 고가-저가, |고가-전 종가|, |저가-전 종가| 중 가장 큰 값이다.
+ * 처음 period 개의 단순 평균에서 시작한다.
+ */
+export const averageTrueRange = (candles: Candle[], period: number): Series => {
+    const result = emptySeries(candles.length);
+    let average = 0;
+    candles.forEach((candle, index) => {
+        const previous = candles[index - 1];
+        const range = previous
+            ? Math.max(candle.high - candle.low, Math.abs(candle.high - previous.close), Math.abs(candle.low - previous.close))
+            : candle.high - candle.low;
+        if (index < period) {
+            average += range / period;
+            if (index < period - 1) return;
+        } else {
+            average = (average * (period - 1) + range) / period;
+        }
+        result[index] = average;
+    });
+    return result;
+};
 
 /** RSI (와일더 평활). 0~100 */
 export const relativeStrength = (candles: Candle[], period: number): Series => {

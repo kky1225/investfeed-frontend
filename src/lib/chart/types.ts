@@ -91,9 +91,12 @@ export const CHART_TYPES: ChartType[] = ['candle', 'bar', 'line', 'area', 'heiki
 
 /**
  * 보조지표. 그려지는 자리는 지표마다 정해져 있다(indicatorPanes.ts 의 INDICATORS):
- * bollinger 는 가격 영역, volumeAverage 는 거래량 영역, 나머지는 차트 아래 별도 영역
+ * 가격 영역에 겹침 / 거래량 영역에 겹침 / 차트 아래 별도 영역
  */
-export type IndicatorType = 'bollinger' | 'volumeAverage' | 'rsi' | 'macd' | 'stochastic';
+export type IndicatorType =
+    | 'bollinger' | 'ichimoku' | 'ema' | 'vwap'     // 가격 영역
+    | 'volumeAverage'                               // 거래량 영역
+    | 'rsi' | 'macd' | 'stochastic' | 'obv' | 'atr';    // 별도 영역
 
 /** 켜 둔 지표 하나와 그 설정값. params 의 순서와 뜻은 INDICATORS 의 params 를 따른다. 비우면 기본값 */
 export interface IndicatorConfig {

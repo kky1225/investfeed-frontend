@@ -15,6 +15,7 @@ export interface VisibleRange {
     count: number,      // 보이는 캔들 수
     spacing: number,
     leftEdge: number,   // 그림 왼쪽 끝에 놓인 순번(소수 가능)
+    rightEdge: number,  // 그림 오른쪽 끝에 놓인 순번(소수 가능). 캔들 수보다 크면 마지막 캔들 뒤의 빈 구간이 보이는 것
 }
 
 /** 세로로 쌓인 영역 하나(가격·거래량·보조지표). 십자선이 마우스 높이를 값으로 바꿀 때 쓴다. (CSS px) */

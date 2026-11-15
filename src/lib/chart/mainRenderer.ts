@@ -358,8 +358,10 @@ export const renderMain = (painter: Painter, input: MainInput): Layout | null =>
     // 보이는 구간의 최고·최저가에 맞춰 가격축을 잡고, 위아래로 5% 여백을 둔다.
     // 이동평균선과 가격 영역 지표가 잘리지 않게 보이는 구간의 그 값들도 범위에 넣는다.
     const end = range.from + range.count;
+    // 캔들보다 긴 지표(일목균형표의 선행스팬)는 마지막 캔들 뒤로 보이는 부분까지 넣는다.
+    const seriesEnd = Math.max(end, Math.ceil(range.rightEdge));
     const visibleAverages = [...averages, ...priceOverlays.flatMap(overlay => overlay.series)]
-        .flatMap(values => values.slice(range.from, end))
+        .flatMap(values => values.slice(range.from, seriesEnd))
         .filter(isNumber)
         // 로그 축에는 0 이하의 값이 놓일 자리가 없다(볼린저밴드 하단이 음수로 내려간 경우 등).
         .filter(value => !logScale || value > 0);

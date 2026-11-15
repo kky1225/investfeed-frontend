@@ -52,14 +52,21 @@ export class Painter {
         ctx.restore();
     }
 
-    /** 지표 값을 선으로 잇는다. 화면 가장자리에서 끊겨 보이지 않게 양옆 한 칸씩 더 잇는다. */
-    strokeSeries(values: Series, range: VisibleRange, toY: (value: number) => number, color: string) {
+    /**
+     * 지표 값을 선으로 잇는다. 화면 가장자리에서 끊겨 보이지 않게 양옆 한 칸씩 더 잇는다.
+     * 값이 캔들보다 길면(앞으로 밀어 그리는 지표) 마지막 캔들 뒤의 빈 구간까지 잇는다. dash 를 주면 점선,
+     * startsAt 을 주면 그 순번들에서 선을 끊고 새로 시작한다(날마다 새로 계산하는 지표).
+     */
+    strokeSeries(
+        values: Series, range: VisibleRange, toY: (value: number) => number, color: string,
+        dash?: number[], startsAt?: Set<number>,
+    ) {
         const ctx = this.ctx;
-        const start = Math.max(0, range.from - 1);
-        const end = Math.min(values.length, range.from + range.count + 1);
+        const {start, end} = this.seriesSpan(values, range);
         ctx.strokeStyle = color;
         ctx.lineWidth = Math.max(1, Math.round(SERIES_LINE_WIDTH * this.dpr));
         ctx.lineJoin = 'round';
+        ctx.setLineDash(dash ? dash.map(length => this.px(length)) : []);
         ctx.beginPath();
         let started = false;
         for (let index = start; index < end; index++) {
@@ -67,7 +74,7 @@ export class Painter {
             if (!isNumber(value)) continue;
             const x = this.centerX(index, range);
             const y = toY(value) * this.dpr;
-            if (started) {
+            if (started && !startsAt?.has(index)) {
                 ctx.lineTo(x, y);
             } else {
                 ctx.moveTo(x, y);
@@ -75,6 +82,15 @@ export class Painter {
             }
         }
         ctx.stroke();
+        ctx.setLineDash([]);
+    }
+
+    /** 지표 값 중 화면에 걸치는 순번의 범위 [start, end). 양옆 한 칸씩 더 잡는다. */
+    seriesSpan(values: Series, range: VisibleRange): { start: number, end: number } {
+        return {
+            start: Math.max(0, range.from - 1),
+            end: Math.min(values.length, Math.max(range.from + range.count, Math.ceil(range.rightEdge)) + 1),
+        };
     }
 }
 

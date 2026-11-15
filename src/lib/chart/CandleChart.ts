@@ -299,7 +299,11 @@ export class CandleChartEngine {
     private computeSeries() {
         this.shapes = this.chartType === 'heikinAshi' ? heikinAshi(this.candles) : this.candles;
         this.averages = this.averagePeriods.map(period => movingAverage(this.candles, period));
-        const instances = this.indicatorConfigs.map(config => createIndicator(config, this.candles));
+        const context = {
+            timeUnit: this.timeUnit,
+            formatPrice: (value: number) => formatPrice(value, this.valueDecimals),
+        };
+        const instances = this.indicatorConfigs.map(config => createIndicator(config, this.candles, context));
         this.paneIndicators = instances.filter(instance => instance.placement === 'pane');
         const overlays = instances.filter((instance): instance is OverlayIndicator => instance.placement !== 'pane');
         this.priceOverlays = overlays.filter(overlay => overlay.placement === 'price');

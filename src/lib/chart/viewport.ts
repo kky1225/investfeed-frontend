@@ -27,7 +27,7 @@ export const visibleRange = (view: View, total: number, plotWidth: number): Visi
     const leftEdge = view.rightEdge - plotWidth / view.spacing;
     const from = Math.max(0, Math.floor(leftEdge));
     const to = Math.min(total, Math.ceil(view.rightEdge));
-    return {from, count: Math.max(0, to - from), spacing: view.spacing, leftEdge};
+    return {from, count: Math.max(0, to - from), spacing: view.spacing, leftEdge, rightEdge: view.rightEdge};
 };
 
 /** 가로 위치 x 에 놓인 순번(소수) */
