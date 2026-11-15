@@ -116,3 +116,11 @@ export const formatVolume = (value: number): string => compactFormatter.format(v
 
 export const formatPrice = (value: number, decimals: number): string =>
     value.toLocaleString('ko-KR', {minimumFractionDigits: decimals, maximumFractionDigits: decimals});
+
+/** 등락률 표기. 0 보다 크면 + 를 붙인다 (예: +1.25%, -0.50%, 0.00%) */
+export const formatPercent = (value: number, decimals: number): string => {
+    const text = value.toLocaleString('ko-KR', {minimumFractionDigits: decimals, maximumFractionDigits: decimals});
+    // 반올림해서 0 이 된 음수(-0.00)는 부호 없이 적는다.
+    const zero = Number(value.toFixed(decimals)) === 0;
+    return `${zero ? text.replace('-', '') : value > 0 ? `+${text}` : text}%`;
+};

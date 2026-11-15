@@ -67,6 +67,7 @@ export class CandleChartEngine {
     private chartType: ChartType = 'candle';
     private shapes: Candle[] = [];          // 모양을 그릴 캔들. 하이킨아시면 다시 만든 것, 그 밖에는 candles 그대로
     private logScale = false;
+    private percentScale = false;
     private priceZoom = 1;                  // 가격축 세로 배율. 1 이면 보이는 구간에 맞춤
     private scaleDrag: { pointerId: number, startY: number, startZoom: number } | null = null;  // 가격축을 끄는 중
 
@@ -189,6 +190,15 @@ export class CandleChartEngine {
     /** 가격축을 로그로 할지. 로그 축에서는 같은 등락률이 같은 높이를 차지한다. */
     setLogScale(enabled: boolean) {
         this.logScale = enabled;
+        this.scheduleDraw();
+    }
+
+    /**
+     * 가격축에 가격 대신 등락률(%)을 적을지. 기준(0%)은 화면에 보이는 첫 캔들의 종가라서 화면을 움직이면 따라 바뀐다.
+     * 캔들의 자리와 위쪽 값 표시는 그대로이고, 축에 적는 글자(눈금·현재가·십자선·수평선·가격선)만 바뀐다.
+     */
+    setPercentScale(enabled: boolean) {
+        this.percentScale = enabled;
         this.scheduleDraw();
     }
 
@@ -626,6 +636,7 @@ export class CandleChartEngine {
             chartType: this.chartType,
             shapes: this.shapes,
             logScale: this.logScale,
+            percentScale: this.percentScale,
             priceZoom: this.priceZoom,
             timeUnit: this.timeUnit,
             style,

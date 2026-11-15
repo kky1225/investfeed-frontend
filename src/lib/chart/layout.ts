@@ -28,6 +28,8 @@ export interface Pane {
     max: number,
     log?: boolean,          // 로그 축인지 (가격 영역만 해당). 값과 높이는 paneToY·paneToValue 로 바꾼다
     format: (value: number) => string,
+    // 오른쪽 축에 적을 때의 표기. 없으면 format 과 같다. 퍼센트 축이면 가격 영역만 등락률로 적는다
+    axisFormat?: (value: number) => string,
 }
 
 /** 영역의 값 → 높이 (CSS px). 선형·로그 축을 가려 준다. */

@@ -448,7 +448,7 @@ export class DrawingLayer {
             ctx.strokeStyle = color;
             ctx.strokeRect(plotRightPx + line / 2, labelTop + line / 2, axisWidthPx - line, labelHeight - line);
             ctx.fillStyle = color;
-            ctx.fillText(pane.format(drawing.price), plotRightPx + painter.px(AXIS_LABEL_OFFSET), y);
+            ctx.fillText((pane.axisFormat ?? pane.format)(drawing.price), plotRightPx + painter.px(AXIS_LABEL_OFFSET), y);
         });
     }
 

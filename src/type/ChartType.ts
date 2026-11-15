@@ -13,6 +13,7 @@ export interface ChartSetting {
     indicators: Record<string, ChartIndicatorSetting>;
     chartType: string;          // 가격을 그리는 방식 (candle, bar, line, area, heikinAshi)
     logScale: boolean;          // 가격축을 로그로
+    percentScale: boolean;      // 가격축에 가격 대신 등락률(%)을 적는다. 기준은 화면에 보이는 첫 캔들의 종가
     drawingToolbar: boolean;    // 그리기 도구 모음 표시
     flatByPrevClose: boolean;   // 시가와 종가가 같은 캔들의 색을 전일 종가와 비교해 정한다. false 면 상승색
     magnet: string;             // 자석: 도형의 점을 캔들의 시가·고가·저가·종가에 붙이는 정도 (off, weak, strong)

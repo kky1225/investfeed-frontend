@@ -102,6 +102,7 @@ const CandleChart = ({
         indicators: indicatorSettings, setIndicatorOn, setIndicatorValues,
         chartType: savedChartType, setChartType,
         logScale, setLogScale,
+        percentScale, setPercentScale,
         drawingToolbar: toolbarVisible, setDrawingToolbar,
         flatByPrevClose, setFlatByPrevClose,
         magnet: savedMagnet, setMagnet,
@@ -308,6 +309,10 @@ const CandleChart = ({
     }, [logScale]);
 
     useEffect(() => {
+        engineRef.current?.setPercentScale(percentScale);
+    }, [percentScale]);
+
+    useEffect(() => {
         engineRef.current?.setPriceLines(priceLines);
     }, [priceLines]);
 
@@ -440,6 +445,8 @@ const CandleChart = ({
                 onDrawingToolbarChange={setDrawingToolbar}
                 logScale={logScale}
                 onLogScaleChange={setLogScale}
+                percentScale={percentScale}
+                onPercentScaleChange={setPercentScale}
                 flatByPrevClose={flatByPrevClose}
                 onFlatByPrevCloseChange={setFlatByPrevClose}
                 drawingCount={drawings.length}

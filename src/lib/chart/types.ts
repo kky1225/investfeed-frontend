@@ -82,12 +82,15 @@ export const DRAWING_TOOLS: DrawingTool[] = [
 
 /**
  * 가격을 그리는 방식. 어느 것이든 거래량·지표·십자선·그리기는 똑같이 동작한다.
- * candle 캔들 / bar 봉(세로선 + 왼쪽 시가·오른쪽 종가 눈금) / line 종가 선 / area 선 아래를 채움
+ * candle 캔들 / hollow 속 빈 캔들(색은 전 캔들 종가와 비교, 종가가 시가보다 높으면 몸통을 비움)
+ * / bar 봉(세로선 + 왼쪽 시가·오른쪽 종가 눈금) / line 종가 선 / area 선 아래를 채움
+ * / baseline 기준선(종가 선과 기준 가격 사이를 칠함. 위는 상승색, 아래는 하락색. 기준은 보이는 첫 캔들의 종가)
  * / heikinAshi 평균값으로 다시 만든 캔들(값 표시와 현재가 선은 실제 가격)
  */
-export type ChartType = 'candle' | 'bar' | 'line' | 'area' | 'heikinAshi';
+export type ChartType = 'candle' | 'hollow' | 'bar' | 'line' | 'area' | 'baseline' | 'heikinAshi';
 
-export const CHART_TYPES: ChartType[] = ['candle', 'bar', 'line', 'area', 'heikinAshi'];
+/** 차트 종류 목록에 보이는 순서 */
+export const CHART_TYPES: ChartType[] = ['candle', 'hollow', 'bar', 'line', 'area', 'baseline', 'heikinAshi'];
 
 /**
  * 보조지표. 그려지는 자리는 지표마다 정해져 있다(indicatorPanes.ts 의 INDICATORS):

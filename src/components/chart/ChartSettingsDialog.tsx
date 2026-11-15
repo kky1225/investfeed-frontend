@@ -63,7 +63,9 @@ interface ChartSettingsDialogProps {
     onDrawingToolbarChange: (visible: boolean) => void,
     logScale: boolean,                          // 가격축을 로그로 할지
     onLogScaleChange: (enabled: boolean) => void,
-    flatByPrevClose: boolean,                   // 시가와 종가가 같은 캔들을 전일 종가 기준으로 색칠할지
+    percentScale: boolean,                      // 가격축에 가격 대신 등락률을 적을지
+    onPercentScaleChange: (enabled: boolean) => void,
+    flatByPrevClose: boolean,                  // 시가와 종가가 같은 캔들을 전일 종가 기준으로 색칠할지
     onFlatByPrevCloseChange: (enabled: boolean) => void,
     drawingCount: number,                       // 그려 둔 선의 수
     onClearDrawings: () => void,
@@ -195,7 +197,7 @@ const IndicatorFields = ({option, onChange}: IndicatorFieldsProps) => {
 const ChartSettingsDialog = ({
     open, onClose, indicatorOptions, onToggleIndicator, onIndicatorChange, onIndicatorReset,
     drawingToolbar, onDrawingToolbarChange,
-    logScale, onLogScaleChange,
+    logScale, onLogScaleChange, percentScale, onPercentScaleChange,
     flatByPrevClose, onFlatByPrevCloseChange, drawingCount, onClearDrawings,
 }: ChartSettingsDialogProps) => (
     // 창은 화면 다른 곳에 따로 그려지므로, 색 단추가 차트의 색을 쓸 수 있게 색 변수를 걸어 준다.
@@ -237,6 +239,18 @@ const ChartSettingsDialog = ({
             <Typography variant="body2" sx={{color: 'text.secondary'}}>
                 켜면 같은 등락률이 같은 높이로 그려집니다. 가격이 크게 오르내린 긴 구간을 볼 때 초반 움직임이 잘 보입니다.
                 오른쪽 가격축을 위아래로 끌면 세로 크기를 바꿀 수 있고, 더블클릭하면 원래대로 돌아옵니다.
+            </Typography>
+            <FormGroup sx={{mt: 1}}>
+                <FormControlLabel
+                    label="퍼센트 축"
+                    control={
+                        <Switch checked={percentScale} onChange={(_event, checked) => onPercentScaleChange(checked)}/>
+                    }
+                />
+            </FormGroup>
+            <Typography variant="body2" sx={{color: 'text.secondary'}}>
+                켜면 가격축에 가격 대신 등락률(%)을 적습니다. 기준(0%)은 화면에 보이는 첫 캔들의 종가라서,
+                차트를 움직이거나 확대하면 기준도 따라 바뀝니다. 위쪽의 시가·고가·저가·종가는 가격 그대로입니다.
             </Typography>
 
             <Divider sx={{my: 2}}/>

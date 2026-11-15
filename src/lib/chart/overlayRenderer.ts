@@ -64,7 +64,7 @@ export const drawCrosshair = (
         ctx.fillRect(plotRightPx, Math.round(y - labelHeight / 2), painter.px(layout.axisWidth), labelHeight);
         ctx.fillStyle = style.backgroundColor;
         ctx.textAlign = 'left';
-        ctx.fillText(pane.format(value), plotRightPx + painter.px(AXIS_LABEL_OFFSET), y);
+        ctx.fillText((pane.axisFormat ?? pane.format)(value), plotRightPx + painter.px(AXIS_LABEL_OFFSET), y);
     }
 
     // 아래 축 라벨: 캔들 날짜. 그림 영역 밖으로 나가지 않게 밀어 넣는다.

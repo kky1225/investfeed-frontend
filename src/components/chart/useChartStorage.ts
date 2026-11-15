@@ -15,7 +15,8 @@ const SETTINGS_KEY = ['chartSettings'];
 const NO_DRAWINGS: Drawing[] = [];
 // 아무것도 바꾸지 않은 상태
 const DEFAULT_SETTING: ChartSetting = {
-    indicators: {}, chartType: 'candle', logScale: false, drawingToolbar: true, flatByPrevClose: false, magnet: 'off',
+    indicators: {}, chartType: 'candle', logScale: false, percentScale: false, drawingToolbar: true,
+    flatByPrevClose: false, magnet: 'off',
 };
 const LEGACY_TOOLBAR_KEY = 'drawingToolbar';    // 예전 브라우저 저장분에서 그리기 도구 모음을 숨겼다는 표시
 
@@ -105,6 +106,7 @@ export const useChartStorage = (assetType: AssetType | undefined, assetCode: str
     const indicators = settingQuery.data?.indicators ?? DEFAULT_SETTING.indicators;
     const chartType = settingQuery.data?.chartType ?? DEFAULT_SETTING.chartType;
     const logScale = settingQuery.data?.logScale ?? DEFAULT_SETTING.logScale;
+    const percentScale = settingQuery.data?.percentScale ?? DEFAULT_SETTING.percentScale;
     const drawingToolbar = settingQuery.data?.drawingToolbar ?? DEFAULT_SETTING.drawingToolbar;
     const flatByPrevClose = settingQuery.data?.flatByPrevClose ?? DEFAULT_SETTING.flatByPrevClose;
     const magnet = settingQuery.data?.magnet ?? DEFAULT_SETTING.magnet;
@@ -113,7 +115,7 @@ export const useChartStorage = (assetType: AssetType | undefined, assetCode: str
     const saveSetting = (change: Partial<ChartSetting>) => {
         if (!settingReady) return;
         const next: ChartSetting = {
-            indicators, chartType, logScale, drawingToolbar, flatByPrevClose, magnet, ...change,
+            indicators, chartType, logScale, percentScale, drawingToolbar, flatByPrevClose, magnet, ...change,
         };
         queryClient.setQueryData(SETTINGS_KEY, next);
         saveChartSetting(next).catch(reportSaveError);
@@ -142,6 +144,7 @@ export const useChartStorage = (assetType: AssetType | undefined, assetCode: str
 
     const setChartType = (type: string) => saveSetting({chartType: type});
     const setLogScale = (enabled: boolean) => saveSetting({logScale: enabled});
+    const setPercentScale = (enabled: boolean) => saveSetting({percentScale: enabled});
     const setDrawingToolbar = (visible: boolean) => saveSetting({drawingToolbar: visible});
     const setFlatByPrevClose = (enabled: boolean) => saveSetting({flatByPrevClose: enabled});
     const setMagnet = (mode: string) => saveSetting({magnet: mode});
@@ -173,6 +176,7 @@ export const useChartStorage = (assetType: AssetType | undefined, assetCode: str
         indicators, setIndicatorOn, setIndicatorValues,
         chartType, setChartType,
         logScale, setLogScale,
+        percentScale, setPercentScale,
         drawingToolbar, setDrawingToolbar,
         flatByPrevClose, setFlatByPrevClose,
         magnet, setMagnet,
