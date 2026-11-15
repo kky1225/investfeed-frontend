@@ -22,14 +22,32 @@ export interface PriceLine {
 export interface Anchor {
     time: number,   // 캔들 시각 (epoch ms)
     price: number,
+    // 마지막 캔들보다 오른쪽(미래 구간)에 놓은 점이면, time 의 캔들에서 뒤로 몇 칸인지.
+    // 캔들이 새로 생겨도 제자리에 있지만, 주기를 바꾸면 한 칸의 길이가 달라져 위치가 어긋날 수 있다
+    offset?: number | null,
+}
+
+/** 도형의 꾸미기. 비워 두면 기본값(흰색 계열, 굵기 1, 실선) */
+export interface DrawingStyle {
+    color?: number | null,      // style.lineColors 안에서의 순번
+    lineWidth?: number | null,  // 1~3
+    dashed?: boolean | null,
 }
 
 /** 사용자가 차트에 직접 그린 도형 */
-export type Drawing =
-    | { id: string, type: 'trend', from: Anchor, to: Anchor }  // 추세선: 두 점을 잇는 선분
-    | { id: string, type: 'horizontal', price: number };       // 수평선
+export type Drawing = { id: string } & DrawingStyle & (
+    | { type: 'trend', from: Anchor, to: Anchor }       // 추세선: 두 점을 잇는 선분
+    | { type: 'ray', from: Anchor, to: Anchor }         // 반직선: from 에서 to 방향으로 끝없이
+    | { type: 'rectangle', from: Anchor, to: Anchor }   // 사각형: 두 점이 대각선 모서리
+    | { type: 'channel', from: Anchor, to: Anchor, third: Anchor }  // 평행 채널: from-to 선과, third 를 지나는 평행선
+    | { type: 'horizontal', price: number }             // 수평선
+    | { type: 'vertical', time: number, offset?: number | null }    // 수직선. offset 은 Anchor 의 것과 같다
+);
 
 export type DrawingTool = Drawing['type'];
+
+/** 도구 목록에 보이는 순서 */
+export const DRAWING_TOOLS: DrawingTool[] = ['trend', 'ray', 'horizontal', 'vertical', 'rectangle', 'channel'];
 
 /**
  * 가격을 그리는 방식. 어느 것이든 거래량·지표·십자선·그리기는 똑같이 동작한다.

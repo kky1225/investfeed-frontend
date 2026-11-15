@@ -1,4 +1,6 @@
-import {Candle, ChartStyle, ChartType, Drawing, DrawingTool, IndicatorConfig, PriceLine, TimeUnit} from "./types.ts";
+import {
+    Candle, ChartStyle, ChartType, Drawing, DrawingStyle, DrawingTool, IndicatorConfig, PriceLine, TimeUnit,
+} from "./types.ts";
 import {heikinAshi, movingAverage, Series} from "./indicators.ts";
 import {AXIS_LABEL_OFFSET, DRAG_THRESHOLD, PRICE_AXIS_WIDTH} from "./constants.ts";
 import {decimalsOf, formatPrice} from "./scale.ts";
@@ -207,6 +209,11 @@ export class CandleChartEngine {
     /** 그리기 도구를 고른다. null 이면 선택·이동 상태로 돌아간다. */
     setTool(tool: DrawingTool | null) {
         this.drawingLayer.setTool(tool);
+    }
+
+    /** 새로 그리는 도형에 입힐 꾸미기 (색·굵기·점선). 이미 그린 도형은 목록의 값을 따른다. */
+    setDrawingStyle(style: DrawingStyle) {
+        this.drawingLayer.setNewStyle(style);
     }
 
     /** 특정 가격에 긋는 가로선들 (목표가 등). 가격축 범위 밖의 선은 그리지 않는다. */

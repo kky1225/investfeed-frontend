@@ -2,14 +2,12 @@ import {ReactNode, useEffect, useMemo, useRef, useState} from "react";
 import Box from "@mui/material/Box";
 import Divider from "@mui/material/Divider";
 import Stack from "@mui/material/Stack";
-import IconButton from "@mui/material/IconButton";
 import Button from "@mui/material/Button";
 import Typography from "@mui/material/Typography";
 import Tooltip from "@mui/material/Tooltip";
-import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
 import SettingsIcon from "@mui/icons-material/Settings";
 import KeyboardDoubleArrowRightIcon from "@mui/icons-material/KeyboardDoubleArrowRight";
-import Paper from "@mui/material/Paper";
+import ChartDrawingStylePanel from "./ChartDrawingStylePanel.tsx";
 import ChartSettingsDialog, {ChartIndicatorOption} from "./ChartSettingsDialog.tsx";
 import {IndicatorParam, INDICATORS, normalizeParams} from "../../lib/chart/indicatorPanes.ts";
 import ChartDrawingToolbar from "./ChartDrawingToolbar.tsx";
@@ -18,7 +16,8 @@ import {useChartStorage} from "./useChartStorage.ts";
 import {useColorScheme} from "@mui/material/styles";
 import {CandleChartEngine, INDICATOR_PANE_HEIGHT} from "../../lib/chart/CandleChart.ts";
 import {
-    Candle, CHART_TYPES, ChartType, DrawingTool, IndicatorConfig, IndicatorType, PriceLine, TimeUnit,
+    Candle, CHART_TYPES, ChartType, Drawing, DrawingStyle, DrawingTool, IndicatorConfig, IndicatorType, PriceLine,
+    TimeUnit,
 } from "../../lib/chart/types.ts";
 import ChartTypeSelect from "./ChartTypeSelect.tsx";
 import type {AssetType} from "../../type/NotificationType.ts";
@@ -58,13 +57,30 @@ interface IndicatorEntry {
 }
 
 // Alt 와 함께 누르는 그리기 단축키 (KeyboardEvent.code)
-const TOOL_SHORTCUTS: Record<string, DrawingTool | undefined> = {KeyT: 'trend', KeyH: 'horizontal'};
+const TOOL_SHORTCUTS: Record<string, DrawingTool | undefined> = {
+    KeyT: 'trend', KeyH: 'horizontal', KeyV: 'vertical', KeyR: 'rectangle',
+};
 
 // 그리기 도구를 고른 뒤 차트 위에 보여 주는 안내
 const TOOL_HINTS: Record<DrawingTool, string> = {
     trend: '추세선: 차트에서 시작점을 누른 채 끌었다가 놓으세요.',
+    ray: '반직선: 시작점을 누른 채 뻗을 방향으로 끌었다가 놓으세요.',
     horizontal: '수평선: 차트에서 원하는 가격을 누르세요.',
+    vertical: '수직선: 차트에서 원하는 날짜를 누르세요.',
+    rectangle: '사각형: 한 모서리를 누른 채 맞은편 모서리까지 끌었다가 놓으세요.',
+    channel: '평행 채널: 선을 끌어 긋고, 맞은편 선이 지날 자리를 한 번 더 누르세요.',
 };
+
+// 엔진에 넘기는 선 색의 CSS 변수. 순서가 곧 색 순번이다 (이동평균선, 지표, 그린 도형이 이 순번으로 색을 고른다)
+const LINE_COLOR_VARS = [
+    '--chart-line-1', '--chart-line-2', '--chart-line-3', '--chart-line-4', '--chart-line-5', '--chart-line-6',
+];
+const MAX_UNDO = 50;    // 되돌릴 수 있는 그리기 변경의 수
+
+interface DrawingHistory {
+    undo: Drawing[][],  // 되돌릴 수 있는 이전 상태들. 맨 뒤가 가장 최근
+    redo: Drawing[][],  // 되돌린 것을 다시 실행할 상태들
+}
 
 const CandleChart = ({
     candles, timeUnit, seriesKey, assetType, assetCode, toolbarStart, onLoadOlder,
@@ -87,7 +103,45 @@ const CandleChart = ({
     // 저장된 값이 이 버전이 모르는 종류면 캔들로 그린다.
     const chartType: ChartType = CHART_TYPES.find(type => type === savedChartType) ?? 'candle';
     const [tool, setTool] = useState<DrawingTool | null>(null);
+    const [lastTool, setLastTool] = useState<DrawingTool>('trend');     // 도형 버튼이 보여 줄, 마지막에 쓴 도형
+    const [newStyle, setNewStyle] = useState<DrawingStyle>({});         // 새로 그리는 도형에 입힐 꾸미기(마지막에 고른 것)
     const [selectedId, setSelectedId] = useState<string | null>(null);
+    const selectedDrawing = drawings.find(drawing => drawing.id === selectedId);
+
+    const selectTool = (next: DrawingTool | null) => {
+        setTool(next);
+        if (next) setLastTool(next);
+    };
+
+    // 그리기 변경(추가·옮기기·지우기·꾸미기)은 모두 changeDrawings 를 거쳐, 되돌릴 수 있게 이전 상태를 남긴다.
+    // 이 화면을 여는 동안만 기억하고, 종목이 바뀌면 비운다.
+    const history = useRef<DrawingHistory>({undo: [], redo: []});
+    const drawingsRef = useRef(drawings);
+    useEffect(() => {
+        history.current = {undo: [], redo: []};
+    }, [assetType, assetCode]);
+
+    const changeDrawings = (next: Drawing[]) => {
+        const {undo} = history.current;
+        undo.push(drawingsRef.current);
+        if (undo.length > MAX_UNDO) undo.shift();
+        history.current.redo = [];
+        updateDrawings(next);
+    };
+
+    /** 한 단계 되돌리거나(undo) 되돌린 것을 다시 실행한다(redo). */
+    const stepHistory = (direction: keyof DrawingHistory) => {
+        const previous = history.current[direction].pop();
+        if (!previous) return;
+        history.current[direction === 'undo' ? 'redo' : 'undo'].push(drawingsRef.current);
+        updateDrawings(previous);
+    };
+
+    /** 선택한 도형의 꾸미기를 바꾼다. 다음에 그리는 도형도 같은 꾸미기를 따른다. */
+    const changeSelectedStyle = (change: DrawingStyle) => {
+        setNewStyle(previous => ({...previous, ...change}));
+        changeDrawings(drawings.map(drawing => drawing.id === selectedId ? {...drawing, ...change} : drawing));
+    };
     const [atLatest, setAtLatest] = useState(true);
     const [settingsOpen, setSettingsOpen] = useState(false);
     // 이 차트에서 쓸 수 있는 지표들: 이동평균선(선마다 기간 하나) + 보조지표
@@ -136,10 +190,13 @@ const CandleChart = ({
     };
 
     // 엔진은 한 번만 만들어지므로, 엔진이 부를 함수는 ref 로 최신 것을 가리키게 한다.
-    const updateDrawingsRef = useRef(updateDrawings);
+    const changeDrawingsRef = useRef(changeDrawings);
+    const stepHistoryRef = useRef(stepHistory);
     const loadOlderRef = useRef(onLoadOlder);
     useEffect(() => {
-        updateDrawingsRef.current = updateDrawings;
+        drawingsRef.current = drawings;
+        changeDrawingsRef.current = changeDrawings;
+        stepHistoryRef.current = stepHistory;
         loadOlderRef.current = onLoadOlder;
     });
 
@@ -154,7 +211,7 @@ const CandleChart = ({
 
         const engine = new CandleChartEngine(container);
         engineRef.current = engine;
-        engine.onDrawingsChange = next => updateDrawingsRef.current(next);
+        engine.onDrawingsChange = next => changeDrawingsRef.current(next);
         engine.onToolChange = setTool;
         engine.onSelectionChange = setSelectedId;
         engine.onLatestChange = setAtLatest;
@@ -210,6 +267,10 @@ const CandleChart = ({
     }, [tool]);
 
     useEffect(() => {
+        engineRef.current?.setDrawingStyle(newStyle);
+    }, [newStyle]);
+
+    useEffect(() => {
         engineRef.current?.setData(candles, timeUnit);
     }, [candles, timeUnit]);
 
@@ -227,17 +288,15 @@ const CandleChart = ({
                 textColor: color('--chart-text'),
                 gridColor: color('--chart-grid'),
                 backgroundColor: color('--chart-background'),
-                lineColors: [
-                    '--chart-line-1', '--chart-line-2', '--chart-line-3', '--chart-line-4', '--chart-line-5',
-                    '--chart-line-6',
-                ].map(color),
+                lineColors: LINE_COLOR_VARS.map(color),
                 fontFamily: computed.fontFamily,
             });
         });
         return () => cancelAnimationFrame(frame);
     }, [mode, systemMode]);
 
-    // 단축키: Alt+T 추세선, Alt+H 수평선, Esc 취소. 글자를 입력하는 중에는 동작하지 않는다.
+    // 단축키: Alt+T·H·V·R 도형, Esc 취소, Ctrl(⌘)+Z 실행 취소, Ctrl(⌘)+Shift+Z 다시 실행.
+    // 글자를 입력하는 중에는 동작하지 않는다.
     useEffect(() => {
         const handleKeyDown = (event: KeyboardEvent) => {
             const target = event.target instanceof HTMLElement ? event.target : null;
@@ -246,11 +305,17 @@ const CandleChart = ({
                 setTool(null);
                 return;
             }
+            if ((event.ctrlKey || event.metaKey) && !event.altKey && event.code === 'KeyZ') {
+                event.preventDefault();
+                stepHistoryRef.current(event.shiftKey ? 'redo' : 'undo');
+                return;
+            }
             if (!event.altKey || event.ctrlKey || event.metaKey) return;
             const next = TOOL_SHORTCUTS[event.code];
             if (!next) return;
             event.preventDefault();
             setTool(next);
+            setLastTool(next);
         };
         window.addEventListener('keydown', handleKeyDown);
         return () => window.removeEventListener('keydown', handleKeyDown);
@@ -263,7 +328,7 @@ const CandleChart = ({
                 {toolbarStart}
                 <ChartTypeSelect value={chartType} onChange={setChartType}/>
                 {toolbarVisible && <Divider orientation="vertical" flexItem sx={{my: 1}}/>}
-                {toolbarVisible && <ChartDrawingToolbar tool={tool} onSelectTool={setTool}/>}
+                {toolbarVisible && <ChartDrawingToolbar tool={tool} lastTool={lastTool} onSelectTool={selectTool}/>}
                 {tool && (
                     <>
                         {/* 좁은 화면에서는 안내 문구를 생략해 버튼이 한 줄에 들어가게 한다. */}
@@ -307,47 +372,42 @@ const CandleChart = ({
                 flatByPrevClose={flatByPrevClose}
                 onFlatByPrevCloseChange={setFlatByPrevClose}
                 drawingCount={drawings.length}
-                onClearDrawings={() => updateDrawings([])}
+                onClearDrawings={() => changeDrawings([])}
             />
             <Stack direction="row">
-                <Box sx={{position: 'relative', flexGrow: 1, minWidth: 0}}>
-                    {/* 선을 선택하면 차트 위쪽 가운데에 그 선에 대한 버튼이 뜬다. */}
-                    {selectedId && !tool && (
-                        <Paper
-                            elevation={3}
-                            sx={{position: 'absolute', top: 8, left: '50%', transform: 'translateX(-50%)', zIndex: 2}}
-                        >
-                            <Tooltip title="선택한 선 삭제 (Delete)">
-                                <IconButton
-                                    size="small"
-                                    aria-label="선택한 선 삭제"
-                                    onClick={() => updateDrawings(drawings.filter(drawing => drawing.id !== selectedId))}
-                                >
-                                    <DeleteOutlineIcon fontSize="small"/>
-                                </IconButton>
-                            </Tooltip>
-                        </Paper>
+                {/* 차트 색은 CSS 변수로 둔다. 캔버스(엔진)와 꾸미기 패널의 색 단추가 같은 값을 쓴다. */}
+                <Box
+                    sx={(theme) => ({
+                        position: 'relative',
+                        flexGrow: 1,
+                        minWidth: 0,
+                        '--chart-up': (theme.vars || theme).palette.error.main,
+                        // 하락색은 info.main 대신 primary.main 을 쓴다. 라이트 모드의 info.main 은 밝은 하늘색이라
+                        // 진한 빨강(error.main)과 무게가 맞지 않고 캔들이 흐려 보인다
+                        '--chart-down': (theme.vars || theme).palette.primary.main,
+                        '--chart-text': (theme.vars || theme).palette.text.secondary,
+                        '--chart-grid': (theme.vars || theme).palette.divider,
+                        '--chart-background': (theme.vars || theme).palette.background.paper,
+                        '--chart-line-1': (theme.vars || theme).palette.success.main,
+                        '--chart-line-2': (theme.vars || theme).palette.warning.main,
+                        '--chart-line-3': (theme.vars || theme).palette.secondary.main,
+                        '--chart-line-4': (theme.vars || theme).palette.grey[500],
+                        '--chart-line-5': (theme.vars || theme).palette.text.primary,
+                        '--chart-line-6': (theme.vars || theme).palette.info.main,
+                    })}
+                >
+                    {/* 도형을 선택하면 차트 위쪽 가운데에 그 도형의 꾸미기·삭제 패널이 뜬다. */}
+                    {selectedDrawing && !tool && (
+                        <ChartDrawingStylePanel
+                            style={selectedDrawing}
+                            colorCount={LINE_COLOR_VARS.length}
+                            onChange={changeSelectedStyle}
+                            onDelete={() => changeDrawings(drawings.filter(drawing => drawing.id !== selectedId))}
+                        />
                     )}
                     <Box
                         ref={containerRef}
-                        sx={(theme) => ({
-                            position: 'relative',
-                            width: '100%',
-                            height: height + paneCount * INDICATOR_PANE_HEIGHT,
-                            '--chart-up': (theme.vars || theme).palette.error.main,
-                            // 하락색은 info.main 대신 primary.main 을 쓴다. 라이트 모드의 info.main 은 밝은 하늘색이라
-                            // 진한 빨강(error.main)과 무게가 맞지 않고 캔들이 흐려 보인다
-                            '--chart-down': (theme.vars || theme).palette.primary.main,
-                            '--chart-text': (theme.vars || theme).palette.text.secondary,
-                            '--chart-grid': (theme.vars || theme).palette.divider,
-                            '--chart-background': (theme.vars || theme).palette.background.paper,
-                            '--chart-line-1': (theme.vars || theme).palette.success.main,
-                            '--chart-line-2': (theme.vars || theme).palette.warning.main,
-                            '--chart-line-3': (theme.vars || theme).palette.secondary.main,
-                            '--chart-line-4': (theme.vars || theme).palette.grey[500],
-                            '--chart-line-5': (theme.vars || theme).palette.text.primary,
-                            '--chart-line-6': (theme.vars || theme).palette.info.main,
-                        })}
+                        sx={{position: 'relative', width: '100%', height: height + paneCount * INDICATOR_PANE_HEIGHT}}
                     />
                 </Box>
             </Stack>
