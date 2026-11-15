@@ -5,6 +5,7 @@ import Paper from "@mui/material/Paper";
 import Stack from "@mui/material/Stack";
 import Tooltip from "@mui/material/Tooltip";
 import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
+import EditOutlinedIcon from "@mui/icons-material/EditOutlined";
 import {ChartToolbarButton} from "./ChartToolbarControls.tsx";
 import {DrawingStyle} from "../../lib/chart/types.ts";
 
@@ -13,6 +14,8 @@ interface ChartDrawingStylePanelProps {
     colorCount: number,         // 고를 수 있는 색의 수. 색은 차트의 --chart-line-N 변수에서 온다
     onChange: (change: DrawingStyle) => void,
     onDelete: () => void,
+    // 글자 도형일 때만 준다. 주면 굵기는 글자 크기로 쓰이고, 점선 대신 글자 수정 버튼이 나온다
+    onEditText?: () => void,
 }
 
 export const DEFAULT_DRAWING_COLOR = 4;     // 꾸미기를 정하지 않은 도형의 색 순번 (엔진의 기본값과 같다)
@@ -23,10 +26,11 @@ const SWATCH_SIZE = 16;
 const selectedSx = {color: 'primary.main', backgroundColor: 'action.selected'};
 
 /**
- * 도형을 선택하면 차트 위쪽 가운데에 뜨는 패널: 색 · 굵기 · 점선 · 삭제.
+ * 도형을 선택하면 차트 위쪽 가운데에 뜨는 패널: 색 · 굵기 · 점선 · 삭제. (글자 도형은 색 · 크기 · 글자 수정 · 삭제)
  * 색은 테마에서 온 선 색 목록 안에서만 고른다.
  */
-const ChartDrawingStylePanel = ({style, colorCount, onChange, onDelete}: ChartDrawingStylePanelProps) => {
+const ChartDrawingStylePanel = ({style, colorCount, onChange, onDelete, onEditText}: ChartDrawingStylePanelProps) => {
+    const widthLabel = onEditText ? '크기' : '굵기';
     const color = style.color ?? DEFAULT_DRAWING_COLOR;
     const lineWidth = style.lineWidth ?? 1;
     const dashed = style.dashed ?? false;
@@ -59,9 +63,9 @@ const ChartDrawingStylePanel = ({style, colorCount, onChange, onDelete}: ChartDr
                 ))}
                 <Divider orientation="vertical" flexItem sx={{my: 0.5}}/>
                 {LINE_WIDTHS.map(width => (
-                    <Tooltip key={width} title={`굵기 ${width}`}>
+                    <Tooltip key={width} title={`${widthLabel} ${width}`}>
                         <ChartToolbarButton
-                            aria-label={`굵기 ${width}`}
+                            aria-label={`${widthLabel} ${width}`}
                             aria-pressed={width === lineWidth}
                             onClick={() => onChange({lineWidth: width})}
                             sx={width === lineWidth ? selectedSx : undefined}
@@ -70,16 +74,24 @@ const ChartDrawingStylePanel = ({style, colorCount, onChange, onDelete}: ChartDr
                         </ChartToolbarButton>
                     </Tooltip>
                 ))}
-                <Tooltip title={dashed ? '실선으로' : '점선으로'}>
-                    <ChartToolbarButton
-                        aria-label="점선"
-                        aria-pressed={dashed}
-                        onClick={() => onChange({dashed: !dashed})}
-                        sx={dashed ? selectedSx : undefined}
-                    >
-                        <Box sx={{width: 16, borderTop: '2px dashed', borderColor: 'currentColor'}}/>
-                    </ChartToolbarButton>
-                </Tooltip>
+                {onEditText ? (
+                    <Tooltip title="글자 수정 (더블클릭)">
+                        <ChartToolbarButton aria-label="글자 수정" onClick={onEditText}>
+                            <EditOutlinedIcon/>
+                        </ChartToolbarButton>
+                    </Tooltip>
+                ) : (
+                    <Tooltip title={dashed ? '실선으로' : '점선으로'}>
+                        <ChartToolbarButton
+                            aria-label="점선"
+                            aria-pressed={dashed}
+                            onClick={() => onChange({dashed: !dashed})}
+                            sx={dashed ? selectedSx : undefined}
+                        >
+                            <Box sx={{width: 16, borderTop: '2px dashed', borderColor: 'currentColor'}}/>
+                        </ChartToolbarButton>
+                    </Tooltip>
+                )}
                 <Divider orientation="vertical" flexItem sx={{my: 0.5}}/>
                 <Tooltip title="삭제 (Delete)">
                     <ChartToolbarButton aria-label="선택한 도형 삭제" onClick={onDelete}>

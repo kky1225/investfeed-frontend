@@ -1,6 +1,6 @@
-import {Anchor, Candle, ChartStyle, Drawing, DrawingStyle, DrawingTool} from "./types.ts";
+import {Anchor, Candle, ChartStyle, Drawing, DrawingStyle, DrawingTool, MagnetMode, TextRequest} from "./types.ts";
 import {AXIS_LABEL_OFFSET, AXIS_TAG_HEIGHT, DRAG_THRESHOLD} from "./constants.ts";
-import {clamp, distanceToSegment, Layout, paneToValue, paneToY, Point} from "./layout.ts";
+import {clamp, distanceToSegment, Layout, Pane, paneToValue, paneToY, Point} from "./layout.ts";
 import {lineColor, Painter} from "./painter.ts";
 
 // 사용자가 그리는 도형: 그리기, 선택, 옮기기, 지우기, 화면에 그리기
@@ -15,9 +15,16 @@ const MAX_LINE_WIDTH = 3;
 const DASH = [6, 4];
 const FILL_ALPHA = 0.1;         // 사각형·채널 안쪽 채움
 const RAY_LENGTH = 20000;       // 반직선을 화면 밖까지 뻗는 길이 (CSS px)
+const MAGNET_DISTANCE = 12;     // 약한 자석: 캔들의 시가·고가·저가·종가가 이만큼 안에 있으면 그 값에 붙는다 (CSS px)
+const FIBONACCI_LEVELS = [0, 0.236, 0.382, 0.5, 0.618, 0.786, 1];
+const TEXT_SIZES = [12, 15, 19];    // 글자 도형의 크기. 꾸미기의 굵기 1~3 에 차례로 대응한다 (CSS px)
+const TEXT_PADDING = 3;         // 글자를 잡을 수 있는 범위를 글자보다 이만큼 넓힌다
+const LABEL_GAP = 2;            // 선과 그 위에 적는 글자 사이
+const GUIDE_ALPHA = 0.5;        // 보조선(피보나치의 두 점을 잇는 선)의 진하기
+const BACKDROP_ALPHA = 0.85;    // 글자 뒤에 까는 바탕의 진하기
 
-/** 두 점 이상으로 만드는 도형. 한 번 눌러 끝나는 수평선·수직선은 여기에 없다. */
-type PointTool = 'trend' | 'ray' | 'rectangle' | 'channel';
+/** 두 점 이상으로 만드는 도형. 한 번 눌러 끝나는 수평선·수직선·글자는 여기에 없다. */
+type PointTool = 'trend' | 'ray' | 'rectangle' | 'channel' | 'fibonacci' | 'measure';
 
 /** 도형에서 잡을 수 있는 부분: 전체, 또는 점 하나 */
 type Part = 'body' | 'from' | 'to' | 'third';
@@ -49,6 +56,24 @@ interface Geometry {
     lines: [Point, Point][],            // 그릴 선분들. 잡는 판정에도 쓴다
     handles: [Part, Point][],           // 끌어서 옮길 수 있는 점
     fill: Point[] | null,               // 옅게 채울 영역의 꼭짓점
+    guides?: [Point, Point][],          // 옅은 점선으로 긋는 보조선. 잡는 판정에도 쓴다
+    labels?: Label[],                   // 도형에 함께 적는 글자
+    box?: Box,                          // 이 안을 누르면 도형을 잡은 것으로 본다 (글자 도형)
+}
+
+interface Label {
+    at: Point,
+    text: string,
+    align: 'left' | 'center',
+    baseline: 'bottom' | 'middle',
+    backdrop: boolean,      // 캔들에 묻히지 않게 글자 뒤에 바탕을 깔지
+}
+
+interface Box {
+    left: number,
+    top: number,
+    right: number,
+    bottom: number,
 }
 
 /** 도형 계층이 엔진에서 읽어 오는 것과 엔진에 알리는 것 */
@@ -60,7 +85,12 @@ export interface DrawingHost {
     drawingsChanged: (drawings: Drawing[]) => void,     // 사용자가 추가·변경·삭제함
     toolReleased: () => void,       // 하나를 다 그렸거나 취소해서 도구가 풀림
     selectionChanged: (id: string | null) => void,
+    textRequested: (request: TextRequest) => void,      // 글자를 입력받아 달라고 요청
 }
+
+/** 글자 도형의 크기 (CSS px) */
+const textSizeOf = (drawing: DrawingStyle): number =>
+    TEXT_SIZES[clamp(Math.round(drawing.lineWidth ?? 1), 1, TEXT_SIZES.length) - 1];
 
 const createId = (): string => `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
 
@@ -86,6 +116,9 @@ export class DrawingLayer {
     private draft: Draft | null = null;
     private move: Move | null = null;
     private newStyle: DrawingStyle = {};            // 새로 그리는 도형에 입힐 꾸미기
+    private magnet: MagnetMode = 'off';             // 점을 캔들의 시가·고가·저가·종가에 붙이는 정도
+    private textSpot: Anchor | null = null;         // 글자 도구로 누른 자리. 손을 떼면 이 자리에 입력을 요청한다
+    private textWidths = new Map<string, number>(); // 글자 도형의 너비(CSS px). 그릴 때 재 두고 잡는 판정에 쓴다
 
     constructor(host: DrawingHost) {
         this.host = host;
@@ -110,6 +143,7 @@ export class DrawingLayer {
     setTool(tool: DrawingTool | null) {
         this.tool = tool;
         this.draft = null;
+        this.textSpot = null;
         if (tool) this.select(null);
         this.host.refreshCursor();
         this.host.redraw();
@@ -118,6 +152,38 @@ export class DrawingLayer {
     /** 새로 그리는 도형에 입힐 꾸미기 (색·굵기·점선) */
     setNewStyle(style: DrawingStyle) {
         this.newStyle = style;
+    }
+
+    /** 자석: 점을 놓거나 고칠 때 캔들 값(시가·고가·저가·종가)에 붙이는 정도 */
+    setMagnet(mode: MagnetMode) {
+        this.magnet = mode;
+    }
+
+    /** 이번 동작에 쓸 자석. invert(Ctrl·⌘를 누르는 중)면 반대로: 꺼져 있으면 약하게 켜고, 켜져 있으면 끈다. */
+    private magnetFor(invert: boolean): MagnetMode {
+        if (!invert) return this.magnet;
+        return this.magnet === 'off' ? 'weak' : 'off';
+    }
+
+    /** 입력받은 글자를 anchor 자리에 도형으로 넣는다. */
+    addText(anchor: Anchor, text: string) {
+        this.changeDrawings([...this.drawings, {...this.newStyle, type: 'text', from: anchor, text, id: createId()}]);
+    }
+
+    /** 이미 있는 글자 도형을 고칠 수 있게 입력을 요청한다. */
+    requestTextEdit(id: string) {
+        const layout = this.host.layout();
+        const drawing = this.drawings.find(item => item.id === id);
+        if (!layout || drawing?.type !== 'text') return;
+        this.host.textRequested({id, text: drawing.text, anchor: drawing.from, ...this.pointOf(drawing.from, layout)});
+    }
+
+    /** 화면 위치에 글자 도형이 있으면 고치기를 요청한다(더블클릭). 요청했으면 true */
+    editTextAt(point: Point): boolean {
+        const hit = this.hitTest(point);
+        if (hit?.drawing.type !== 'text') return false;
+        this.requestTextEdit(hit.drawing.id);
+        return true;
     }
 
     /** Esc: 그리던 것을 취소하고, 그리는 중이 아니면 선택을 푼다. */
@@ -136,10 +202,10 @@ export class DrawingLayer {
     }
 
     /** 누르지 않은 채 움직일 때: 첫 점을 찍은 뒤라면 다음 점이 마우스를 따라온다. */
-    hover(point: Point) {
+    hover(point: Point, invertMagnet: boolean) {
         const draft = this.draft;
         if (!draft) return;
-        const anchor = this.anchorAt(point, true);
+        const anchor = this.anchorAt(point, true, this.magnetFor(invertMagnet));
         if (!anchor) return;
         if (draft.stage === 1) draft.to = anchor;
         else if (!draft.thirdPlaced) draft.third = anchor;
@@ -151,10 +217,10 @@ export class DrawingLayer {
     }
 
     /** 누른 자리에서 그리기나 옮기기를 시작한다. 시작했으면 true, 아니면(빈 곳) false 로 차트 이동에 넘긴다. */
-    beginEdit(point: Point): boolean {
+    beginEdit(point: Point, invertMagnet: boolean): boolean {
         const tool = this.tool;
         if (tool) {
-            const anchor = this.anchorAt(point, false);
+            const anchor = this.anchorAt(point, false, this.magnetFor(invertMagnet));
             if (!anchor) return false;
             const draft = this.draft;
             if (tool === 'horizontal') {
@@ -162,6 +228,9 @@ export class DrawingLayer {
                 this.add({type: 'horizontal', price: anchor.price});
             } else if (tool === 'vertical') {
                 this.add({type: 'vertical', time: anchor.time, offset: anchor.offset});
+            } else if (tool === 'text') {
+                // 입력 칸은 손을 뗀 뒤에 띄운다. 누르는 순간에 띄우면 차트가 포커스를 가져가 입력 칸이 바로 닫힌다.
+                this.textSpot = anchor;
             } else if (!draft) {
                 this.draft = {
                     type: tool, from: anchor, to: anchor, third: null, origin: point, stage: 1, thirdPlaced: false,
@@ -188,20 +257,23 @@ export class DrawingLayer {
     }
 
     /** 누른 채 움직이는 동안: 그리는 도형의 점을 옮기거나, 잡은 도형을 옮긴다. */
-    updateEdit(point: Point) {
-        const target = this.anchorAt(point, true);
-        if (!target) return;
+    updateEdit(point: Point, invertMagnet: boolean) {
         const draft = this.draft;
+        const move = this.move;
+        // 도형 전체를 옮길 때는 자석을 쓰지 않는다. 잡은 자리만 붙으면 나머지 점이 어디에 놓일지 알기 어렵기 때문이다.
+        // 수평선은 옮기는 것이 곧 가격을 고치는 것이라 붙인다.
+        const snap = draft !== null || move?.part !== 'body' || move.original.type === 'horizontal';
+        const target = this.anchorAt(point, true, snap ? this.magnetFor(invertMagnet) : 'off');
+        if (!target) return;
         if (draft) {
             if (draft.stage === 1) draft.to = target;
             else draft.third = target;
             return;
         }
-        const move = this.move;
         if (!move) return;
         if (!move.changed && distance(point, move.start) < DRAG_THRESHOLD) return;
 
-        const start = this.anchorAt(move.start, true);
+        const start = this.anchorAt(move.start, true, 'off');
         if (!start) return;
         const next = this.moved(move.original, move.part, start, target);
         move.changed = true;
@@ -210,6 +282,13 @@ export class DrawingLayer {
 
     /** 손을 뗐을 때: 그리던 도형을 다음 단계로 넘기거나 확정하고, 옮긴 결과를 알린다. */
     finishEdit(point: Point) {
+        const textSpot = this.textSpot;
+        const layout = this.host.layout();
+        if (textSpot) {
+            this.releaseTool();
+            if (layout) this.host.textRequested({id: null, text: '', anchor: textSpot, ...this.pointOf(textSpot, layout)});
+            return;
+        }
         const draft = this.draft;
         if (draft) {
             if (draft.stage === 1) {
@@ -250,6 +329,15 @@ export class DrawingLayer {
         ctx.beginPath();
         ctx.rect(0, painter.px(pane.top), plotRightPx, painter.px(pane.bottom) - painter.px(pane.top));
         ctx.clip();
+        // 글자 도형의 너비는 그릴 때만 잴 수 있어, 먼저 재 두고 자리 계산(geometryOf)과 잡는 판정에 쓴다.
+        this.textWidths = new Map();
+        drawings.forEach(drawing => {
+            if (drawing.type !== 'text') return;
+            ctx.font = `${painter.px(textSizeOf(drawing))}px ${style.fontFamily}`;
+            this.textWidths.set(drawing.id, ctx.measureText(drawing.text).width / painter.dpr);
+        });
+        painter.useFont(style);
+
         drawings.forEach(drawing => {
             const active = drawing.id === this.selectedId || drawing.id === DRAFT_ID;
             const geometry = this.geometryOf(drawing, layout);
@@ -282,7 +370,57 @@ export class DrawingLayer {
                 ctx.lineTo(at(end.x), at(end.y));
             });
             ctx.stroke();
+
+            // 보조선: 가늘고 옅은 점선
+            if (geometry.guides?.length) {
+                ctx.lineWidth = line;
+                ctx.setLineDash(DASH.map(length => painter.px(length)));
+                ctx.globalAlpha = GUIDE_ALPHA;
+                ctx.beginPath();
+                geometry.guides.forEach(([start, end]) => {
+                    ctx.moveTo(start.x * painter.dpr, start.y * painter.dpr);
+                    ctx.lineTo(end.x * painter.dpr, end.y * painter.dpr);
+                });
+                ctx.stroke();
+                ctx.globalAlpha = 1;
+            }
             ctx.setLineDash([]);
+
+            geometry.labels?.forEach(label => {
+                const x = label.at.x * painter.dpr;
+                const y = label.at.y * painter.dpr;
+                ctx.textAlign = label.align;
+                ctx.textBaseline = label.baseline;
+                if (label.backdrop) {
+                    const width = ctx.measureText(label.text).width + painter.px(TEXT_PADDING) * 2;
+                    const height = painter.px(AXIS_TAG_HEIGHT);
+                    ctx.fillStyle = style.backgroundColor;
+                    ctx.globalAlpha = BACKDROP_ALPHA;
+                    ctx.fillRect(Math.round(x - width / 2), Math.round(y - height / 2), Math.round(width), height);
+                    ctx.globalAlpha = 1;
+                    ctx.fillStyle = color;
+                }
+                ctx.fillText(label.text, x, y);
+            });
+            ctx.textBaseline = 'middle';
+
+            if (drawing.type === 'text' && geometry.box) {
+                const {box} = geometry;
+                ctx.textAlign = 'left';
+                ctx.font = `${painter.px(textSizeOf(drawing))}px ${style.fontFamily}`;
+                ctx.fillText(drawing.text, (box.left + TEXT_PADDING) * painter.dpr, (box.top + box.bottom) / 2 * painter.dpr);
+                painter.useFont(style);
+                // 선택한 글자는 둘레에 점선 테두리를 친다.
+                if (active) {
+                    ctx.lineWidth = line;
+                    ctx.setLineDash(DASH.map(length => painter.px(length)));
+                    ctx.strokeRect(
+                        painter.px(box.left) + line / 2, painter.px(box.top) + line / 2,
+                        painter.px(box.right) - painter.px(box.left), painter.px(box.bottom) - painter.px(box.top),
+                    );
+                    ctx.setLineDash([]);
+                }
+            }
 
             if (active) {
                 geometry.handles.forEach(([, point]) => {
@@ -337,6 +475,7 @@ export class DrawingLayer {
     private releaseTool() {
         this.tool = null;
         this.draft = null;
+        this.textSpot = null;
         this.host.refreshCursor();
         this.host.toolReleased();
     }
@@ -369,7 +508,7 @@ export class DrawingLayer {
      * 화면 위치를 점(캔들 시각·가격)으로 바꾼다. 가로는 그 자리의 칸에 붙이고, 마지막 캔들 오른쪽이면 미래 구간의 점이 된다.
      * 가격 영역 밖이면 null. clampToPane 이면 영역 안으로 끌어와 계산한다(끄는 중에 영역을 벗어났을 때).
      */
-    private anchorAt(point: Point, clampToPane: boolean): Anchor | null {
+    private anchorAt(point: Point, clampToPane: boolean, magnet: MagnetMode): Anchor | null {
         const layout = this.host.layout();
         const pane = layout?.panes[0];
         if (!layout || !pane || this.host.candles().length === 0) return null;
@@ -377,7 +516,24 @@ export class DrawingLayer {
         if (!inside && !clampToPane) return null;
         const x = clamp(point.x, 0, layout.plotWidth - 1);
         const y = clamp(point.y, pane.top, pane.bottom);
-        return this.anchorOf(Math.floor(layout.range.leftEdge + x / layout.range.spacing), paneToValue(pane)(y));
+        const index = Math.floor(layout.range.leftEdge + x / layout.range.spacing);
+        return this.anchorOf(index, this.snappedPrice(index, y, pane, magnet));
+    }
+
+    /**
+     * 자석: 그 칸 캔들의 시가·고가·저가·종가 중 높이 y 에 가장 가까운 값.
+     * 약한 자석은 그 값이 가까울 때만, 강한 자석은 항상 붙는다. 붙지 않으면 y 자리의 가격 그대로.
+     * 캔들이 없는 칸(미래 구간)에서는 붙지 않는다.
+     */
+    private snappedPrice(index: number, y: number, pane: Pane, magnet: MagnetMode): number {
+        const candle = this.host.candles()[index];
+        const free = paneToValue(pane)(y);
+        if (magnet === 'off' || !candle) return free;
+        const toY = paneToY(pane);
+        const nearest = [candle.open, candle.high, candle.low, candle.close]
+            .map(price => ({price, gap: Math.abs(toY(price) - y)}))
+            .reduce((best, next) => next.gap < best.gap ? next : best);
+        return magnet === 'strong' || nearest.gap <= MAGNET_DISTANCE ? nearest.price : free;
     }
 
     /** 순번의 가로 위치 (CSS px). 칸의 가운데 */
@@ -426,6 +582,61 @@ export class DrawingLayer {
                     fill: corners,
                 };
             }
+            case 'fibonacci': {
+                // 비율 0 이 to, 1 이 from. 가로선은 두 점 사이에만 긋고, 선 왼쪽 위에 비율과 가격을 적는다.
+                const from = this.pointOf(drawing.from, layout);
+                const to = this.pointOf(drawing.to, layout);
+                const left = Math.min(from.x, to.x);
+                const right = Math.max(from.x, to.x);
+                const toY = paneToY(pane);
+                const levels = FIBONACCI_LEVELS.map(ratio => {
+                    const price = drawing.to.price + (drawing.from.price - drawing.to.price) * ratio;
+                    return {text: `${ratio} (${pane.format(price)})`, y: toY(price)};
+                });
+                return {
+                    lines: levels.map(({y}): [Point, Point] => [{x: left, y}, {x: right, y}]),
+                    handles: [['from', from], ['to', to]],
+                    fill: null,
+                    guides: [[from, to]],
+                    labels: levels.map(({text, y}): Label => (
+                        {at: {x: left, y: y - LABEL_GAP}, text, align: 'left', baseline: 'bottom', backdrop: false}
+                    )),
+                };
+            }
+            case 'measure': {
+                // from 에서 to 까지의 가격 차이, 등락률, 캔들 수를 상자 가운데에 적는다.
+                const from = this.pointOf(drawing.from, layout);
+                const to = this.pointOf(drawing.to, layout);
+                const corners = [from, {x: to.x, y: from.y}, to, {x: from.x, y: to.y}];
+                const change = drawing.to.price - drawing.from.price;
+                const rate = drawing.from.price !== 0 ? Math.abs(change / drawing.from.price) * 100 : 0;
+                const sign = change < 0 ? '-' : '+';
+                const bars = Math.abs(this.indexOf(drawing.to) - this.indexOf(drawing.from));
+                return {
+                    lines: corners.map((corner, order): [Point, Point] => [corner, corners[(order + 1) % corners.length]]),
+                    handles: [['from', from], ['to', to]],
+                    fill: corners,
+                    labels: [{
+                        at: {x: (from.x + to.x) / 2, y: (from.y + to.y) / 2},
+                        text: `${sign}${pane.format(Math.abs(change))} (${sign}${rate.toFixed(2)}%) · ${bars}봉`,
+                        align: 'center',
+                        baseline: 'middle',
+                        backdrop: true,
+                    }],
+                };
+            }
+            case 'text': {
+                // from 이 글자의 왼쪽 가운데. 상자는 글자를 잡는 범위이자 선택 테두리다.
+                const at = this.pointOf(drawing.from, layout);
+                const half = textSizeOf(drawing) / 2 + TEXT_PADDING;
+                const width = (this.textWidths.get(drawing.id) ?? 0) + TEXT_PADDING * 2;
+                return {
+                    lines: [],
+                    handles: [],
+                    fill: null,
+                    box: {left: at.x - TEXT_PADDING, top: at.y - half, right: at.x - TEXT_PADDING + width, bottom: at.y + half},
+                };
+            }
             case 'channel': {
                 // from-to 선을 third 가 지나는 자리까지 나란히 옮긴 선을 하나 더 긋는다.
                 const from = this.pointOf(drawing.from, layout);
@@ -458,7 +669,12 @@ export class DrawingLayer {
             const geometry = this.geometryOf(drawing, layout);
             const handle = geometry.handles.find(([, spot]) => distance(point, spot) <= HIT_TOLERANCE + 2);
             if (handle) return {drawing, part: handle[0]};
-            if (geometry.lines.some(([start, end]) => distanceToSegment(point, start, end) <= HIT_TOLERANCE)) {
+            const segments = [...geometry.lines, ...(geometry.guides ?? [])];
+            if (segments.some(([start, end]) => distanceToSegment(point, start, end) <= HIT_TOLERANCE)) {
+                return {drawing, part: 'body'};
+            }
+            const box = geometry.box;
+            if (box && point.x >= box.left && point.x <= box.right && point.y >= box.top && point.y <= box.bottom) {
                 return {drawing, part: 'body'};
             }
         }
@@ -479,6 +695,8 @@ export class DrawingLayer {
                 return {...original, price: target.price};
             case 'vertical':
                 return {...original, time: target.time, offset: target.offset};
+            case 'text':
+                return {...original, from: shift(original.from)};
             case 'channel':
                 if (part === 'third') return {...original, third: target};
                 if (part === 'body') {
@@ -494,7 +712,7 @@ export class DrawingLayer {
 
 /** 도형에서 id 와 꾸미기를 뺀, 모양만 */
 type DrawingShape =
-    | { type: 'trend' | 'ray' | 'rectangle', from: Anchor, to: Anchor }
+    | { type: 'trend' | 'ray' | 'rectangle' | 'fibonacci' | 'measure', from: Anchor, to: Anchor }
     | { type: 'channel', from: Anchor, to: Anchor, third: Anchor }
     | { type: 'horizontal', price: number }
     | { type: 'vertical', time: number, offset?: number | null };

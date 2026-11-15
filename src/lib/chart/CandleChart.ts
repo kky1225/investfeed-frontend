@@ -1,5 +1,6 @@
 import {
-    Candle, ChartStyle, ChartType, Drawing, DrawingStyle, DrawingTool, IndicatorConfig, PriceLine, TimeUnit,
+    Anchor, Candle, ChartStyle, ChartType, Drawing, DrawingStyle, DrawingTool, IndicatorConfig, MagnetMode, PriceLine,
+    TextRequest, TimeUnit,
 } from "./types.ts";
 import {heikinAshi, movingAverage, Series} from "./indicators.ts";
 import {AXIS_LABEL_OFFSET, DRAG_THRESHOLD, PRICE_AXIS_WIDTH} from "./constants.ts";
@@ -24,6 +25,9 @@ const DECIMAL_SAMPLE_SIZE = 300;    // 가격의 소수 자릿수를 알아낼 �
 const PRICE_ZOOM_RATE = 0.005;
 const MIN_PRICE_ZOOM = 0.2;
 const MAX_PRICE_ZOOM = 10;
+
+/** Ctrl(Mac 은 ⌘)을 누른 채 그리거나 고치는 중인지. 그동안은 자석이 반대로 동작한다. */
+const invertsMagnet = (event: PointerEvent): boolean => event.ctrlKey || event.metaKey;
 
 type Gesture =
     | { type: 'pan', startX: number, startRightEdge: number, moved: boolean }
@@ -86,6 +90,11 @@ export class CandleChartEngine {
     onToolChange: ((tool: DrawingTool | null) => void) | null = null;
     /** 선택한 도형이 바뀌면 알린다. */
     onSelectionChange: ((id: string | null) => void) | null = null;
+    /**
+     * 글자 도형의 내용을 입력받아야 할 때 알린다(글자 도구로 차트를 눌렀거나, 글자를 더블클릭했거나, editText 를 불렀을 때).
+     * 받는 쪽은 입력 칸을 띄우고, 새 글자면 addText 로 넘기고 고치는 것이면 도형 목록을 바꿔 setDrawings 로 넘긴다.
+     */
+    onTextRequest: ((request: TextRequest) => void) | null = null;
     /** 가장 최근 캔들이 화면에 보이는지가 바뀌면 알린다. (최근으로 이동 버튼 표시용) */
     onLatestChange: ((atLatest: boolean) => void) | null = null;
     /**
@@ -102,6 +111,7 @@ export class CandleChartEngine {
         drawingsChanged: drawings => this.onDrawingsChange?.(drawings),
         toolReleased: () => this.onToolChange?.(null),
         selectionChanged: id => this.onSelectionChange?.(id),
+        textRequested: request => this.onTextRequest?.(request),
     });
 
     constructor(container: HTMLElement) {
@@ -216,6 +226,24 @@ export class CandleChartEngine {
         this.drawingLayer.setNewStyle(style);
     }
 
+    /**
+     * 자석: 도형의 점을 놓거나 고칠 때 캔들 값(시가·고가·저가·종가)에 붙이는 정도.
+     * Ctrl(Mac 은 ⌘)을 누른 채 그리거나 고치면 그동안만 반대로 동작한다.
+     */
+    setMagnet(mode: MagnetMode) {
+        this.drawingLayer.setMagnet(mode);
+    }
+
+    /** onTextRequest 로 요청한 새 글자의 입력이 끝나면 부른다. anchor 는 요청에 담겨 있던 자리 */
+    addText(anchor: Anchor, text: string) {
+        this.drawingLayer.addText(anchor, text);
+    }
+
+    /** 이미 있는 글자 도형을 고칠 수 있게 onTextRequest 를 부른다. */
+    editText(id: string) {
+        this.drawingLayer.requestTextEdit(id);
+    }
+
     /** 특정 가격에 긋는 가로선들 (목표가 등). 가격축 범위 밖의 선은 그리지 않는다. */
     setPriceLines(priceLines: PriceLine[]) {
         this.priceLines = priceLines;
@@ -299,7 +327,8 @@ export class CandleChartEngine {
         }
 
         // 도구를 골랐거나 도형 위를 눌렀으면 그리기·옮기기로 처리하고, 차트는 이동시키지 않는다.
-        if (this.activePointers.size === 0 && this.editPointerId === null && this.drawingLayer.beginEdit(point)) {
+        if (this.activePointers.size === 0 && this.editPointerId === null
+            && this.drawingLayer.beginEdit(point, invertsMagnet(event))) {
             this.editPointerId = event.pointerId;
             this.container.setPointerCapture(event.pointerId);
             this.pointer = point;
@@ -328,7 +357,7 @@ export class CandleChartEngine {
         }
         if (event.pointerId === this.editPointerId) {
             this.pointer = point;
-            this.drawingLayer.updateEdit(point);
+            this.drawingLayer.updateEdit(point, invertsMagnet(event));
             this.scheduleOverlay();
             return;
         }
@@ -336,7 +365,7 @@ export class CandleChartEngine {
             // 누르지 않은 채 움직임: 십자선만 옮긴다. 추세선의 첫 점을 찍은 뒤라면 끝점이 따라온다.
             if (event.pointerType === 'touch') return;
             this.pointer = point;
-            this.drawingLayer.hover(point);
+            this.drawingLayer.hover(point, invertsMagnet(event));
             this.updateCursor(point);
             this.scheduleOverlay();
             return;
@@ -378,9 +407,14 @@ export class CandleChartEngine {
         this.beginGesture();
     };
 
-    /** 가격축을 더블클릭하면 세로 배율을 되돌려 보이는 구간에 다시 맞춘다. */
+    /** 가격축을 더블클릭하면 세로 배율을 되돌려 보이는 구간에 다시 맞추고, 글자 도형을 더블클릭하면 고치기를 요청한다. */
     private readonly handleDoubleClick = (event: MouseEvent) => {
-        if (!this.isOnPriceAxis(this.localPoint(event)) || this.priceZoom === 1) return;
+        const point = this.localPoint(event);
+        if (!this.isOnPriceAxis(point)) {
+            this.drawingLayer.editTextAt(point);
+            return;
+        }
+        if (this.priceZoom === 1) return;
         this.priceZoom = 1;
         this.scheduleDraw();
     };

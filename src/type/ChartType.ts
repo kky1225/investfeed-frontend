@@ -14,6 +14,7 @@ export interface ChartSetting {
     logScale: boolean;          // 가격축을 로그로
     drawingToolbar: boolean;    // 그리기 도구 모음 표시
     flatByPrevClose: boolean;   // 시가와 종가가 같은 캔들의 색을 전일 종가와 비교해 정한다. false 면 상승색
+    magnet: string;             // 자석: 도형의 점을 캔들의 시가·고가·저가·종가에 붙이는 정도 (off, weak, strong)
 }
 
 /** 회원이 한 종목 차트에 그린 선 */

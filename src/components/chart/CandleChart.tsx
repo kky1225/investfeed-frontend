@@ -1,6 +1,7 @@
 import {ReactNode, useEffect, useMemo, useRef, useState} from "react";
 import Box from "@mui/material/Box";
 import Divider from "@mui/material/Divider";
+import InputBase from "@mui/material/InputBase";
 import Stack from "@mui/material/Stack";
 import Button from "@mui/material/Button";
 import Typography from "@mui/material/Typography";
@@ -16,8 +17,8 @@ import {useChartStorage} from "./useChartStorage.ts";
 import {useColorScheme} from "@mui/material/styles";
 import {CandleChartEngine, INDICATOR_PANE_HEIGHT} from "../../lib/chart/CandleChart.ts";
 import {
-    Candle, CHART_TYPES, ChartType, Drawing, DrawingStyle, DrawingTool, IndicatorConfig, IndicatorType, PriceLine,
-    TimeUnit,
+    Candle, CHART_TYPES, ChartType, Drawing, DrawingStyle, DrawingTool, IndicatorConfig, IndicatorType,
+    MAGNET_MODES, MagnetMode, MAX_DRAWING_TEXT_LENGTH, PriceLine, TextRequest, TimeUnit,
 } from "../../lib/chart/types.ts";
 import ChartTypeSelect from "./ChartTypeSelect.tsx";
 import type {AssetType} from "../../type/NotificationType.ts";
@@ -58,7 +59,7 @@ interface IndicatorEntry {
 
 // Alt 와 함께 누르는 그리기 단축키 (KeyboardEvent.code)
 const TOOL_SHORTCUTS: Record<string, DrawingTool | undefined> = {
-    KeyT: 'trend', KeyH: 'horizontal', KeyV: 'vertical', KeyR: 'rectangle',
+    KeyT: 'trend', KeyH: 'horizontal', KeyV: 'vertical', KeyR: 'rectangle', KeyF: 'fibonacci',
 };
 
 // 그리기 도구를 고른 뒤 차트 위에 보여 주는 안내
@@ -69,7 +70,11 @@ const TOOL_HINTS: Record<DrawingTool, string> = {
     vertical: '수직선: 차트에서 원하는 날짜를 누르세요.',
     rectangle: '사각형: 한 모서리를 누른 채 맞은편 모서리까지 끌었다가 놓으세요.',
     channel: '평행 채널: 선을 끌어 긋고, 맞은편 선이 지날 자리를 한 번 더 누르세요.',
+    fibonacci: '피보나치 되돌림: 움직임이 시작된 곳을 누른 채 끝난 곳까지 끌었다가 놓으세요.',
+    measure: '가격 범위 측정: 잴 구간의 시작을 누른 채 끝까지 끌었다가 놓으세요.',
+    text: '글자: 차트에서 글자를 놓을 자리를 누르세요.',
 };
+const TEXT_INPUT_WIDTH = 200;   // 글자 입력 칸의 너비 (px)
 
 // 엔진에 넘기는 선 색의 CSS 변수. 순서가 곧 색 순번이다 (이동평균선, 지표, 그린 도형이 이 순번으로 색을 고른다)
 const LINE_COLOR_VARS = [
@@ -99,7 +104,10 @@ const CandleChart = ({
         logScale, setLogScale,
         drawingToolbar: toolbarVisible, setDrawingToolbar,
         flatByPrevClose, setFlatByPrevClose,
+        magnet: savedMagnet, setMagnet,
     } = useChartStorage(assetType, assetCode);
+    // 저장된 값이 이 버전이 모르는 것이면 자석을 끈 것으로 본다.
+    const magnet: MagnetMode = MAGNET_MODES.find(mode => mode === savedMagnet) ?? 'off';
     // 저장된 값이 이 버전이 모르는 종류면 캔들로 그린다.
     const chartType: ChartType = CHART_TYPES.find(type => type === savedChartType) ?? 'candle';
     const [tool, setTool] = useState<DrawingTool | null>(null);
@@ -141,6 +149,31 @@ const CandleChart = ({
     const changeSelectedStyle = (change: DrawingStyle) => {
         setNewStyle(previous => ({...previous, ...change}));
         changeDrawings(drawings.map(drawing => drawing.id === selectedId ? {...drawing, ...change} : drawing));
+    };
+
+    // 글자 도형의 입력. 엔진이 요청하면 그 자리에 입력 칸을 띄운다.
+    // Enter 나 바깥을 누르면 확정하고, Esc 나 빈 채로 닫으면 취소한다.
+    const [textRequest, setTextRequest] = useState<TextRequest | null>(null);
+    const textRequestRef = useRef<TextRequest | null>(null);
+    const openTextInput = (request: TextRequest | null) => {
+        textRequestRef.current = request;
+        setTextRequest(request);
+    };
+    /** 입력 칸을 닫는다. text 를 주면 그 내용으로 확정한다. */
+    const closeTextInput = (text?: string) => {
+        // 확정하면서 입력 칸이 사라질 때 blur 가 한 번 더 들어오므로, 이미 닫았으면 아무것도 하지 않는다.
+        const request = textRequestRef.current;
+        if (!request) return;
+        openTextInput(null);
+        const trimmed = text?.trim();
+        if (!trimmed) return;
+        if (request.id === null) {
+            engineRef.current?.addText(request.anchor, trimmed);
+        } else if (trimmed !== request.text) {
+            changeDrawings(drawingsRef.current.map(drawing => (
+                drawing.id === request.id && drawing.type === 'text' ? {...drawing, text: trimmed} : drawing
+            )));
+        }
     };
     const [atLatest, setAtLatest] = useState(true);
     const [settingsOpen, setSettingsOpen] = useState(false);
@@ -214,6 +247,10 @@ const CandleChart = ({
         engine.onDrawingsChange = next => changeDrawingsRef.current(next);
         engine.onToolChange = setTool;
         engine.onSelectionChange = setSelectedId;
+        engine.onTextRequest = request => {
+            textRequestRef.current = request;
+            setTextRequest(request);
+        };
         engine.onLatestChange = setAtLatest;
         engine.onNeedOlder = () => loadOlderRef.current?.();
 
@@ -271,6 +308,16 @@ const CandleChart = ({
     }, [newStyle]);
 
     useEffect(() => {
+        engineRef.current?.setMagnet(magnet);
+    }, [magnet]);
+
+    // 다른 종목·주기로 바뀌면 띄워 둔 글자 입력 칸은 자리가 맞지 않으므로 닫는다.
+    useEffect(() => {
+        textRequestRef.current = null;
+        setTextRequest(null);
+    }, [seriesKey, assetType, assetCode]);
+
+    useEffect(() => {
         engineRef.current?.setData(candles, timeUnit);
     }, [candles, timeUnit]);
 
@@ -295,7 +342,7 @@ const CandleChart = ({
         return () => cancelAnimationFrame(frame);
     }, [mode, systemMode]);
 
-    // 단축키: Alt+T·H·V·R 도형, Esc 취소, Ctrl(⌘)+Z 실행 취소, Ctrl(⌘)+Shift+Z 다시 실행.
+    // 단축키: Alt+T·H·V·R·F 도형, Esc 취소, Ctrl(⌘)+Z 실행 취소, Ctrl(⌘)+Shift+Z 다시 실행.
     // 글자를 입력하는 중에는 동작하지 않는다.
     useEffect(() => {
         const handleKeyDown = (event: KeyboardEvent) => {
@@ -328,7 +375,15 @@ const CandleChart = ({
                 {toolbarStart}
                 <ChartTypeSelect value={chartType} onChange={setChartType}/>
                 {toolbarVisible && <Divider orientation="vertical" flexItem sx={{my: 1}}/>}
-                {toolbarVisible && <ChartDrawingToolbar tool={tool} lastTool={lastTool} onSelectTool={selectTool}/>}
+                {toolbarVisible && (
+                    <ChartDrawingToolbar
+                        tool={tool}
+                        lastTool={lastTool}
+                        onSelectTool={selectTool}
+                        magnet={magnet}
+                        onMagnetChange={setMagnet}
+                    />
+                )}
                 {tool && (
                     <>
                         {/* 좁은 화면에서는 안내 문구를 생략해 버튼이 한 줄에 들어가게 한다. */}
@@ -397,18 +452,52 @@ const CandleChart = ({
                     })}
                 >
                     {/* 도형을 선택하면 차트 위쪽 가운데에 그 도형의 꾸미기·삭제 패널이 뜬다. */}
-                    {selectedDrawing && !tool && (
+                    {selectedDrawing && !tool && !textRequest && (
                         <ChartDrawingStylePanel
                             style={selectedDrawing}
                             colorCount={LINE_COLOR_VARS.length}
                             onChange={changeSelectedStyle}
                             onDelete={() => changeDrawings(drawings.filter(drawing => drawing.id !== selectedId))}
+                            onEditText={selectedDrawing.type === 'text'
+                                ? () => engineRef.current?.editText(selectedDrawing.id)
+                                : undefined}
                         />
                     )}
                     <Box
                         ref={containerRef}
                         sx={{position: 'relative', width: '100%', height: height + paneCount * INDICATOR_PANE_HEIGHT}}
                     />
+                    {/* 글자 도형의 입력 칸. 글자가 놓일 자리에 띄우고, 오른쪽 끝에서는 차트 밖으로 나가지 않게 당긴다. */}
+                    {textRequest && (
+                        <InputBase
+                            key={`${textRequest.id}-${textRequest.x}-${textRequest.y}`}
+                            autoFocus
+                            defaultValue={textRequest.text}
+                            placeholder="글자 입력"
+                            inputProps={{maxLength: MAX_DRAWING_TEXT_LENGTH, 'aria-label': '차트에 적을 글자'}}
+                            onFocus={event => event.target.select()}
+                            onBlur={event => closeTextInput(event.target.value)}
+                            onKeyDown={event => {
+                                if (event.nativeEvent.isComposing) return;     // 한글 조합 중의 Enter 는 확정이 아니다
+                                if (event.key === 'Enter') closeTextInput((event.target as HTMLInputElement).value);
+                                else if (event.key === 'Escape') closeTextInput();
+                            }}
+                            sx={{
+                                position: 'absolute',
+                                zIndex: 2,
+                                left: `min(${textRequest.x}px, calc(100% - ${TEXT_INPUT_WIDTH}px))`,
+                                top: textRequest.y,
+                                transform: 'translateY(-50%)',
+                                width: TEXT_INPUT_WIDTH,
+                                px: 1,
+                                typography: 'body2',
+                                backgroundColor: 'background.paper',
+                                border: 1,
+                                borderColor: 'primary.main',
+                                borderRadius: 1,
+                            }}
+                        />
+                    )}
                 </Box>
             </Stack>
         </Box>

@@ -30,8 +30,32 @@ export interface Anchor {
 /** 도형의 꾸미기. 비워 두면 기본값(흰색 계열, 굵기 1, 실선) */
 export interface DrawingStyle {
     color?: number | null,      // style.lineColors 안에서의 순번
-    lineWidth?: number | null,  // 1~3
+    lineWidth?: number | null,  // 1~3. 글자 도형에서는 글자 크기의 단계
     dashed?: boolean | null,
+}
+
+/**
+ * 자석: 도형의 점을 놓거나 고칠 때 그 칸 캔들의 시가·고가·저가·종가에 붙인다.
+ * weak 는 가까울 때만, strong 은 거리와 상관없이 항상 붙는다.
+ * Ctrl(Mac 은 ⌘)을 누르는 동안은 반대로 동작한다(꺼져 있으면 weak, 켜져 있으면 꺼짐).
+ */
+export type MagnetMode = 'off' | 'weak' | 'strong';
+
+export const MAGNET_MODES: MagnetMode[] = ['off', 'weak', 'strong'];
+
+/** 글자 도형의 최대 길이 */
+export const MAX_DRAWING_TEXT_LENGTH = 100;
+
+/**
+ * 글자를 입력받아 달라는 요청. 엔진은 캔버스만 그리므로 입력 칸은 바깥(React)에서 띄운다.
+ * 새 글자면 id 가 null 이고, 입력이 끝나면 엔진의 addText 로 넘긴다. 고치는 것이면 id 가 그 도형이다.
+ */
+export interface TextRequest {
+    id: string | null,
+    text: string,       // 지금 적혀 있는 내용. 새 글자면 빈 문자열
+    anchor: Anchor,     // 글자가 놓일 자리
+    x: number,          // 입력 칸을 띄울 화면 위치 (차트 영역 기준, CSS px). 글자의 왼쪽 가운데
+    y: number,
 }
 
 /** 사용자가 차트에 직접 그린 도형 */
@@ -40,6 +64,11 @@ export type Drawing = { id: string } & DrawingStyle & (
     | { type: 'ray', from: Anchor, to: Anchor }         // 반직선: from 에서 to 방향으로 끝없이
     | { type: 'rectangle', from: Anchor, to: Anchor }   // 사각형: 두 점이 대각선 모서리
     | { type: 'channel', from: Anchor, to: Anchor, third: Anchor }  // 평행 채널: from-to 선과, third 를 지나는 평행선
+    // 피보나치 되돌림: from(1)에서 to(0)까지의 높이를 정해진 비율로 나눈 가로선들
+    | { type: 'fibonacci', from: Anchor, to: Anchor }
+    // 가격 범위 측정: from 에서 to 까지의 가격 차이·등락률·캔들 수를 적은 상자
+    | { type: 'measure', from: Anchor, to: Anchor }
+    | { type: 'text', from: Anchor, text: string }      // 글자. from 이 글자의 왼쪽 가운데
     | { type: 'horizontal', price: number }             // 수평선
     | { type: 'vertical', time: number, offset?: number | null }    // 수직선. offset 은 Anchor 의 것과 같다
 );
@@ -47,7 +76,9 @@ export type Drawing = { id: string } & DrawingStyle & (
 export type DrawingTool = Drawing['type'];
 
 /** 도구 목록에 보이는 순서 */
-export const DRAWING_TOOLS: DrawingTool[] = ['trend', 'ray', 'horizontal', 'vertical', 'rectangle', 'channel'];
+export const DRAWING_TOOLS: DrawingTool[] = [
+    'trend', 'ray', 'horizontal', 'vertical', 'rectangle', 'channel', 'fibonacci', 'measure', 'text',
+];
 
 /**
  * 가격을 그리는 방식. 어느 것이든 거래량·지표·십자선·그리기는 똑같이 동작한다.

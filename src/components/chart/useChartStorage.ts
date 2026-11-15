@@ -15,7 +15,7 @@ const SETTINGS_KEY = ['chartSettings'];
 const NO_DRAWINGS: Drawing[] = [];
 // 아무것도 바꾸지 않은 상태
 const DEFAULT_SETTING: ChartSetting = {
-    indicators: {}, chartType: 'candle', logScale: false, drawingToolbar: true, flatByPrevClose: false,
+    indicators: {}, chartType: 'candle', logScale: false, drawingToolbar: true, flatByPrevClose: false, magnet: 'off',
 };
 const LEGACY_TOOLBAR_KEY = 'drawingToolbar';    // 예전 브라우저 저장분에서 그리기 도구 모음을 숨겼다는 표시
 
@@ -107,11 +107,14 @@ export const useChartStorage = (assetType: AssetType | undefined, assetCode: str
     const logScale = settingQuery.data?.logScale ?? DEFAULT_SETTING.logScale;
     const drawingToolbar = settingQuery.data?.drawingToolbar ?? DEFAULT_SETTING.drawingToolbar;
     const flatByPrevClose = settingQuery.data?.flatByPrevClose ?? DEFAULT_SETTING.flatByPrevClose;
+    const magnet = settingQuery.data?.magnet ?? DEFAULT_SETTING.magnet;
 
     // 설정은 통째로 저장하므로, 바꾸는 항목 말고는 지금 값을 그대로 실어 보낸다.
     const saveSetting = (change: Partial<ChartSetting>) => {
         if (!settingReady) return;
-        const next: ChartSetting = {indicators, chartType, logScale, drawingToolbar, flatByPrevClose, ...change};
+        const next: ChartSetting = {
+            indicators, chartType, logScale, drawingToolbar, flatByPrevClose, magnet, ...change,
+        };
         queryClient.setQueryData(SETTINGS_KEY, next);
         saveChartSetting(next).catch(reportSaveError);
     };
@@ -138,6 +141,7 @@ export const useChartStorage = (assetType: AssetType | undefined, assetCode: str
     const setLogScale = (enabled: boolean) => saveSetting({logScale: enabled});
     const setDrawingToolbar = (visible: boolean) => saveSetting({drawingToolbar: visible});
     const setFlatByPrevClose = (enabled: boolean) => saveSetting({flatByPrevClose: enabled});
+    const setMagnet = (mode: string) => saveSetting({magnet: mode});
 
     // 예전에 브라우저에 저장해 둔 설정(끈 항목 목록)을 계정으로 한 번 옮긴다. 서버에 이미 설정이 있으면 서버 것을 쓴다.
     const serverSetting = settingQuery.data;
@@ -168,5 +172,6 @@ export const useChartStorage = (assetType: AssetType | undefined, assetCode: str
         logScale, setLogScale,
         drawingToolbar, setDrawingToolbar,
         flatByPrevClose, setFlatByPrevClose,
+        magnet, setMagnet,
     };
 };
