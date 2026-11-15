@@ -17,21 +17,7 @@ const BAND_FILL_ALPHA = 0.08;       // 볼린저밴드 안쪽 채움
 const RSI_LEVELS = [70, 30];        // 과매수·과매도 기준선
 const STOCHASTIC_LEVELS = [80, 20];
 
-// style.lineColors 안에서의 색 순서
-const RSI_COLOR = 2;
-const MACD_COLOR = 4;
-const MACD_SIGNAL_COLOR = 1;
-const STOCHASTIC_K_COLOR = 4;
-const STOCHASTIC_D_COLOR = 1;
-const VOLUME_AVERAGE_COLOR = 1;
-const BAND_COLOR = 5;
-const ICHIMOKU_CONVERSION_COLOR = 2;
-const ICHIMOKU_BASE_COLOR = 5;
-const ICHIMOKU_LAGGING_COLOR = 3;
-const EMA_COLORS = [0, 1];
-const VWAP_COLOR = 2;
-const OBV_COLOR = 5;
-const ATR_COLOR = 1;
+const MAX_LINES = 8;                // 선 개수를 바꿀 수 있는 지표(지수이동평균)의 최대 선 수
 
 const CLOUD_FILL_ALPHA = 0.12;      // 일목균형표의 구름 채움
 const EMA_DASH = [4, 3];            // 지수이동평균은 점선으로 그려 단순 이동평균선과 구분한다
@@ -100,16 +86,33 @@ export interface IndicatorContext {
     formatPrice: (value: number) => string,     // 캔들 가격과 같은 자릿수의 표기. 가격 단위의 지표(ATR)가 쓴다
 }
 
-export interface IndicatorDefinition {
+/** 사용자가 색을 바꿀 수 있는 선 하나. 색은 style.lineColors 안에서의 순번 */
+export interface IndicatorColor {
+    label: string,
+    default: number,
+}
+
+/** 지표에서 사용자가 바꿀 수 있는 것의 모양. 설정 창과 저장된 값의 해석이 이것을 따른다. */
+export interface IndicatorShape {
+    params: IndicatorParam[],
+    colors: IndicatorColor[],
+    /**
+     * 있으면 설정값 하나가 선 하나인 지표(이동평균선, 지수이동평균)이고, 이 범위 안에서 선 개수를 바꿀 수 있다.
+     * params 와 colors 는 처음 상태의 선들이다(한 개 이상, 같은 순서).
+     */
+    lines?: { min: number, max: number },
+}
+
+export interface IndicatorDefinition extends IndicatorShape {
     label: string,
     placement: IndicatorInstance['placement'],
     defaultOn: boolean,     // 처음 쓰는 사람에게 켜져 있는지
-    params: IndicatorParam[],
-    /** params 는 normalizeParams 를 거친 값(개수와 범위가 맞음) */
-    create: (candles: Candle[], params: number[], context: IndicatorContext) => IndicatorInstance,
+    /** params 와 colors 는 resolveIndicator 를 거친 값(개수와 범위가 맞음) */
+    create: (candles: Candle[], params: number[], colors: number[], context: IndicatorContext) => IndicatorInstance,
 }
 
 const period = (label: string, value: number): IndicatorParam => ({label, default: value, min: 1, max: 500, step: 1});
+const swatch = (label: string, order: number): IndicatorColor => ({label, default: order});
 
 export const formatIndicator = (value: number | null | undefined): string =>
     isNumber(value) ? value.toLocaleString('ko-KR', {maximumFractionDigits: 2}) : '-';
@@ -157,7 +160,9 @@ const ichimokuDefinition: IndicatorDefinition = {
     placement: 'price',
     defaultOn: false,
     params: [period('전환선', 9), period('기준선', 26), period('선행스팬2', 52)],
-    create: (candles, [conversionPeriod, basePeriod, spanPeriod]) => {
+    // 선행스팬 두 개와 구름은 상승색·하락색으로 뜻을 나타내므로 바꿀 수 없다.
+    colors: [swatch('전환선', 2), swatch('기준선', 5), swatch('후행스팬', 3)],
+    create: (candles, [conversionPeriod, basePeriod, spanPeriod], [conversionColor, baseColor, laggingColor]) => {
         const {conversion, base, spanA, spanB, lagging} = ichimoku(candles, conversionPeriod, basePeriod, spanPeriod);
         return {
             placement: 'price',
@@ -197,14 +202,14 @@ const ichimokuDefinition: IndicatorDefinition = {
 
                 painter.strokeSeries(spanA, range, toY, style.upColor);
                 painter.strokeSeries(spanB, range, toY, style.downColor);
-                painter.strokeSeries(lagging, range, toY, lineColor(style, ICHIMOKU_LAGGING_COLOR));
-                painter.strokeSeries(base, range, toY, lineColor(style, ICHIMOKU_BASE_COLOR));
-                painter.strokeSeries(conversion, range, toY, lineColor(style, ICHIMOKU_CONVERSION_COLOR));
+                painter.strokeSeries(lagging, range, toY, lineColor(style, laggingColor));
+                painter.strokeSeries(base, range, toY, lineColor(style, baseColor));
+                painter.strokeSeries(conversion, range, toY, lineColor(style, conversionColor));
             },
             legend: (index, style, format) => [
                 [`일목 ${conversionPeriod}·${basePeriod}·${spanPeriod}`, style.textColor],
-                [`전환 ${formatWith(format, conversion[index])}`, lineColor(style, ICHIMOKU_CONVERSION_COLOR)],
-                [`기준 ${formatWith(format, base[index])}`, lineColor(style, ICHIMOKU_BASE_COLOR)],
+                [`전환 ${formatWith(format, conversion[index])}`, lineColor(style, conversionColor)],
+                [`기준 ${formatWith(format, base[index])}`, lineColor(style, baseColor)],
                 [`선행1 ${formatWith(format, spanA[index])}`, style.upColor],
                 [`선행2 ${formatWith(format, spanB[index])}`, style.downColor],
             ],
@@ -217,20 +222,22 @@ const emaDefinition: IndicatorDefinition = {
     placement: 'price',
     defaultOn: false,
     params: [period('선 1', 12), period('선 2', 26)],
-    create: (candles, periods) => {
+    colors: [swatch('선 1', 0), swatch('선 2', 1)],
+    lines: {min: 1, max: MAX_LINES},
+    create: (candles, periods, colors) => {
         const lines = periods.map(length => exponentialMovingAverage(candles, length));
         return {
             placement: 'price',
             series: lines,
             draw: ({painter, range, style, toY}) => {
                 lines.forEach((values, order) => {
-                    painter.strokeSeries(values, range, toY, lineColor(style, EMA_COLORS[order]), EMA_DASH);
+                    painter.strokeSeries(values, range, toY, lineColor(style, colors[order]), EMA_DASH);
                 });
             },
             legend: (index, style, format) => [
                 ['지수이평', style.textColor],
                 ...lines.map((values, order): LegendItem => (
-                    [`${periods[order]} ${formatWith(format, values[index])}`, lineColor(style, EMA_COLORS[order])]
+                    [`${periods[order]} ${formatWith(format, values[index])}`, lineColor(style, colors[order])]
                 )),
             ],
         };
@@ -242,7 +249,8 @@ const vwapDefinition: IndicatorDefinition = {
     placement: 'price',
     defaultOn: false,
     params: [],
-    create: (candles, _params, {timeUnit}) => {
+    colors: [swatch('선', 2)],
+    create: (candles, _params, [vwapColor], {timeUnit}) => {
         // 일봉 이상에서는 하루가 캔들 한 개라 계산할 것이 없으므로 그리지 않는다.
         const values = timeUnit === 'minute' ? volumeWeightedAverage(candles) : [];
         // 날이 바뀌어 새로 계산을 시작하는 순번. 앞날의 선과 잇지 않는다.
@@ -254,11 +262,11 @@ const vwapDefinition: IndicatorDefinition = {
             placement: 'price',
             series: [values],
             draw: ({painter, range, style, toY}) => {
-                painter.strokeSeries(values, range, toY, lineColor(style, VWAP_COLOR), undefined, dayStarts);
+                painter.strokeSeries(values, range, toY, lineColor(style, vwapColor), undefined, dayStarts);
             },
             legend: (index, style, format) => values.length === 0 ? [] : [
                 ['VWAP', style.textColor],
-                [formatWith(format, values[index]), lineColor(style, VWAP_COLOR)],
+                [formatWith(format, values[index]), lineColor(style, vwapColor)],
             ],
         };
     },
@@ -269,15 +277,16 @@ const obvDefinition: IndicatorDefinition = {
     placement: 'pane',
     defaultOn: false,
     params: [],
-    create: candles => {
+    colors: [swatch('선', 5)],
+    create: (candles, _params, [obvColor]) => {
         const values = onBalanceVolume(candles);
         return {
             placement: 'pane',
             format: formatVolume,
-            draw: context => drawLinePane(context, values, OBV_COLOR, formatVolume),
+            draw: context => drawLinePane(context, values, obvColor, formatVolume),
             legend: (index, style) => [
                 ['OBV', style.textColor],
-                [formatWith(formatVolume, values[index]), lineColor(style, OBV_COLOR)],
+                [formatWith(formatVolume, values[index]), lineColor(style, obvColor)],
             ],
         };
     },
@@ -288,15 +297,16 @@ const atrDefinition: IndicatorDefinition = {
     placement: 'pane',
     defaultOn: false,
     params: [period('기간', 14)],
-    create: (candles, [length], {formatPrice}) => {
+    colors: [swatch('선', 1)],
+    create: (candles, [length], [atrColor], {formatPrice}) => {
         const values = averageTrueRange(candles, length);
         return {
             placement: 'pane',
             format: formatPrice,
-            draw: context => drawLinePane(context, values, ATR_COLOR, formatPrice),
+            draw: context => drawLinePane(context, values, atrColor, formatPrice),
             legend: (index, style) => [
                 [`ATR ${length}`, style.textColor],
-                [formatWith(formatPrice, values[index]), lineColor(style, ATR_COLOR)],
+                [formatWith(formatPrice, values[index]), lineColor(style, atrColor)],
             ],
         };
     },
@@ -307,14 +317,15 @@ const rsiDefinition: IndicatorDefinition = {
     placement: 'pane',
     defaultOn: true,
     params: [period('기간', 14)],
-    create: (candles, [length]) => {
+    colors: [swatch('선', 2)],
+    create: (candles, [length], [rsiColor]) => {
         const values = relativeStrength(candles, length);
         return {
             placement: 'pane',
-            draw: context => drawPercentPane(context, RSI_LEVELS, [[values, RSI_COLOR]]),
+            draw: context => drawPercentPane(context, RSI_LEVELS, [[values, rsiColor]]),
             legend: (index, style) => [
                 [`RSI ${length}`, style.textColor],
-                [formatIndicator(values[index]), lineColor(style, RSI_COLOR)],
+                [formatIndicator(values[index]), lineColor(style, rsiColor)],
             ],
         };
     },
@@ -325,7 +336,9 @@ const macdDefinition: IndicatorDefinition = {
     placement: 'pane',
     defaultOn: true,
     params: [period('단기', 12), period('장기', 26), period('시그널', 9)],
-    create: (candles, [fast, slow, signalLength]) => {
+    // 오실레이터 막대는 상승색·하락색으로 뜻을 나타내므로 바꿀 수 없다.
+    colors: [swatch('MACD', 4), swatch('시그널', 1)],
+    create: (candles, [fast, slow, signalLength], [macdColor, signalColor]) => {
         const {macd: macdLine, signal, histogram} = macd(candles, fast, slow, signalLength);
         return {
             placement: 'pane',
@@ -362,8 +375,8 @@ const macdDefinition: IndicatorDefinition = {
                     }
                     ctx.globalAlpha = 1;
 
-                    painter.strokeSeries(macdLine, range, toY, lineColor(style, MACD_COLOR));
-                    painter.strokeSeries(signal, range, toY, lineColor(style, MACD_SIGNAL_COLOR));
+                    painter.strokeSeries(macdLine, range, toY, lineColor(style, macdColor));
+                    painter.strokeSeries(signal, range, toY, lineColor(style, signalColor));
                 });
                 return {min: -extent, max: extent};
             },
@@ -371,8 +384,8 @@ const macdDefinition: IndicatorDefinition = {
                 const bar = histogram[index];
                 return [
                     [`MACD ${fast}·${slow}·${signalLength}`, style.textColor],
-                    [`MACD ${formatIndicator(macdLine[index])}`, lineColor(style, MACD_COLOR)],
-                    [`시그널 ${formatIndicator(signal[index])}`, lineColor(style, MACD_SIGNAL_COLOR)],
+                    [`MACD ${formatIndicator(macdLine[index])}`, lineColor(style, macdColor)],
+                    [`시그널 ${formatIndicator(signal[index])}`, lineColor(style, signalColor)],
                     [
                         `오실레이터 ${formatIndicator(bar)}`,
                         !isNumber(bar) ? style.textColor : bar >= 0 ? style.upColor : style.downColor,
@@ -388,15 +401,16 @@ const stochasticDefinition: IndicatorDefinition = {
     placement: 'pane',
     defaultOn: false,
     params: [period('기간', 14), period('%K', 3), period('%D', 3)],
-    create: (candles, [length, smoothK, smoothD]) => {
+    colors: [swatch('%K', 4), swatch('%D', 1)],
+    create: (candles, [length, smoothK, smoothD], [kColor, dColor]) => {
         const {k, d} = stochastic(candles, length, smoothK, smoothD);
         return {
             placement: 'pane',
-            draw: context => drawPercentPane(context, STOCHASTIC_LEVELS, [[k, STOCHASTIC_K_COLOR], [d, STOCHASTIC_D_COLOR]]),
+            draw: context => drawPercentPane(context, STOCHASTIC_LEVELS, [[k, kColor], [d, dColor]]),
             legend: (index, style) => [
                 [`스토캐스틱 ${length}·${smoothK}·${smoothD}`, style.textColor],
-                [`%K ${formatIndicator(k[index])}`, lineColor(style, STOCHASTIC_K_COLOR)],
-                [`%D ${formatIndicator(d[index])}`, lineColor(style, STOCHASTIC_D_COLOR)],
+                [`%K ${formatIndicator(k[index])}`, lineColor(style, kColor)],
+                [`%D ${formatIndicator(d[index])}`, lineColor(style, dColor)],
             ],
         };
     },
@@ -407,14 +421,15 @@ const bollingerDefinition: IndicatorDefinition = {
     placement: 'price',
     defaultOn: false,
     params: [period('기간', 20), {label: '배수', default: 2, min: 0.1, max: 10, step: 0.1}],
-    create: (candles, [length, multiplier]) => {
+    colors: [swatch('밴드', 5)],
+    create: (candles, [length, multiplier], [bandColor]) => {
         const {upper, middle, lower} = bollinger(candles, length, multiplier);
         return {
             placement: 'price',
             series: [upper, lower],
             draw: ({painter, range, style, toY}) => {
                 const ctx = painter.ctx;
-                const color = lineColor(style, BAND_COLOR);
+                const color = lineColor(style, bandColor);
 
                 // 위·아래 선 사이를 옅게 채운다. 선과 같이 양옆 한 칸씩 더 잡아 가장자리에서 끊겨 보이지 않게 한다.
                 const start = Math.max(0, range.from - 1);
@@ -446,7 +461,7 @@ const bollingerDefinition: IndicatorDefinition = {
                 [`볼린저 ${length}·${multiplier}`, style.textColor],
                 [
                     [upper, middle, lower].map(values => formatWith(format, values[index])).join(' · '),
-                    lineColor(style, BAND_COLOR),
+                    lineColor(style, bandColor),
                 ],
             ],
         };
@@ -458,17 +473,18 @@ const volumeAverageDefinition: IndicatorDefinition = {
     placement: 'volume',
     defaultOn: false,
     params: [period('기간', 20)],
-    create: (candles, [length]) => {
+    colors: [swatch('선', 1)],
+    create: (candles, [length], [averageColor]) => {
         const values = volumeAverage(candles, length);
         return {
             placement: 'volume',
             series: [values],
             draw: ({painter, range, style, toY}) => {
-                painter.strokeSeries(values, range, toY, lineColor(style, VOLUME_AVERAGE_COLOR));
+                painter.strokeSeries(values, range, toY, lineColor(style, averageColor));
             },
             legend: (index, style, format) => [
                 [`거래량 이평 ${length}`, style.textColor],
-                [formatWith(format, values[index]), lineColor(style, VOLUME_AVERAGE_COLOR)],
+                [formatWith(format, values[index]), lineColor(style, averageColor)],
             ],
         };
     },
@@ -497,12 +513,54 @@ export const normalizeParams = (specs: IndicatorParam[], values: number[] | unde
         return spec.step === 1 ? Math.round(bounded) : bounded;
     });
 
-/** 설정값을 맞춘 뒤 캔들로 지표를 계산한다. */
+/** 저장된 값을 지표의 모양에 맞춘 결과 */
+export interface ResolvedIndicator {
+    paramSpecs: IndicatorParam[],   // 설정값 칸들. 선 개수를 바꿀 수 있는 지표는 지금의 선 수만큼
+    colorSpecs: IndicatorColor[],   // 색을 바꿀 수 있는 선들
+    params: number[],               // paramSpecs 와 같은 순서의 값
+    colors: number[],               // colorSpecs 와 같은 순서의 색 순번
+}
+
+/**
+ * 저장된 설정값과 색을 지표의 모양에 맞춘다. 빠졌거나 쓸 수 없는 값은 기본값으로 채운다.
+ * 선 개수를 바꿀 수 있는 지표는 저장된 설정값의 개수가 선의 수가 된다(범위 안으로 맞춘다).
+ * 처음 상태에 없던 선은 마지막 선의 정의를 따르고, 색은 순번대로 돌려 쓴다.
+ */
+export const resolveIndicator = (
+    shape: IndicatorShape, params: number[] | null | undefined, colors: number[] | null | undefined,
+): ResolvedIndicator => {
+    const {lines} = shape;
+    const count = lines
+        ? Math.min(lines.max, Math.max(lines.min, params?.length ?? shape.params.length))
+        : shape.params.length;
+    const paramSpecs = lines
+        ? Array.from({length: count}, (_unused, order): IndicatorParam => (
+            shape.params[order] ?? {...shape.params[shape.params.length - 1], label: `선 ${order + 1}`}
+        ))
+        : shape.params;
+    const colorSpecs = lines
+        ? Array.from({length: count}, (_unused, order): IndicatorColor => (
+            shape.colors[order] ?? {label: `선 ${order + 1}`, default: order}
+        ))
+        : shape.colors;
+    return {
+        paramSpecs,
+        colorSpecs,
+        params: normalizeParams(paramSpecs, params ?? undefined),
+        colors: colorSpecs.map((spec, order) => {
+            const value = colors?.[order];
+            return typeof value === 'number' && Number.isInteger(value) && value >= 0 ? value : spec.default;
+        }),
+    };
+};
+
+/** 설정값과 색을 맞춘 뒤 캔들로 지표를 계산한다. */
 export const createIndicator = (
     config: IndicatorConfig, candles: Candle[], context: IndicatorContext,
 ): IndicatorInstance => {
     const definition = INDICATORS[config.type];
-    return definition.create(candles, normalizeParams(definition.params, config.params), context);
+    const {params, colors} = resolveIndicator(definition, config.params, config.colors);
+    return definition.create(candles, params, colors, context);
 };
 
 /** 별도 영역 지표 하나를 그린다. 위쪽 한 줄은 값 표시(위 장)가 쓰도록 비워 둔다. */

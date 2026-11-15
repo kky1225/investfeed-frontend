@@ -123,7 +123,7 @@ export const useChartStorage = (assetType: AssetType | undefined, assetCode: str
     const changeIndicator = (key: string, change: ChartIndicatorSetting) => {
         const merged = {...indicators[key], ...change};
         const rest = Object.fromEntries(Object.entries(indicators).filter(([name]) => name !== key));
-        const hasOverride = typeof merged.on === 'boolean' || Array.isArray(merged.params);
+        const hasOverride = typeof merged.on === 'boolean' || Array.isArray(merged.params) || Array.isArray(merged.colors);
         saveSetting({indicators: hasOverride ? {...rest, [key]: merged} : rest});
     };
 
@@ -132,9 +132,12 @@ export const useChartStorage = (assetType: AssetType | undefined, assetCode: str
         changeIndicator(key, {on: on === defaultOn ? null : on});
     };
 
-    /** 지표의 설정값을 바꾼다. null 이면 저장한 값을 지워 기본값으로 돌린다. */
-    const setIndicatorParams = (key: string, values: number[] | null) => {
-        changeIndicator(key, {params: values});
+    /**
+     * 지표의 설정값(기간 등)이나 선 색을 바꾼다. 준 항목만 바뀌고, null 을 주면 저장한 값을 지워 기본값으로 돌린다.
+     * 선을 지울 때처럼 둘이 함께 바뀌는 경우는 한 번에 준다.
+     */
+    const setIndicatorValues = (key: string, change: Pick<ChartIndicatorSetting, 'params' | 'colors'>) => {
+        changeIndicator(key, change);
     };
 
     const setChartType = (type: string) => saveSetting({chartType: type});
@@ -167,7 +170,7 @@ export const useChartStorage = (assetType: AssetType | undefined, assetCode: str
 
     return {
         drawings, updateDrawings,
-        indicators, setIndicatorOn, setIndicatorParams,
+        indicators, setIndicatorOn, setIndicatorValues,
         chartType, setChartType,
         logScale, setLogScale,
         drawingToolbar, setDrawingToolbar,

@@ -10,7 +10,8 @@ import SettingsIcon from "@mui/icons-material/Settings";
 import KeyboardDoubleArrowRightIcon from "@mui/icons-material/KeyboardDoubleArrowRight";
 import ChartDrawingStylePanel from "./ChartDrawingStylePanel.tsx";
 import ChartSettingsDialog, {ChartIndicatorOption} from "./ChartSettingsDialog.tsx";
-import {IndicatorParam, INDICATORS, normalizeParams} from "../../lib/chart/indicatorPanes.ts";
+import {INDICATORS, IndicatorShape, resolveIndicator} from "../../lib/chart/indicatorPanes.ts";
+import {chartColorVars, LINE_COLOR_VARS} from "./chartColors.ts";
 import ChartDrawingToolbar from "./ChartDrawingToolbar.tsx";
 import {ChartToolbarButton} from "./ChartToolbarControls.tsx";
 import {useChartStorage} from "./useChartStorage.ts";
@@ -43,19 +44,22 @@ export interface CandleChartProps {
 const DEFAULT_MOVING_AVERAGES = [5, 20, 60, 120];
 const DEFAULT_INDICATORS = Object.keys(INDICATORS) as IndicatorType[];
 const NO_PRICE_LINES: PriceLine[] = [];
-const NO_MOVING_AVERAGES: number[] = [];
+const NO_MOVING_AVERAGES: { periods: number[], colors: number[] } = {periods: [], colors: []};
 
 // 설정에 저장하는 이동평균선의 key. 선 전체를 한 번에 켜고 끄며, 설정값은 선마다의 기간이다. 보조지표의 key 는 종류 이름
 const AVERAGE_KEY = 'average';
 const AVERAGE_PERIOD_MAX = 500;
+const AVERAGE_LINES = {min: 1, max: 8};     // 이동평균선의 수
 
 /** 설정 창에 보이는 지표 한 줄의 정의: 이동평균선 + 보조지표들 */
 interface IndicatorEntry {
     key: string,
     label: string,
     defaultOn: boolean,
-    specs: IndicatorParam[],
+    shape: IndicatorShape,  // 바꿀 수 있는 것: 설정값 칸, 색, 선 개수
 }
+
+const sameNumbers = (a: number[], b: number[]) => a.length === b.length && a.every((value, order) => value === b[order]);
 
 // Alt 와 함께 누르는 그리기 단축키 (KeyboardEvent.code)
 const TOOL_SHORTCUTS: Record<string, DrawingTool | undefined> = {
@@ -76,10 +80,6 @@ const TOOL_HINTS: Record<DrawingTool, string> = {
 };
 const TEXT_INPUT_WIDTH = 200;   // 글자 입력 칸의 너비 (px)
 
-// 엔진에 넘기는 선 색의 CSS 변수. 순서가 곧 색 순번이다 (이동평균선, 지표, 그린 도형이 이 순번으로 색을 고른다)
-const LINE_COLOR_VARS = [
-    '--chart-line-1', '--chart-line-2', '--chart-line-3', '--chart-line-4', '--chart-line-5', '--chart-line-6',
-];
 const MAX_UNDO = 50;    // 되돌릴 수 있는 그리기 변경의 수
 
 interface DrawingHistory {
@@ -99,7 +99,7 @@ const CandleChart = ({
     // 그린 선과 차트 설정(꺼 둔 지표)은 계정에 저장한다.
     const {
         drawings, updateDrawings,
-        indicators: indicatorSettings, setIndicatorOn, setIndicatorParams,
+        indicators: indicatorSettings, setIndicatorOn, setIndicatorValues,
         chartType: savedChartType, setChartType,
         logScale, setLogScale,
         drawingToolbar: toolbarVisible, setDrawingToolbar,
@@ -183,37 +183,53 @@ const CandleChart = ({
             key: AVERAGE_KEY,
             label: '이동평균선',
             defaultOn: true,
-            specs: movingAverages.map((period, order) => (
-                {label: `선 ${order + 1}`, default: period, min: 1, max: AVERAGE_PERIOD_MAX, step: 1}
-            )),
+            shape: {
+                params: movingAverages.map((period, order) => (
+                    {label: `선 ${order + 1}`, default: period, min: 1, max: AVERAGE_PERIOD_MAX, step: 1}
+                )),
+                colors: movingAverages.map((_period, order) => ({label: `선 ${order + 1}`, default: order})),
+                lines: AVERAGE_LINES,
+            },
         }] : []),
         ...indicators.map(type => {
-            const {label, defaultOn, params: specs} = INDICATORS[type];
-            return {key: type, label, defaultOn, specs};
+            const {label, defaultOn} = INDICATORS[type];
+            return {key: type, label, defaultOn, shape: INDICATORS[type]};
         }),
     ], [movingAverages, indicators]);
 
     // 저장된 설정을 입혀 설정 창에 보일 상태로 만든다.
     const indicatorOptions = useMemo<ChartIndicatorOption[]>(() => entries.map(entry => {
         const saved = indicatorSettings[entry.key];
-        const values = normalizeParams(entry.specs, saved?.params ?? undefined);
+        const {lines} = entry.shape;
+        const resolved = resolveIndicator(entry.shape, saved?.params, saved?.colors);
+        const initial = resolveIndicator(entry.shape, null, null);
         return {
             key: entry.key,
             label: entry.label,
             on: saved?.on ?? entry.defaultOn,
-            params: entry.specs.map((spec, order) => ({...spec, value: values[order]})),
-            customized: entry.specs.some((spec, order) => spec.default !== values[order]),
+            params: resolved.paramSpecs.map((spec, order) => ({...spec, value: resolved.params[order]})),
+            colors: resolved.colorSpecs.map((spec, order) => ({label: spec.label, value: resolved.colors[order]})),
+            lines: lines
+                ? {canAdd: resolved.params.length < lines.max, canRemove: resolved.params.length > lines.min}
+                : null,
+            customized: !sameNumbers(resolved.params, initial.params) || !sameNumbers(resolved.colors, initial.colors),
         };
     }), [entries, indicatorSettings]);
 
-    // 엔진에 넘길 것: 켜 둔 이동평균선의 기간들, 켜 둔 보조지표와 설정값
+    // 엔진에 넘길 것: 켜 둔 이동평균선의 기간과 색, 켜 둔 보조지표의 설정값과 색
     const activeAverages = useMemo(() => {
         const option = indicatorOptions.find(item => item.key === AVERAGE_KEY);
-        return option?.on ? option.params.map(param => param.value) : NO_MOVING_AVERAGES;
+        return option?.on
+            ? {periods: option.params.map(param => param.value), colors: option.colors.map(color => color.value)}
+            : NO_MOVING_AVERAGES;
     }, [indicatorOptions]);
     const activeIndicators = useMemo<IndicatorConfig[]>(() => indicatorOptions
         .filter(option => option.on && option.key !== AVERAGE_KEY)
-        .map(option => ({type: option.key as IndicatorType, params: option.params.map(param => param.value)})),
+        .map(option => ({
+            type: option.key as IndicatorType,
+            params: option.params.map(param => param.value),
+            colors: option.colors.map(color => color.value),
+        })),
     [indicatorOptions]);
     // 차트 아래에 따로 영역을 차지하는 지표의 수. 그만큼 전체 높이를 늘린다
     const paneCount = activeIndicators.filter(config => INDICATORS[config.type].placement === 'pane').length;
@@ -272,7 +288,7 @@ const CandleChart = ({
     }, [seriesKey]);
 
     useEffect(() => {
-        engineRef.current?.setMovingAverages(activeAverages);
+        engineRef.current?.setMovingAverages(activeAverages.periods, activeAverages.colors);
     }, [activeAverages]);
 
     useEffect(() => {
@@ -418,8 +434,8 @@ const CandleChart = ({
                 onClose={() => setSettingsOpen(false)}
                 indicatorOptions={indicatorOptions}
                 onToggleIndicator={toggleIndicator}
-                onParamsChange={setIndicatorParams}
-                onParamsReset={key => setIndicatorParams(key, null)}
+                onIndicatorChange={setIndicatorValues}
+                onIndicatorReset={key => setIndicatorValues(key, {params: null, colors: null})}
                 drawingToolbar={toolbarVisible}
                 onDrawingToolbarChange={setDrawingToolbar}
                 logScale={logScale}
@@ -436,19 +452,7 @@ const CandleChart = ({
                         position: 'relative',
                         flexGrow: 1,
                         minWidth: 0,
-                        '--chart-up': (theme.vars || theme).palette.error.main,
-                        // 하락색은 info.main 대신 primary.main 을 쓴다. 라이트 모드의 info.main 은 밝은 하늘색이라
-                        // 진한 빨강(error.main)과 무게가 맞지 않고 캔들이 흐려 보인다
-                        '--chart-down': (theme.vars || theme).palette.primary.main,
-                        '--chart-text': (theme.vars || theme).palette.text.secondary,
-                        '--chart-grid': (theme.vars || theme).palette.divider,
-                        '--chart-background': (theme.vars || theme).palette.background.paper,
-                        '--chart-line-1': (theme.vars || theme).palette.success.main,
-                        '--chart-line-2': (theme.vars || theme).palette.warning.main,
-                        '--chart-line-3': (theme.vars || theme).palette.secondary.main,
-                        '--chart-line-4': (theme.vars || theme).palette.grey[500],
-                        '--chart-line-5': (theme.vars || theme).palette.text.primary,
-                        '--chart-line-6': (theme.vars || theme).palette.info.main,
+                        ...chartColorVars(theme),
                     })}
                 >
                     {/* 도형을 선택하면 차트 위쪽 가운데에 그 도형의 꾸미기·삭제 패널이 뜬다. */}

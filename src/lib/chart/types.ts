@@ -102,6 +102,7 @@ export type IndicatorType =
 export interface IndicatorConfig {
     type: IndicatorType,
     params?: number[],
+    colors?: number[],  // 선마다의 색(style.lineColors 안에서의 순번). 순서와 뜻은 INDICATORS 의 colors 를 따른다. 비우면 기본 색
 }
 
 /** 캔들 한 개가 담는 기간. 실시간 체결이 어느 캔들에 들어갈지 정하는 데 쓴다. */

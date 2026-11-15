@@ -168,7 +168,8 @@ const writeLegendLine = (painter: Painter, layout: Layout, middle: number, items
  * 이동평균과 가격 영역 지표는 값 표시 아랫줄에, 거래량 영역 지표는 거래량 영역 왼쪽 위에 적는다.
  */
 export const drawOverlayLegends = (
-    painter: Painter, layout: Layout, style: ChartStyle, periods: number[], averages: Series[], index: number,
+    painter: Painter, layout: Layout, style: ChartStyle,
+    periods: number[], averages: Series[], averageColors: number[], index: number,
 ) => {
     const [pricePane, volumePane] = layout.panes;
     const priceItems: LegendItem[] = [
@@ -177,7 +178,7 @@ export const drawOverlayLegends = (
             const value = averages[order]?.[index];
             return [
                 `${period} ${isNumber(value) ? formatPrice(value, layout.priceDecimals) : '-'}`,
-                lineColor(style, order),
+                lineColor(style, averageColors[order] ?? order),
             ];
         }),
         ...layout.priceOverlays.flatMap(overlay => overlay.legend(index, style, pricePane.format)),

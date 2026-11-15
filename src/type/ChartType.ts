@@ -4,6 +4,7 @@ import type {Drawing} from "../lib/chart/types.ts";
 export interface ChartIndicatorSetting {
     on?: boolean | null;        // 켜짐 여부
     params?: number[] | null;   // 설정값 (기간 등). 순서는 설정 창의 칸 순서
+    colors?: number[] | null;   // 선마다의 색. 차트의 선 색 목록에서의 순번. 순서는 설정 창의 선 순서
 }
 
 /** 회원별 차트 설정 */

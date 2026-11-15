@@ -77,6 +77,7 @@ export class CandleChartEngine {
     private flatByPrevClose = false;
     private averagePeriods: number[] = [];
     private averages: Series[] = [];        // averagePeriods 와 같은 순서
+    private averageColors: number[] = [];   // 이동평균선마다의 색 순번. 비어 있거나 모자라면 순서대로의 색
     private indicatorConfigs: IndicatorConfig[] = [];
     // indicatorConfigs 를 계산해 그려지는 자리별로 나눈 것
     private paneIndicators: PaneIndicator[] = [];
@@ -197,9 +198,13 @@ export class CandleChartEngine {
         this.scheduleDraw();
     }
 
-    /** 그릴 이동평균선의 기간들 (예: [5, 20, 60, 120]) */
-    setMovingAverages(periods: number[]) {
+    /**
+     * 그릴 이동평균선의 기간들 (예: [5, 20, 60, 120])과 선마다의 색(style.lineColors 안에서의 순번).
+     * 색을 주지 않으면 순서대로의 색을 쓴다.
+     */
+    setMovingAverages(periods: number[], colors: number[] = []) {
         this.averagePeriods = periods;
+        this.averageColors = colors;
         this.computeSeries();
         this.scheduleDraw();
     }
@@ -628,6 +633,7 @@ export class CandleChartEngine {
             height: this.height,
             range: visibleRange(this.resolveView(), this.candles.length, this.plotWidth()),
             averages: this.averages,
+            averageColors: this.averageColors,
             indicators: this.paneIndicators,
             priceOverlays: this.priceOverlays,
             volumeOverlays: this.volumeOverlays,
@@ -656,7 +662,7 @@ export class CandleChartEngine {
         if (candle) {
             drawCandleLegend(painter, layout, style, candle, candleColor(this.candles, index, style, this.flatByPrevClose));
         }
-        drawOverlayLegends(painter, layout, style, this.averagePeriods, this.averages, index);
+        drawOverlayLegends(painter, layout, style, this.averagePeriods, this.averages, this.averageColors, index);
         drawIndicatorLegends(painter, layout, style, index);
     }
 }

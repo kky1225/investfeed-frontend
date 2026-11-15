@@ -37,7 +37,8 @@ export interface MainInput {
     width: number,              // 캔버스 크기 (CSS px)
     height: number,
     range: VisibleRange,
-    averages: Series[],         // 이동평균선. 색은 순서대로
+    averages: Series[],         // 이동평균선
+    averageColors: number[],    // 이동평균선마다의 색 순번. 없는 자리는 순서대로의 색
     indicators: PaneIndicator[],        // 위에서 아래로 쌓을 별도 영역 지표
     priceOverlays: OverlayIndicator[],  // 가격 영역에 겹칠 지표
     volumeOverlays: OverlayIndicator[], // 거래량 영역에 겹칠 지표
@@ -179,7 +180,10 @@ const drawCloseLine = ({painter, style, candles, chartType, range, priceBottom, 
  * 캔들 + 거래량 + 이동평균선 + 겹쳐 그리는 지표. 드래그로 반쯤 걸친 캔들이 축 영역으로 넘어가지 않게 자른다.
  * 가격 영역 지표(볼린저밴드의 채움 등)는 캔들 뒤에, 선들은 캔들 앞에 놓인다.
  */
-const drawCandles = (frame: Frame, averages: Series[], priceOverlays: OverlayIndicator[], volumeOverlays: OverlayIndicator[]) => {
+const drawCandles = (
+    frame: Frame, averages: Series[], averageColors: number[],
+    priceOverlays: OverlayIndicator[], volumeOverlays: OverlayIndicator[],
+) => {
     const {
         painter, style, candles, shapes, chartType, visible, range, flatByPrevClose,
         plotWidth, mainBottom, volumeTop, priceY, volumeY, line,
@@ -232,7 +236,7 @@ const drawCandles = (frame: Frame, averages: Series[], priceOverlays: OverlayInd
         });
 
         averages.forEach((values, order) => {
-            painter.strokeSeries(values, range, priceY, lineColor(style, order));
+            painter.strokeSeries(values, range, priceY, lineColor(style, averageColors[order] ?? order));
         });
     });
 
@@ -340,7 +344,8 @@ const drawPriceLines = (frame: Frame, priceLines: PriceLine[]) => {
 export const renderMain = (painter: Painter, input: MainInput): Layout | null => {
     const {
         candles, chartType, shapes, logScale, priceZoom, timeUnit, style, width, height, range,
-        averages, indicators, priceOverlays, volumeOverlays, priceLines, flatByPrevClose, axisWidth, valueDecimals,
+        averages, averageColors, indicators, priceOverlays, volumeOverlays, priceLines, flatByPrevClose,
+        axisWidth, valueDecimals,
     } = input;
 
     // 위에서부터: 가격 / 거래량 / 보조지표들 / 날짜축
@@ -416,7 +421,7 @@ export const renderMain = (painter: Painter, input: MainInput): Layout | null =>
     drawVolumeAxis(frame);
     drawTimeAxis(frame);
     drawBorders(frame);
-    drawCandles(frame, averages, priceOverlays, volumeOverlays);
+    drawCandles(frame, averages, averageColors, priceOverlays, volumeOverlays);
     drawExtremes(frame);
     drawCurrentPrice(frame);
     drawPriceLines(frame, priceLines);

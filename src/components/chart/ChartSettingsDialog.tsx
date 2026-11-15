@@ -8,10 +8,16 @@ import Button from "@mui/material/Button";
 import Divider from "@mui/material/Divider";
 import FormGroup from "@mui/material/FormGroup";
 import FormControlLabel from "@mui/material/FormControlLabel";
+import IconButton from "@mui/material/IconButton";
 import Stack from "@mui/material/Stack";
 import Switch from "@mui/material/Switch";
 import TextField from "@mui/material/TextField";
+import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
+import AddIcon from "@mui/icons-material/Add";
+import CloseIcon from "@mui/icons-material/Close";
+import ChartColorPicker from "./ChartColorPicker.tsx";
+import {chartColorVars} from "./chartColors.ts";
 
 /** 지표의 설정값 하나 (기간 등) */
 export interface ChartIndicatorParam {
@@ -22,13 +28,28 @@ export interface ChartIndicatorParam {
     step: number,   // 1 이면 정수만 받는다
 }
 
+/** 색을 바꿀 수 있는 선 하나 */
+export interface ChartIndicatorColor {
+    label: string,
+    value: number,  // 차트의 선 색 목록에서의 순번
+}
+
 /** 설정 창의 지표 한 줄 */
 export interface ChartIndicatorOption {
     key: string,
     label: string,
     on: boolean,
     params: ChartIndicatorParam[],
-    customized: boolean,    // 설정값을 기본값에서 바꿔 둔 상태인지
+    colors: ChartIndicatorColor[],
+    // 설정값 하나가 선 하나인 지표(이동평균선 등)면 선을 더하고 뺄 수 있는지. 그런 지표는 params 와 colors 가 같은 순서의 선들이다
+    lines: { canAdd: boolean, canRemove: boolean } | null,
+    customized: boolean,    // 설정값·색·선 개수를 기본에서 바꿔 둔 상태인지
+}
+
+/** 지표에서 바꾼 것. 준 항목만 바뀐다 */
+export interface ChartIndicatorChange {
+    params?: number[],
+    colors?: number[],
 }
 
 interface ChartSettingsDialogProps {
@@ -36,8 +57,8 @@ interface ChartSettingsDialogProps {
     onClose: () => void,
     indicatorOptions: ChartIndicatorOption[],
     onToggleIndicator: (key: string, on: boolean) => void,
-    onParamsChange: (key: string, values: number[]) => void,
-    onParamsReset: (key: string) => void,
+    onIndicatorChange: (key: string, change: ChartIndicatorChange) => void,
+    onIndicatorReset: (key: string) => void,
     drawingToolbar: boolean,                    // 그리기 도구 모음을 보일지
     onDrawingToolbarChange: (visible: boolean) => void,
     logScale: boolean,                          // 가격축을 로그로 할지
@@ -89,14 +110,96 @@ const ParamField = ({param, onCommit}: ParamFieldProps) => {
     );
 };
 
+interface IndicatorFieldsProps {
+    option: ChartIndicatorOption,
+    onChange: (change: ChartIndicatorChange) => void,
+}
+
+/** 지표 한 줄의 설정값 칸과 색 단추. 선을 더하고 뺄 수 있는 지표는 선마다 "기간 · 색 · 지우기"를 한 묶음으로 놓는다. */
+const IndicatorFields = ({option, onChange}: IndicatorFieldsProps) => {
+    const values = option.params.map(param => param.value);
+    const colors = option.colors.map(color => color.value);
+    const replaced = (list: number[], order: number, value: number) => list.map((item, index) => index === order ? value : item);
+    const colorPicker = (color: ChartIndicatorColor, order: number) => (
+        <ChartColorPicker
+            label={`${option.label} ${color.label}`}
+            value={color.value}
+            onChange={value => onChange({colors: replaced(colors, order, value)})}
+        />
+    );
+    const paramField = (param: ChartIndicatorParam, order: number) => (
+        <ParamField
+            // 값이 바깥에서 바뀌면(기본값으로 되돌리기, 선 지우기 등) 칸을 새 값으로 다시 만든다.
+            key={`${order}-${param.value}`}
+            param={param}
+            onCommit={value => onChange({params: replaced(values, order, value)})}
+        />
+    );
+
+    if (option.lines) {
+        const last = option.params[option.params.length - 1];
+        return (
+            <Stack direction="row" spacing={1.5} useFlexGap sx={{flexWrap: 'wrap', alignItems: 'center', mt: 1}}>
+                {option.params.map((param, order) => (
+                    <Stack key={`${order}-${param.value}`} direction="row" spacing={0.5} sx={{alignItems: 'center'}}>
+                        {paramField(param, order)}
+                        {colorPicker(option.colors[order], order)}
+                        {option.lines?.canRemove && (
+                            <Tooltip title="선 지우기">
+                                <IconButton
+                                    size="small"
+                                    aria-label={`${option.label} ${param.label} 지우기`}
+                                    onClick={() => onChange({
+                                        params: values.filter((_value, index) => index !== order),
+                                        colors: colors.filter((_color, index) => index !== order),
+                                    })}
+                                >
+                                    <CloseIcon fontSize="inherit"/>
+                                </IconButton>
+                            </Tooltip>
+                        )}
+                    </Stack>
+                ))}
+                {option.lines.canAdd && (
+                    <Button
+                        size="small"
+                        startIcon={<AddIcon/>}
+                        // 새 선의 기간은 마지막 선의 2배, 색은 다음 순번
+                        onClick={() => onChange({
+                            params: [...values, Math.min(last.max, last.value * 2)],
+                            colors: [...colors, colors.length],
+                        })}
+                    >
+                        선 추가
+                    </Button>
+                )}
+            </Stack>
+        );
+    }
+
+    if (option.params.length === 0 && option.colors.length === 0) return null;
+    return (
+        <Stack direction="row" spacing={1} useFlexGap sx={{flexWrap: 'wrap', alignItems: 'center', mt: 1}}>
+            {option.params.map(paramField)}
+            {option.colors.map((color, order) => (
+                <Stack key={color.label} direction="row" spacing={0.5} sx={{alignItems: 'center', pl: 0.5}}>
+                    <Typography variant="caption" sx={{color: 'text.secondary'}}>{color.label}</Typography>
+                    {colorPicker(color, order)}
+                </Stack>
+            ))}
+        </Stack>
+    );
+};
+
 /** 차트 설정 창. 바꾸는 즉시 차트에 반영된다. */
 const ChartSettingsDialog = ({
-    open, onClose, indicatorOptions, onToggleIndicator, onParamsChange, onParamsReset,
+    open, onClose, indicatorOptions, onToggleIndicator, onIndicatorChange, onIndicatorReset,
     drawingToolbar, onDrawingToolbarChange,
     logScale, onLogScaleChange,
     flatByPrevClose, onFlatByPrevCloseChange, drawingCount, onClearDrawings,
 }: ChartSettingsDialogProps) => (
-    <Dialog open={open} onClose={onClose} maxWidth="xs" fullWidth>
+    // 창은 화면 다른 곳에 따로 그려지므로, 색 단추가 차트의 색을 쓸 수 있게 색 변수를 걸어 준다.
+    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth sx={chartColorVars}>
         <DialogTitle>차트 설정</DialogTitle>
         <DialogContent>
             <Typography variant="subtitle2" sx={{color: 'text.secondary', mb: 1}}>지표</Typography>
@@ -114,22 +217,10 @@ const ChartSettingsDialog = ({
                                 }
                             />
                             {option.customized && (
-                                <Button size="small" onClick={() => onParamsReset(option.key)}>기본값으로</Button>
+                                <Button size="small" onClick={() => onIndicatorReset(option.key)}>기본값으로</Button>
                             )}
                         </Stack>
-                        <Stack direction="row" spacing={1} useFlexGap sx={{flexWrap: 'wrap', mt: 1}}>
-                            {option.params.map((param, order) => (
-                                <ParamField
-                                    // 값이 바깥에서 바뀌면(기본값으로 되돌리기 등) 칸을 새 값으로 다시 만든다.
-                                    key={`${order}-${param.value}`}
-                                    param={param}
-                                    onCommit={value => onParamsChange(
-                                        option.key,
-                                        option.params.map((item, index) => index === order ? value : item.value),
-                                    )}
-                                />
-                            ))}
-                        </Stack>
+                        <IndicatorFields option={option} onChange={change => onIndicatorChange(option.key, change)}/>
                     </Box>
                 ))}
             </Stack>
