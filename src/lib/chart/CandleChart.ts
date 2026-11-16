@@ -151,6 +151,7 @@ export class CandleChartEngine {
     private readonly drawingLayer = new DrawingLayer({
         layout: () => this.layout,
         candles: () => this.candles,
+        timeUnit: () => this.timeUnit,
         redraw: () => this.scheduleOverlay(),
         refreshCursor: () => this.updateCursor(),
         drawingsChanged: drawings => this.onDrawingsChange?.(drawings),
@@ -354,6 +355,11 @@ export class CandleChartEngine {
         this.crosshairHeld = false;
         this.pointer = null;
         this.scheduleOverlay();
+    }
+
+    /** 도형을 하나 더 만든다. 원래 것에서 오른쪽 아래로 조금 비켜 놓고 새 도형을 선택한다. */
+    duplicateDrawing(id: string) {
+        this.drawingLayer.duplicate(id);
     }
 
     /** 정해진 가격에 수평선을 긋는다. 새로 그리는 도형의 꾸미기를 따른다. */

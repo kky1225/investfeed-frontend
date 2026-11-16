@@ -69,6 +69,8 @@ interface ChartSettingsDialogProps {
     onFlatByPrevCloseChange: (enabled: boolean) => void,
     drawingCount: number,                       // 그려 둔 선의 수
     onClearDrawings: () => void,
+    hiddenDrawingCount: number,                 // 그중 숨겨 둔 선의 수
+    onShowDrawings: () => void,                 // 숨겨 둔 선을 모두 다시 보이게 한다
 }
 
 interface ParamFieldProps {
@@ -198,7 +200,7 @@ const ChartSettingsDialog = ({
     open, onClose, indicatorOptions, onToggleIndicator, onIndicatorChange, onIndicatorReset,
     drawingToolbar, onDrawingToolbarChange,
     logScale, onLogScaleChange, percentScale, onPercentScaleChange,
-    flatByPrevClose, onFlatByPrevCloseChange, drawingCount, onClearDrawings,
+    flatByPrevClose, onFlatByPrevCloseChange, drawingCount, onClearDrawings, hiddenDrawingCount, onShowDrawings,
 }: ChartSettingsDialogProps) => (
     // 창은 화면 다른 곳에 따로 그려지므로, 색 단추가 차트의 색을 쓸 수 있게 색 변수를 걸어 준다.
     <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth sx={chartColorVars}>
@@ -287,9 +289,17 @@ const ChartSettingsDialog = ({
                 />
             </FormGroup>
             {drawingCount > 0 ? (
-                <Button variant="outlined" color="error" size="small" onClick={onClearDrawings} sx={{mt: 1}}>
-                    그린 선 모두 삭제 ({drawingCount}개)
-                </Button>
+                <Stack direction="row" spacing={1} sx={{mt: 1, flexWrap: 'wrap', rowGap: 1}}>
+                    <Button variant="outlined" color="error" size="small" onClick={onClearDrawings}>
+                        그린 선 모두 삭제 ({drawingCount}개)
+                    </Button>
+                    {/* 숨긴 선은 차트에서 고를 수 없으므로 여기서 한꺼번에 다시 보이게 한다. */}
+                    {hiddenDrawingCount > 0 && (
+                        <Button variant="outlined" size="small" onClick={onShowDrawings}>
+                            숨긴 선 모두 보이기 ({hiddenDrawingCount}개)
+                        </Button>
+                    )}
+                </Stack>
             ) : (
                 <Typography variant="body2" sx={{color: 'text.secondary', mt: 1}}>그린 선이 없습니다.</Typography>
             )}

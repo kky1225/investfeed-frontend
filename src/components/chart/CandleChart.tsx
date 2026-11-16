@@ -22,7 +22,7 @@ import {
     CandleChartEngine, INDICATOR_HEIGHT_LIMIT, INDICATOR_PANE_HEIGHT, MAIN_HEIGHT_LIMIT, VOLUME_RATIO_LIMIT,
 } from "../../lib/chart/CandleChart.ts";
 import {
-    Candle, CandleInterval, CHART_TYPES, ChartType, ContextMenuRequest, Drawing, DrawingStyle, DrawingTool, IndicatorConfig, IndicatorType,
+    Candle, CandleInterval, CHART_TYPES, ChartType, ContextMenuRequest, Drawing, DrawingState, DrawingStyle, DrawingTool, IndicatorConfig, IndicatorType,
     MAGNET_MODES, MagnetMode, MAX_DRAWING_TEXT_LENGTH, PaneResize, PriceLine, TextRequest, TimeUnit,
 } from "../../lib/chart/types.ts";
 import ChartTypeSelect from "./ChartTypeSelect.tsx";
@@ -162,6 +162,12 @@ const CandleChart = ({
         updateDrawings(previous);
     };
 
+    /** 도형 하나의 상태(잠금·숨김)를 바꾼다. */
+    const changeDrawing = (id: string, change: DrawingState) => {
+        changeDrawings(drawings.map(drawing => drawing.id === id ? {...drawing, ...change} : drawing));
+    };
+    const hiddenCount = drawings.filter(drawing => drawing.hidden).length;
+
     /** 선택한 도형의 꾸미기를 바꾼다. 다음에 그리는 도형도 같은 꾸미기를 따른다. */
     const changeSelectedStyle = (change: DrawingStyle) => {
         setNewStyle(previous => ({...previous, ...change}));
@@ -198,6 +204,7 @@ const CandleChart = ({
     // 닫히는 동안에도 항목이 그대로 보이도록, 내용(contextMenu)은 남겨 두고 열림 여부만 따로 바꾼다.
     const [contextMenu, setContextMenu] = useState<ContextMenuRequest | null>(null);
     const [menuOpen, setMenuOpen] = useState(false);
+    const menuDrawing = drawings.find(drawing => drawing.id === contextMenu?.drawingId);    // 메뉴를 띄운 도형
     const openContextMenu = (request: ContextMenuRequest) => {
         setContextMenu(request);
         setMenuOpen(true);
@@ -530,6 +537,8 @@ const CandleChart = ({
                 onFlatByPrevCloseChange={setFlatByPrevClose}
                 drawingCount={drawings.length}
                 onClearDrawings={() => changeDrawings([])}
+                hiddenDrawingCount={hiddenCount}
+                onShowDrawings={() => changeDrawings(drawings.map(drawing => drawing.hidden ? {...drawing, hidden: null} : drawing))}
             />
             {/* 우클릭 메뉴. 도형 위에서는 그 도형의 메뉴, 빈 곳에서는 차트의 메뉴. 해당하지 않는 항목은 보이지 않는다. */}
             <Menu
@@ -555,15 +564,34 @@ const CandleChart = ({
                     },
                 }}
             >
-                {contextMenu?.drawingId ? (
+                {contextMenu?.drawingId ? [
                     <MenuItem
+                        key="copy"
+                        onClick={() => runMenuAction(() => engineRef.current?.duplicateDrawing(contextMenu.drawingId!))}
+                    >
+                        복제
+                    </MenuItem>,
+                    <MenuItem
+                        key="lock"
+                        onClick={() => runMenuAction(() => changeDrawing(contextMenu.drawingId!, {locked: !menuDrawing?.locked}))}
+                    >
+                        {menuDrawing?.locked ? '잠금 해제' : '잠금'}
+                    </MenuItem>,
+                    <MenuItem
+                        key="hide"
+                        onClick={() => runMenuAction(() => changeDrawing(contextMenu.drawingId!, {hidden: true}))}
+                    >
+                        숨기기
+                    </MenuItem>,
+                    <MenuItem
+                        key="delete"
                         onClick={() => runMenuAction(() => changeDrawings(
                             drawings.filter(drawing => drawing.id !== contextMenu.drawingId),
                         ))}
                     >
                         삭제
-                    </MenuItem>
-                ) : [
+                    </MenuItem>,
+                ] : [
                     contextMenu?.price != null && (
                         <MenuItem
                             key="line"
@@ -614,6 +642,8 @@ const CandleChart = ({
                             colorCount={LINE_COLOR_VARS.length}
                             onChange={changeSelectedStyle}
                             onDelete={() => changeDrawings(drawings.filter(drawing => drawing.id !== selectedId))}
+                            locked={selectedDrawing.locked ?? false}
+                            onLockChange={locked => changeDrawing(selectedDrawing.id, {locked})}
                             onEditText={selectedDrawing.type === 'text'
                                 ? () => engineRef.current?.editText(selectedDrawing.id)
                                 : undefined}

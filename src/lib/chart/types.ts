@@ -69,8 +69,14 @@ export interface ContextMenuRequest {
     priceScaled: boolean,       // 가격축을 끌어 세로 배율을 바꿔 둔 상태인지 (resetPriceScale 로 되돌릴 수 있는지)
 }
 
+/** 도형의 상태. 비워 두면 풀려 있고 보이는 상태 */
+export interface DrawingState {
+    locked?: boolean | null,    // 잠금: 끌어 옮기거나 점을 고칠 수 없고 Delete 키로 지워지지 않는다. 꾸미기는 바꿀 수 있다
+    hidden?: boolean | null,    // 숨김: 그리지 않고 잡히지도 않는다. 지운 것은 아니다
+}
+
 /** 사용자가 차트에 직접 그린 도형 */
-export type Drawing = { id: string } & DrawingStyle & (
+export type Drawing = { id: string } & DrawingStyle & DrawingState & (
     | { type: 'trend', from: Anchor, to: Anchor }       // 추세선: 두 점을 잇는 선분
     | { type: 'ray', from: Anchor, to: Anchor }         // 반직선: from 에서 to 방향으로 끝없이
     | { type: 'rectangle', from: Anchor, to: Anchor }   // 사각형: 두 점이 대각선 모서리

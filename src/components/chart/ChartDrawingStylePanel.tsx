@@ -6,6 +6,8 @@ import Stack from "@mui/material/Stack";
 import Tooltip from "@mui/material/Tooltip";
 import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
 import EditOutlinedIcon from "@mui/icons-material/EditOutlined";
+import LockOpenOutlinedIcon from "@mui/icons-material/LockOpenOutlined";
+import LockOutlinedIcon from "@mui/icons-material/LockOutlined";
 import {ChartToolbarButton} from "./ChartToolbarControls.tsx";
 import {DrawingStyle} from "../../lib/chart/types.ts";
 
@@ -14,6 +16,8 @@ interface ChartDrawingStylePanelProps {
     colorCount: number,         // 고를 수 있는 색의 수. 색은 차트의 --chart-line-N 변수에서 온다
     onChange: (change: DrawingStyle) => void,
     onDelete: () => void,
+    locked: boolean,            // 잠근 도형인지. 잠그면 끌어 옮기거나 점을 고칠 수 없다
+    onLockChange: (locked: boolean) => void,
     // 글자 도형일 때만 준다. 주면 굵기는 글자 크기로 쓰이고, 점선 대신 글자 수정 버튼이 나온다
     onEditText?: () => void,
 }
@@ -26,10 +30,12 @@ const SWATCH_SIZE = 16;
 const selectedSx = {color: 'primary.main', backgroundColor: 'action.selected'};
 
 /**
- * 도형을 선택하면 차트 위쪽 가운데에 뜨는 패널: 색 · 굵기 · 점선 · 삭제. (글자 도형은 색 · 크기 · 글자 수정 · 삭제)
+ * 도형을 선택하면 차트 위쪽 가운데에 뜨는 패널: 색 · 굵기 · 점선 · 잠금 · 삭제. (글자 도형은 색 · 크기 · 글자 수정 · 잠금 · 삭제)
  * 색은 테마에서 온 선 색 목록 안에서만 고른다.
  */
-const ChartDrawingStylePanel = ({style, colorCount, onChange, onDelete, onEditText}: ChartDrawingStylePanelProps) => {
+const ChartDrawingStylePanel = ({
+    style, colorCount, onChange, onDelete, locked, onLockChange, onEditText,
+}: ChartDrawingStylePanelProps) => {
     const widthLabel = onEditText ? '크기' : '굵기';
     const color = style.color ?? DEFAULT_DRAWING_COLOR;
     const lineWidth = style.lineWidth ?? 1;
@@ -93,7 +99,17 @@ const ChartDrawingStylePanel = ({style, colorCount, onChange, onDelete, onEditTe
                     </Tooltip>
                 )}
                 <Divider orientation="vertical" flexItem sx={{my: 0.5}}/>
-                <Tooltip title="삭제 (Delete)">
+                <Tooltip title={locked ? '잠금 해제' : '잠금 (옮기거나 고칠 수 없게)'}>
+                    <ChartToolbarButton
+                        aria-label="잠금"
+                        aria-pressed={locked}
+                        onClick={() => onLockChange(!locked)}
+                        sx={locked ? selectedSx : undefined}
+                    >
+                        {locked ? <LockOutlinedIcon/> : <LockOpenOutlinedIcon/>}
+                    </ChartToolbarButton>
+                </Tooltip>
+                <Tooltip title={locked ? '삭제' : '삭제 (Delete)'}>
                     <ChartToolbarButton aria-label="선택한 도형 삭제" onClick={onDelete}>
                         <DeleteOutlineIcon/>
                     </ChartToolbarButton>

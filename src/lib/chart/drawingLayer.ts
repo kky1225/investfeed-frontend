@@ -1,5 +1,8 @@
-import {Anchor, Candle, ChartStyle, Drawing, DrawingStyle, DrawingTool, MagnetMode, TextRequest} from "./types.ts";
-import {AXIS_LABEL_OFFSET, AXIS_TAG_HEIGHT, DRAG_THRESHOLD} from "./constants.ts";
+import {
+    Anchor, Candle, ChartStyle, Drawing, DrawingStyle, DrawingTool, MagnetMode, TextRequest, TimeUnit,
+} from "./types.ts";
+import {AXIS_LABEL_OFFSET, AXIS_TAG_HEIGHT, AXIS_TAG_PADDING, DRAG_THRESHOLD} from "./constants.ts";
+import {formatTime} from "./scale.ts";
 import {clamp, distanceToSegment, Layout, Pane, paneToValue, paneToY, Point} from "./layout.ts";
 import {lineColor, Painter} from "./painter.ts";
 
@@ -22,6 +25,9 @@ const TEXT_PADDING = 3;         // 글자를 잡을 수 있는 범위를 글자�
 const LABEL_GAP = 2;            // 선과 그 위에 적는 글자 사이
 const GUIDE_ALPHA = 0.5;        // 보조선(피보나치의 두 점을 잇는 선)의 진하기
 const BACKDROP_ALPHA = 0.85;    // 글자 뒤에 까는 바탕의 진하기
+// 복제한 도형을 원래 것에서 비켜 놓는 정도: 오른쪽으로 캔들 몇 칸, 아래로 몇 px
+const COPY_SHIFT_BARS = 2;
+const COPY_SHIFT_Y = 16;
 
 /** 두 점 이상으로 만드는 도형. 한 번 눌러 끝나는 수평선·수직선·글자는 여기에 없다. */
 type PointTool = 'trend' | 'ray' | 'rectangle' | 'channel' | 'fibonacci' | 'measure';
@@ -80,7 +86,8 @@ interface Box {
 export interface DrawingHost {
     layout: () => Layout | null,    // 마지막으로 그린 배치
     candles: () => Candle[],
-    redraw: () => void,             // 위 장을 다시 그려 달라고 요청
+    timeUnit: () => TimeUnit,       // 수직선의 날짜 라벨 표기 단위
+    redraw: () => void,            // 위 장을 다시 그려 달라고 요청
     refreshCursor: () => void,      // 도구 상태가 바뀌어 마우스 커서를 다시 정해야 함
     drawingsChanged: (drawings: Drawing[]) => void,     // 사용자가 추가·변경·삭제함
     toolReleased: () => void,       // 하나를 다 그렸거나 취소해서 도구가 풀림
@@ -135,7 +142,10 @@ export class DrawingLayer {
     /** 도형 목록을 통째로 바꾼다. (바깥에서 준 목록이라 변경을 알리지 않는다) */
     setDrawings(drawings: Drawing[]) {
         this.drawings = drawings;
-        if (this.selectedId && !drawings.some(drawing => drawing.id === this.selectedId)) this.select(null);
+        // 선택한 도형이 지워졌거나 숨겨졌으면 선택을 푼다.
+        if (this.selectedId && !drawings.some(drawing => drawing.id === this.selectedId && !drawing.hidden)) {
+            this.select(null);
+        }
         this.host.redraw();
     }
 
@@ -193,10 +203,10 @@ export class DrawingLayer {
         this.host.redraw();
     }
 
-    /** 선택한 도형을 지운다. */
+    /** 선택한 도형을 지운다. 잠근 도형은 지우지 않는다. */
     deleteSelected() {
         const selectedId = this.selectedId;
-        if (!selectedId) return;
+        if (!selectedId || this.drawings.find(drawing => drawing.id === selectedId)?.locked) return;
         this.select(null);
         this.changeDrawings(this.drawings.filter(drawing => drawing.id !== selectedId));
     }
@@ -221,6 +231,29 @@ export class DrawingLayer {
         const id = this.hitTest(point)?.drawing.id ?? null;
         if (id) this.select(id);
         return id;
+    }
+
+    /**
+     * 도형을 하나 더 만든다. 원래 것과 겹치지 않게 오른쪽 아래로 조금 비켜 놓고, 새 도형을 선택한다.
+     * 잠금은 따라가지 않는다(바로 옮길 수 있어야 하므로).
+     */
+    duplicate(id: string) {
+        const layout = this.host.layout();
+        const original = this.drawings.find(drawing => drawing.id === id);
+        if (!layout || !original) return;
+        const pane = layout.panes[0];
+        const toY = paneToY(pane);
+        const toPrice = paneToValue(pane);
+        const lower = (price: number) => toPrice(toY(price) + COPY_SHIFT_Y);
+        const shift = (anchor: Anchor): Anchor => this.anchorOf(this.indexOf(anchor) + COPY_SHIFT_BARS, lower(anchor.price));
+        const base = {...original, id: createId(), locked: null};
+        const copy: Drawing = base.type === 'horizontal' ? {...base, price: lower(base.price)}
+            : base.type === 'vertical' ? {...base, ...this.columnOf(this.indexOf(base) + COPY_SHIFT_BARS)}
+            : base.type === 'text' ? {...base, from: shift(base.from)}
+            : base.type === 'channel' ? {...base, from: shift(base.from), to: shift(base.to), third: shift(base.third)}
+            : {...base, from: shift(base.from), to: shift(base.to)};
+        this.changeDrawings([...this.drawings, copy]);
+        this.select(copy.id);
     }
 
     /** 도구를 고르지 않고 정해진 가격에 수평선을 긋는다. (우클릭 메뉴용) */
@@ -264,6 +297,8 @@ export class DrawingLayer {
             return false;
         }
         this.select(hit.drawing.id);
+        // 잠근 도형은 선택만 하고 옮기지 않는다. 끌면 차트가 이동한다.
+        if (hit.drawing.locked) return false;
         this.move = {part: hit.part, start: point, original: hit.drawing, changed: false};
         return true;
     }
@@ -321,12 +356,16 @@ export class DrawingLayer {
         this.move = null;
     }
 
-    /** 그린 도형들을 위 장에 그린다. 가격 영역 밖으로는 나가지 않는다. */
+    /**
+     * 그린 도형들을 위 장에 그린다. 가격 영역 밖으로는 나가지 않는다.
+     * 수직선만 아래 영역(거래량·보조지표)까지 긋고 날짜축에 날짜를 적는다. 숨긴 도형은 그리지 않는다.
+     */
     render(painter: Painter, layout: Layout, style: ChartStyle) {
         const draft = this.draft;
+        const shown = this.drawings.filter(drawing => !drawing.hidden);
         const drawings: Drawing[] = draft
-            ? [...this.drawings, {...this.newStyle, ...this.draftShape(draft), id: DRAFT_ID}]
-            : this.drawings;
+            ? [...shown, {...this.newStyle, ...this.draftShape(draft), id: DRAFT_ID}]
+            : shown;
         if (drawings.length === 0) return;
 
         const ctx = painter.ctx;
@@ -337,10 +376,6 @@ export class DrawingLayer {
         const handle = painter.px(HANDLE_SIZE);
         const colorOf = (drawing: Drawing) => lineColor(style, drawing.color ?? DEFAULT_COLOR);
 
-        ctx.save();
-        ctx.beginPath();
-        ctx.rect(0, painter.px(pane.top), plotRightPx, painter.px(pane.bottom) - painter.px(pane.top));
-        ctx.clip();
         // 글자 도형의 너비는 그릴 때만 잴 수 있어, 먼저 재 두고 자리 계산(geometryOf)과 잡는 판정에 쓴다.
         this.textWidths = new Map();
         drawings.forEach(drawing => {
@@ -350,7 +385,7 @@ export class DrawingLayer {
         });
         painter.useFont(style);
 
-        drawings.forEach(drawing => {
+        const drawOne = (drawing: Drawing) => {
             const active = drawing.id === this.selectedId || drawing.id === DRAFT_ID;
             const geometry = this.geometryOf(drawing, layout);
             const color = colorOf(drawing);
@@ -434,7 +469,8 @@ export class DrawingLayer {
                 }
             }
 
-            if (active) {
+            // 잠근 도형은 점을 고칠 수 없으므로 손잡이를 그리지 않는다.
+            if (active && !drawing.locked) {
                 geometry.handles.forEach(([, point]) => {
                     ctx.fillRect(
                         Math.round(point.x * painter.dpr - handle / 2), Math.round(point.y * painter.dpr - handle / 2),
@@ -442,8 +478,19 @@ export class DrawingLayer {
                     );
                 });
             }
-        });
-        ctx.restore();
+        };
+        /** 위에서 bottom 까지의 그림 영역 안에만 그려지게 하고 도형들을 그린다. */
+        const drawWithin = (bottom: number, items: Drawing[]) => {
+            ctx.save();
+            ctx.beginPath();
+            ctx.rect(0, painter.px(pane.top), plotRightPx, painter.px(bottom) - painter.px(pane.top));
+            ctx.clip();
+            items.forEach(drawOne);
+            ctx.restore();
+        };
+        const verticals = drawings.filter(drawing => drawing.type === 'vertical');
+        drawWithin(pane.bottom, drawings.filter(drawing => drawing.type !== 'vertical'));
+        drawWithin(layout.plotBottom, verticals);
 
         // 수평선은 오른쪽 축에 가격 라벨을 붙인다.
         const labelHeight = painter.px(AXIS_TAG_HEIGHT);
@@ -462,6 +509,32 @@ export class DrawingLayer {
             ctx.fillStyle = color;
             ctx.fillText((pane.axisFormat ?? pane.format)(drawing.price), plotRightPx + painter.px(AXIS_LABEL_OFFSET), y);
         });
+
+        // 수직선은 아래 날짜축에 그 캔들의 날짜 라벨을 붙인다. 캔들이 없는 자리(미래 구간)와 화면 밖의 선에는 붙이지 않는다.
+        const candles = this.host.candles();
+        const timeUnit = this.host.timeUnit();
+        const labelPadding = painter.px(AXIS_TAG_PADDING);
+        const labelTop = painter.px(layout.plotBottom) + line;
+        ctx.textAlign = 'center';
+        verticals.forEach(drawing => {
+            if (drawing.type !== 'vertical') return;
+            const index = this.indexOf(drawing);
+            const candle = candles[index];
+            const x = painter.px(this.xOf(index, layout));
+            if (!candle || x < 0 || x > plotRightPx) return;
+            const color = colorOf(drawing);
+            const text = formatTime(candle.time, timeUnit, true);
+            const width = ctx.measureText(text).width + labelPadding * 2;
+            // 그림 영역 밖으로 나가지 않게 밀어 넣는다.
+            const left = Math.round(clamp(x - width / 2, 0, Math.max(0, plotRightPx - width)));
+            ctx.fillStyle = style.backgroundColor;
+            ctx.fillRect(left, labelTop, width, labelHeight);
+            ctx.strokeStyle = color;
+            ctx.strokeRect(left + line / 2, labelTop + line / 2, width - line, labelHeight - line);
+            ctx.fillStyle = color;
+            ctx.fillText(text, left + width / 2, labelTop + labelHeight / 2);
+        });
+        ctx.textAlign = 'left';
     }
 
     private select(id: string | null) {
@@ -516,6 +589,12 @@ export class DrawingLayer {
             : {time: candles[bounded].time, price};
     }
 
+    /** 순번을 수직선이 놓이는 자리(캔들 시각, 미래 구간이면 몇 칸 뒤인지)로 바꾼다. */
+    private columnOf(index: number): { time: number, offset: number | null } {
+        const {time, offset} = this.anchorOf(index, 0);
+        return {time, offset: offset ?? null};
+    }
+
     /**
      * 화면 위치를 점(캔들 시각·가격)으로 바꾼다. 가로는 그 자리의 칸에 붙이고, 마지막 캔들 오른쪽이면 미래 구간의 점이 된다.
      * 가격 영역 밖이면 null. clampToPane 이면 영역 안으로 끌어와 계산한다(끄는 중에 영역을 벗어났을 때).
@@ -568,7 +647,8 @@ export class DrawingLayer {
             }
             case 'vertical': {
                 const x = this.xOf(this.indexOf(drawing), layout);
-                return {lines: [[{x, y: pane.top}, {x, y: pane.bottom}]], handles: [], fill: null};
+                // 거래량·보조지표 영역까지 끝까지 긋는다.
+                return {lines: [[{x, y: pane.top}, {x, y: layout.plotBottom}]], handles: [], fill: null};
             }
             case 'trend': {
                 const from = this.pointOf(drawing.from, layout);
@@ -674,10 +754,13 @@ export class DrawingLayer {
         const layout = this.host.layout();
         const pane = layout?.panes[0];
         if (!layout || !pane) return null;
-        if (point.x < 0 || point.x >= layout.plotWidth || point.y < pane.top || point.y > pane.bottom) return null;
+        if (point.x < 0 || point.x >= layout.plotWidth || point.y < pane.top || point.y > layout.plotBottom) return null;
+        // 가격 영역 아래(거래량·보조지표)에서는 거기까지 그어지는 수직선만 잡힌다.
+        const belowPrice = point.y > pane.bottom;
 
         for (let order = this.drawings.length - 1; order >= 0; order--) {
             const drawing = this.drawings[order];
+            if (drawing.hidden || (belowPrice && drawing.type !== 'vertical')) continue;
             const geometry = this.geometryOf(drawing, layout);
             const handle = geometry.handles.find(([, spot]) => distance(point, spot) <= HIT_TOLERANCE + 2);
             if (handle) return {drawing, part: handle[0]};
