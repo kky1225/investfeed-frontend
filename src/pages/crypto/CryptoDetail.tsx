@@ -17,7 +17,9 @@ import {CryptoDetailLineChartProps} from "../../components/CryptoDetailLineChart
 import CandleChart from "../../components/chart/CandleChart.tsx";
 import {ChartToolbarGroup} from "../../components/chart/ChartToolbarControls.tsx";
 import {Candle, CandleInterval, TimeUnit} from "../../lib/chart/types.ts";
-import {fetchCryptoDetail, fetchCryptoStream} from "../../api/crypto/CryptoApi.ts";
+import type {ChartComparisonSource} from "../../components/chart/useChartComparisons.ts";
+import {requireOk} from "../../lib/apiResponse.ts";
+import {fetchCryptoDetail, fetchCryptoSearch, fetchCryptoStream} from "../../api/crypto/CryptoApi.ts";
 import {useRealtimeWebSocket} from "../detail/useRealtimeWebSocket.ts";
 import {CryptoChart, CryptoChartType, CryptoDetailReq, CryptoDetailRes} from "../../type/CryptoType.ts";
 import {useParams} from "react-router-dom";
@@ -391,6 +393,21 @@ const CryptoDetail = () => {
     // 차트 캔들. 실시간 체결가는 마지막 캔들의 종가·고가·저가에만 반영하고, 새 캔들은 주기적 조회로 받는다.
     // (코인 캔들은 거래소가 정한 시각에 나뉘므로, 화면에서 새 캔들을 직접 만들지 않는다.)
     const candleList = useMemo(() => toCandles(result?.chartList ?? []), [result]);
+
+    // 종목 비교: 다른 코인을 검색하고, 지금 차트와 같은 주기의 캔들을 받는다.
+    // 코인은 과거 구간을 이어 받는 조회가 없어, 상세 조회가 주는 구간만 비교한다(주 차트와 같은 길이).
+    const chartComparison = useMemo<ChartComparisonSource>(() => ({
+        search: async keyword => (
+            requireOk<{ market: string, koreanName: string }[] | null>(await fetchCryptoSearch(keyword), '코인 검색') ?? []
+        ).map(item => ({code: item.market, name: item.koreanName})),
+        fetchPage: async code => {
+            const detail = requireOk<CryptoDetailRes>(
+                await fetchCryptoDetail(code, {chartType: req.chartType}, {skipGlobalError: true}),
+                '비교 코인 차트 조회',
+            );
+            return {candles: toCandles(detail.chartList ?? []), nextCursor: null};
+        },
+    }), [req.chartType]);
     const candles = useMemo(() => {
         const last = candleList[candleList.length - 1];
         if (!last || !livePrice || livePrice.stamp < last.time) return candleList;
@@ -558,6 +575,7 @@ const CryptoDetail = () => {
                                 seriesKey={`${market}-${req.chartType}`}
                                 assetType="CRYPTO"
                                 assetCode={market}
+                                comparison={chartComparison}
                                 toolbarStart={isNarrow ? undefined : chartControls}
                             />
                         )}

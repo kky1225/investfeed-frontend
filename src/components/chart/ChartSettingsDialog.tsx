@@ -17,6 +17,7 @@ import Typography from "@mui/material/Typography";
 import AddIcon from "@mui/icons-material/Add";
 import CloseIcon from "@mui/icons-material/Close";
 import ChartColorPicker from "./ChartColorPicker.tsx";
+import ChartComparisonField, {ChartComparisonFieldProps} from "./ChartComparisonField.tsx";
 import {chartColorVars} from "./chartColors.ts";
 
 /** 지표의 설정값 하나 (기간 등) */
@@ -71,6 +72,7 @@ interface ChartSettingsDialogProps {
     onClearDrawings: () => void,
     hiddenDrawingCount: number,                 // 그중 숨겨 둔 선의 수
     onShowDrawings: () => void,                 // 숨겨 둔 선을 모두 다시 보이게 한다
+    comparison?: ChartComparisonFieldProps,     // 종목 비교. 비교를 쓸 수 있는 화면에서만 준다
 }
 
 interface ParamFieldProps {
@@ -201,11 +203,22 @@ const ChartSettingsDialog = ({
     drawingToolbar, onDrawingToolbarChange,
     logScale, onLogScaleChange, percentScale, onPercentScaleChange,
     flatByPrevClose, onFlatByPrevCloseChange, drawingCount, onClearDrawings, hiddenDrawingCount, onShowDrawings,
+    comparison,
 }: ChartSettingsDialogProps) => (
     // 창은 화면 다른 곳에 따로 그려지므로, 색 단추가 차트의 색을 쓸 수 있게 색 변수를 걸어 준다.
     <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth sx={chartColorVars}>
         <DialogTitle>차트 설정</DialogTitle>
         <DialogContent>
+            {comparison && (
+                <>
+                    <Typography variant="subtitle2" sx={{color: 'text.secondary', mb: 1}}>종목 비교</Typography>
+                    {/* 검색 칸의 이름표가 잘리지 않게 위에 여백을 둔다. */}
+                    <Box sx={{pt: 1}}>
+                        <ChartComparisonField {...comparison}/>
+                    </Box>
+                    <Divider sx={{my: 2}}/>
+                </>
+            )}
             <Typography variant="subtitle2" sx={{color: 'text.secondary', mb: 1}}>지표</Typography>
             <Stack spacing={1.5}>
                 {indicatorOptions.map(option => (

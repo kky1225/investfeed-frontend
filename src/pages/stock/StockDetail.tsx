@@ -39,7 +39,10 @@ import type {PriceTarget} from "../../type/NotificationType.ts";
 import {applyTick} from "../../lib/chart/realtime.ts";
 import {mergeCandles} from "../../lib/chart/merge.ts";
 import {CandlePage, useCandleHistory} from "../../components/chart/useCandleHistory.ts";
-import {fetchStockDetail, fetchStockStream, fetchStockProgramChart, fetchStockCandles} from "../../api/stock/StockApi.ts";
+import type {ChartComparisonSource} from "../../components/chart/useChartComparisons.ts";
+import {
+    fetchStockDetail, fetchStockStream, fetchStockProgramChart, fetchStockCandles, fetchStockSearch,
+} from "../../api/stock/StockApi.ts";
 import {useMarketWebSocket} from "../detail/useMarketWebSocket.ts";
 import {fetchNews} from "../../api/news/NewsApi.ts";
 import InvestorBarChart from "../../components/InvestorBarChart.tsx";
@@ -597,6 +600,20 @@ const StockDetail = () => {
         return {candles: toCandles(page.candles), nextCursor: page.nextCursor ?? null};
     }, [stkCd, req.chartType]);
     const {history: candleHistory, loadOlder: loadOlderCandles} = useCandleHistory(chartSeriesKey, fetchCandlePage);
+
+    // 종목 비교: 다른 국내 종목을 검색하고, 지금 차트와 같은 주기의 캔들을 받는다.
+    const chartComparison = useMemo<ChartComparisonSource>(() => ({
+        search: async keyword => (
+            requireOk<{ stkCd: string, stkNm: string }[] | null>(await fetchStockSearch(keyword), '종목 검색') ?? []
+        ).map(item => ({code: item.stkCd, name: item.stkNm})),
+        fetchPage: async (code, cursor) => {
+            const page = requireOk<StockCandleRes>(
+                await fetchStockCandles(code, {chartType: req.chartType, cursor: cursor ?? undefined}, {skipGlobalError: true}),
+                '비교 종목 차트 조회',
+            );
+            return {candles: toCandles(page.candles), nextCursor: page.nextCursor ?? null};
+        },
+    }), [req.chartType]);
     const fullCandles = useMemo(() => mergeCandles(candleHistory, chartCandles), [candleHistory, chartCandles]);
 
     // 폴링 응답에 이미 들어 있는 체결(조회 시각 이전)은 다시 더하지 않는다.
@@ -1154,6 +1171,7 @@ const StockDetail = () => {
                                 interval={CHART_INTERVAL[req.chartType]}
                                 seriesKey={chartSeriesKey}
                                 onLoadOlder={loadOlderCandles}
+                                comparison={chartComparison}
                                 priceLines={targetLines}
                                 assetType="STOCK"
                                 assetCode={stkCd}
