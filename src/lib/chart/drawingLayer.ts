@@ -216,6 +216,18 @@ export class DrawingLayer {
         return this.hitTest(point) !== null;
     }
 
+    /** 화면 위치에 도형이 있으면 그 도형을 선택하고 id 를 돌려준다. 없으면 선택을 그대로 두고 null (우클릭 메뉴용) */
+    selectAt(point: Point): string | null {
+        const id = this.hitTest(point)?.drawing.id ?? null;
+        if (id) this.select(id);
+        return id;
+    }
+
+    /** 도구를 고르지 않고 정해진 가격에 수평선을 긋는다. (우클릭 메뉴용) */
+    addHorizontal(price: number) {
+        this.add({type: 'horizontal', price});
+    }
+
     /** 누른 자리에서 그리기나 옮기기를 시작한다. 시작했으면 true, 아니면(빈 곳) false 로 차트 이동에 넘긴다. */
     beginEdit(point: Point, invertMagnet: boolean): boolean {
         const tool = this.tool;

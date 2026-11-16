@@ -58,6 +58,17 @@ export interface TextRequest {
     y: number,
 }
 
+/** 차트를 우클릭했을 때 엔진이 알리는 것. 받는 쪽이 이 자리에 메뉴를 띄운다. */
+export interface ContextMenuRequest {
+    clientX: number,            // 메뉴를 띄울 화면 위치 (브라우저 창 기준, CSS px)
+    clientY: number,
+    drawingId: string | null,   // 도형 위를 눌렀으면 그 도형. 엔진이 그 도형을 선택해 둔다
+    // 가격 영역 안을 눌렀으면 그 높이의 가격(캔들 가격의 자릿수로 맞춘 것)과 표기. 그 밖이면 null
+    price: number | null,
+    priceText: string | null,
+    priceScaled: boolean,       // 가격축을 끌어 세로 배율을 바꿔 둔 상태인지 (resetPriceScale 로 되돌릴 수 있는지)
+}
+
 /** 사용자가 차트에 직접 그린 도형 */
 export type Drawing = { id: string } & DrawingStyle & (
     | { type: 'trend', from: Anchor, to: Anchor }       // 추세선: 두 점을 잇는 선분

@@ -2,6 +2,8 @@ import {ReactNode, useEffect, useMemo, useRef, useState} from "react";
 import Box from "@mui/material/Box";
 import Divider from "@mui/material/Divider";
 import InputBase from "@mui/material/InputBase";
+import Menu from "@mui/material/Menu";
+import MenuItem from "@mui/material/MenuItem";
 import Stack from "@mui/material/Stack";
 import Button from "@mui/material/Button";
 import Typography from "@mui/material/Typography";
@@ -20,7 +22,7 @@ import {
     CandleChartEngine, INDICATOR_HEIGHT_LIMIT, INDICATOR_PANE_HEIGHT, MAIN_HEIGHT_LIMIT, VOLUME_RATIO_LIMIT,
 } from "../../lib/chart/CandleChart.ts";
 import {
-    Candle, CandleInterval, CHART_TYPES, ChartType, Drawing, DrawingStyle, DrawingTool, IndicatorConfig, IndicatorType,
+    Candle, CandleInterval, CHART_TYPES, ChartType, ContextMenuRequest, Drawing, DrawingStyle, DrawingTool, IndicatorConfig, IndicatorType,
     MAGNET_MODES, MagnetMode, MAX_DRAWING_TEXT_LENGTH, PaneResize, PriceLine, TextRequest, TimeUnit,
 } from "../../lib/chart/types.ts";
 import ChartTypeSelect from "./ChartTypeSelect.tsx";
@@ -192,6 +194,26 @@ const CandleChart = ({
     };
     const [atLatest, setAtLatest] = useState(true);
     const [settingsOpen, setSettingsOpen] = useState(false);
+    // 우클릭 메뉴. 엔진이 누른 자리와 그 자리의 가격·도형을 알려 주면 그 자리에 띄운다.
+    // 닫히는 동안에도 항목이 그대로 보이도록, 내용(contextMenu)은 남겨 두고 열림 여부만 따로 바꾼다.
+    const [contextMenu, setContextMenu] = useState<ContextMenuRequest | null>(null);
+    const [menuOpen, setMenuOpen] = useState(false);
+    const openContextMenu = (request: ContextMenuRequest) => {
+        setContextMenu(request);
+        setMenuOpen(true);
+    };
+    // 메뉴가 닫힌 뒤 차트에 포커스를 돌려줄지. 메뉴에서 설정 창을 열 때는 그 창이 포커스를 가져가므로 돌려주지 않는다.
+    const refocusAfterMenu = useRef(true);
+    const closeContextMenu = (refocus = true) => {
+        refocusAfterMenu.current = refocus;
+        setMenuOpen(false);
+        engineRef.current?.releaseCrosshair();
+    };
+    /** 메뉴를 닫고 고른 항목을 실행한다. */
+    const runMenuAction = (action: () => void, refocus = true) => {
+        closeContextMenu(refocus);
+        action();
+    };
     // 이 차트에서 쓸 수 있는 지표들: 이동평균선(선마다 기간 하나) + 보조지표
     const entries = useMemo<IndicatorEntry[]>(() => [
         ...(movingAverages.length > 0 ? [{
@@ -314,6 +336,7 @@ const CandleChart = ({
             setTextRequest(request);
         };
         engine.onPaneResize = (change, done) => resizePaneRef.current(change, done);
+        engine.onContextMenu = openContextMenu;
         engine.onLatestChange = setAtLatest;
         engine.onNeedOlder = () => loadOlderRef.current?.();
 
@@ -382,10 +405,12 @@ const CandleChart = ({
         engineRef.current?.setMagnet(magnet);
     }, [magnet]);
 
-    // 다른 종목·주기로 바뀌면 띄워 둔 글자 입력 칸은 자리가 맞지 않으므로 닫는다.
+    // 다른 종목·주기로 바뀌면 띄워 둔 글자 입력 칸과 우클릭 메뉴는 자리가 맞지 않으므로 닫는다.
     useEffect(() => {
         textRequestRef.current = null;
         setTextRequest(null);
+        setMenuOpen(false);
+        engineRef.current?.releaseCrosshair();
     }, [seriesKey, assetType, assetCode]);
 
     useEffect(() => {
@@ -506,6 +531,72 @@ const CandleChart = ({
                 drawingCount={drawings.length}
                 onClearDrawings={() => changeDrawings([])}
             />
+            {/* 우클릭 메뉴. 도형 위에서는 그 도형의 메뉴, 빈 곳에서는 차트의 메뉴. 해당하지 않는 항목은 보이지 않는다. */}
+            <Menu
+                open={menuOpen && contextMenu !== null}
+                onClose={() => closeContextMenu()}
+                // 메뉴는 닫힐 때 그 전에 포커스가 있던 곳(차트)으로 포커스를 돌려주는데, 그러면 브라우저가 차트 전체가
+                // 보이도록 페이지를 스크롤한다. 마우스는 그대로인데 차트가 움직여 십자선의 가격이 메뉴에 적힌 가격과
+                // 달라지므로, 메뉴에 맡기지 않고 닫힌 뒤에 스크롤 없이 직접 돌려준다.
+                disableRestoreFocus
+                anchorReference="anchorPosition"
+                anchorPosition={contextMenu ? {left: contextMenu.clientX, top: contextMenu.clientY} : undefined}
+                // 메뉴가 떠 있는 동안 다시 우클릭하면 브라우저 메뉴가 겹쳐 뜨지 않게 닫기만 한다.
+                onContextMenu={event => {
+                    event.preventDefault();
+                    closeContextMenu();
+                }}
+                slotProps={{
+                    list: {dense: true},
+                    transition: {
+                        onExited: () => {
+                            if (refocusAfterMenu.current) containerRef.current?.focus({preventScroll: true});
+                        },
+                    },
+                }}
+            >
+                {contextMenu?.drawingId ? (
+                    <MenuItem
+                        onClick={() => runMenuAction(() => changeDrawings(
+                            drawings.filter(drawing => drawing.id !== contextMenu.drawingId),
+                        ))}
+                    >
+                        삭제
+                    </MenuItem>
+                ) : [
+                    contextMenu?.price != null && (
+                        <MenuItem
+                            key="line"
+                            onClick={() => runMenuAction(() => engineRef.current?.addHorizontalLine(contextMenu.price!))}
+                        >
+                            {contextMenu.priceText}에 수평선 긋기
+                        </MenuItem>
+                    ),
+                    contextMenu?.price != null && (
+                        <MenuItem
+                            key="copy"
+                            onClick={() => runMenuAction(() => {
+                                navigator.clipboard?.writeText(String(contextMenu.price)).catch(console.error);
+                            })}
+                        >
+                            가격 복사
+                        </MenuItem>
+                    ),
+                    !atLatest && (
+                        <MenuItem key="latest" onClick={() => runMenuAction(() => engineRef.current?.scrollToLatest())}>
+                            최근으로 이동
+                        </MenuItem>
+                    ),
+                    contextMenu?.priceScaled && (
+                        <MenuItem key="scale" onClick={() => runMenuAction(() => engineRef.current?.resetPriceScale())}>
+                            가격축 원래대로
+                        </MenuItem>
+                    ),
+                    <MenuItem key="settings" onClick={() => runMenuAction(() => setSettingsOpen(true), false)}>
+                        차트 설정
+                    </MenuItem>,
+                ]}
+            </Menu>
             <Stack direction="row">
                 {/* 차트 색은 CSS 변수로 둔다. 캔버스(엔진)와 꾸미기 패널의 색 단추가 같은 값을 쓴다. */}
                 <Box

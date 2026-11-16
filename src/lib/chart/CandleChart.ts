@@ -1,5 +1,5 @@
 import {
-    Anchor, Candle, ChartStyle, ChartType, Drawing, DrawingStyle, DrawingTool, IndicatorConfig, IndicatorType, MagnetMode,
+    Anchor, Candle, ChartStyle, ChartType, ContextMenuRequest, Drawing, DrawingStyle, DrawingTool, IndicatorConfig, IndicatorType, MagnetMode,
     CandleInterval, PaneResize, PaneSizes, PriceLine, TextRequest, TimeUnit,
 } from "./types.ts";
 import {bucketEnd} from "./realtime.ts";
@@ -9,7 +9,7 @@ import {
     PRICE_PANE_TOP, TIME_AXIS_HEIGHT, VOLUME_RATIO, VOLUME_RATIO_LIMIT,
 } from "./constants.ts";
 import {decimalsOf, formatCountdown, formatPrice} from "./scale.ts";
-import {clamp, Layout, Point, View} from "./layout.ts";
+import {clamp, Layout, paneToValue, Point, View} from "./layout.ts";
 import {clampView, defaultView, logicalAt, visibleRange, zoomedView} from "./viewport.ts";
 import {candleColor, Painter} from "./painter.ts";
 import {createIndicator, OverlayIndicator, PaneIndicator} from "./indicatorPanes.ts";
@@ -34,6 +34,14 @@ const BOUNDARY_REACH = 4;
 const BOUNDARY_TOUCH_REACH = 12;
 const RATIO_STEPS = 1000;   // 거래량 영역의 비율을 소수 셋째 자리까지만 다룬다
 const MINUTE_MS = 60_000;
+// 우클릭한 자리가 떠 있는 십자선에서 이 거리 안이면 십자선의 자리를 누른 것으로 본다 (CSS px)
+const CROSSHAIR_KEEP_DISTANCE = 24;
+// 키보드 조작: 화살표 한 번에 옮기는 캔들 수(Shift 를 누르면 크게), +/- 한 번에 바뀌는 캔들 너비의 비율
+const KEY_STEP = 1;
+const KEY_LARGE_STEP = 10;
+const KEY_ZOOM_RATIO = 1.2;
+// 이 안에 포커스가 있으면 키보드 조작을 하지 않는다 (글자 입력, 열려 있는 창·메뉴)
+const KEY_IGNORED_TARGETS = 'input, textarea, select, [contenteditable="true"], [role="dialog"], [role="menu"]';
 const COUNTDOWN_CHECK_MS = 250;    // 남은 시간의 글자가 바뀌었는지 살피는 간격. 1초보다 짧게 잡아 초가 건너뛰지 않게 한다
 
 /** Ctrl(Mac 은 ⌘)을 누른 채 그리거나 고치는 중인지. 그동안은 자석이 반대로 동작한다. */
@@ -79,6 +87,9 @@ export class CandleChartEngine {
     private readonly activePointers = new Map<number, Point>();    // 누르고 있는 포인터
     private editPointerId: number | null = null;    // 그리기·옮기기에 쓰이는 포인터. 이 포인터는 차트를 이동시키지 않는다
     private atLatest = true;
+    private hovered = false;                // 마우스가 차트 위에 있는지. 키보드 조작을 받을지 정한다
+    // 우클릭 메뉴가 떠 있는 동안 십자선을 우클릭한 자리에 붙들어 둔다. 메뉴가 마우스를 가로채도 지우지 않는다
+    private crosshairHeld = false;
 
     private chartType: ChartType = 'candle';
     private shapes: Candle[] = [];          // 모양을 그릴 캔들. 하이킨아시면 다시 만든 것, 그 밖에는 candles 그대로
@@ -127,6 +138,8 @@ export class CandleChartEngine {
      * 차트 전체 높이가 달라지므로 받는 쪽은 엔진을 담은 요소의 높이를 맞추고, 값을 setPaneSizes 로 다시 넘긴다.
      */
     onPaneResize: ((change: PaneResize, done: boolean) => void) | null = null;
+    /** 차트를 우클릭하면 알린다. 받는 쪽이 메뉴를 띄운다. 그리기 도구를 고른 동안과 터치의 길게 누르기에는 알리지 않는다. */
+    onContextMenu: ((request: ContextMenuRequest) => void) | null = null;
     /** 가장 최근 캔들이 화면에 보이는지가 바뀌면 알린다. (최근으로 이동 버튼 표시용) */
     onLatestChange: ((atLatest: boolean) => void) | null = null;
     /**
@@ -171,6 +184,9 @@ export class CandleChartEngine {
         container.addEventListener('wheel', this.handleWheel, {passive: false});
         container.addEventListener('dblclick', this.handleDoubleClick);
         container.addEventListener('touchstart', this.handleTouchStart, {passive: false});
+        container.addEventListener('contextmenu', this.handleContextMenu);
+        // 이동·확대 키는 차트를 클릭하지 않아도 마우스가 위에 있으면 받도록 창 전체에서 듣는다.
+        window.addEventListener('keydown', this.handleNavigationKey);
     }
 
     // ---------- 바깥에서 부르는 것 ----------
@@ -325,6 +341,26 @@ export class CandleChartEngine {
         this.setView({...view, rightEdge: Math.max(this.candles.length, this.plotWidth() / view.spacing)});
     }
 
+    /** 가격축을 끌어 바꾼 세로 배율을 되돌려 보이는 구간에 다시 맞춘다. */
+    resetPriceScale() {
+        if (this.priceZoom === 1) return;
+        this.priceZoom = 1;
+        this.scheduleDraw();
+    }
+
+    /** 우클릭 메뉴가 닫히면 부른다. 붙들어 둔 십자선을 풀고, 마우스가 다시 움직일 때까지 십자선을 지운다. */
+    releaseCrosshair() {
+        if (!this.crosshairHeld) return;
+        this.crosshairHeld = false;
+        this.pointer = null;
+        this.scheduleOverlay();
+    }
+
+    /** 정해진 가격에 수평선을 긋는다. 새로 그리는 도형의 꾸미기를 따른다. */
+    addHorizontalLine(price: number) {
+        this.drawingLayer.addHorizontal(price);
+    }
+
     /** 드래그·확대한 상태를 버리고 기본 보기로 돌아간다. 다른 종목·주기로 바뀔 때 부른다. */
     resetView() {
         this.view = null;
@@ -365,6 +401,8 @@ export class CandleChartEngine {
         this.container.removeEventListener('wheel', this.handleWheel);
         this.container.removeEventListener('dblclick', this.handleDoubleClick);
         this.container.removeEventListener('touchstart', this.handleTouchStart);
+        this.container.removeEventListener('contextmenu', this.handleContextMenu);
+        window.removeEventListener('keydown', this.handleNavigationKey);
         this.mainCanvas.remove();
         this.overlayCanvas.remove();
     }
@@ -440,6 +478,7 @@ export class CandleChartEngine {
 
     private readonly handlePointerMove = (event: PointerEvent) => {
         const point = this.localPoint(event);
+        if (event.pointerType !== 'touch') this.hovered = true;
         if (event.pointerId === this.paneDrag?.pointerId) {
             const change = this.resizedBy(this.paneDrag.boundary, point.y - this.paneDrag.startY);
             this.paneDrag.change = change;
@@ -539,9 +578,43 @@ export class CandleChartEngine {
             this.drawingLayer.editTextAt(point);
             return;
         }
-        if (this.priceZoom === 1) return;
-        this.priceZoom = 1;
-        this.scheduleDraw();
+        this.resetPriceScale();
+    };
+
+    /**
+     * 우클릭: 브라우저의 메뉴 대신 차트의 메뉴를 띄우도록 알린다. 도형 위면 그 도형을 선택한다.
+     * 그리기 도구를 고른 동안에는 아무 메뉴도 띄우지 않고, 터치의 길게 누르기는 브라우저에 맡긴다.
+     */
+    private readonly handleContextMenu = (event: MouseEvent) => {
+        if ((event as PointerEvent).pointerType === 'touch') return;
+        event.preventDefault();
+        if (this.drawingLayer.activeTool) return;
+        // 십자선이 떠 있고 누른 자리가 그 근처면 십자선의 자리를 쓴다. 트랙패드의 두 손가락 클릭은 누르는 순간
+        // 페이지를 몇 px 스크롤시키곤 하는데, 그러면 마우스는 그대로여도 차트가 밀려 누른 자리의 가격이 화면에 보이던
+        // 십자선의 가격과 달라진다. 사용자가 보고 누른 것은 십자선이므로 그 가격을 메뉴에 쓴다.
+        const clicked = this.localPoint(event);
+        const shown = this.pointer;
+        const point = shown && Math.hypot(clicked.x - shown.x, clicked.y - shown.y) <= CROSSHAIR_KEEP_DISTANCE
+            ? shown
+            : clicked;
+        const pane = this.layout?.panes[0];
+        const insidePrice = this.layout && pane
+            && point.x < this.layout.plotWidth && point.y >= pane.top && point.y <= pane.bottom;
+        // 캔들 가격의 자릿수로 맞춘다(주식이면 원 단위).
+        const price = insidePrice ? Number(paneToValue(pane)(point.y).toFixed(this.valueDecimals)) : null;
+        if (!this.onContextMenu) return;
+        // 십자선을 메뉴가 떠 있는 동안 그 자리에 그대로 둔다. 축에 적힌 가격과 메뉴의 가격이 같은 자리의 값이다.
+        this.pointer = point;
+        this.crosshairHeld = true;
+        this.scheduleOverlay();
+        this.onContextMenu({
+            clientX: event.clientX,
+            clientY: event.clientY,
+            drawingId: this.drawingLayer.selectAt(point),
+            price,
+            priceText: price === null ? null : formatPrice(price, this.valueDecimals),
+            priceScaled: this.priceZoom !== 1,
+        });
     };
 
     /**
@@ -637,6 +710,8 @@ export class CandleChartEngine {
     private readonly handlePointerLeave = (event: PointerEvent) => {
         // 터치는 손을 떼도 십자선을 남겨 값을 읽을 수 있게 한다.
         if (event.pointerType === 'touch') return;
+        this.hovered = false;
+        if (this.crosshairHeld) return;
         this.pointer = null;
         this.scheduleOverlay();
     };
@@ -675,6 +750,33 @@ export class CandleChartEngine {
             event.preventDefault();
             this.drawingLayer.deleteSelected();
         }
+    };
+
+    /**
+     * 키보드로 이동·확대한다. 마우스가 차트 위에 있거나 차트를 클릭해 둔 동안에만 받는다.
+     * ← / → 한 칸 이동(Shift 를 누르면 열 칸), + / - 화면 오른쪽 끝을 기준으로 확대·축소.
+     * ↑ / ↓ 는 페이지 스크롤에 맡기고, Ctrl·⌘·Alt 와 함께 누른 것은 브라우저와 다른 단축키에 맡긴다.
+     */
+    private readonly handleNavigationKey = (event: KeyboardEvent) => {
+        if (event.ctrlKey || event.metaKey || event.altKey || this.candles.length === 0) return;
+        if (!this.hovered && document.activeElement !== this.container) return;
+        const target = event.target instanceof Element ? event.target : null;
+        if (target?.closest(KEY_IGNORED_TARGETS)) return;
+
+        const view = this.resolveView();
+        const step = event.shiftKey ? KEY_LARGE_STEP : KEY_STEP;
+        if (event.key === 'ArrowLeft') {
+            this.setView({...view, rightEdge: view.rightEdge - step});
+        } else if (event.key === 'ArrowRight') {
+            this.setView({...view, rightEdge: view.rightEdge + step});
+        } else if (event.key === '+' || event.key === '=') {
+            this.zoomAt(view, this.plotWidth(), view.rightEdge, view.spacing * KEY_ZOOM_RATIO);
+        } else if (event.key === '-' || event.key === '_') {
+            this.zoomAt(view, this.plotWidth(), view.rightEdge, view.spacing / KEY_ZOOM_RATIO);
+        } else {
+            return;
+        }
+        event.preventDefault();
     };
 
     /** 지금 누르고 있는 포인터 수에 맞춰 드래그(1개)·두 손가락 확대(2개)의 기준점을 다시 잡는다. */
