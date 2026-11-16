@@ -187,10 +187,12 @@ const writeLegendLine = (painter: Painter, layout: Layout, middle: number, items
 /**
  * 겹쳐 그린 선들의 값을 선 색으로 적는다.
  * 이동평균과 가격 영역 지표는 값 표시 아랫줄에, 거래량 영역 지표는 거래량 영역 왼쪽 위에 적는다.
+ * comparisonItems: 비교 종목의 이름과 등락률. 이동평균 줄 다음에 적는다.
  */
 export const drawOverlayLegends = (
     painter: Painter, layout: Layout, style: ChartStyle,
     periods: number[], averages: Series[], averageColors: number[], index: number,
+    comparisonItems: LegendItem[] = [],
 ) => {
     const [pricePane, volumePane] = layout.panes;
     const priceItems: LegendItem[] = [
@@ -207,6 +209,12 @@ export const drawOverlayLegends = (
     if (priceItems.length > 0) {
         const middle = painter.px(PADDING_TOP + LEGEND_HEIGHT) + painter.px(LEGEND_HEIGHT) / 2;
         writeLegendLine(painter, layout, middle, priceItems);
+    }
+    if (comparisonItems.length > 0) {
+        // 이동평균 줄이 비어 있으면 그 줄에 적고, 차 있으면 한 줄 아래에 적는다. 아래 줄은 캔들과 겹치는 자리라 바탕을 깐다.
+        const row = priceItems.length > 0 ? 2 : 1;
+        const middle = painter.px(PADDING_TOP + LEGEND_HEIGHT * row) + painter.px(LEGEND_HEIGHT) / 2;
+        writeLegendLine(painter, layout, middle, comparisonItems, row === 2 ? style.backgroundColor : undefined);
     }
 
     const volumeItems = layout.volumeOverlays.flatMap(overlay => overlay.legend(index, style, volumePane.format));

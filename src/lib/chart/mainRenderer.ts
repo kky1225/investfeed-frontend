@@ -4,6 +4,7 @@ import {
     createLinearScale, createLogScale, decimalsOf, formatPercent, formatPrice, formatVolume, logTicks, niceTicks,
 } from "./scale.ts";
 import {timeTicks} from "./timeAxis.ts";
+import {ComparisonLine, scaleComparison} from "./comparison.ts";
 import {
     AXIS_LABEL_OFFSET, AXIS_TAG_HEIGHT, FONT_SIZE, LEGEND_LEFT, PRICE_PANE_TOP, TIME_AXIS_HEIGHT,
 } from "./constants.ts";
@@ -51,8 +52,10 @@ export interface MainInput {
     priceOverlays: OverlayIndicator[],  // 가격 영역에 겹칠 지표
     volumeOverlays: OverlayIndicator[], // 거래량 영역에 겹칠 지표
     priceLines: PriceLine[],
+    // 비교 종목: 주 종목의 캔들 순번에 맞춘 종가와 선 색 순번. 있으면 percentScale 도 켜서 넘길 것
+    comparisons: { closes: Series, color: number }[],
     flatByPrevClose: boolean,
-    axisWidth: number,          // 오른쪽 가격축 너비 (CSS px)
+    axisWidth: number,         // 오른쪽 가격축 너비 (CSS px)
     valueDecimals: number,      // 캔들 가격의 소수 자릿수
     countdown: string | null,   // 현재가 라벨 아래에 적을, 마지막 캔들이 마감하기까지 남은 시간. 없으면 적지 않는다
 }
@@ -91,6 +94,7 @@ interface Frame {
     axisText: (price: number, decimals: number) => string,
     baseline: number,               // 기준선 차트의 기준 가격
     countdown: string | null,       // 현재가 라벨 아래에 적을 남은 시간
+    comparisons: { line: ComparisonLine, color: number }[],     // 비교 종목의 선
 }
 
 /** 가격 눈금: 가로 격자 + 오른쪽 라벨. 눈금의 소수 자릿수를 돌려준다. */
@@ -351,6 +355,9 @@ const drawCandles = (
         averages.forEach((values, order) => {
             painter.strokeSeries(values, range, priceY, lineColor(style, averageColors[order] ?? order));
         });
+        frame.comparisons.forEach(({line: comparison, color}) => {
+            painter.strokeSeries(comparison.values, range, priceY, lineColor(style, color));
+        });
     });
 
     // 거래량 영역 지표는 값이 눈금 상한을 넘어도 가격 영역으로 올라가지 않게 거래량 영역으로 자른다.
@@ -385,6 +392,26 @@ const drawExtremes = (frame: Frame) => {
     const lowOffset = visible.reduce((best, candle, offset) => lowOf(candle) < lowOf(visible[best]) ? offset : best, 0);
     mark(highOffset, highOf(visible[highOffset]), '최고', style.upColor);
     mark(lowOffset, lowOf(visible[lowOffset]), '최저', style.downColor);
+};
+
+/**
+ * 비교 종목의 라벨: 보이는 구간의 마지막 값 높이에, 오른쪽 축에 선 색으로 등락률을 적는다.
+ * 가격축을 끌어 범위를 좁혀 그 값이 범위를 벗어나면 적지 않는다.
+ */
+const drawComparisonTags = (frame: Frame) => {
+    const {painter, style, priceMin, priceMax, priceY, plotRightPx, axisLabelX} = frame;
+    const ctx = painter.ctx;
+    const labelHeight = painter.px(AXIS_TAG_HEIGHT);
+    ctx.textAlign = 'left';
+    frame.comparisons.forEach(({line: comparison, color}) => {
+        const value = comparison.last;
+        if (value === null || value < priceMin || value > priceMax) return;
+        const y = painter.px(priceY(value));
+        ctx.fillStyle = lineColor(style, color);
+        ctx.fillRect(plotRightPx, Math.round(y - labelHeight / 2), frame.axisWidthPx, labelHeight);
+        ctx.fillStyle = style.backgroundColor;
+        ctx.fillText(frame.axisText(value, frame.valueDecimals), axisLabelX, y);
+    });
 };
 
 /**
@@ -464,7 +491,7 @@ export const renderMain = (painter: Painter, input: MainInput): Layout | null =>
     const {
         candles, chartType, shapes, logScale, percentScale, priceZoom, timeUnit, style, width, range,
         mainHeight, volumeRatio, indicatorHeights,
-        averages, averageColors, indicators, priceOverlays, volumeOverlays, priceLines, flatByPrevClose,
+        averages, averageColors, indicators, priceOverlays, volumeOverlays, priceLines, comparisons, flatByPrevClose,
         axisWidth, valueDecimals, countdown,
     } = input;
 
@@ -488,7 +515,15 @@ export const renderMain = (painter: Painter, input: MainInput): Layout | null =>
     const end = range.from + range.count;
     // 캔들보다 긴 지표(일목균형표의 선행스팬)는 마지막 캔들 뒤로 보이는 부분까지 넣는다.
     const seriesEnd = Math.max(end, Math.ceil(range.rightEdge));
-    const visibleAverages = [...averages, ...priceOverlays.flatMap(overlay => overlay.series)]
+    // 퍼센트 축의 기준(0%)과 기준선 차트의 기준 가격: 보이는 첫 캔들의 종가. 화면을 움직이면 따라 바뀐다.
+    const firstClose = visible[0].close;
+    // 비교 종목도 같은 자리를 0% 로 놓고, 등락률을 주 종목의 가격으로 바꿔 같은 축에 그린다.
+    const comparisonLines = comparisons.map(({closes, color}) => ({
+        line: scaleComparison(closes, range, firstClose), color,
+    }));
+    const visibleAverages = [
+        ...averages, ...priceOverlays.flatMap(overlay => overlay.series), ...comparisonLines.map(({line}) => line.values),
+    ]
         .flatMap(values => values.slice(range.from, seriesEnd))
         .filter(isNumber)
         // 로그 축에는 0 이하의 값이 놓일 자리가 없다(볼린저밴드 하단이 음수로 내려간 경우 등).
@@ -523,9 +558,7 @@ export const renderMain = (painter: Painter, input: MainInput): Layout | null =>
     const typicalHigh = [...volumes].sort((a, b) => a - b)[Math.floor((volumes.length - 1) * VOLUME_PERCENTILE)];
     const volumeMax = Math.min(highestVolume, typicalHigh * VOLUME_OUTLIER_RATIO) || highestVolume || 1;
 
-    // 퍼센트 축의 기준(0%)과 기준선 차트의 기준 가격: 보이는 첫 캔들의 종가. 화면을 움직이면 따라 바뀐다.
-    const firstClose = visible[0].close;
-    const percentBase = percentScale && firstClose > 0 ? firstClose : null;
+    const percentBase =percentScale && firstClose > 0 ? firstClose : null;
     const axisText = (price: number, decimals: number) => percentBase
         ? formatPercent((price / percentBase - 1) * 100, PERCENT_DECIMALS)
         : formatPrice(price, decimals);
@@ -547,6 +580,7 @@ export const renderMain = (painter: Painter, input: MainInput): Layout | null =>
         axisText,
         baseline: firstClose,
         countdown,
+        comparisons: comparisonLines,
     };
 
     painter.useFont(style);
@@ -557,6 +591,7 @@ export const renderMain = (painter: Painter, input: MainInput): Layout | null =>
     drawBorders(frame);
     drawCandles(frame, averages, averageColors, priceOverlays, volumeOverlays);
     drawExtremes(frame);
+    drawComparisonTags(frame);
     drawCurrentPrice(frame);
     drawPriceLines(frame, priceLines);
 
@@ -583,5 +618,6 @@ export const renderMain = (painter: Painter, input: MainInput): Layout | null =>
         indicators: indicators.map((instance, order) => ({instance, top: indicatorTops[order]})),
         priceOverlays,
         volumeOverlays,
+        comparisonBases: comparisonLines.map(({line}) => line.base),
     };
 };

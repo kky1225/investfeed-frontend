@@ -54,6 +54,8 @@ export interface Layout {
     indicators: { instance: PaneIndicator, top: number }[],    // 별도 영역 지표와 그 영역의 위쪽 높이
     priceOverlays: OverlayIndicator[],      // 가격 영역에 겹쳐 그린 지표
     volumeOverlays: OverlayIndicator[],     // 거래량 영역에 겹쳐 그린 지표
+    // 비교 종목마다 0% 로 삼은 종가. 보이는 구간에 값이 없으면 null. 값 표시가 등락률을 계산할 때 쓴다
+    comparisonBases: (number | null)[],
 }
 
 export interface Point {

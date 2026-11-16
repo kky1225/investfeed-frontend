@@ -1,5 +1,5 @@
 import {
-    Anchor, Candle, ChartStyle, ChartType, ContextMenuRequest, Drawing, DrawingStyle, DrawingTool, IndicatorConfig, IndicatorType, MagnetMode,
+    Anchor, Candle, ChartStyle, ChartType, Comparison, ContextMenuRequest, Drawing, DrawingStyle, DrawingTool, IndicatorConfig, IndicatorType, MagnetMode,
     CandleInterval, PaneResize, PaneSizes, PriceLine, TextRequest, TimeUnit,
 } from "./types.ts";
 import {bucketEnd} from "./realtime.ts";
@@ -8,18 +8,20 @@ import {
     AXIS_LABEL_OFFSET, DRAG_THRESHOLD, INDICATOR_HEIGHT_LIMIT, INDICATOR_PANE_HEIGHT, MAIN_HEIGHT_LIMIT, PRICE_AXIS_WIDTH,
     PRICE_PANE_TOP, TIME_AXIS_HEIGHT, VOLUME_RATIO, VOLUME_RATIO_LIMIT,
 } from "./constants.ts";
-import {decimalsOf, formatCountdown, formatPrice} from "./scale.ts";
+import {decimalsOf, formatCountdown, formatPercent, formatPrice} from "./scale.ts";
+import {alignCloses, comparisonPercent} from "./comparison.ts";
 import {clamp, isNumber, Layout, paneToValue, Point, View} from "./layout.ts";
 import {clampView, defaultView, logicalAt, visibleRange, zoomedView} from "./viewport.ts";
-import {candleColor, Painter} from "./painter.ts";
-import {createIndicator, OverlayIndicator, PaneIndicator} from "./indicatorPanes.ts";
+import {candleColor, lineColor, Painter} from "./painter.ts";
+import {createIndicator, LegendItem, OverlayIndicator, PaneIndicator} from "./indicatorPanes.ts";
 import {PANE_GAP, renderMain} from "./mainRenderer.ts";
 import {drawCandleLegend, drawCrosshair, drawIndicatorLegends, drawOverlayLegends} from "./overlayRenderer.ts";
 import {DrawingLayer} from "./drawingLayer.ts";
 
 export {INDICATOR_HEIGHT_LIMIT, INDICATOR_PANE_HEIGHT, MAIN_HEIGHT_LIMIT, VOLUME_RATIO_LIMIT} from "./constants.ts";
 
-const LOAD_OLDER_THRESHOLD = 50;    // 화면 왼쪽 끝에서 받아 둔 첫 캔들까지 이만큼 이하로 남으면 과거 구간을 요청한다
+const COMPARISON_PERCENT_DECIMALS = 2;  // 값 표시에 적는 비교 종목 등락률의 소수 자릿수
+const LOAD_OLDER_THRESHOLD = 50;   // 화면 왼쪽 끝에서 받아 둔 첫 캔들까지 이만큼 이하로 남으면 과거 구간을 요청한다
 const PINCH_DELTA_LIMIT = 30;   // 휠 한 번의 이동량이 이보다 작으면 트랙패드 두 손가락 벌리기로 본다
 const WHEEL_ZOOM_RATE = 0.0015;
 const PINCH_WHEEL_ZOOM_RATE = 0.01; // 트랙패드 두 손가락 벌리기 (ctrl + wheel 로 들어옴)
@@ -121,6 +123,8 @@ export class CandleChartEngine {
     private priceOverlays: OverlayIndicator[] = [];
     private volumeOverlays: OverlayIndicator[] = [];
     private priceLines: PriceLine[] = [];
+    private comparisons: Comparison[] = [];
+    private comparisonCloses: Series[] = [];    // comparisons 와 같은 순서. 주 종목의 캔들 순번에 맞춘 종가
 
     /** 도형이 추가·변경·삭제되면 새 목록을 알린다. */
     onDrawingsChange: ((drawings: Drawing[]) => void) | null = null;
@@ -277,6 +281,17 @@ export class CandleChartEngine {
         this.scheduleDraw();
     }
 
+    /**
+     * 비교 종목 목록을 통째로 바꾼다. 주 종목과 같은 주기의 캔들을 줄 것.
+     * 하나라도 있으면 가격축이 퍼센트 축이 되고, 다 비우면 setPercentScale 로 정한 설정으로 돌아간다.
+     * 화면에 보이는 첫 캔들을 0% 로 놓고, 주 종목과 비교 종목이 그 뒤로 움직인 등락률을 같은 축에 그린다.
+     */
+    setComparisons(comparisons: Comparison[]) {
+        this.comparisons = comparisons;
+        this.computeSeries();
+        this.scheduleDraw();
+    }
+
     /** 사용자가 그린 도형 목록을 통째로 바꾼다. */
     setDrawings(drawings: Drawing[]) {
         this.drawingLayer.setDrawings(drawings);
@@ -426,6 +441,7 @@ export class CandleChartEngine {
     private computeSeries() {
         this.shapes = this.chartType === 'heikinAshi' ? heikinAshi(this.candles) : this.candles;
         this.averages = this.averagePeriods.map(period => movingAverage(this.candles, period));
+        this.comparisonCloses = this.comparisons.map(comparison => alignCloses(this.candles, comparison.candles));
         const context = {
             timeUnit: this.timeUnit,
             formatPrice: (value: number) => formatPrice(value, this.valueDecimals),
@@ -972,7 +988,8 @@ export class CandleChartEngine {
             chartType: this.chartType,
             shapes: this.shapes,
             logScale: this.logScale,
-            percentScale: this.percentScale,
+            // 비교 종목은 등락률로만 견줄 수 있으므로, 있는 동안에는 설정과 상관없이 퍼센트 축으로 그린다.
+            percentScale: this.percentScale || this.comparisons.length > 0,
             priceZoom: this.priceZoom,
             timeUnit: this.timeUnit,
             style,
@@ -987,6 +1004,7 @@ export class CandleChartEngine {
             priceOverlays: this.priceOverlays,
             volumeOverlays: this.volumeOverlays,
             priceLines: this.priceLines,
+            comparisons: this.comparisons.map(({color}, order) => ({closes: this.comparisonCloses[order] ?? [], color})),
             flatByPrevClose: this.flatByPrevClose,
             axisWidth: this.axisWidth,
             valueDecimals: this.valueDecimals,
@@ -1015,7 +1033,16 @@ export class CandleChartEngine {
                 this.candles[index - 1]?.close ?? null,
             );
         }
-        drawOverlayLegends(painter, layout, style, this.averagePeriods, this.averages, this.averageColors, index);
+        const comparisonItems = this.comparisons.map(({name, color}, order): LegendItem => {
+            const percent = comparisonPercent(this.comparisonCloses[order] ?? [], layout.comparisonBases[order] ?? null, index);
+            return [
+                `${name} ${percent === null ? '-' : formatPercent(percent, COMPARISON_PERCENT_DECIMALS)}`,
+                lineColor(style, color),
+            ];
+        });
+        drawOverlayLegends(
+            painter, layout, style, this.averagePeriods, this.averages, this.averageColors, index, comparisonItems,
+        );
         drawIndicatorLegends(painter, layout, style, index);
     }
 }

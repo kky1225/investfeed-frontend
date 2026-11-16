@@ -18,6 +18,17 @@ export interface PriceLine {
     tone: 'up' | 'down' | 'neutral',    // 색: 상승색 / 하락색 / 글자색
 }
 
+/**
+ * 비교 종목 하나. 주 종목과 같은 주기의 캔들을 주면, 가격 영역에 등락률로 맞춘 선으로 겹쳐 그린다.
+ * 비교 종목이 하나라도 있으면 가격축은 퍼센트 축이 된다.
+ */
+export interface Comparison {
+    key: string,        // 종목 코드처럼 비교 종목을 가리는 값
+    name: string,       // 값 표시에 적는 이름
+    candles: Candle[],  // 오래된 순
+    color: number,      // style.lineColors 안에서의 순번
+}
+
 /** 그린 도형이 붙는 자리. 화면 좌표가 아니라 캔들 시각과 가격에 고정된다. */
 export interface Anchor {
     time: number,   // 캔들 시각 (epoch ms)
