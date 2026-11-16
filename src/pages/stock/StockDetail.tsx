@@ -21,7 +21,6 @@ import MenuItem from "@mui/material/MenuItem";
 import {useParams} from "react-router-dom";
 import {
     StockCandleRes,
-    StockChart,
     StockChartType,
     StockDetailReq,
     StockDetailRes,
@@ -39,10 +38,9 @@ import type {PriceTarget} from "../../type/NotificationType.ts";
 import {applyTick} from "../../lib/chart/realtime.ts";
 import {mergeCandles} from "../../lib/chart/merge.ts";
 import {CandlePage, useCandleHistory} from "../../components/chart/useCandleHistory.ts";
-import type {ChartComparisonSource} from "../../components/chart/useChartComparisons.ts";
-import {
-    fetchStockDetail, fetchStockStream, fetchStockProgramChart, fetchStockCandles, fetchStockSearch,
-} from "../../api/stock/StockApi.ts";
+import {createComparisonSource} from "../detail/chartComparison.ts";
+import {kiwoomCandles as toCandles, parseChartPrice} from "../detail/chartCandles.ts";
+import {fetchStockDetail, fetchStockStream, fetchStockProgramChart, fetchStockCandles} from "../../api/stock/StockApi.ts";
 import {useMarketWebSocket} from "../detail/useMarketWebSocket.ts";
 import {fetchNews} from "../../api/news/NewsApi.ts";
 import InvestorBarChart from "../../components/InvestorBarChart.tsx";
@@ -303,32 +301,6 @@ const INITIAL_TAB_DATA: TabDataShape = {
     shortSelling: { col: [], row: [] },
     daily: { col: [], row: [] },
 };
-
-// 키움 차트 시각(yyyyMMdd 또는 yyyyMMddHHmmss) → epoch ms. 월·일이 없으면 1로 본다.
-const parseChartTime = (dt: string): number => new Date(
-    Number(dt.slice(0, 4)),
-    (Number(dt.slice(4, 6)) || 1) - 1,
-    Number(dt.slice(6, 8)) || 1,
-    Number(dt.slice(8, 10)),
-    Number(dt.slice(10, 12)),
-).getTime();
-
-// 키움 가격은 등락 부호(+/-)가 앞에 붙어 올 수 있어 떼고 읽는다.
-const parseChartPrice = (price: string | null | undefined): number =>
-    price ? Number(price.replace(/^[+-]/, '')) : NaN;
-
-// 서버가 주는 차트 목록(최신→과거)을 캔들(오래된 순)로 바꾼다. 값이 깨진 항목은 버린다.
-const toCandles = (list: StockChart[]): Candle[] => list
-    .map(item => ({
-        time: parseChartTime(item.dt ?? ''),
-        open: parseChartPrice(item.openPric),
-        high: parseChartPrice(item.highPric),
-        low: parseChartPrice(item.lowPric),
-        close: parseChartPrice(item.curPrc),
-        volume: Number(item.trdeQty) || 0,
-    }))
-    .filter(candle => [candle.time, candle.open, candle.high, candle.low, candle.close].every(Number.isFinite))
-    .reverse();
 
 const CHART_TIME_UNIT: Record<StockChartType, TimeUnit> = {
     [StockChartType.MINUTE_1]: 'minute',
@@ -601,19 +573,8 @@ const StockDetail = () => {
     }, [stkCd, req.chartType]);
     const {history: candleHistory, loadOlder: loadOlderCandles} = useCandleHistory(chartSeriesKey, fetchCandlePage);
 
-    // 종목 비교: 다른 국내 종목을 검색하고, 지금 차트와 같은 주기의 캔들을 받는다.
-    const chartComparison = useMemo<ChartComparisonSource>(() => ({
-        search: async keyword => (
-            requireOk<{ stkCd: string, stkNm: string }[] | null>(await fetchStockSearch(keyword), '종목 검색') ?? []
-        ).map(item => ({code: item.stkCd, name: item.stkNm})),
-        fetchPage: async (code, cursor) => {
-            const page = requireOk<StockCandleRes>(
-                await fetchStockCandles(code, {chartType: req.chartType, cursor: cursor ?? undefined}, {skipGlobalError: true}),
-                '비교 종목 차트 조회',
-            );
-            return {candles: toCandles(page.candles), nextCursor: page.nextCursor ?? null};
-        },
-    }), [req.chartType]);
+    // 종목 비교: 일봉 이상은 국내·미국·코인을 섞어, 분봉은 국내 종목끼리만 비교한다.
+    const chartComparison = useMemo(() => createComparisonSource('STOCK', req.chartType), [req.chartType]);
     const fullCandles = useMemo(() => mergeCandles(candleHistory, chartCandles), [candleHistory, chartCandles]);
 
     // 폴링 응답에 이미 들어 있는 체결(조회 시각 이전)은 다시 더하지 않는다.

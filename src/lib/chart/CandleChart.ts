@@ -9,7 +9,7 @@ import {
     PRICE_PANE_TOP, TIME_AXIS_HEIGHT, VOLUME_RATIO, VOLUME_RATIO_LIMIT,
 } from "./constants.ts";
 import {decimalsOf, formatCountdown, formatPercent, formatPrice} from "./scale.ts";
-import {alignCloses, comparisonPercent} from "./comparison.ts";
+import {alignCloses, ComparisonAlign, comparisonPercent} from "./comparison.ts";
 import {clamp, isNumber, Layout, paneToValue, Point, View} from "./layout.ts";
 import {clampView, defaultView, logicalAt, visibleRange, zoomedView} from "./viewport.ts";
 import {candleColor, lineColor, Painter} from "./painter.ts";
@@ -124,6 +124,7 @@ export class CandleChartEngine {
     private volumeOverlays: OverlayIndicator[] = [];
     private priceLines: PriceLine[] = [];
     private comparisons: Comparison[] = [];
+    private comparisonAlign: ComparisonAlign = 'time';
     private comparisonCloses: Series[] = [];    // comparisons 와 같은 순서. 주 종목의 캔들 순번에 맞춘 종가
 
     /** 도형이 추가·변경·삭제되면 새 목록을 알린다. */
@@ -285,9 +286,11 @@ export class CandleChartEngine {
      * 비교 종목 목록을 통째로 바꾼다. 주 종목과 같은 주기의 캔들을 줄 것.
      * 하나라도 있으면 가격축이 퍼센트 축이 되고, 다 비우면 setPercentScale 로 정한 설정으로 돌아간다.
      * 화면에 보이는 첫 캔들을 0% 로 놓고, 주 종목과 비교 종목이 그 뒤로 움직인 등락률을 같은 축에 그린다.
+     * align: 두 종목의 캔들을 무엇으로 맞출지. 일봉 이상에서 종류가 다른 종목을 섞으면 날·주·달·해로 맞춘다.
      */
-    setComparisons(comparisons: Comparison[]) {
+    setComparisons(comparisons: Comparison[], align: ComparisonAlign = 'time') {
         this.comparisons = comparisons;
+        this.comparisonAlign = align;
         this.computeSeries();
         this.scheduleDraw();
     }
@@ -441,7 +444,9 @@ export class CandleChartEngine {
     private computeSeries() {
         this.shapes = this.chartType === 'heikinAshi' ? heikinAshi(this.candles) : this.candles;
         this.averages = this.averagePeriods.map(period => movingAverage(this.candles, period));
-        this.comparisonCloses = this.comparisons.map(comparison => alignCloses(this.candles, comparison.candles));
+        this.comparisonCloses = this.comparisons.map(comparison => (
+            alignCloses(this.candles, comparison.candles, this.comparisonAlign)
+        ));
         const context = {
             timeUnit: this.timeUnit,
             formatPrice: (value: number) => formatPrice(value, this.valueDecimals),

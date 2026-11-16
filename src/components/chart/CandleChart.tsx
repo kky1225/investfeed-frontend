@@ -17,7 +17,7 @@ import {chartColorVars, LINE_COLOR_VARS} from "./chartColors.ts";
 import ChartDrawingToolbar from "./ChartDrawingToolbar.tsx";
 import {ChartToolbarButton} from "./ChartToolbarControls.tsx";
 import {useChartStorage} from "./useChartStorage.ts";
-import {ChartComparisonSource, MAX_COMPARISONS, useChartComparisons} from "./useChartComparisons.ts";
+import {ChartComparisonSource, comparisonKey, MAX_COMPARISONS, useChartComparisons} from "./useChartComparisons.ts";
 import {useColorScheme} from "@mui/material/styles";
 import {
     CandleChartEngine, INDICATOR_HEIGHT_LIMIT, INDICATOR_PANE_HEIGHT, MAIN_HEIGHT_LIMIT, VOLUME_RATIO_LIMIT,
@@ -46,7 +46,7 @@ export interface CandleChartProps {
     // 화면 왼쪽 끝이 받아 둔 캔들의 처음에 가까워지면 부른다. 가까운 동안 여러 번 부르므로
     // 받는 쪽에서 요청 중이거나 더 받을 것이 없으면 무시해야 한다 (useCandleHistory 의 loadOlder)
     onLoadOlder?: () => void,
-    // 종목 비교에 쓸 검색·캔들 조회. 주면 설정 창에 종목 비교 칸이 생긴다. 종목·주기가 바뀔 때만 바뀌는 값을 넘길 것
+    // 종목 비교에 쓸 검색·캔들 조회. 주면 설정 창에 종목 비교 칸이 생긴다. 주기가 바뀔 때만 바뀌는 값을 넘길 것
     comparison?: ChartComparisonSource,
     toolbarStart?: ReactNode,   // 위쪽 줄 맨 앞에 놓을 화면별 버튼 (주기, 차트 종류 등)
     // 가격+거래량 영역의 기본 높이. 보조지표 영역은 이 아래에 더해진다. 사용자가 경계를 끌어 바꿔 두었으면 그 높이를 쓴다
@@ -132,6 +132,7 @@ const CandleChart = ({
     const {
         items: comparisonItems, add: addComparison, remove: removeComparison, comparisons,
     } = useChartComparisons(`${assetType}-${assetCode}`, seriesKey ?? '', comparison, candles[0]?.time ?? null);
+    const comparisonAlign = comparison?.align ?? 'time';
     // 저장된 값이 이 버전이 모르는 것이면 자석을 끈 것으로 본다.
     const magnet: MagnetMode = MAGNET_MODES.find(mode => mode === savedMagnet) ?? 'off';
     // 저장된 값이 이 버전이 모르는 종류면 캔들로 그린다.
@@ -420,8 +421,8 @@ const CandleChart = ({
     }, [priceLines]);
 
     useEffect(() => {
-        engineRef.current?.setComparisons(comparisons);
-    }, [comparisons]);
+        engineRef.current?.setComparisons(comparisons, comparisonAlign);
+    }, [comparisons, comparisonAlign]);
 
     useEffect(() => {
         engineRef.current?.setDrawings(drawings);
@@ -575,7 +576,9 @@ const CandleChart = ({
                 comparison={comparison && {
                     items: comparisonItems,
                     max: MAX_COMPARISONS,
-                    selfCode: assetCode,
+                    market: comparison.market,
+                    mixed: comparison.mixed,
+                    selfKey: assetCode ? comparisonKey(comparison.market, assetCode) : undefined,
                     onSearch: comparison.search,
                     onAdd: addComparison,
                     onRemove: removeComparison,

@@ -16,10 +16,10 @@ import MenuItem from "@mui/material/MenuItem";
 import {CryptoDetailLineChartProps} from "../../components/CryptoDetailLineChart.tsx";
 import CandleChart from "../../components/chart/CandleChart.tsx";
 import {ChartToolbarGroup} from "../../components/chart/ChartToolbarControls.tsx";
-import {Candle, CandleInterval, TimeUnit} from "../../lib/chart/types.ts";
-import type {ChartComparisonSource} from "../../components/chart/useChartComparisons.ts";
-import {requireOk} from "../../lib/apiResponse.ts";
-import {fetchCryptoDetail, fetchCryptoSearch, fetchCryptoStream} from "../../api/crypto/CryptoApi.ts";
+import {CandleInterval, TimeUnit} from "../../lib/chart/types.ts";
+import {createComparisonSource} from "../detail/chartComparison.ts";
+import {cryptoCandles as toCandles} from "../detail/chartCandles.ts";
+import {fetchCryptoDetail, fetchCryptoStream} from "../../api/crypto/CryptoApi.ts";
 import {useRealtimeWebSocket} from "../detail/useRealtimeWebSocket.ts";
 import {CryptoChart, CryptoChartType, CryptoDetailReq, CryptoDetailRes} from "../../type/CryptoType.ts";
 import {useParams} from "react-router-dom";
@@ -43,19 +43,6 @@ interface CryptoTickerData {
     accTradeVolume24h: number;
     tradeDateTimeKst: string;
 }
-
-/** 차트 응답을 캔들로 바꾼다. 오래된 것부터 놓고, 숫자가 아닌 행은 뺀다. */
-const toCandles = (list: CryptoChart[]): Candle[] => list
-    .map(item => ({
-        time: new Date(item.dt).getTime(),
-        open: item.openingPrice,
-        high: item.highPrice,
-        low: item.lowPrice,
-        close: item.tradePrice,
-        volume: item.candleAccTradeVolume || 0,
-    }))
-    .filter(candle => [candle.time, candle.open, candle.high, candle.low, candle.close].every(Number.isFinite))
-    .sort((a, b) => a.time - b.time);
 
 // 날짜 눈금 표기 단위. 주봉은 날짜까지 적는다
 const CHART_TIME_UNIT: Record<CryptoChartType, TimeUnit> = {
@@ -394,20 +381,8 @@ const CryptoDetail = () => {
     // (코인 캔들은 거래소가 정한 시각에 나뉘므로, 화면에서 새 캔들을 직접 만들지 않는다.)
     const candleList = useMemo(() => toCandles(result?.chartList ?? []), [result]);
 
-    // 종목 비교: 다른 코인을 검색하고, 지금 차트와 같은 주기의 캔들을 받는다.
-    // 코인은 과거 구간을 이어 받는 조회가 없어, 상세 조회가 주는 구간만 비교한다(주 차트와 같은 길이).
-    const chartComparison = useMemo<ChartComparisonSource>(() => ({
-        search: async keyword => (
-            requireOk<{ market: string, koreanName: string }[] | null>(await fetchCryptoSearch(keyword), '코인 검색') ?? []
-        ).map(item => ({code: item.market, name: item.koreanName})),
-        fetchPage: async code => {
-            const detail = requireOk<CryptoDetailRes>(
-                await fetchCryptoDetail(code, {chartType: req.chartType}, {skipGlobalError: true}),
-                '비교 코인 차트 조회',
-            );
-            return {candles: toCandles(detail.chartList ?? []), nextCursor: null};
-        },
-    }), [req.chartType]);
+    // 종목 비교: 일봉 이상은 국내·미국·코인을 섞어, 분봉은 코인끼리만 비교한다.
+    const chartComparison = useMemo(() => createComparisonSource('CRYPTO', req.chartType), [req.chartType]);
     const candles = useMemo(() => {
         const last = candleList[candleList.length - 1];
         if (!last || !livePrice || livePrice.stamp < last.time) return candleList;
