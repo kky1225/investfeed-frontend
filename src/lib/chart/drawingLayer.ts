@@ -1,5 +1,6 @@
 import {
-    Anchor, Candle, ChartStyle, Drawing, DrawingStyle, DrawingTool, MagnetMode, TextRequest, TimeUnit,
+    Anchor, Candle, ChartStyle, Drawing, DrawingStyle, DrawingTool, FIBONACCI_DEFAULT_LEVELS, MagnetMode, TextRequest,
+    TimeUnit,
 } from "./types.ts";
 import {AXIS_LABEL_OFFSET, AXIS_TAG_HEIGHT, AXIS_TAG_PADDING, DRAG_THRESHOLD} from "./constants.ts";
 import {formatTime} from "./scale.ts";
@@ -19,7 +20,6 @@ const DASH = [6, 4];
 const FILL_ALPHA = 0.1;         // 사각형·채널 안쪽 채움
 const RAY_LENGTH = 20000;       // 반직선을 화면 밖까지 뻗는 길이 (CSS px)
 const MAGNET_DISTANCE = 12;     // 약한 자석: 캔들의 시가·고가·저가·종가가 이만큼 안에 있으면 그 값에 붙는다 (CSS px)
-const FIBONACCI_LEVELS = [0, 0.236, 0.382, 0.5, 0.618, 0.786, 1];
 const TEXT_SIZES = [12, 15, 19];    // 글자 도형의 크기. 꾸미기의 굵기 1~3 에 차례로 대응한다 (CSS px)
 const TEXT_PADDING = 3;         // 글자를 잡을 수 있는 범위를 글자보다 이만큼 넓힌다
 const LABEL_GAP = 2;            // 선과 그 위에 적는 글자 사이
@@ -87,6 +87,8 @@ export interface DrawingHost {
     layout: () => Layout | null,    // 마지막으로 그린 배치
     candles: () => Candle[],
     timeUnit: () => TimeUnit,       // 수직선의 날짜 라벨 표기 단위
+    // index 번째 캔들 자리에서 가격 영역에 그려진 선들의 값(이동평균선, 볼린저밴드 등). 자석이 지표 선에 붙을 때 쓴다
+    lineValues: (index: number) => number[],
     redraw: () => void,            // 위 장을 다시 그려 달라고 요청
     refreshCursor: () => void,      // 도구 상태가 바뀌어 마우스 커서를 다시 정해야 함
     drawingsChanged: (drawings: Drawing[]) => void,     // 사용자가 추가·변경·삭제함
@@ -123,7 +125,9 @@ export class DrawingLayer {
     private draft: Draft | null = null;
     private move: Move | null = null;
     private newStyle: DrawingStyle = {};            // 새로 그리는 도형에 입힐 꾸미기
+    private newLevels: number[] | null = null;      // 새로 그리는 피보나치 되돌림에 쓸 비율. null 이면 기본 비율
     private magnet: MagnetMode = 'off';             // 점을 캔들의 시가·고가·저가·종가에 붙이는 정도
+    private magnetIndicators = false;               // 자석을 가격 영역의 지표 선에도 붙일지
     private textSpot: Anchor | null = null;         // 글자 도구로 누른 자리. 손을 떼면 이 자리에 입력을 요청한다
     private textWidths = new Map<string, number>(); // 글자 도형의 너비(CSS px). 그릴 때 재 두고 잡는 판정에 쓴다
 
@@ -164,9 +168,18 @@ export class DrawingLayer {
         this.newStyle = style;
     }
 
-    /** 자석: 점을 놓거나 고칠 때 캔들 값(시가·고가·저가·종가)에 붙이는 정도 */
-    setMagnet(mode: MagnetMode) {
+    /** 새로 그리는 피보나치 되돌림에 쓸 비율. null 이면 기본 비율 */
+    setNewLevels(levels: number[] | null) {
+        this.newLevels = levels;
+    }
+
+    /**
+     * 자석: 점을 놓거나 고칠 때 캔들 값(시가·고가·저가·종가)에 붙이는 정도.
+     * indicators 가 true 면 가격 영역에 그려진 지표 선의 값에도 붙는다.
+     */
+    setMagnet(mode: MagnetMode, indicators: boolean) {
         this.magnet = mode;
+        this.magnetIndicators = indicators;
     }
 
     /** 이번 동작에 쓸 자석. invert(Ctrl·⌘를 누르는 중)면 반대로: 꺼져 있으면 약하게 켜고, 켜져 있으면 끈다. */
@@ -363,9 +376,7 @@ export class DrawingLayer {
     render(painter: Painter, layout: Layout, style: ChartStyle) {
         const draft = this.draft;
         const shown = this.drawings.filter(drawing => !drawing.hidden);
-        const drawings: Drawing[] = draft
-            ? [...shown, {...this.newStyle, ...this.draftShape(draft), id: DRAFT_ID}]
-            : shown;
+        const drawings: Drawing[] = draft ? [...shown, this.created(this.draftShape(draft), DRAFT_ID)] : shown;
         if (drawings.length === 0) return;
 
         const ctx = painter.ctx;
@@ -550,9 +561,15 @@ export class DrawingLayer {
         this.host.redraw();
     }
 
+    /** 모양에 새 도형의 꾸미기(색·굵기·점선, 피보나치면 비율)를 입혀 도형으로 만든다. */
+    private created(shape: DrawingShape, id: string): Drawing {
+        const levels = shape.type === 'fibonacci' && this.newLevels ? {levels: this.newLevels} : {};
+        return {...this.newStyle, ...shape, ...levels, id} as Drawing;
+    }
+
     /** 다 그린 도형을 목록에 넣고 도구를 푼다. */
     private add(shape: DrawingShape) {
-        this.changeDrawings([...this.drawings, {...this.newStyle, ...shape, id: createId()} as Drawing]);
+        this.changeDrawings([...this.drawings, this.created(shape, createId())]);
         this.releaseTool();
     }
 
@@ -613,6 +630,7 @@ export class DrawingLayer {
 
     /**
      * 자석: 그 칸 캔들의 시가·고가·저가·종가 중 높이 y 에 가장 가까운 값.
+     * 지표 선에도 붙이도록 켜 두었으면 그 칸에서의 지표 선 값(이동평균선, 볼린저밴드 등)도 함께 견준다.
      * 약한 자석은 그 값이 가까울 때만, 강한 자석은 항상 붙는다. 붙지 않으면 y 자리의 가격 그대로.
      * 캔들이 없는 칸(미래 구간)에서는 붙지 않는다.
      */
@@ -621,7 +639,8 @@ export class DrawingLayer {
         const free = paneToValue(pane)(y);
         if (magnet === 'off' || !candle) return free;
         const toY = paneToY(pane);
-        const nearest = [candle.open, candle.high, candle.low, candle.close]
+        const lineValues = this.magnetIndicators ? this.host.lineValues(index) : [];
+        const nearest = [candle.open, candle.high, candle.low, candle.close, ...lineValues]
             .map(price => ({price, gap: Math.abs(toY(price) - y)}))
             .reduce((best, next) => next.gap < best.gap ? next : best);
         return magnet === 'strong' || nearest.gap <= MAGNET_DISTANCE ? nearest.price : free;
@@ -681,7 +700,8 @@ export class DrawingLayer {
                 const left = Math.min(from.x, to.x);
                 const right = Math.max(from.x, to.x);
                 const toY = paneToY(pane);
-                const levels = FIBONACCI_LEVELS.map(ratio => {
+                const ratios = drawing.levels?.length ? drawing.levels : FIBONACCI_DEFAULT_LEVELS;
+                const levels = ratios.map(ratio => {
                     const price = drawing.to.price + (drawing.from.price - drawing.to.price) * ratio;
                     return {text: `${ratio} (${pane.format(price)})`, y: toY(price)};
                 });

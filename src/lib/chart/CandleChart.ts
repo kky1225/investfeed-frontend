@@ -9,7 +9,7 @@ import {
     PRICE_PANE_TOP, TIME_AXIS_HEIGHT, VOLUME_RATIO, VOLUME_RATIO_LIMIT,
 } from "./constants.ts";
 import {decimalsOf, formatCountdown, formatPrice} from "./scale.ts";
-import {clamp, Layout, paneToValue, Point, View} from "./layout.ts";
+import {clamp, isNumber, Layout, paneToValue, Point, View} from "./layout.ts";
 import {clampView, defaultView, logicalAt, visibleRange, zoomedView} from "./viewport.ts";
 import {candleColor, Painter} from "./painter.ts";
 import {createIndicator, OverlayIndicator, PaneIndicator} from "./indicatorPanes.ts";
@@ -152,6 +152,9 @@ export class CandleChartEngine {
         layout: () => this.layout,
         candles: () => this.candles,
         timeUnit: () => this.timeUnit,
+        lineValues: index => [...this.averages, ...this.priceOverlays.flatMap(overlay => overlay.series)]
+            .map(series => series[index])
+            .filter(isNumber),
         redraw: () => this.scheduleOverlay(),
         refreshCursor: () => this.updateCursor(),
         drawingsChanged: drawings => this.onDrawingsChange?.(drawings),
@@ -289,12 +292,18 @@ export class CandleChartEngine {
         this.drawingLayer.setNewStyle(style);
     }
 
+    /** 새로 그리는 피보나치 되돌림에 쓸 비율. null 이면 기본 비율. 이미 그린 것은 그 도형의 값을 따른다. */
+    setFibonacciLevels(levels: number[] | null) {
+        this.drawingLayer.setNewLevels(levels);
+    }
+
     /**
      * 자석: 도형의 점을 놓거나 고칠 때 캔들 값(시가·고가·저가·종가)에 붙이는 정도.
+     * indicators 가 true 면 가격 영역에 그려진 선(이동평균선, 지수이동평균, 볼린저밴드, 일목균형표, VWAP)의 값에도 붙는다.
      * Ctrl(Mac 은 ⌘)을 누른 채 그리거나 고치면 그동안만 반대로 동작한다.
      */
-    setMagnet(mode: MagnetMode) {
-        this.drawingLayer.setMagnet(mode);
+    setMagnet(mode: MagnetMode, indicators = false) {
+        this.drawingLayer.setMagnet(mode, indicators);
     }
 
     /** onTextRequest 로 요청한 새 글자의 입력이 끝나면 부른다. anchor 는 요청에 담겨 있던 자리 */

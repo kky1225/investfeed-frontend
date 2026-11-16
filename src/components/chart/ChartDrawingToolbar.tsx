@@ -28,6 +28,8 @@ interface ChartDrawingToolbarProps {
     onSelectTool: (tool: DrawingTool | null) => void,
     magnet: MagnetMode,         // 자석: 점을 캔들의 시가·고가·저가·종가에 붙이는 정도
     onMagnetChange: (mode: MagnetMode) => void,
+    magnetIndicators: boolean,  // 자석을 가격 영역의 지표 선(이동평균선 등)에도 붙일지
+    onMagnetIndicatorsChange: (enabled: boolean) => void,
 }
 
 const MAGNET_LABELS: Record<MagnetMode, string> = {
@@ -79,7 +81,9 @@ const selectedSx = {color: 'primary.main', backgroundColor: 'action.selected'};
  * 도형을 고르면 차트에서 하나를 그린 뒤 다시 선택 상태로 돌아온다.
  * 자석은 버튼을 늘리지 않으려고 도형 목록의 맨 아래에 둔다.
  */
-const ChartDrawingToolbar = ({tool, lastTool, onSelectTool, magnet, onMagnetChange}: ChartDrawingToolbarProps) => {
+const ChartDrawingToolbar = ({
+    tool, lastTool, onSelectTool, magnet, onMagnetChange, magnetIndicators, onMagnetIndicatorsChange,
+}: ChartDrawingToolbarProps) => {
     const [anchor, setAnchor] = useState<HTMLElement | null>(null);
     // 그리는 중이면 그 도형을, 아니면 마지막에 쓴 도형을 보여 준다.
     const shown = tool ?? lastTool;
@@ -149,6 +153,18 @@ const ChartDrawingToolbar = ({tool, lastTool, onSelectTool, magnet, onMagnetChan
                         <ListItemText>{MAGNET_LABELS[mode]}</ListItemText>
                     </MenuItem>
                 ))}
+                {/* 자석이 붙는 대상을 넓히는 스위치. 자석을 켜 두었을 때만 효과가 있다 */}
+                <MenuItem
+                    role="menuitemcheckbox"
+                    aria-checked={magnetIndicators}
+                    onClick={() => {
+                        setAnchor(null);
+                        onMagnetIndicatorsChange(!magnetIndicators);
+                    }}
+                >
+                    <ListItemIcon>{magnetIndicators && <CheckIcon/>}</ListItemIcon>
+                    <ListItemText secondary="이동평균선, 볼린저밴드 등 가격 위에 그려진 선">지표 선에도 붙이기</ListItemText>
+                </MenuItem>
             </Menu>
         </Stack>
     );

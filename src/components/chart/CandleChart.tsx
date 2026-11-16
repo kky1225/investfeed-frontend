@@ -22,7 +22,8 @@ import {
     CandleChartEngine, INDICATOR_HEIGHT_LIMIT, INDICATOR_PANE_HEIGHT, MAIN_HEIGHT_LIMIT, VOLUME_RATIO_LIMIT,
 } from "../../lib/chart/CandleChart.ts";
 import {
-    Candle, CandleInterval, CHART_TYPES, ChartType, ContextMenuRequest, Drawing, DrawingState, DrawingStyle, DrawingTool, IndicatorConfig, IndicatorType,
+    Candle, CandleInterval, CHART_TYPES, ChartType, ContextMenuRequest, Drawing, DrawingState, DrawingStyle,
+    FIBONACCI_DEFAULT_LEVELS, DrawingTool, IndicatorConfig, IndicatorType,
     MAGNET_MODES, MagnetMode, MAX_DRAWING_TEXT_LENGTH, PaneResize, PriceLine, TextRequest, TimeUnit,
 } from "../../lib/chart/types.ts";
 import ChartTypeSelect from "./ChartTypeSelect.tsx";
@@ -119,6 +120,7 @@ const CandleChart = ({
         drawingToolbar: toolbarVisible, setDrawingToolbar,
         flatByPrevClose, setFlatByPrevClose,
         magnet: savedMagnet, setMagnet,
+        magnetIndicators, setMagnetIndicators,
         volumeRatio: savedVolumeRatio, setVolumeRatio,
         mainHeight: savedMainHeight, setMainHeight,
         setIndicatorHeight,
@@ -130,6 +132,8 @@ const CandleChart = ({
     const [tool, setTool] = useState<DrawingTool | null>(null);
     const [lastTool, setLastTool] = useState<DrawingTool>('trend');     // 도형 버튼이 보여 줄, 마지막에 쓴 도형
     const [newStyle, setNewStyle] = useState<DrawingStyle>({});         // 새로 그리는 도형에 입힐 꾸미기(마지막에 고른 것)
+    // 새로 그리는 피보나치 되돌림에 쓸 비율(마지막에 고른 것). null 이면 기본 비율
+    const [newLevels, setNewLevels] = useState<number[] | null>(null);
     const [selectedId, setSelectedId] = useState<string | null>(null);
     const selectedDrawing = drawings.find(drawing => drawing.id === selectedId);
 
@@ -160,6 +164,18 @@ const CandleChart = ({
         if (!previous) return;
         history.current[direction === 'undo' ? 'redo' : 'undo'].push(drawingsRef.current);
         updateDrawings(previous);
+    };
+
+    /**
+     * 선택한 피보나치 되돌림의 비율을 바꾼다. 다음에 그리는 것도 같은 비율을 따른다.
+     * 기본 비율과 같으면 저장하지 않는다(비워 둔다).
+     */
+    const changeSelectedLevels = (levels: number[]) => {
+        const stored = sameNumbers(levels, FIBONACCI_DEFAULT_LEVELS) ? null : levels;
+        setNewLevels(stored);
+        changeDrawings(drawings.map(drawing => (
+            drawing.id === selectedId && drawing.type === 'fibonacci' ? {...drawing, levels: stored} : drawing
+        )));
     };
 
     /** 도형 하나의 상태(잠금·숨김)를 바꾼다. */
@@ -409,8 +425,12 @@ const CandleChart = ({
     }, [newStyle]);
 
     useEffect(() => {
-        engineRef.current?.setMagnet(magnet);
-    }, [magnet]);
+        engineRef.current?.setFibonacciLevels(newLevels);
+    }, [newLevels]);
+
+    useEffect(() => {
+        engineRef.current?.setMagnet(magnet, magnetIndicators);
+    }, [magnet, magnetIndicators]);
 
     // 다른 종목·주기로 바뀌면 띄워 둔 글자 입력 칸과 우클릭 메뉴는 자리가 맞지 않으므로 닫는다.
     useEffect(() => {
@@ -487,6 +507,8 @@ const CandleChart = ({
                         tool={tool}
                         lastTool={lastTool}
                         onSelectTool={selectTool}
+                        magnetIndicators={magnetIndicators}
+                        onMagnetIndicatorsChange={setMagnetIndicators}
                         magnet={magnet}
                         onMagnetChange={setMagnet}
                     />
@@ -644,6 +666,10 @@ const CandleChart = ({
                             onDelete={() => changeDrawings(drawings.filter(drawing => drawing.id !== selectedId))}
                             locked={selectedDrawing.locked ?? false}
                             onLockChange={locked => changeDrawing(selectedDrawing.id, {locked})}
+                            levels={selectedDrawing.type === 'fibonacci'
+                                ? (selectedDrawing.levels?.length ? selectedDrawing.levels : FIBONACCI_DEFAULT_LEVELS)
+                                : undefined}
+                            onLevelsChange={changeSelectedLevels}
                             onEditText={selectedDrawing.type === 'text'
                                 ? () => engineRef.current?.editText(selectedDrawing.id)
                                 : undefined}

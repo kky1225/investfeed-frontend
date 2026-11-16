@@ -1,6 +1,13 @@
+import {useState} from "react";
 import Box from "@mui/material/Box";
+import Button from "@mui/material/Button";
 import ButtonBase from "@mui/material/ButtonBase";
 import Divider from "@mui/material/Divider";
+import ListItemIcon from "@mui/material/ListItemIcon";
+import ListItemText from "@mui/material/ListItemText";
+import Menu from "@mui/material/Menu";
+import MenuItem from "@mui/material/MenuItem";
+import CheckIcon from "@mui/icons-material/Check";
 import Paper from "@mui/material/Paper";
 import Stack from "@mui/material/Stack";
 import Tooltip from "@mui/material/Tooltip";
@@ -9,7 +16,7 @@ import EditOutlinedIcon from "@mui/icons-material/EditOutlined";
 import LockOpenOutlinedIcon from "@mui/icons-material/LockOpenOutlined";
 import LockOutlinedIcon from "@mui/icons-material/LockOutlined";
 import {ChartToolbarButton} from "./ChartToolbarControls.tsx";
-import {DrawingStyle} from "../../lib/chart/types.ts";
+import {DrawingStyle, FIBONACCI_LEVEL_CHOICES} from "../../lib/chart/types.ts";
 
 interface ChartDrawingStylePanelProps {
     style: DrawingStyle,        // 선택한 도형의 꾸미기
@@ -20,6 +27,9 @@ interface ChartDrawingStylePanelProps {
     onLockChange: (locked: boolean) => void,
     // 글자 도형일 때만 준다. 주면 굵기는 글자 크기로 쓰이고, 점선 대신 글자 수정 버튼이 나온다
     onEditText?: () => void,
+    // 피보나치 되돌림일 때만 준다. 켜 둔 비율이고, 주면 비율을 켜고 끄는 버튼이 나온다
+    levels?: number[],
+    onLevelsChange?: (levels: number[]) => void,
 }
 
 export const DEFAULT_DRAWING_COLOR = 4;     // 꾸미기를 정하지 않은 도형의 색 순번 (엔진의 기본값과 같다)
@@ -31,11 +41,19 @@ const selectedSx = {color: 'primary.main', backgroundColor: 'action.selected'};
 
 /**
  * 도형을 선택하면 차트 위쪽 가운데에 뜨는 패널: 색 · 굵기 · 점선 · 잠금 · 삭제. (글자 도형은 색 · 크기 · 글자 수정 · 잠금 · 삭제)
+ * 피보나치 되돌림은 점선 뒤에 비율을 켜고 끄는 버튼이 더 나온다.
  * 색은 테마에서 온 선 색 목록 안에서만 고른다.
  */
 const ChartDrawingStylePanel = ({
-    style, colorCount, onChange, onDelete, locked, onLockChange, onEditText,
+    style, colorCount, onChange, onDelete, locked, onLockChange, onEditText, levels, onLevelsChange,
 }: ChartDrawingStylePanelProps) => {
+    const [levelsAnchor, setLevelsAnchor] = useState<HTMLElement | null>(null);
+    /** 비율 하나를 켜거나 끈다. 마지막 남은 하나는 끌 수 없다(선이 하나도 없는 도형이 되므로). */
+    const toggleLevel = (level: number) => {
+        if (!levels || !onLevelsChange) return;
+        const next = levels.includes(level) ? levels.filter(item => item !== level) : [...levels, level];
+        if (next.length > 0) onLevelsChange(FIBONACCI_LEVEL_CHOICES.filter(item => next.includes(item)));
+    };
     const widthLabel = onEditText ? '크기' : '굵기';
     const color = style.color ?? DEFAULT_DRAWING_COLOR;
     const lineWidth = style.lineWidth ?? 1;
@@ -97,6 +115,37 @@ const ChartDrawingStylePanel = ({
                             <Box sx={{width: 16, borderTop: '2px dashed', borderColor: 'currentColor'}}/>
                         </ChartToolbarButton>
                     </Tooltip>
+                )}
+                {levels && (
+                    <>
+                        <Button
+                            size="small"
+                            aria-haspopup="menu"
+                            onClick={event => setLevelsAnchor(event.currentTarget)}
+                            sx={{minWidth: 0, color: 'text.secondary'}}
+                        >
+                            비율
+                        </Button>
+                        {/* 고르는 동안 닫지 않고, 바깥을 누르면 닫는다. */}
+                        <Menu
+                            anchorEl={levelsAnchor}
+                            open={Boolean(levelsAnchor)}
+                            onClose={() => setLevelsAnchor(null)}
+                            slotProps={{list: {dense: true}}}
+                        >
+                            {FIBONACCI_LEVEL_CHOICES.map(level => (
+                                <MenuItem
+                                    key={level}
+                                    role="menuitemcheckbox"
+                                    aria-checked={levels.includes(level)}
+                                    onClick={() => toggleLevel(level)}
+                                >
+                                    <ListItemIcon>{levels.includes(level) && <CheckIcon fontSize="small"/>}</ListItemIcon>
+                                    <ListItemText>{level}</ListItemText>
+                                </MenuItem>
+                            ))}
+                        </Menu>
+                    </>
                 )}
                 <Divider orientation="vertical" flexItem sx={{my: 0.5}}/>
                 <Tooltip title={locked ? '잠금 해제' : '잠금 (옮기거나 고칠 수 없게)'}>

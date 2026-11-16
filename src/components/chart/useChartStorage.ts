@@ -110,6 +110,7 @@ export const useChartStorage = (assetType: AssetType | undefined, assetCode: str
     const drawingToolbar = settingQuery.data?.drawingToolbar ?? DEFAULT_SETTING.drawingToolbar;
     const flatByPrevClose = settingQuery.data?.flatByPrevClose ?? DEFAULT_SETTING.flatByPrevClose;
     const magnet = settingQuery.data?.magnet ?? DEFAULT_SETTING.magnet;
+    const magnetIndicators = settingQuery.data?.magnetIndicators ?? false;
     // 영역 크기. 바꾼 적이 없으면 null 이고 차트가 기본 크기를 쓴다
     const volumeRatio = settingQuery.data?.volumeRatio ?? null;
     const mainHeight = settingQuery.data?.mainHeight ?? null;
@@ -119,7 +120,7 @@ export const useChartStorage = (assetType: AssetType | undefined, assetCode: str
         if (!settingReady) return;
         const next: ChartSetting = {
             indicators, chartType, logScale, percentScale, drawingToolbar, flatByPrevClose, magnet,
-            volumeRatio, mainHeight, ...change,
+            magnetIndicators, volumeRatio, mainHeight, ...change,
         };
         queryClient.setQueryData(SETTINGS_KEY, next);
         saveChartSetting(next).catch(reportSaveError);
@@ -153,6 +154,7 @@ export const useChartStorage = (assetType: AssetType | undefined, assetCode: str
     const setDrawingToolbar = (visible: boolean) => saveSetting({drawingToolbar: visible});
     const setFlatByPrevClose = (enabled: boolean) => saveSetting({flatByPrevClose: enabled});
     const setMagnet = (mode: string) => saveSetting({magnet: mode});
+    const setMagnetIndicators = (enabled: boolean) => saveSetting({magnetIndicators: enabled});
     // 영역 크기. null 을 주면 저장한 값을 지워 기본 크기로 돌린다
     const setVolumeRatio = (ratio: number | null) => saveSetting({volumeRatio: ratio});
     const setMainHeight = (height: number | null) => saveSetting({mainHeight: height});
@@ -189,6 +191,7 @@ export const useChartStorage = (assetType: AssetType | undefined, assetCode: str
         drawingToolbar, setDrawingToolbar,
         flatByPrevClose, setFlatByPrevClose,
         magnet, setMagnet,
+        magnetIndicators, setMagnetIndicators,
         volumeRatio, setVolumeRatio,
         mainHeight, setMainHeight,
         setIndicatorHeight,

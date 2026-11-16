@@ -43,6 +43,10 @@ export type MagnetMode = 'off' | 'weak' | 'strong';
 
 export const MAGNET_MODES: MagnetMode[] = ['off', 'weak', 'strong'];
 
+/** 피보나치 되돌림에서 고를 수 있는 비율. 앞의 것들은 기본으로 켜져 있고, 뒤의 확장 비율(1 초과)은 꺼져 있다 */
+export const FIBONACCI_DEFAULT_LEVELS = [0, 0.236, 0.382, 0.5, 0.618, 0.786, 1];
+export const FIBONACCI_LEVEL_CHOICES = [...FIBONACCI_DEFAULT_LEVELS, 1.272, 1.618, 2.618];
+
 /** 글자 도형의 최대 길이 */
 export const MAX_DRAWING_TEXT_LENGTH = 100;
 
@@ -81,8 +85,8 @@ export type Drawing = { id: string } & DrawingStyle & DrawingState & (
     | { type: 'ray', from: Anchor, to: Anchor }         // 반직선: from 에서 to 방향으로 끝없이
     | { type: 'rectangle', from: Anchor, to: Anchor }   // 사각형: 두 점이 대각선 모서리
     | { type: 'channel', from: Anchor, to: Anchor, third: Anchor }  // 평행 채널: from-to 선과, third 를 지나는 평행선
-    // 피보나치 되돌림: from(1)에서 to(0)까지의 높이를 정해진 비율로 나눈 가로선들
-    | { type: 'fibonacci', from: Anchor, to: Anchor }
+    // 피보나치 되돌림: from(1)에서 to(0)까지의 높이를 비율로 나눈 가로선들. levels 는 켜 둔 비율이고 비우면 기본 비율
+    | { type: 'fibonacci', from: Anchor, to: Anchor, levels?: number[] | null }
     // 가격 범위 측정: from 에서 to 까지의 가격 차이·등락률·캔들 수를 적은 상자
     | { type: 'measure', from: Anchor, to: Anchor }
     | { type: 'text', from: Anchor, text: string }      // 글자. from 이 글자의 왼쪽 가운데
