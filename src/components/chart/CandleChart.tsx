@@ -16,10 +16,12 @@ import ChartDrawingToolbar from "./ChartDrawingToolbar.tsx";
 import {ChartToolbarButton} from "./ChartToolbarControls.tsx";
 import {useChartStorage} from "./useChartStorage.ts";
 import {useColorScheme} from "@mui/material/styles";
-import {CandleChartEngine, INDICATOR_PANE_HEIGHT} from "../../lib/chart/CandleChart.ts";
+import {
+    CandleChartEngine, INDICATOR_HEIGHT_LIMIT, INDICATOR_PANE_HEIGHT, MAIN_HEIGHT_LIMIT, VOLUME_RATIO_LIMIT,
+} from "../../lib/chart/CandleChart.ts";
 import {
     Candle, CHART_TYPES, ChartType, Drawing, DrawingStyle, DrawingTool, IndicatorConfig, IndicatorType,
-    MAGNET_MODES, MagnetMode, MAX_DRAWING_TEXT_LENGTH, PriceLine, TextRequest, TimeUnit,
+    MAGNET_MODES, MagnetMode, MAX_DRAWING_TEXT_LENGTH, PaneResize, PriceLine, TextRequest, TimeUnit,
 } from "../../lib/chart/types.ts";
 import ChartTypeSelect from "./ChartTypeSelect.tsx";
 import type {AssetType} from "../../type/NotificationType.ts";
@@ -38,7 +40,8 @@ export interface CandleChartProps {
     // 받는 쪽에서 요청 중이거나 더 받을 것이 없으면 무시해야 한다 (useCandleHistory 의 loadOlder)
     onLoadOlder?: () => void,
     toolbarStart?: ReactNode,   // 위쪽 줄 맨 앞에 놓을 화면별 버튼 (주기, 차트 종류 등)
-    height?: number,            // 가격+거래량 영역 높이. 보조지표 영역은 이 아래에 더해진다
+    // 가격+거래량 영역의 기본 높이. 보조지표 영역은 이 아래에 더해진다. 사용자가 경계를 끌어 바꿔 두었으면 그 높이를 쓴다
+    height?: number,
 }
 
 const DEFAULT_MOVING_AVERAGES = [5, 20, 60, 120];
@@ -58,6 +61,11 @@ interface IndicatorEntry {
     defaultOn: boolean,
     shape: IndicatorShape,  // 바꿀 수 있는 것: 설정값 칸, 색, 선 개수
 }
+
+/** 저장된 크기가 숫자면 끌어서 바꿀 수 있는 범위 안으로 맞춰 돌려주고, 아니면 undefined */
+const sizeWithin = (value: number | null | undefined, limit: { min: number, max: number }): number | undefined => (
+    typeof value === 'number' && Number.isFinite(value) ? Math.min(limit.max, Math.max(limit.min, value)) : undefined
+);
 
 const sameNumbers = (a: number[], b: number[]) => a.length === b.length && a.every((value, order) => value === b[order]);
 
@@ -106,6 +114,9 @@ const CandleChart = ({
         drawingToolbar: toolbarVisible, setDrawingToolbar,
         flatByPrevClose, setFlatByPrevClose,
         magnet: savedMagnet, setMagnet,
+        volumeRatio: savedVolumeRatio, setVolumeRatio,
+        mainHeight: savedMainHeight, setMainHeight,
+        setIndicatorHeight,
     } = useChartStorage(assetType, assetCode);
     // 저장된 값이 이 버전이 모르는 것이면 자석을 끈 것으로 본다.
     const magnet: MagnetMode = MAGNET_MODES.find(mode => mode === savedMagnet) ?? 'off';
@@ -232,8 +243,37 @@ const CandleChart = ({
             colors: option.colors.map(color => color.value),
         })),
     [indicatorOptions]);
-    // 차트 아래에 따로 영역을 차지하는 지표의 수. 그만큼 전체 높이를 늘린다
-    const paneCount = activeIndicators.filter(config => INDICATORS[config.type].placement === 'pane').length;
+
+    // 영역 크기: 저장된 값에, 지금 경계를 끌어 바꾸고 있는 값을 덮어쓴다. 끄는 동안에는 저장하지 않고 손을 뗄 때 저장한다.
+    // (손을 뗀 뒤에도 그 값을 들고 있는다. 저장된 값이 뒤늦게 바뀌는 사이에 높이가 잠깐 되돌아가지 않게 하기 위함)
+    const [resizing, setResizing] = useState<PaneResize | null>(null);
+    const paneSizes = useMemo(() => {
+        const saved = {
+            mainHeight: sizeWithin(savedMainHeight, MAIN_HEIGHT_LIMIT) ?? height,
+            volumeRatio: sizeWithin(savedVolumeRatio, VOLUME_RATIO_LIMIT),
+            indicators: Object.fromEntries(indicators.map(type => (
+                [type, sizeWithin(indicatorSettings[type]?.height, INDICATOR_HEIGHT_LIMIT)]
+            ))) as Partial<Record<IndicatorType, number>>,
+        };
+        if (resizing?.target === 'main') return {...saved, mainHeight: resizing.height ?? height};
+        if (resizing?.target === 'volume') return {...saved, volumeRatio: resizing.ratio ?? undefined};
+        if (resizing?.target === 'indicator') {
+            return {...saved, indicators: {...saved.indicators, [resizing.type]: resizing.height ?? undefined}};
+        }
+        return saved;
+    }, [savedMainHeight, savedVolumeRatio, indicatorSettings, indicators, height, resizing]);
+    // 차트 전체 높이: 가격+거래량 + 차트 아래에 따로 영역을 차지하는 지표들
+    const chartHeight = activeIndicators
+        .filter(config => INDICATORS[config.type].placement === 'pane')
+        .reduce((sum, config) => sum + (paneSizes.indicators[config.type] ?? INDICATOR_PANE_HEIGHT), paneSizes.mainHeight);
+
+    const resizePane = (change: PaneResize, done: boolean) => {
+        setResizing(change);
+        if (!done) return;
+        if (change.target === 'main') setMainHeight(change.height);
+        else if (change.target === 'volume') setVolumeRatio(change.ratio);
+        else setIndicatorHeight(change.type, change.height);
+    };
 
     const toggleIndicator = (key: string, on: boolean) => {
         setIndicatorOn(key, on, entries.find(entry => entry.key === key)?.defaultOn ?? true);
@@ -243,7 +283,9 @@ const CandleChart = ({
     const changeDrawingsRef = useRef(changeDrawings);
     const stepHistoryRef = useRef(stepHistory);
     const loadOlderRef = useRef(onLoadOlder);
+    const resizePaneRef = useRef(resizePane);
     useEffect(() => {
+        resizePaneRef.current = resizePane;
         drawingsRef.current = drawings;
         changeDrawingsRef.current = changeDrawings;
         stepHistoryRef.current = stepHistory;
@@ -268,6 +310,7 @@ const CandleChart = ({
             textRequestRef.current = request;
             setTextRequest(request);
         };
+        engine.onPaneResize = (change, done) => resizePaneRef.current(change, done);
         engine.onLatestChange = setAtLatest;
         engine.onNeedOlder = () => loadOlderRef.current?.();
 
@@ -295,6 +338,10 @@ const CandleChart = ({
     useEffect(() => {
         engineRef.current?.setIndicators(activeIndicators);
     }, [activeIndicators]);
+
+    useEffect(() => {
+        engineRef.current?.setPaneSizes(paneSizes);
+    }, [paneSizes]);
 
     useEffect(() => {
         engineRef.current?.setFlatByPrevClose(flatByPrevClose);
@@ -476,7 +523,7 @@ const CandleChart = ({
                     )}
                     <Box
                         ref={containerRef}
-                        sx={{position: 'relative', width: '100%', height: height + paneCount * INDICATOR_PANE_HEIGHT}}
+                        sx={{position: 'relative', width: '100%', height: chartHeight}}
                     />
                     {/* 글자 도형의 입력 칸. 글자가 놓일 자리에 띄우고, 오른쪽 끝에서는 차트 밖으로 나가지 않게 당긴다. */}
                     {textRequest && (

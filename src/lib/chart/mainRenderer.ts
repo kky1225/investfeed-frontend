@@ -5,8 +5,7 @@ import {
 } from "./scale.ts";
 import {timeTicks} from "./timeAxis.ts";
 import {
-    AXIS_LABEL_OFFSET, AXIS_TAG_HEIGHT, FONT_SIZE, INDICATOR_PANE_HEIGHT, LEGEND_LEFT,
-    PRICE_PANE_TOP, TIME_AXIS_HEIGHT,
+    AXIS_LABEL_OFFSET, AXIS_TAG_HEIGHT, FONT_SIZE, LEGEND_LEFT, PRICE_PANE_TOP, TIME_AXIS_HEIGHT,
 } from "./constants.ts";
 import {clamp, isNumber, Layout, VisibleRange} from "./layout.ts";
 import {candleColor, lineColor, Painter} from "./painter.ts";
@@ -14,8 +13,7 @@ import {drawIndicatorPane, OverlayIndicator, PaneIndicator} from "./indicatorPan
 
 // 아래 장: 캔들·거래량·이동평균선·축·현재가 선·가격선·보조지표 영역
 
-const PANE_GAP = 8;             // 가격 영역과 거래량 영역 사이
-const VOLUME_RATIO = 0.22;      // 가격+거래량 높이 중 거래량 영역 비율
+export const PANE_GAP = 8;      // 가격 영역과 거래량 영역 사이. 둘을 나누는 선은 이 가운데에 긋는다
 const PRICE_TICK_GAP = 32;      // 가격 눈금 사이 최소 간격
 const TIME_TICK_GAP = 96;       // 날짜 눈금 사이 최소 간격
 const TIME_LABEL_GAP = 12;      // 날짜 눈금의 글자와 글자 사이에 남기는 최소 여백
@@ -41,8 +39,10 @@ export interface MainInput {
     priceZoom: number,         // 가격축 세로 배율. 1 이면 보이는 구간에 딱 맞추고, 클수록 범위가 넓어져 캔들이 납작해진다
     timeUnit: TimeUnit,
     style: ChartStyle,
-    width: number,              // 캔버스 크기 (CSS px)
-    height: number,
+    width: number,              // 캔버스 너비 (CSS px)
+    mainHeight: number,         // 가격+거래량 영역의 높이. 날짜축을 포함한다 (CSS px)
+    volumeRatio: number,        // 가격+거래량 높이 중 거래량 영역의 비율
+    indicatorHeights: number[], // indicators 와 같은 순서의 영역 높이 (CSS px)
     range: VisibleRange,
     averages: Series[],         // 이동평균선
     averageColors: number[],    // 이동평균선마다의 색 순번. 없는 자리는 순서대로의 색
@@ -451,20 +451,24 @@ const drawPriceLines = (frame: Frame, priceLines: PriceLine[]) => {
 /** 아래 장 전체를 그리고, 그린 배치를 돌려준다. 그릴 자리가 없으면 null. 캔버스는 부르는 쪽에서 지운다. */
 export const renderMain = (painter: Painter, input: MainInput): Layout | null => {
     const {
-        candles, chartType, shapes, logScale, percentScale, priceZoom, timeUnit, style, width, height, range,
+        candles, chartType, shapes, logScale, percentScale, priceZoom, timeUnit, style, width, range,
+        mainHeight, volumeRatio, indicatorHeights,
         averages, averageColors, indicators, priceOverlays, volumeOverlays, priceLines, flatByPrevClose,
         axisWidth, valueDecimals,
     } = input;
 
-    // 위에서부터: 가격 / 거래량 / 보조지표들 / 날짜축
+    // 위에서부터: 가격 / 거래량 / 보조지표들 / 날짜축. 위에서 아래로 쌓으므로 아래 영역의 높이가 바뀌어도 위 영역은 그대로다.
     const plotWidth = width - axisWidth;
-    const plotBottom = height - TIME_AXIS_HEIGHT;
-    const mainBottom = plotBottom - indicators.length * INDICATOR_PANE_HEIGHT;
-    const mainHeight = mainBottom - PRICE_PANE_TOP;
-    if (plotWidth <= 0 || mainHeight <= 0 || range.count === 0) return null;
+    const mainBottom = mainHeight - TIME_AXIS_HEIGHT;
+    const indicatorTops = indicatorHeights.reduce<number[]>(
+        (tops, paneHeight) => [...tops, tops[tops.length - 1] + paneHeight], [mainBottom],
+    );
+    const plotBottom = indicatorTops[indicators.length];
+    const innerHeight = mainBottom - PRICE_PANE_TOP;
+    if (plotWidth <= 0 || innerHeight <= 0 || range.count === 0) return null;
 
     const visible = candles.slice(range.from, range.from + range.count);
-    const volumeTop = mainBottom - mainHeight * VOLUME_RATIO;
+    const volumeTop = mainBottom - innerHeight * volumeRatio;
     const priceTop = PRICE_PANE_TOP;
     const priceBottom = volumeTop - PANE_GAP;
 
@@ -544,9 +548,8 @@ export const renderMain = (painter: Painter, input: MainInput): Layout | null =>
     drawCurrentPrice(frame);
     drawPriceLines(frame, priceLines);
 
-    const indicatorTops = indicators.map((_, order) => mainBottom + order * INDICATOR_PANE_HEIGHT);
     const indicatorPanes = indicators.map((instance, order) => drawIndicatorPane(
-        painter, instance, indicatorTops[order], indicatorTops[order] + INDICATOR_PANE_HEIGHT, plotWidth, range, style,
+        painter, instance, indicatorTops[order], indicatorTops[order + 1], plotWidth, range, style,
     ));
 
     return {

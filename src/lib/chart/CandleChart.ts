@@ -1,19 +1,22 @@
 import {
-    Anchor, Candle, ChartStyle, ChartType, Drawing, DrawingStyle, DrawingTool, IndicatorConfig, MagnetMode, PriceLine,
-    TextRequest, TimeUnit,
+    Anchor, Candle, ChartStyle, ChartType, Drawing, DrawingStyle, DrawingTool, IndicatorConfig, IndicatorType, MagnetMode,
+    PaneResize, PaneSizes, PriceLine, TextRequest, TimeUnit,
 } from "./types.ts";
 import {heikinAshi, movingAverage, Series} from "./indicators.ts";
-import {AXIS_LABEL_OFFSET, DRAG_THRESHOLD, PRICE_AXIS_WIDTH} from "./constants.ts";
+import {
+    AXIS_LABEL_OFFSET, DRAG_THRESHOLD, INDICATOR_HEIGHT_LIMIT, INDICATOR_PANE_HEIGHT, MAIN_HEIGHT_LIMIT, PRICE_AXIS_WIDTH,
+    PRICE_PANE_TOP, TIME_AXIS_HEIGHT, VOLUME_RATIO, VOLUME_RATIO_LIMIT,
+} from "./constants.ts";
 import {decimalsOf, formatPrice} from "./scale.ts";
 import {clamp, Layout, Point, View} from "./layout.ts";
 import {clampView, defaultView, logicalAt, visibleRange, zoomedView} from "./viewport.ts";
 import {candleColor, Painter} from "./painter.ts";
 import {createIndicator, OverlayIndicator, PaneIndicator} from "./indicatorPanes.ts";
-import {renderMain} from "./mainRenderer.ts";
+import {PANE_GAP, renderMain} from "./mainRenderer.ts";
 import {drawCandleLegend, drawCrosshair, drawIndicatorLegends, drawOverlayLegends} from "./overlayRenderer.ts";
 import {DrawingLayer} from "./drawingLayer.ts";
 
-export {INDICATOR_PANE_HEIGHT} from "./constants.ts";
+export {INDICATOR_HEIGHT_LIMIT, INDICATOR_PANE_HEIGHT, MAIN_HEIGHT_LIMIT, VOLUME_RATIO_LIMIT} from "./constants.ts";
 
 const LOAD_OLDER_THRESHOLD = 50;    // 화면 왼쪽 끝에서 받아 둔 첫 캔들까지 이만큼 이하로 남으면 과거 구간을 요청한다
 const PINCH_DELTA_LIMIT = 30;   // 휠 한 번의 이동량이 이보다 작으면 트랙패드 두 손가락 벌리기로 본다
@@ -25,9 +28,19 @@ const DECIMAL_SAMPLE_SIZE = 300;    // 가격의 소수 자릿수를 알아낼 �
 const PRICE_ZOOM_RATE = 0.005;
 const MIN_PRICE_ZOOM = 0.2;
 const MAX_PRICE_ZOOM = 10;
+// 영역 사이의 경계를 잡을 수 있는 거리 (경계선의 위아래로, CSS px). 손가락은 넓게 잡는다
+const BOUNDARY_REACH = 4;
+const BOUNDARY_TOUCH_REACH = 12;
+const RATIO_STEPS = 1000;   // 거래량 영역의 비율을 소수 셋째 자리까지만 다룬다
 
 /** Ctrl(Mac 은 ⌘)을 누른 채 그리거나 고치는 중인지. 그동안은 자석이 반대로 동작한다. */
 const invertsMagnet = (event: PointerEvent): boolean => event.ctrlKey || event.metaKey;
+
+/** 영역 사이의 경계 하나. start 는 끌기 시작할 때의 크기(거래량이면 비율, 그 밖에는 높이) */
+type Boundary =
+    | { target: 'volume', start: number }
+    | { target: 'main', start: number }
+    | { target: 'indicator', type: IndicatorType, start: number };
 
 type Gesture =
     | { type: 'pan', startX: number, startRightEdge: number, moved: boolean }
@@ -71,6 +84,10 @@ export class CandleChartEngine {
     private priceZoom = 1;                  // 가격축 세로 배율. 1 이면 보이는 구간에 맞춤
     private scaleDrag: { pointerId: number, startY: number, startZoom: number } | null = null;  // 가격축을 끄는 중
 
+    private paneSizes: PaneSizes = {};      // 바깥에서 정해 준 영역 크기
+    // 영역 사이의 경계를 끄는 중. change 는 지금까지 끌어서 바뀐 크기(아직 움직이지 않았으면 null)
+    private paneDrag: { pointerId: number, startY: number, boundary: Boundary, change: PaneResize | null } | null = null;
+
     private valueDecimals = 0;              // 캔들 가격의 소수 자릿수
     private widestPrice = '';               // 가장 긴 가격 표기 (가격축 너비를 정하는 데 쓴다)
     private axisWidth = PRICE_AXIS_WIDTH;   // 오른쪽 가격축 너비 (CSS px)
@@ -82,6 +99,7 @@ export class CandleChartEngine {
     private indicatorConfigs: IndicatorConfig[] = [];
     // indicatorConfigs 를 계산해 그려지는 자리별로 나눈 것
     private paneIndicators: PaneIndicator[] = [];
+    private paneTypes: IndicatorType[] = [];    // paneIndicators 와 같은 순서의 지표 종류
     private priceOverlays: OverlayIndicator[] = [];
     private volumeOverlays: OverlayIndicator[] = [];
     private priceLines: PriceLine[] = [];
@@ -97,6 +115,11 @@ export class CandleChartEngine {
      * 받는 쪽은 입력 칸을 띄우고, 새 글자면 addText 로 넘기고 고치는 것이면 도형 목록을 바꿔 setDrawings 로 넘긴다.
      */
     onTextRequest: ((request: TextRequest) => void) | null = null;
+    /**
+     * 영역 사이의 경계를 끌어 크기를 바꾸면 알린다. 끄는 동안 계속 부르고, 손을 떼면 done 이 true 다.
+     * 차트 전체 높이가 달라지므로 받는 쪽은 엔진을 담은 요소의 높이를 맞추고, 값을 setPaneSizes 로 다시 넘긴다.
+     */
+    onPaneResize: ((change: PaneResize, done: boolean) => void) | null = null;
     /** 가장 최근 캔들이 화면에 보이는지가 바뀌면 알린다. (최근으로 이동 버튼 표시용) */
     onLatestChange: ((atLatest: boolean) => void) | null = null;
     /**
@@ -140,6 +163,7 @@ export class CandleChartEngine {
         container.addEventListener('pointerleave', this.handlePointerLeave);
         container.addEventListener('wheel', this.handleWheel, {passive: false});
         container.addEventListener('dblclick', this.handleDoubleClick);
+        container.addEventListener('touchstart', this.handleTouchStart, {passive: false});
     }
 
     // ---------- 바깥에서 부르는 것 ----------
@@ -259,6 +283,14 @@ export class CandleChartEngine {
         this.drawingLayer.requestTextEdit(id);
     }
 
+    /** 세로로 쌓인 영역들의 크기. 비운 항목은 기본값을 쓴다. */
+    setPaneSizes(sizes: PaneSizes) {
+        this.paneSizes = sizes;
+        // 경계를 끄는 중이면 끌고 있는 값이 더 최신이다.
+        if (this.paneDrag?.change) this.applyResize(this.paneDrag.change);
+        this.scheduleDraw();
+    }
+
     /** 특정 가격에 긋는 가로선들 (목표가 등). 가격축 범위 밖의 선은 그리지 않는다. */
     setPriceLines(priceLines: PriceLine[]) {
         this.priceLines = priceLines;
@@ -279,6 +311,7 @@ export class CandleChartEngine {
     }
 
     resize(width: number, height: number) {
+        if (width === this.width && height === this.height) return;
         this.width = width;
         this.height = height;
         const dpr = window.devicePixelRatio || 1;
@@ -290,7 +323,9 @@ export class CandleChartEngine {
             canvas.style.width = `${width}px`;
             canvas.style.height = `${height}px`;
         });
-        this.scheduleDraw();
+        // 캔버스는 크기를 바꾸면 지워진다. 다음 프레임까지 기다리면 그 사이 빈 화면이 보이므로
+        // (경계를 끌어 높이가 계속 바뀌는 동안 깜박인다) 바로 그린다.
+        this.drawNow();
     }
 
     destroy() {
@@ -306,6 +341,7 @@ export class CandleChartEngine {
         this.container.removeEventListener('pointerleave', this.handlePointerLeave);
         this.container.removeEventListener('wheel', this.handleWheel);
         this.container.removeEventListener('dblclick', this.handleDoubleClick);
+        this.container.removeEventListener('touchstart', this.handleTouchStart);
         this.mainCanvas.remove();
         this.overlayCanvas.remove();
     }
@@ -320,6 +356,9 @@ export class CandleChartEngine {
         };
         const instances = this.indicatorConfigs.map(config => createIndicator(config, this.candles, context));
         this.paneIndicators = instances.filter(instance => instance.placement === 'pane');
+        this.paneTypes = this.indicatorConfigs
+            .filter((_, order) => instances[order].placement === 'pane')
+            .map(config => config.type);
         const overlays = instances.filter((instance): instance is OverlayIndicator => instance.placement !== 'pane');
         this.priceOverlays = overlays.filter(overlay => overlay.placement === 'price');
         this.volumeOverlays = overlays.filter(overlay => overlay.placement === 'volume');
@@ -337,9 +376,22 @@ export class CandleChartEngine {
         const point = this.localPoint(event);
         this.container.focus({preventScroll: true});
 
+        const idle = this.activePointers.size === 0 && this.editPointerId === null && this.scaleDrag === null
+            && this.paneDrag === null;
+
+        // 영역 사이의 경계를 누르면 그 위 영역의 크기 조절을 시작한다.
+        const boundary = idle ? this.boundaryAt(point, event.pointerType === 'touch') : null;
+        if (boundary) {
+            this.paneDrag = {pointerId: event.pointerId, startY: point.y, boundary, change: null};
+            this.container.setPointerCapture(event.pointerId);
+            this.pointer = null;
+            this.updateCursor();
+            this.scheduleOverlay();
+            return;
+        }
+
         // 가격축을 누르면 세로 배율 조절을 시작한다. 차트 이동·그리기와는 따로 처리한다.
-        if (this.activePointers.size === 0 && this.editPointerId === null && this.scaleDrag === null
-            && this.isOnPriceAxis(point)) {
+        if (idle && this.isOnPriceAxis(point)) {
             this.scaleDrag = {pointerId: event.pointerId, startY: point.y, startZoom: this.priceZoom};
             this.container.setPointerCapture(event.pointerId);
             return;
@@ -365,6 +417,14 @@ export class CandleChartEngine {
 
     private readonly handlePointerMove = (event: PointerEvent) => {
         const point = this.localPoint(event);
+        if (event.pointerId === this.paneDrag?.pointerId) {
+            const change = this.resizedBy(this.paneDrag.boundary, point.y - this.paneDrag.startY);
+            this.paneDrag.change = change;
+            this.applyResize(change);
+            this.scheduleDraw();
+            this.onPaneResize?.(change, false);
+            return;
+        }
         if (event.pointerId === this.scaleDrag?.pointerId) {
             // 아래로 끌면 범위가 넓어져 캔들이 납작해지고, 위로 끌면 좁아져 길어진다.
             const {startY, startZoom} = this.scaleDrag;
@@ -402,6 +462,16 @@ export class CandleChartEngine {
     };
 
     private readonly handlePointerUp = (event: PointerEvent) => {
+        if (event.pointerId === this.paneDrag?.pointerId) {
+            const {change} = this.paneDrag;
+            this.paneDrag = null;
+            if (this.container.hasPointerCapture(event.pointerId)) {
+                this.container.releasePointerCapture(event.pointerId);
+            }
+            this.updateCursor();
+            if (change) this.onPaneResize?.(change, true);
+            return;
+        }
         if (event.pointerId === this.scaleDrag?.pointerId) {
             this.scaleDrag = null;
             if (this.container.hasPointerCapture(event.pointerId)) {
@@ -426,9 +496,22 @@ export class CandleChartEngine {
         this.beginGesture();
     };
 
-    /** 가격축을 더블클릭하면 세로 배율을 되돌려 보이는 구간에 다시 맞추고, 글자 도형을 더블클릭하면 고치기를 요청한다. */
+    /**
+     * 영역 사이의 경계를 더블클릭하면 그 위 영역을 기본 크기로 되돌리고, 가격축을 더블클릭하면 세로 배율을 되돌려
+     * 보이는 구간에 다시 맞추고, 글자 도형을 더블클릭하면 고치기를 요청한다.
+     */
     private readonly handleDoubleClick = (event: MouseEvent) => {
         const point = this.localPoint(event);
+        const boundary = this.boundaryAt(point, false);
+        if (boundary) {
+            const reset: PaneResize = boundary.target === 'volume' ? {target: 'volume', ratio: null}
+                : boundary.target === 'main' ? {target: 'main', height: null}
+                : {target: 'indicator', type: boundary.type, height: null};
+            this.applyResize(reset);
+            this.scheduleDraw();
+            this.onPaneResize?.(reset, true);
+            return;
+        }
         if (!this.isOnPriceAxis(point)) {
             this.drawingLayer.editTextAt(point);
             return;
@@ -437,6 +520,89 @@ export class CandleChartEngine {
         this.priceZoom = 1;
         this.scheduleDraw();
     };
+
+    /**
+     * 손가락으로 경계를 잡았으면 페이지가 세로로 스크롤되지 않게 막는다.
+     * (세로 스크롤은 브라우저에 맡겨 두었으므로, 막지 않으면 끌기가 중간에 끊긴다.)
+     */
+    private readonly handleTouchStart = (event: TouchEvent) => {
+        if (event.touches.length !== 1 || !event.cancelable) return;
+        const rect = this.container.getBoundingClientRect();
+        const touch = event.touches[0];
+        if (this.boundaryAt({x: touch.clientX - rect.left, y: touch.clientY - rect.top}, true)) event.preventDefault();
+    };
+
+    // ---------- 영역 크기 ----------
+
+    /** 별도 영역 지표들의 높이. paneIndicators 와 같은 순서 */
+    private indicatorHeights(): number[] {
+        return this.paneTypes.map(type => this.paneSizes.indicators?.[type] ?? INDICATOR_PANE_HEIGHT);
+    }
+
+    /** 가격+거래량 영역의 높이. 정해 주지 않았으면 요소의 높이에서 지표 영역을 뺀 나머지 */
+    private mainHeight(): number {
+        return this.paneSizes.mainHeight
+            ?? this.height - this.indicatorHeights().reduce((sum, paneHeight) => sum + paneHeight, 0);
+    }
+
+    /**
+     * point 가 놓인 영역 사이의 경계. 경계는 그 위 영역의 크기를 바꾼다:
+     * 가격과 거래량 사이(거래량 비율) / 거래량 아래(가격+거래량 높이) / 지표 영역 아래(그 영역의 높이).
+     * 그리기 도구를 고른 동안에는 잡지 않는다.
+     */
+    private boundaryAt(point: Point, touch: boolean): Boundary | null {
+        const layout = this.layout;
+        if (!layout || this.drawingLayer.activeTool || layout.panes.length !== this.paneTypes.length + 2) return null;
+        const [, volume, ...indicatorPanes] = layout.panes;
+        const heights = this.indicatorHeights();
+        const boundaries: { y: number, boundary: Boundary }[] = [
+            {y: volume.top - PANE_GAP / 2, boundary: {target: 'volume', start: this.paneSizes.volumeRatio ?? VOLUME_RATIO}},
+            // 가격+거래량 높이를 정해 주지 않았으면 요소의 높이를 따르므로 끌어서 바꿀 수 없다.
+            ...(this.paneSizes.mainHeight === undefined ? [] : [
+                {y: volume.bottom, boundary: {target: 'main' as const, start: this.paneSizes.mainHeight}},
+            ]),
+            ...indicatorPanes.map((pane, order) => ({
+                y: pane.bottom,
+                boundary: {target: 'indicator' as const, type: this.paneTypes[order], start: heights[order]},
+            })),
+        ];
+        const reach = touch ? BOUNDARY_TOUCH_REACH : BOUNDARY_REACH;
+        const nearest = boundaries
+            .filter(({y}) => Math.abs(point.y - y) <= reach)
+            .sort((a, b) => Math.abs(point.y - a.y) - Math.abs(point.y - b.y))[0];
+        return nearest?.boundary ?? null;
+    }
+
+    /** 경계를 아래로 delta 만큼 끌었을 때의 크기 */
+    private resizedBy(boundary: Boundary, delta: number): PaneResize {
+        if (boundary.target === 'volume') {
+            // 경계가 내려가면 거래량 영역이 줄어든다.
+            const innerHeight = Math.max(1, this.mainHeight() - TIME_AXIS_HEIGHT - PRICE_PANE_TOP);
+            const ratio = clamp(boundary.start - delta / innerHeight, VOLUME_RATIO_LIMIT.min, VOLUME_RATIO_LIMIT.max);
+            return {target: 'volume', ratio: Math.round(ratio * RATIO_STEPS) / RATIO_STEPS};
+        }
+        if (boundary.target === 'main') {
+            const height = clamp(Math.round(boundary.start + delta), MAIN_HEIGHT_LIMIT.min, MAIN_HEIGHT_LIMIT.max);
+            return {target: 'main', height};
+        }
+        const height = clamp(Math.round(boundary.start + delta), INDICATOR_HEIGHT_LIMIT.min, INDICATOR_HEIGHT_LIMIT.max);
+        return {target: 'indicator', type: boundary.type, height};
+    }
+
+    /** 끌어서 바꾼 크기를 바로 반영한다. 기본 크기로 되돌린 것이면 그 항목을 비운다. */
+    private applyResize(change: PaneResize) {
+        if (change.target === 'volume') {
+            this.paneSizes = {...this.paneSizes, volumeRatio: change.ratio ?? undefined};
+        } else if (change.target === 'main') {
+            // 가격+거래량의 기본 높이는 바깥이 정하므로, 되돌릴 때는 바깥이 setPaneSizes 로 넘겨 줄 때까지 그대로 둔다.
+            if (change.height !== null) this.paneSizes = {...this.paneSizes, mainHeight: change.height};
+        } else {
+            this.paneSizes = {
+                ...this.paneSizes,
+                indicators: {...this.paneSizes.indicators, [change.type]: change.height ?? undefined},
+            };
+        }
+    }
 
     /** 가격 영역 오른쪽의 가격축 위인지 */
     private isOnPriceAxis(point: Point): boolean {
@@ -531,9 +697,11 @@ export class CandleChartEngine {
         return false;
     }
 
-    /** 상황에 맞는 마우스 커서: 끄는 중 / 가격축 위 / 도구 고름 / 도형 위 / 기본 */
+    /** 상황에 맞는 마우스 커서: 끄는 중 / 영역 경계 위 / 가격축 위 / 도구 고름 / 도형 위 / 기본 */
     private updateCursor(hover?: Point) {
-        this.container.style.cursor = this.gesture ? 'grabbing'
+        this.container.style.cursor = this.paneDrag ? 'row-resize'
+            : this.gesture ? 'grabbing'
+            : hover && this.boundaryAt(hover, false) ? 'row-resize'
             : hover && this.isOnPriceAxis(hover) ? 'ns-resize'
             : this.drawingLayer.activeTool ? 'crosshair'
             : hover && this.drawingLayer.isOver(hover) ? 'pointer'
@@ -601,18 +769,31 @@ export class CandleChartEngine {
         if (this.frame) return;
         this.frame = requestAnimationFrame(() => {
             this.frame = 0;
-            this.layout = this.drawMain();
-            this.drawOverlay();
-
-            const atLatest = this.resolveView().rightEdge >= this.candles.length - 0.5;
-            if (atLatest !== this.atLatest) {
-                this.atLatest = atLatest;
-                this.onLatestChange?.(atLatest);
-            }
-
-            // 받아 둔 캔들의 왼쪽 끝이 가까우면 과거 구간을 더 달라고 알린다.
-            if (this.layout && this.layout.range.leftEdge < LOAD_OLDER_THRESHOLD) this.onNeedOlder?.();
+            this.drawAll();
         });
+    }
+
+    /** 다음 프레임을 기다리지 않고 바로 그린다. */
+    private drawNow() {
+        if (this.frame) cancelAnimationFrame(this.frame);
+        if (this.overlayFrame) cancelAnimationFrame(this.overlayFrame);
+        this.frame = 0;
+        this.overlayFrame = 0;
+        this.drawAll();
+    }
+
+    private drawAll() {
+        this.layout = this.drawMain();
+        this.drawOverlay();
+
+        const atLatest = this.resolveView().rightEdge >= this.candles.length - 0.5;
+        if (atLatest !== this.atLatest) {
+            this.atLatest = atLatest;
+            this.onLatestChange?.(atLatest);
+        }
+
+        // 받아 둔 캔들의 왼쪽 끝이 가까우면 과거 구간을 더 달라고 알린다.
+        if (this.layout && this.layout.range.leftEdge < LOAD_OLDER_THRESHOLD) this.onNeedOlder?.();
     }
 
     /** 마우스 이동은 위 장만 다시 그린다. */
@@ -641,7 +822,9 @@ export class CandleChartEngine {
             timeUnit: this.timeUnit,
             style,
             width: this.width,
-            height: this.height,
+            mainHeight: this.mainHeight(),
+            volumeRatio: this.paneSizes.volumeRatio ?? VOLUME_RATIO,
+            indicatorHeights: this.indicatorHeights(),
             range: visibleRange(this.resolveView(), this.candles.length, this.plotWidth()),
             averages: this.averages,
             averageColors: this.averageColors,

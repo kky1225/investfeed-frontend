@@ -1,7 +1,14 @@
 // 엔진 전체가 함께 쓰는 배치 상수 (CSS px). 한 파일에서만 쓰는 상수는 그 파일에 둔다.
 
-/** 보조지표 영역 하나의 높이. 래퍼가 전체 높이를 정할 때도 쓴다. */
+/** 보조지표 영역 하나의 기본 높이. 래퍼가 전체 높이를 정할 때도 쓴다. */
 export const INDICATOR_PANE_HEIGHT = 90;
+/** 가격+거래량 높이 중 거래량 영역의 기본 비율 */
+export const VOLUME_RATIO = 0.22;
+
+// 영역 사이의 경계를 끌어 바꿀 수 있는 범위. 저장할 때 서버도 같은 범위를 검사한다
+export const INDICATOR_HEIGHT_LIMIT = {min: 50, max: 300};
+export const VOLUME_RATIO_LIMIT = {min: 0.1, max: 0.5};
+export const MAIN_HEIGHT_LIMIT = {min: 250, max: 800};      // 가격+거래량 영역(날짜축 포함)
 
 export const PRICE_AXIS_WIDTH = 64;
 export const TIME_AXIS_HEIGHT = 24;

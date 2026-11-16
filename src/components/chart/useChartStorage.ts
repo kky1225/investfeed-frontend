@@ -110,12 +110,16 @@ export const useChartStorage = (assetType: AssetType | undefined, assetCode: str
     const drawingToolbar = settingQuery.data?.drawingToolbar ?? DEFAULT_SETTING.drawingToolbar;
     const flatByPrevClose = settingQuery.data?.flatByPrevClose ?? DEFAULT_SETTING.flatByPrevClose;
     const magnet = settingQuery.data?.magnet ?? DEFAULT_SETTING.magnet;
+    // 영역 크기. 바꾼 적이 없으면 null 이고 차트가 기본 크기를 쓴다
+    const volumeRatio = settingQuery.data?.volumeRatio ?? null;
+    const mainHeight = settingQuery.data?.mainHeight ?? null;
 
     // 설정은 통째로 저장하므로, 바꾸는 항목 말고는 지금 값을 그대로 실어 보낸다.
     const saveSetting = (change: Partial<ChartSetting>) => {
         if (!settingReady) return;
         const next: ChartSetting = {
-            indicators, chartType, logScale, percentScale, drawingToolbar, flatByPrevClose, magnet, ...change,
+            indicators, chartType, logScale, percentScale, drawingToolbar, flatByPrevClose, magnet,
+            volumeRatio, mainHeight, ...change,
         };
         queryClient.setQueryData(SETTINGS_KEY, next);
         saveChartSetting(next).catch(reportSaveError);
@@ -125,7 +129,8 @@ export const useChartStorage = (assetType: AssetType | undefined, assetCode: str
     const changeIndicator = (key: string, change: ChartIndicatorSetting) => {
         const merged = {...indicators[key], ...change};
         const rest = Object.fromEntries(Object.entries(indicators).filter(([name]) => name !== key));
-        const hasOverride = typeof merged.on === 'boolean' || Array.isArray(merged.params) || Array.isArray(merged.colors);
+        const hasOverride = typeof merged.on === 'boolean' || Array.isArray(merged.params) || Array.isArray(merged.colors)
+            || typeof merged.height === 'number';
         saveSetting({indicators: hasOverride ? {...rest, [key]: merged} : rest});
     };
 
@@ -148,6 +153,10 @@ export const useChartStorage = (assetType: AssetType | undefined, assetCode: str
     const setDrawingToolbar = (visible: boolean) => saveSetting({drawingToolbar: visible});
     const setFlatByPrevClose = (enabled: boolean) => saveSetting({flatByPrevClose: enabled});
     const setMagnet = (mode: string) => saveSetting({magnet: mode});
+    // 영역 크기. null 을 주면 저장한 값을 지워 기본 크기로 돌린다
+    const setVolumeRatio = (ratio: number | null) => saveSetting({volumeRatio: ratio});
+    const setMainHeight = (height: number | null) => saveSetting({mainHeight: height});
+    const setIndicatorHeight = (key: string, height: number | null) => changeIndicator(key, {height});
 
     // 예전에 브라우저에 저장해 둔 설정(끈 항목 목록)을 계정으로 한 번 옮긴다. 서버에 이미 설정이 있으면 서버 것을 쓴다.
     const serverSetting = settingQuery.data;
@@ -180,5 +189,8 @@ export const useChartStorage = (assetType: AssetType | undefined, assetCode: str
         drawingToolbar, setDrawingToolbar,
         flatByPrevClose, setFlatByPrevClose,
         magnet, setMagnet,
+        volumeRatio, setVolumeRatio,
+        mainHeight, setMainHeight,
+        setIndicatorHeight,
     };
 };
