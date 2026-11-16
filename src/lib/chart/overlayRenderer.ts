@@ -1,6 +1,6 @@
 import {Candle, ChartStyle, TimeUnit} from "./types.ts";
 import {Series} from "./indicators.ts";
-import {formatPrice, formatTime} from "./scale.ts";
+import {formatPercent, formatPrice, formatTime} from "./scale.ts";
 import {
     AXIS_LABEL_OFFSET, AXIS_TAG_HEIGHT, AXIS_TAG_PADDING, LEGEND_GAP, LEGEND_HEIGHT, LEGEND_ITEM_GAP, LEGEND_LEFT,
     PADDING_TOP,
@@ -12,6 +12,7 @@ import {LegendItem} from "./indicatorPanes.ts";
 // 위 장: 십자선과 값 표시. 마우스가 움직일 때마다 다시 그린다.
 
 const CROSSHAIR_DASH = [4, 3];
+const CHANGE_RATE_DECIMALS = 2;     // 값 표시의 등락률 소수 자릿수
 
 /**
  * 십자선과 축 위의 값·날짜 라벨.
@@ -81,30 +82,50 @@ export const drawCrosshair = (
     return index;
 };
 
-/** 왼쪽 위에 시가·고가·저가·종가·거래량을 한 줄로 표시한다. 값은 캔들 색(valueColor)을 따른다. */
+/**
+ * 바로 앞 캔들의 종가 대비 등락: "+1,200 (+1.53%)". 색은 캔들 색과 별개로 부호를 따른다.
+ * 앞 캔들이 없으면(previousClose 가 null) 항목이 없다.
+ */
+const changeItem = (candle: Candle, previousClose: number | null, decimals: number, style: ChartStyle): LegendItem[] => {
+    if (previousClose === null) return [];
+    // 소수 계산의 오차로 0 이 -0.00 처럼 적히지 않게 가격의 자릿수로 맞춘다.
+    const change = Number((candle.close - previousClose).toFixed(decimals));
+    const amount = `${change > 0 ? '+' : ''}${formatPrice(change, decimals)}`;
+    const rate = previousClose > 0 ? ` (${formatPercent(change / previousClose * 100, CHANGE_RATE_DECIMALS)})` : '';
+    const color = change > 0 ? style.upColor : change < 0 ? style.downColor : style.textColor;
+    return [[`${amount}${rate}`, color]];
+};
+
+/**
+ * 왼쪽 위에 시가·고가·저가·종가·등락·거래량을 한 줄로 표시한다. 시고저종과 거래량의 값은 캔들 색(valueColor)을 따른다.
+ * previousClose: 바로 앞 캔들의 종가. 맨 첫 캔들이면 null
+ */
 export const drawCandleLegend = (
-    painter: Painter, layout: Layout, style: ChartStyle, candle: Candle, valueColor: string,
+    painter: Painter, layout: Layout, style: ChartStyle, candle: Candle, valueColor: string, previousClose: number | null,
 ) => {
     const ctx = painter.ctx;
-    const items: [string, string][] = [
-        ['시', formatPrice(candle.open, layout.valueDecimals)],
-        ['고', formatPrice(candle.high, layout.valueDecimals)],
-        ['저', formatPrice(candle.low, layout.valueDecimals)],
-        ['종', formatPrice(candle.close, layout.valueDecimals)],
-        ['거래량', candle.volume.toLocaleString('ko-KR')],
+    // [이름, 값, 값의 색]. 이름이 없는 항목은 값만 적는다
+    const items: [string, string, string][] = [
+        ['시', formatPrice(candle.open, layout.valueDecimals), valueColor],
+        ['고', formatPrice(candle.high, layout.valueDecimals), valueColor],
+        ['저', formatPrice(candle.low, layout.valueDecimals), valueColor],
+        ['종', formatPrice(candle.close, layout.valueDecimals), valueColor],
+        ...changeItem(candle, previousClose, layout.valueDecimals, style)
+            .map(([text, color]): [string, string, string] => ['', text, color]),
+        ['거래량', candle.volume.toLocaleString('ko-KR'), valueColor],
     ];
-    const gap = painter.px(LEGEND_GAP);
     const itemGap = painter.px(LEGEND_ITEM_GAP);
-    const widths = items.map(([name, value]) => [ctx.measureText(name).width, ctx.measureText(value).width]);
+    const gapOf = (name: string) => name ? painter.px(LEGEND_GAP) : 0;
+    const widths = items.map(([name, value]) => [ctx.measureText(name).width + gapOf(name), ctx.measureText(value).width]);
     const left = painter.px(LEGEND_LEFT);
     const top = painter.px(PADDING_TOP);
     const height = painter.px(LEGEND_HEIGHT);
     const padding = painter.px(AXIS_TAG_PADDING);
 
-    // 좁은 화면에서는 뒤쪽 항목(거래량부터)을 빼서 그림 영역 안에 들어가게 한다.
+    // 좁은 화면에서는 뒤쪽 항목(거래량, 등락 순서)을 빼서 그림 영역 안에 들어가게 한다.
     const maxWidth = painter.px(layout.plotWidth) - left - padding;
     const widthOf = (count: number) => widths.slice(0, count)
-        .reduce((sum, [nameWidth, valueWidth]) => sum + nameWidth + gap + valueWidth, 0) + itemGap * (count - 1);
+        .reduce((sum, [nameWidth, valueWidth]) => sum + nameWidth + valueWidth, 0) + itemGap * (count - 1);
     let shown = items.length;
     while (shown > 1 && widthOf(shown) > maxWidth) shown--;
     const totalWidth = widthOf(shown);
@@ -118,13 +139,13 @@ export const drawCandleLegend = (
     const middle = top + height / 2;
     ctx.textAlign = 'left';
     let cursor = left;
-    items.slice(0, shown).forEach(([name, value], index) => {
+    items.slice(0, shown).forEach(([name, value, color], index) => {
         const [nameWidth, valueWidth] = widths[index];
         ctx.fillStyle = style.textColor;
         ctx.fillText(name, cursor, middle);
-        ctx.fillStyle = valueColor;
-        ctx.fillText(value, cursor + nameWidth + gap, middle);
-        cursor += nameWidth + gap + valueWidth + itemGap;
+        ctx.fillStyle = color;
+        ctx.fillText(value, cursor + nameWidth, middle);
+        cursor += nameWidth + valueWidth + itemGap;
     });
 };
 

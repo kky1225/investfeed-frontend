@@ -16,7 +16,7 @@ import MenuItem from "@mui/material/MenuItem";
 import {CryptoDetailLineChartProps} from "../../components/CryptoDetailLineChart.tsx";
 import CandleChart from "../../components/chart/CandleChart.tsx";
 import {ChartToolbarGroup} from "../../components/chart/ChartToolbarControls.tsx";
-import {Candle, TimeUnit} from "../../lib/chart/types.ts";
+import {Candle, CandleInterval, TimeUnit} from "../../lib/chart/types.ts";
 import {fetchCryptoDetail, fetchCryptoStream} from "../../api/crypto/CryptoApi.ts";
 import {useRealtimeWebSocket} from "../detail/useRealtimeWebSocket.ts";
 import {CryptoChart, CryptoChartType, CryptoDetailReq, CryptoDetailRes} from "../../type/CryptoType.ts";
@@ -66,6 +66,15 @@ const CHART_TIME_UNIT: Record<CryptoChartType, TimeUnit> = {
     [CryptoChartType.WEEK]: 'day',
     [CryptoChartType.MONTH]: 'month',
     [CryptoChartType.YEAR]: 'year',
+};
+
+// 분봉 한 개가 담는 기간. 차트가 캔들 마감까지 남은 시간을 적는 데 쓴다 (일봉 이상은 적지 않는다)
+const CHART_INTERVAL: Partial<Record<CryptoChartType, CandleInterval>> = {
+    [CryptoChartType.MINUTE_1]: {unit: 'minute', count: 1},
+    [CryptoChartType.MINUTE_3]: {unit: 'minute', count: 3},
+    [CryptoChartType.MINUTE_5]: {unit: 'minute', count: 5},
+    [CryptoChartType.MINUTE_10]: {unit: 'minute', count: 10},
+    [CryptoChartType.MINUTE_30]: {unit: 'minute', count: 30},
 };
 
 interface CryptoRangeProps {
@@ -545,6 +554,7 @@ const CryptoDetail = () => {
                             <CandleChart
                                 candles={candles}
                                 timeUnit={CHART_TIME_UNIT[req.chartType]}
+                                interval={CHART_INTERVAL[req.chartType]}
                                 seriesKey={`${market}-${req.chartType}`}
                                 assetType="CRYPTO"
                                 assetCode={market}

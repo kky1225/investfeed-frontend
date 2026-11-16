@@ -26,6 +26,13 @@ export const bucketStart = (time: number, interval: CandleInterval): number => {
 };
 
 /**
+ * time 이 속한 캔들이 마감하는 시각. 분봉만 알 수 있고, 일봉 이상은 장 마감 시각을 몰라 null 이다.
+ */
+export const bucketEnd = (time: number, interval: CandleInterval): number | null => (
+    interval.unit === 'minute' ? bucketStart(time, interval) + interval.count * MINUTE_MS : null
+);
+
+/**
  * 체결 한 건을 캔들 목록에 반영한 새 목록을 돌려준다. (원본은 바꾸지 않는다)
  * - 마지막 캔들과 같은 기간이면 종가·고가·저가·거래량을 갱신한다.
  * - 더 뒤 기간이면 새 캔들을 붙인다.

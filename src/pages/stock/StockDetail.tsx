@@ -341,7 +341,7 @@ const CHART_TIME_UNIT: Record<StockChartType, TimeUnit> = {
     [StockChartType.YEAR]: 'year',
 };
 
-// 실시간 체결이 어느 캔들에 들어갈지 정하는 기준
+// 실시간 체결이 어느 캔들에 들어갈지 정하는 기준. 차트가 캔들 마감까지 남은 시간을 적는 데도 쓴다
 const CHART_INTERVAL: Record<StockChartType, CandleInterval> = {
     [StockChartType.MINUTE_1]: {unit: 'minute', count: 1},
     [StockChartType.MINUTE_3]: {unit: 'minute', count: 3},
@@ -1151,6 +1151,7 @@ const StockDetail = () => {
                             <CandleChart
                                 candles={fullCandles}
                                 timeUnit={CHART_TIME_UNIT[req.chartType]}
+                                interval={CHART_INTERVAL[req.chartType]}
                                 seriesKey={chartSeriesKey}
                                 onLoadOlder={loadOlderCandles}
                                 priceLines={targetLines}

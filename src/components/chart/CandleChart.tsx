@@ -20,7 +20,7 @@ import {
     CandleChartEngine, INDICATOR_HEIGHT_LIMIT, INDICATOR_PANE_HEIGHT, MAIN_HEIGHT_LIMIT, VOLUME_RATIO_LIMIT,
 } from "../../lib/chart/CandleChart.ts";
 import {
-    Candle, CHART_TYPES, ChartType, Drawing, DrawingStyle, DrawingTool, IndicatorConfig, IndicatorType,
+    Candle, CandleInterval, CHART_TYPES, ChartType, Drawing, DrawingStyle, DrawingTool, IndicatorConfig, IndicatorType,
     MAGNET_MODES, MagnetMode, MAX_DRAWING_TEXT_LENGTH, PaneResize, PriceLine, TextRequest, TimeUnit,
 } from "../../lib/chart/types.ts";
 import ChartTypeSelect from "./ChartTypeSelect.tsx";
@@ -29,7 +29,10 @@ import type {AssetType} from "../../type/NotificationType.ts";
 export interface CandleChartProps {
     candles: Candle[],      // 오래된 순
     timeUnit: TimeUnit,
-    seriesKey?: string,     // 종목·주기처럼 다른 차트로 바뀌는 기준. 바뀌면 드래그·확대 상태를 기본 보기로 되돌린다
+    // 캔들 한 개가 담는 기간. 분봉이면 현재가 라벨 아래에 캔들 마감까지 남은 시간을 적는다. 주지 않으면 적지 않는다.
+    // 그릴 때마다 새로 만든 객체가 아니라 주기별로 정해 둔 값을 넘길 것
+    interval?: CandleInterval,
+    seriesKey?: string,    // 종목·주기처럼 다른 차트로 바뀌는 기준. 바뀌면 드래그·확대 상태를 기본 보기로 되돌린다
     // 그린 선을 계정에 저장하는 기준. 주기를 바꿔도 같은 선을 보여 준다. 둘 다 주지 않으면 저장하지 않는다
     assetType?: AssetType,
     assetCode?: string,
@@ -96,7 +99,7 @@ interface DrawingHistory {
 }
 
 const CandleChart = ({
-    candles, timeUnit, seriesKey, assetType, assetCode, toolbarStart, onLoadOlder,
+    candles, timeUnit, interval, seriesKey, assetType, assetCode, toolbarStart, onLoadOlder,
     movingAverages = DEFAULT_MOVING_AVERAGES, indicators = DEFAULT_INDICATORS, priceLines = NO_PRICE_LINES,
     height = 400,
 }: CandleChartProps) => {
@@ -388,6 +391,10 @@ const CandleChart = ({
     useEffect(() => {
         engineRef.current?.setData(candles, timeUnit);
     }, [candles, timeUnit]);
+
+    useEffect(() => {
+        engineRef.current?.setCandleInterval(interval ?? null);
+    }, [interval]);
 
     // 캔버스는 CSS 변수를 못 읽으므로 테마 색을 실제 값으로 풀어 엔진에 넘긴다.
     // 라이트/다크 전환은 상위 ThemeProvider 의 effect 에서 반영되므로 다음 프레임에 읽는다.

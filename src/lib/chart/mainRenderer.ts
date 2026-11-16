@@ -18,6 +18,7 @@ const PRICE_TICK_GAP = 32;      // 가격 눈금 사이 최소 간격
 const TIME_TICK_GAP = 96;       // 날짜 눈금 사이 최소 간격
 const TIME_LABEL_GAP = 12;      // 날짜 눈금의 글자와 글자 사이에 남기는 최소 여백
 const CURRENT_PRICE_DASH = [2, 2];
+const COUNTDOWN_HEIGHT = 14;    // 현재가 라벨 아래에 남은 시간을 적는 줄의 높이
 const PRICE_LINE_DASH = [6, 4];
 const PRICE_LINE_TITLE_OFFSET = 8;  // 선과 그 위 이름 사이
 const EXTREME_LABEL_GAP = 4;        // 최고·최저가 표시와 캔들 사이 (가로)
@@ -53,6 +54,7 @@ export interface MainInput {
     flatByPrevClose: boolean,
     axisWidth: number,          // 오른쪽 가격축 너비 (CSS px)
     valueDecimals: number,      // 캔들 가격의 소수 자릿수
+    countdown: string | null,   // 현재가 라벨 아래에 적을, 마지막 캔들이 마감하기까지 남은 시간. 없으면 적지 않는다
 }
 
 /** 한 번 그리는 동안 여러 함수가 함께 쓰는 값. 높이·너비는 CSS px, 이름이 Px 로 끝나면 기기 픽셀 */
@@ -88,6 +90,7 @@ interface Frame {
     /** 가격축에 적을 글자: 퍼센트 축이면 기준 대비 등락률, 아니면 decimals 자리의 가격 */
     axisText: (price: number, decimals: number) => string,
     baseline: number,               // 기준선 차트의 기준 가격
+    countdown: string | null,       // 현재가 라벨 아래에 적을 남은 시간
 }
 
 /** 가격 눈금: 가로 격자 + 오른쪽 라벨. 눈금의 소수 자릿수를 돌려준다. */
@@ -109,6 +112,8 @@ const drawPriceAxis = (frame: Frame): number => {
     // 현재가 라벨에 가려질 눈금 글자는 적지 않는다(격자선은 그린다).
     const currentPriceY = painter.px(priceY(candles[candles.length - 1].close));
     const labelClearance = painter.px(AXIS_TAG_HEIGHT);
+    // 남은 시간을 적으면 현재가 라벨이 그만큼 아래로 길어진다.
+    const clearanceBelow = labelClearance + (frame.countdown ? painter.px(COUNTDOWN_HEIGHT) : 0);
     // 로그 축의 눈금은 아래쪽으로 갈수록 촘촘해지므로, 위에서부터 보며 바로 위 눈금과 너무 붙은 것은 건너뛴다.
     const minGap = painter.px(MIN_PRICE_TICK_GAP);
     let previousY = -Infinity;
@@ -118,7 +123,7 @@ const drawPriceAxis = (frame: Frame): number => {
         previousY = y;
         ctx.fillStyle = style.gridColor;
         ctx.fillRect(0, y, plotRightPx, line);
-        if (Math.abs(y - currentPriceY) < labelClearance) return;
+        if (y - currentPriceY > -labelClearance && y - currentPriceY < clearanceBelow) return;
         ctx.fillStyle = style.textColor;
         ctx.fillText(labelOf(value), axisLabelX, y);
     });
@@ -385,6 +390,7 @@ const drawExtremes = (frame: Frame) => {
 /**
  * 현재가 선: 마지막 캔들의 종가 높이에 점선을 긋고, 오른쪽 축에 캔들 색 라벨을 붙인다.
  * 과거로 이동해 현재가가 가격축 범위를 벗어나면 그리지 않는다.
+ * 남은 시간이 있으면 라벨을 아래로 한 줄 늘려 가격 밑에 적는다.
  */
 const drawCurrentPrice = (frame: Frame) => {
     const {painter, style, candles, flatByPrevClose, priceMin, priceMax, priceY, line, plotRightPx, axisLabelX} = frame;
@@ -404,10 +410,15 @@ const drawCurrentPrice = (frame: Frame) => {
     ctx.stroke();
     ctx.setLineDash([]);
     ctx.fillStyle = color;
-    ctx.fillRect(plotRightPx, Math.round(y - labelHeight / 2), frame.axisWidthPx, labelHeight);
+    const countdownHeight = frame.countdown ? painter.px(COUNTDOWN_HEIGHT) : 0;
+    ctx.fillRect(plotRightPx, Math.round(y - labelHeight / 2), frame.axisWidthPx, labelHeight + countdownHeight);
     ctx.fillStyle = style.backgroundColor;
     ctx.textAlign = 'left';
     ctx.fillText(frame.axisText(last.close, frame.valueDecimals), axisLabelX, y);
+    if (frame.countdown) {
+        // 가격 줄에 붙여 적는다(줄 높이의 가운데보다 조금 위).
+        ctx.fillText(frame.countdown, axisLabelX, y + labelHeight / 2 + countdownHeight / 2 - painter.px(2));
+    }
 };
 
 /** 가격선(목표가 등): 점선 + 선 위 이름 + 오른쪽 축에 테두리 라벨. 현재가 라벨(채움)과 구분된다. */
@@ -454,7 +465,7 @@ export const renderMain = (painter: Painter, input: MainInput): Layout | null =>
         candles, chartType, shapes, logScale, percentScale, priceZoom, timeUnit, style, width, range,
         mainHeight, volumeRatio, indicatorHeights,
         averages, averageColors, indicators, priceOverlays, volumeOverlays, priceLines, flatByPrevClose,
-        axisWidth, valueDecimals,
+        axisWidth, valueDecimals, countdown,
     } = input;
 
     // 위에서부터: 가격 / 거래량 / 보조지표들 / 날짜축. 위에서 아래로 쌓으므로 아래 영역의 높이가 바뀌어도 위 영역은 그대로다.
@@ -535,6 +546,7 @@ export const renderMain = (painter: Painter, input: MainInput): Layout | null =>
         percentBase,
         axisText,
         baseline: firstClose,
+        countdown,
     };
 
     painter.useFont(style);

@@ -117,6 +117,15 @@ export const formatVolume = (value: number): string => compactFormatter.format(v
 export const formatPrice = (value: number, decimals: number): string =>
     value.toLocaleString('ko-KR', {minimumFractionDigits: decimals, maximumFractionDigits: decimals});
 
+/** 남은 시간 표기. 1시간 미만이면 분:초(02:15), 그 이상이면 시:분:초(1:02:15). 초 아래는 올린다 */
+export const formatCountdown = (milliseconds: number): string => {
+    const total = Math.ceil(milliseconds / 1000);
+    const pad = (value: number) => String(value).padStart(2, '0');
+    const hours = Math.floor(total / 3600);
+    const rest = `${pad(Math.floor(total % 3600 / 60))}:${pad(total % 60)}`;
+    return hours > 0 ? `${hours}:${rest}` : rest;
+};
+
 /** 등락률 표기. 0 보다 크면 + 를 붙인다 (예: +1.25%, -0.50%, 0.00%) */
 export const formatPercent = (value: number, decimals: number): string => {
     const text = value.toLocaleString('ko-KR', {minimumFractionDigits: decimals, maximumFractionDigits: decimals});

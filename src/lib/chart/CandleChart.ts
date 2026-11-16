@@ -1,13 +1,14 @@
 import {
     Anchor, Candle, ChartStyle, ChartType, Drawing, DrawingStyle, DrawingTool, IndicatorConfig, IndicatorType, MagnetMode,
-    PaneResize, PaneSizes, PriceLine, TextRequest, TimeUnit,
+    CandleInterval, PaneResize, PaneSizes, PriceLine, TextRequest, TimeUnit,
 } from "./types.ts";
+import {bucketEnd} from "./realtime.ts";
 import {heikinAshi, movingAverage, Series} from "./indicators.ts";
 import {
     AXIS_LABEL_OFFSET, DRAG_THRESHOLD, INDICATOR_HEIGHT_LIMIT, INDICATOR_PANE_HEIGHT, MAIN_HEIGHT_LIMIT, PRICE_AXIS_WIDTH,
     PRICE_PANE_TOP, TIME_AXIS_HEIGHT, VOLUME_RATIO, VOLUME_RATIO_LIMIT,
 } from "./constants.ts";
-import {decimalsOf, formatPrice} from "./scale.ts";
+import {decimalsOf, formatCountdown, formatPrice} from "./scale.ts";
 import {clamp, Layout, Point, View} from "./layout.ts";
 import {clampView, defaultView, logicalAt, visibleRange, zoomedView} from "./viewport.ts";
 import {candleColor, Painter} from "./painter.ts";
@@ -32,6 +33,8 @@ const MAX_PRICE_ZOOM = 10;
 const BOUNDARY_REACH = 4;
 const BOUNDARY_TOUCH_REACH = 12;
 const RATIO_STEPS = 1000;   // 거래량 영역의 비율을 소수 셋째 자리까지만 다룬다
+const MINUTE_MS = 60_000;
+const COUNTDOWN_CHECK_MS = 250;    // 남은 시간의 글자가 바뀌었는지 살피는 간격. 1초보다 짧게 잡아 초가 건너뛰지 않게 한다
 
 /** Ctrl(Mac 은 ⌘)을 누른 채 그리거나 고치는 중인지. 그동안은 자석이 반대로 동작한다. */
 const invertsMagnet = (event: PointerEvent): boolean => event.ctrlKey || event.metaKey;
@@ -91,6 +94,10 @@ export class CandleChartEngine {
     private valueDecimals = 0;              // 캔들 가격의 소수 자릿수
     private widestPrice = '';               // 가장 긴 가격 표기 (가격축 너비를 정하는 데 쓴다)
     private axisWidth = PRICE_AXIS_WIDTH;   // 오른쪽 가격축 너비 (CSS px)
+
+    private candleInterval: CandleInterval | null = null;   // 캔들 한 개가 담는 기간. 남은 시간을 적는 데 쓴다
+    private countdownTimer = 0;
+    private countdownText: string | null = null;            // 마지막으로 그린 남은 시간
 
     private flatByPrevClose = false;
     private averagePeriods: number[] = [];
@@ -297,6 +304,21 @@ export class CandleChartEngine {
         this.scheduleDraw();
     }
 
+    /**
+     * 캔들 한 개가 담는 기간. 분봉이면 현재가 라벨 아래에 마지막 캔들이 마감하기까지 남은 시간을 적는다.
+     * 일봉 이상이거나 null 이면 적지 않는다. 시각은 기기 시계를 따른다.
+     */
+    setCandleInterval(interval: CandleInterval | null) {
+        this.candleInterval = interval;
+        window.clearInterval(this.countdownTimer);
+        this.countdownTimer = interval?.unit === 'minute'
+            ? window.setInterval(() => {
+                if (this.countdown() !== this.countdownText) this.scheduleDraw();
+            }, COUNTDOWN_CHECK_MS)
+            : 0;
+        this.scheduleDraw();
+    }
+
     /** 확대 정도는 그대로 두고 가장 최근 캔들이 오른쪽 끝에 오도록 이동한다. */
     scrollToLatest() {
         const view = this.resolveView();
@@ -333,6 +355,7 @@ export class CandleChartEngine {
         if (this.overlayFrame) cancelAnimationFrame(this.overlayFrame);
         this.frame = 0;
         this.overlayFrame = 0;
+        window.clearInterval(this.countdownTimer);
         this.container.removeEventListener('keydown', this.handleKeyDown);
         this.container.removeEventListener('pointerdown', this.handlePointerDown);
         this.container.removeEventListener('pointermove', this.handlePointerMove);
@@ -805,10 +828,25 @@ export class CandleChartEngine {
         });
     }
 
+    /**
+     * 마지막 캔들이 마감하기까지 남은 시간. 분봉이 아니거나 마감 시각이 이미 지났으면(장이 끝났거나 체결이 없어
+     * 캔들이 멈춘 경우) null. 기기 시계가 늦어 한 캔들의 길이보다 길게 남은 것으로 나와도 적지 않는다.
+     */
+    private countdown(): string | null {
+        const last = this.candles[this.candles.length - 1];
+        const interval = this.candleInterval;
+        if (!last || interval?.unit !== 'minute') return null;
+        const end = bucketEnd(last.time, interval);
+        if (end === null) return null;
+        const remaining = end - Date.now();
+        return remaining > 0 && remaining <= interval.count * MINUTE_MS ? formatCountdown(remaining) : null;
+    }
+
     /** 아래 장 전체를 그리고, 그린 배치를 돌려준다. 그릴 것이 없으면 null */
     private drawMain(): Layout | null {
         this.mainPainter.ctx.clearRect(0, 0, this.mainCanvas.width, this.mainCanvas.height);
         const style = this.style;
+        this.countdownText = this.countdown();
         if (!style || this.candles.length === 0) return null;
         this.updateAxisWidth(style);
 
@@ -835,6 +873,7 @@ export class CandleChartEngine {
             flatByPrevClose: this.flatByPrevClose,
             axisWidth: this.axisWidth,
             valueDecimals: this.valueDecimals,
+            countdown: this.countdownText,
         });
     }
 
@@ -854,7 +893,10 @@ export class CandleChartEngine {
             ?? this.candles.length - 1;
         const candle = this.candles[index];
         if (candle) {
-            drawCandleLegend(painter, layout, style, candle, candleColor(this.candles, index, style, this.flatByPrevClose));
+            drawCandleLegend(
+                painter, layout, style, candle, candleColor(this.candles, index, style, this.flatByPrevClose),
+                this.candles[index - 1]?.close ?? null,
+            );
         }
         drawOverlayLegends(painter, layout, style, this.averagePeriods, this.averages, this.averageColors, index);
         drawIndicatorLegends(painter, layout, style, index);
