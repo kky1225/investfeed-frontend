@@ -44,6 +44,8 @@ export interface CandleChartProps {
     movingAverages?: number[],  // 이동평균선의 기본 기간(설정 창에서 바꿀 수 있다). 색은 순서대로 success·warning·secondary·grey
     indicators?: IndicatorType[],   // 이 차트에서 쓸 수 있는 보조지표. 기본은 등록된 전부이고, 켜고 끄는 것은 설정 창에서 한다
     priceLines?: PriceLine[],   // 특정 가격에 긋는 가로선 (목표가 등)
+    // id 가 있는 가격선을 끌어 다른 가격에 놓으면 부른다. 받아들이려면 바뀐 priceLines 를 넘겨야 한다(넘기지 않으면 선은 제자리로 돌아간다)
+    onPriceLineMove?: (id: string, price: number) => void,
     // 화면 왼쪽 끝이 받아 둔 캔들의 처음에 가까워지면 부른다. 가까운 동안 여러 번 부르므로
     // 받는 쪽에서 요청 중이거나 더 받을 것이 없으면 무시해야 한다 (useCandleHistory 의 loadOlder)
     onLoadOlder?: () => void,
@@ -106,7 +108,7 @@ interface DrawingHistory {
 }
 
 const CandleChart = ({
-    candles, timeUnit, interval, seriesKey, assetType, assetCode, toolbarStart, onLoadOlder, comparison,
+    candles, timeUnit, interval, seriesKey, assetType, assetCode, toolbarStart, onLoadOlder, comparison, onPriceLineMove,
     movingAverages = DEFAULT_MOVING_AVERAGES, indicators = DEFAULT_INDICATORS, priceLines = NO_PRICE_LINES,
     height = 400,
 }: CandleChartProps) => {
@@ -372,11 +374,13 @@ const CandleChart = ({
     const stepHistoryRef = useRef(stepHistory);
     const loadOlderRef = useRef(onLoadOlder);
     const resizePaneRef = useRef(resizePane);
+    const priceLineMoveRef = useRef(onPriceLineMove);
     // Esc 로 전체 화면을 끝낼지 정할 때 본다: 그리기 도구를 고른 중이면 도구만 풀고, 브라우저가 전체 화면이면 브라우저가 끝낸다
     const leaveFullscreenRef = useRef<(() => void) | null>(null);
     useEffect(() => {
         leaveFullscreenRef.current = fullscreen && !tool ? () => changeFullscreen(false) : null;
         resizePaneRef.current = resizePane;
+        priceLineMoveRef.current = onPriceLineMove;
         drawingsRef.current = drawings;
         changeDrawingsRef.current = changeDrawings;
         stepHistoryRef.current = stepHistory;
@@ -403,6 +407,7 @@ const CandleChart = ({
         };
         engine.onPaneResize = (change, done) => resizePaneRef.current(change, done);
         engine.onContextMenu = openContextMenu;
+        engine.onPriceLineMove = (id, price) => priceLineMoveRef.current?.(id, price);
         engine.onLatestChange = setAtLatest;
         engine.onNeedOlder = () => loadOlderRef.current?.();
 
@@ -506,6 +511,8 @@ const CandleChart = ({
             engineRef.current?.setStyle({
                 upColor: color('--chart-up'),
                 downColor: color('--chart-down'),
+                upTextColor: color('--chart-up-text'),
+                downTextColor: color('--chart-down-text'),
                 textColor: color('--chart-text'),
                 gridColor: color('--chart-grid'),
                 backgroundColor: color('--chart-background'),

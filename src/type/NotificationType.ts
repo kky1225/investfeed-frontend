@@ -29,6 +29,11 @@ export interface PriceTarget {
     createdAt: string;
 }
 
+export interface PriceTargetUpdateReq {
+    targetPrice: number;
+    direction: PriceTargetDirection;
+}
+
 export interface PriceTargetCreateReq {
     assetType: AssetType;
     assetCode: string;

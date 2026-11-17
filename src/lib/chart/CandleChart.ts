@@ -10,9 +10,9 @@ import {
 } from "./constants.ts";
 import {decimalsOf, formatCountdown, formatPercent, formatPrice} from "./scale.ts";
 import {alignCloses, ComparisonAlign, comparisonPercent} from "./comparison.ts";
-import {clamp, isNumber, Layout, paneToValue, Point, View} from "./layout.ts";
+import {clamp, isNumber, Layout, paneToValue, paneToY, Point, View} from "./layout.ts";
 import {clampView, defaultView, futureMargin, logicalAt, visibleRange, zoomedView} from "./viewport.ts";
-import {candleColor, lineColor, Painter} from "./painter.ts";
+import {candleColor, lineColor, Painter, textColorOf} from "./painter.ts";
 import {createIndicator, LegendItem, OverlayIndicator, PaneIndicator} from "./indicatorPanes.ts";
 import {PANE_GAP, renderMain} from "./mainRenderer.ts";
 import {drawCandleLegend, drawCrosshair, drawIndicatorLegends, drawOverlayLegends} from "./overlayRenderer.ts";
@@ -130,6 +130,9 @@ export class CandleChartEngine {
     private priceOverlays: OverlayIndicator[] = [];
     private volumeOverlays: OverlayIndicator[] = [];
     private priceLines: PriceLine[] = [];
+    // 가격선(목표가)을 끄는 중. price 는 지금 끌어다 놓은 가격이고, 손을 뗄 때까지 그 선을 이 가격에 그린다
+    private hoveredPriceLine: string | null = null;     // 마우스가 올라가 있는, 끌 수 있는 가격선
+    private priceLineDrag: { pointerId: number, id: string, startY: number, price: number, moved: boolean } | null = null;
     private comparisons: Comparison[] = [];
     private comparisonAlign: ComparisonAlign = 'time';
     private comparisonCloses: Series[] = [];    // comparisons 와 같은 순서. 주 종목의 캔들 순번에 맞춘 종가
@@ -150,6 +153,11 @@ export class CandleChartEngine {
      * 차트 전체 높이가 달라지므로 받는 쪽은 엔진을 담은 요소의 높이를 맞추고, 값을 setPaneSizes 로 다시 넘긴다.
      */
     onPaneResize: ((change: PaneResize, done: boolean) => void) | null = null;
+    /**
+     * id 가 있는 가격선을 끌어 다른 가격에 놓으면 알린다. 엔진은 손을 떼는 순간 선을 원래 자리로 돌려놓으므로,
+     * 받는 쪽이 새 가격을 받아들이려면 setPriceLines 로 바뀐 목록을 넘겨야 한다.
+     */
+    onPriceLineMove: ((id: string, price: number) => void) | null = null;
     /** 차트를 우클릭하면 알린다. 받는 쪽이 메뉴를 띄운다. 그리기 도구를 고른 동안과 터치의 길게 누르기에는 알리지 않는다. */
     onContextMenu: ((request: ContextMenuRequest) => void) | null = null;
     /** 가장 최근 캔들이 화면에 보이는지가 바뀌면 알린다. (최근으로 이동 버튼 표시용) */
@@ -490,7 +498,7 @@ export class CandleChartEngine {
         this.container.focus({preventScroll: true});
 
         const idle = this.activePointers.size === 0 && this.editPointerId === null && this.scaleDrag === null
-            && this.paneDrag === null;
+            && this.paneDrag === null && this.priceLineDrag === null;
 
         // 영역 사이의 경계를 누르면 그 위 영역의 크기 조절을 시작한다.
         const boundary = idle ? this.boundaryAt(point, event.pointerType === 'touch') : null;
@@ -516,6 +524,19 @@ export class CandleChartEngine {
             this.editPointerId = event.pointerId;
             this.container.setPointerCapture(event.pointerId);
             this.pointer = point;
+            this.scheduleOverlay();
+            return;
+        }
+
+        // 끌 수 있는 가격선(목표가) 위를 눌렀으면 그 선을 위아래로 옮긴다. 그린 도형이 겹쳐 있으면 도형이 먼저다.
+        const priceLine = idle ? this.priceLineAt(point) : null;
+        if (priceLine?.id) {
+            this.priceLineDrag = {
+                pointerId: event.pointerId, id: priceLine.id, startY: point.y, price: priceLine.price, moved: false,
+            };
+            this.container.setPointerCapture(event.pointerId);
+            this.pointer = point;
+            this.updateCursor();
             this.scheduleOverlay();
             return;
         }
@@ -568,6 +589,20 @@ export class CandleChartEngine {
             this.scheduleDraw();
             return;
         }
+        if (event.pointerId === this.priceLineDrag?.pointerId) {
+            const drag = this.priceLineDrag;
+            const pane = this.layout?.panes[0];
+            this.pointer = point;
+            if (pane && (drag.moved || Math.abs(point.y - drag.startY) >= DRAG_THRESHOLD)) {
+                drag.moved = true;
+                // 가격 영역 안에서만, 캔들 가격의 자릿수로 맞춘다(주식이면 원 단위).
+                const y = clamp(point.y, pane.top, pane.bottom);
+                const price = Number(paneToValue(pane)(y).toFixed(this.valueDecimals));
+                if (price > 0) drag.price = price;
+            }
+            this.scheduleDraw();
+            return;
+        }
         if (event.pointerId === this.editPointerId) {
             this.pointer = point;
             this.drawingLayer.updateEdit(point, invertsMagnet(event));
@@ -580,6 +615,8 @@ export class CandleChartEngine {
             this.pointer = point;
             this.drawingLayer.hover(point, invertsMagnet(event));
             this.updateCursor(point);
+            // 누르면 잡힐 가격선을 강조한다. 그린 도형이 겹쳐 있으면 도형이 잡히므로 강조하지 않는다.
+            this.hoverPriceLine(this.drawingLayer.isOver(point) ? null : this.priceLineAt(point)?.id ?? null);
             this.scheduleOverlay();
             return;
         }
@@ -611,6 +648,18 @@ export class CandleChartEngine {
             if (this.container.hasPointerCapture(event.pointerId)) {
                 this.container.releasePointerCapture(event.pointerId);
             }
+            return;
+        }
+        if (event.pointerId === this.priceLineDrag?.pointerId) {
+            const {id, price, moved} = this.priceLineDrag;
+            this.priceLineDrag = null;
+            if (this.container.hasPointerCapture(event.pointerId)) {
+                this.container.releasePointerCapture(event.pointerId);
+            }
+            this.updateCursor();
+            this.scheduleDraw();
+            // 끌다가 취소된 것(pointercancel)은 알리지 않는다.
+            if (moved && event.type === 'pointerup') this.onPriceLineMove?.(id, price);
             return;
         }
         if (event.pointerId === this.editPointerId) {
@@ -722,8 +771,26 @@ export class CandleChartEngine {
         if (event.touches.length !== 1 || !event.cancelable) return;
         const rect = this.container.getBoundingClientRect();
         const touch = event.touches[0];
-        if (this.boundaryAt({x: touch.clientX - rect.left, y: touch.clientY - rect.top}, true)) event.preventDefault();
+        const point = {x: touch.clientX - rect.left, y: touch.clientY - rect.top};
+        if (this.boundaryAt(point, true) || this.priceLineAt(point, true)) event.preventDefault();
     };
+
+    /**
+     * point 가 놓인, 끌 수 있는 가격선(id 가 있는 것). 가격 영역의 그림 안에서만 잡는다.
+     * 그리기 도구를 고른 동안에는 잡지 않는다.
+     */
+    private priceLineAt(point: Point, touch = false): PriceLine | null {
+        const pane = this.layout?.panes[0];
+        if (!pane || this.drawingLayer.activeTool || !this.isInPricePane(point)) return null;
+        const toY = paneToY(pane);
+        const reach = touch ? BOUNDARY_TOUCH_REACH : BOUNDARY_REACH;
+        const nearest = this.priceLines
+            .filter(priceLine => priceLine.id !== undefined)
+            .map(priceLine => ({priceLine, distance: Math.abs(point.y - toY(priceLine.price))}))
+            .filter(({distance}) => distance <= reach)
+            .sort((a, b) => a.distance - b.distance)[0];
+        return nearest?.priceLine ?? null;
+    }
 
     // ---------- 영역 크기 ----------
 
@@ -804,6 +871,13 @@ export class CandleChartEngine {
             && point.x >= this.layout!.plotWidth && point.y >= pane!.top && point.y <= pane!.bottom;
     }
 
+    /** 마우스가 올라간 가격선이 바뀌면 다시 그린다. */
+    private hoverPriceLine(id: string | null) {
+        if (id === this.hoveredPriceLine) return;
+        this.hoveredPriceLine = id;
+        this.scheduleDraw();
+    }
+
     /** 가격 영역의 그림 안인지 (가격축 제외) */
     private isInPricePane(point: Point): boolean {
         const pane = this.layout?.panes[0];
@@ -815,6 +889,7 @@ export class CandleChartEngine {
         // 터치는 손을 떼도 십자선을 남겨 값을 읽을 수 있게 한다.
         if (event.pointerType === 'touch') return;
         this.hovered = false;
+        this.hoverPriceLine(null);
         if (this.crosshairHeld) return;
         this.pointer = null;
         this.scheduleOverlay();
@@ -946,11 +1021,13 @@ export class CandleChartEngine {
     /** 상황에 맞는 마우스 커서: 끄는 중 / 영역 경계 위 / 가격축 위 / 도구 고름 / 도형 위 / 기본 */
     private updateCursor(hover?: Point) {
         this.container.style.cursor = this.paneDrag ? 'row-resize'
+            : this.priceLineDrag ? 'ns-resize'
             : this.gesture ? 'grabbing'
             : hover && this.boundaryAt(hover, false) ? 'row-resize'
             : hover && this.isOnPriceAxis(hover) ? 'ns-resize'
             : this.drawingLayer.activeTool ? 'crosshair'
             : hover && this.drawingLayer.isOver(hover) ? 'pointer'
+            : hover && this.priceLineAt(hover) ? 'ns-resize'
             : '';
     }
 
@@ -1072,6 +1149,7 @@ export class CandleChartEngine {
         this.countdownText = this.countdown();
         if (!style || this.candles.length === 0) return null;
         this.updateAxisWidth(style);
+        const drag = this.priceLineDrag;
 
         return renderMain(this.mainPainter, {
             candles: this.candles,
@@ -1094,7 +1172,11 @@ export class CandleChartEngine {
             indicators: this.paneIndicators,
             priceOverlays: this.priceOverlays,
             volumeOverlays: this.volumeOverlays,
-            priceLines: this.priceLines,
+            // 끌고 있는 가격선은 끌어다 놓은 가격에 그린다.
+            priceLines: drag
+                ? this.priceLines.map(priceLine => priceLine.id === drag.id ? {...priceLine, price: drag.price} : priceLine)
+                : this.priceLines,
+            activePriceLine: drag?.id ?? this.hoveredPriceLine,
             comparisons: this.comparisons.map(({color}, order) => ({closes: this.comparisonCloses[order] ?? [], color})),
             flatByPrevClose: this.flatByPrevClose,
             axisWidth: this.axisWidth,
@@ -1120,7 +1202,8 @@ export class CandleChartEngine {
         const candle = this.candles[index];
         if (candle) {
             drawCandleLegend(
-                painter, layout, style, candle, candleColor(this.candles, index, style, this.flatByPrevClose),
+                painter, layout, style, candle,
+                textColorOf(style, candleColor(this.candles, index, style, this.flatByPrevClose)),
                 this.candles[index - 1]?.close ?? null,
             );
         }

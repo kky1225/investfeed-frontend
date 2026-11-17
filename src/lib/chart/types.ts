@@ -16,6 +16,8 @@ export interface PriceLine {
     price: number,
     title: string,                      // 선 왼쪽에 적는 이름
     tone: 'up' | 'down' | 'neutral',    // 색: 상승색 / 하락색 / 글자색
+    // 주면 선을 위아래로 끌어 옮길 수 있다. 끌어 놓으면 엔진이 onPriceLineMove 로 이 값과 새 가격을 알린다
+    id?: string,
 }
 
 /**
@@ -175,6 +177,9 @@ export interface Tick {
 export interface ChartStyle {
     upColor: string,     // 상승 (종가 > 시가)
     downColor: string,   // 하락 (종가 < 시가)
+    // 글자로 적을 때의 상승색·하락색. 어두운 배경에서 캔들 색이 글자로는 읽기 어려울 때 준다. 없으면 캔들 색을 쓴다
+    upTextColor?: string,
+    downTextColor?: string,
     textColor: string,   // 축 글자, 보합 캔들
     gridColor: string,   // 격자, 축 경계선
     backgroundColor: string,    // 십자선 라벨 글자, 값 표시 바탕

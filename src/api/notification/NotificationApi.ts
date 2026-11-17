@@ -1,7 +1,7 @@
 import type {AxiosRequestConfig} from "axios";
 import api from "../../axios.ts";
 import type {ApiResponse} from "../../type/AuthType";
-import type {Notification, PriceTarget, PriceTargetCreateReq} from "../../type/NotificationType.ts";
+import type {Notification, PriceTarget, PriceTargetCreateReq, PriceTargetUpdateReq} from "../../type/NotificationType.ts";
 import type {NotificationSettingReq, NotificationSettingRes} from "../../type/NotificationSettingType.ts";
 
 export const fetchNotifications = async (assetType?: string, config?: AxiosRequestConfig): Promise<ApiResponse<Notification[]>> => {
@@ -35,7 +35,12 @@ export const fetchPriceTargets = async (config?: AxiosRequestConfig): Promise<Ap
     return res.data;
 };
 
-export const deletePriceTarget = async (id: number): Promise<ApiResponse<null>> => {
+export const updatePriceTarget = async (id: number, req: PriceTargetUpdateReq): Promise<ApiResponse<PriceTarget>> => {
+    const res = await api.patch<ApiResponse<PriceTarget>>(`/notifications/price-targets/${id}`, req);
+    return res.data;
+};
+
+export const deletePriceTarget =async (id: number): Promise<ApiResponse<null>> => {
     const res = await api.delete<ApiResponse<null>>(`/notifications/price-targets/${id}`);
     return res.data;
 };

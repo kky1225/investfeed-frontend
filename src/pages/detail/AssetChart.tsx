@@ -1,5 +1,6 @@
 import {MouseEvent, useCallback, useLayoutEffect, useMemo, useRef, useState} from "react";
-import {useQuery} from "@tanstack/react-query";
+import {useMutation, useQuery, useQueryClient} from "@tanstack/react-query";
+import PriceTargetMoveDialog, {PriceTargetMove} from "./PriceTargetMoveDialog.tsx";
 import Box from "@mui/material/Box";
 import MenuItem from "@mui/material/MenuItem";
 import Select, {SelectChangeEvent} from "@mui/material/Select";
@@ -14,7 +15,7 @@ import type {ComparisonMarket} from "../../components/chart/useChartComparisons.
 import {mergeCandles} from "../../lib/chart/merge.ts";
 import type {Candle, PriceLine} from "../../lib/chart/types.ts";
 import {requireOk} from "../../lib/apiResponse.ts";
-import {fetchPriceTargets} from "../../api/notification/NotificationApi.ts";
+import {fetchPriceTargets, updatePriceTarget} from "../../api/notification/NotificationApi.ts";
 import {fetchStockCandles} from "../../api/stock/StockApi.ts";
 import type {PriceTarget} from "../../type/NotificationType.ts";
 import type {StockCandleRes, StockChartType} from "../../type/StockType.ts";
@@ -39,7 +40,7 @@ export interface AssetChartProps {
     height?: number,        // 가격+거래량 영역의 기본 높이
 }
 
-const DEFAULT_HEIGHT = 400;
+const DEFAULT_HEIGHT = 480;
 // 주기 버튼을 차트 위쪽 줄에 함께 놓을 수 있는 최소 너비. 이보다 좁으면 차트 아래에 놓는다(위쪽 줄의 설정 버튼이 잘리지 않게)
 const TOOLBAR_MIN_WIDTH = 640;
 const TOGGLE_MINUTE = 'MINUTE';
@@ -154,15 +155,48 @@ const AssetChart = ({
         queryFn: async ({signal}) => requireOk(await fetchPriceTargets({signal, skipGlobalError: true}), [] as PriceTarget[]),
         refetchOnWindowFocus: false,
     });
+    // 목표가 선을 끌어 놓으면 확인 창을 띄우고, 확인하면 그 가격으로 바꾼다. 창이 떠 있는 동안에는 선을 놓은 자리에 그린다.
+    const [targetMove, setTargetMove] = useState<PriceTargetMove | null>(null);
+    const queryClient = useQueryClient();
+    const moveMutation = useMutation({
+        mutationFn: async ({target, price, direction}: PriceTargetMove) =>
+            requireOk(await updatePriceTarget(target.id, {targetPrice: price, direction}), '목표가 변경'),
+        onSuccess: updated => {
+            queryClient.setQueryData<PriceTarget[]>(['priceTargets'], previous => (
+                (previous ?? []).map(target => target.id === updated.id ? updated : target)
+            ));
+            queryClient.invalidateQueries({queryKey: ['priceTargets']});
+            setTargetMove(null);
+        },
+        onError: error => console.error(error),
+    });
+    const lastClose = fullCandles[fullCandles.length - 1]?.close;
+    /** 목표가를 price 로 옮겼을 때의 내용. 방향은 목표가 알림 창과 같은 규칙: 현재가 이상이면 "이상", 미만이면 "이하" */
+    const moveOf = (target: PriceTarget, price: number): PriceTargetMove => ({
+        target,
+        price,
+        // 현재가를 모르면 방향은 그대로 둔다.
+        direction: lastClose === undefined ? target.direction : price >= lastClose ? 'ABOVE' : 'BELOW',
+    });
+    const handleTargetMove = (id: string, price: number) => {
+        const target = (priceTargets ?? []).find(item => String(item.id) === id);
+        if (!target || price === target.targetPrice) return;
+        moveMutation.reset();
+        setTargetMove(moveOf(target, price));
+    };
     const targetLines = useMemo<PriceLine[]>(
         () => (priceTargets ?? [])
             .filter(target => target.assetType === storage.assetType && target.assetCode === storage.assetCode)
-            .map(target => ({
-                price: target.targetPrice,
-                title: '목표가',
-                tone: target.direction === 'ABOVE' ? 'up' : 'down',
-            })),
-        [priceTargets, storage.assetType, storage.assetCode],
+            .map(target => {
+                const moved = targetMove?.target.id === target.id ? targetMove : null;
+                return {
+                    id: String(target.id),
+                    price: moved?.price ?? target.targetPrice,
+                    title: '목표가',
+                    tone: (moved?.direction ?? target.direction) === 'ABOVE' ? 'up' : 'down',
+                };
+            }),
+        [priceTargets, storage.assetType, storage.assetCode, targetMove],
     );
 
     // 종목 비교: 일봉 이상은 종류를 섞어, 분봉은 같은 종류끼리만 비교한다.
@@ -192,10 +226,19 @@ const AssetChart = ({
                     onLoadOlder={rule.history ? loadOlder : undefined}
                     comparison={comparison}
                     priceLines={targetLines}
+                    onPriceLineMove={handleTargetMove}
                     toolbarStart={wide ? controls : undefined}
                     height={height}
                 />
             )}
+            <PriceTargetMoveDialog
+                move={targetMove}
+                saving={moveMutation.isPending}
+                failed={moveMutation.isError}
+                onPriceChange={price => setTargetMove(previous => previous && moveOf(previous.target, price))}
+                onConfirm={() => targetMove && moveMutation.mutate(targetMove)}
+                onCancel={() => setTargetMove(null)}
+            />
             {!wide && (
                 <Box display="flex" justifyContent="space-between" alignItems="center" flexWrap="wrap">
                     {controls}
