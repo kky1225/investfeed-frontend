@@ -189,6 +189,11 @@ export const useChartStorage = (assetType: AssetType | undefined, assetCode: str
         changeIndicator(key, change);
     };
 
+    /** 지표에 대해 저장해 둔 것(켜짐·설정값·선 모양·영역 높이)을 모두 지운다. 하나 더 추가한 지표를 지울 때 쓴다. */
+    const removeIndicator = (key: string) => {
+        changeIndicator(key, {on: null, params: null, colors: null, widths: null, dashes: null, height: null});
+    };
+
     const setChartType = (type: string) => saveSetting({chartType: type});
     const setLogScale = (enabled: boolean) => saveSetting({logScale: enabled});
     const setPercentScale = (enabled: boolean) => saveSetting({percentScale: enabled});
@@ -226,7 +231,7 @@ export const useChartStorage = (assetType: AssetType | undefined, assetCode: str
 
     return {
         drawings, updateDrawings,
-        indicators, setIndicatorOn, setIndicatorValues,
+        indicators, setIndicatorOn, setIndicatorValues, removeIndicator,
         chartType, setChartType,
         logScale, setLogScale,
         percentScale, setPercentScale,

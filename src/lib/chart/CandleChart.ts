@@ -1,5 +1,5 @@
 import {
-    Anchor, Candle, ChartStyle, ChartType, Comparison, ContextMenuRequest, Drawing, DrawingStyle, DrawingTool, IndicatorConfig, IndicatorType, MagnetMode,
+    Anchor, Candle, ChartStyle, ChartType, Comparison, ContextMenuRequest, Drawing, DrawingStyle, DrawingTool, IndicatorConfig, MagnetMode,
     CandleInterval, PaneResize, PaneSizes, PriceLine, SeriesStroke, TextRequest, TimeUnit,
 } from "./types.ts";
 import {bucketEnd} from "./realtime.ts";
@@ -55,7 +55,7 @@ const invertsMagnet = (event: PointerEvent): boolean => event.ctrlKey || event.m
 type Boundary =
     | { target: 'volume', start: number }
     | { target: 'main', start: number }
-    | { target: 'indicator', type: IndicatorType, start: number };
+    | { target: 'indicator', key: string, start: number };
 
 type Gesture =
     // vertical: 위아래로도 옮기는지(가격축을 손으로 맞춰 둔 상태에서 마우스로 끌 때). startShift 는 시작할 때의 priceShift
@@ -127,7 +127,7 @@ export class CandleChartEngine {
     private indicatorConfigs: IndicatorConfig[] = [];
     // indicatorConfigs 를 계산해 그려지는 자리별로 나눈 것
     private paneIndicators: PaneIndicator[] = [];
-    private paneTypes: IndicatorType[] = [];    // paneIndicators 와 같은 순서의 지표 종류
+    private paneKeys: string[] = [];    // paneIndicators 와 같은 순서의 지표 이름 (IndicatorConfig 의 key)
     private priceOverlays: OverlayIndicator[] = [];
     private volumeOverlays: OverlayIndicator[] = [];
     private priceLines: PriceLine[] = [];
@@ -293,7 +293,7 @@ export class CandleChartEngine {
         this.scheduleDraw();
     }
 
-    /** 켤 보조지표와 설정값. 별도 영역 지표는 적은 순서대로 위에서 아래로 놓인다. */
+    /** 켤 보조지표와 설정값. 별도 영역 지표는 적은 순서대로 위에서 아래로 놓인다. 같은 종류를 둘 넣을 때는 key 를 다르게 준다. */
     setIndicators(indicators: IndicatorConfig[]) {
         this.indicatorConfigs = indicators;
         this.computeSeries();
@@ -479,9 +479,9 @@ export class CandleChartEngine {
         };
         const instances = this.indicatorConfigs.map(config => createIndicator(config, this.candles, context));
         this.paneIndicators = instances.filter(instance => instance.placement === 'pane');
-        this.paneTypes = this.indicatorConfigs
+        this.paneKeys = this.indicatorConfigs
             .filter((_, order) => instances[order].placement === 'pane')
-            .map(config => config.type);
+            .map(config => config.key ?? config.type);
         const overlays = instances.filter((instance): instance is OverlayIndicator => instance.placement !== 'pane');
         this.priceOverlays = overlays.filter(overlay => overlay.placement === 'price');
         this.volumeOverlays = overlays.filter(overlay => overlay.placement === 'volume');
@@ -697,7 +697,7 @@ export class CandleChartEngine {
         if (boundary) {
             const reset: PaneResize = boundary.target === 'volume' ? {target: 'volume', ratio: null}
                 : boundary.target === 'main' ? {target: 'main', height: null}
-                : {target: 'indicator', type: boundary.type, height: null};
+                : {target: 'indicator', key: boundary.key, height: null};
             this.applyResize(reset);
             this.scheduleDraw();
             this.onPaneResize?.(reset, true);
@@ -798,7 +798,7 @@ export class CandleChartEngine {
 
     /** 별도 영역 지표들의 높이. paneIndicators 와 같은 순서 */
     private indicatorHeights(): number[] {
-        return this.paneTypes.map(type => this.paneSizes.indicators?.[type] ?? INDICATOR_PANE_HEIGHT);
+        return this.paneKeys.map(key => this.paneSizes.indicators?.[key] ?? INDICATOR_PANE_HEIGHT);
     }
 
     /** 가격+거래량 영역의 높이. 정해 주지 않았으면 요소의 높이에서 지표 영역을 뺀 나머지 */
@@ -814,7 +814,7 @@ export class CandleChartEngine {
      */
     private boundaryAt(point: Point, touch: boolean): Boundary | null {
         const layout = this.layout;
-        if (!layout || this.drawingLayer.activeTool || layout.panes.length !== this.paneTypes.length + 2) return null;
+        if (!layout || this.drawingLayer.activeTool || layout.panes.length !== this.paneKeys.length + 2) return null;
         const [, volume, ...indicatorPanes] = layout.panes;
         const heights = this.indicatorHeights();
         const boundaries: { y: number, boundary: Boundary }[] = [
@@ -825,7 +825,7 @@ export class CandleChartEngine {
             ]),
             ...indicatorPanes.map((pane, order) => ({
                 y: pane.bottom,
-                boundary: {target: 'indicator' as const, type: this.paneTypes[order], start: heights[order]},
+                boundary: {target: 'indicator' as const, key: this.paneKeys[order], start: heights[order]},
             })),
         ];
         const reach = touch ? BOUNDARY_TOUCH_REACH : BOUNDARY_REACH;
@@ -848,7 +848,7 @@ export class CandleChartEngine {
             return {target: 'main', height};
         }
         const height = clamp(Math.round(boundary.start + delta), INDICATOR_HEIGHT_LIMIT.min, INDICATOR_HEIGHT_LIMIT.max);
-        return {target: 'indicator', type: boundary.type, height};
+        return {target: 'indicator', key: boundary.key, height};
     }
 
     /** 끌어서 바꾼 크기를 바로 반영한다. 기본 크기로 되돌린 것이면 그 항목을 비운다. */
@@ -861,7 +861,7 @@ export class CandleChartEngine {
         } else {
             this.paneSizes = {
                 ...this.paneSizes,
-                indicators: {...this.paneSizes.indicators, [change.type]: change.height ?? undefined},
+                indicators: {...this.paneSizes.indicators, [change.key]: change.height ?? undefined},
             };
         }
     }

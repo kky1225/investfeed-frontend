@@ -65,10 +65,14 @@ const NO_MOVING_AVERAGES: { periods: number[], colors: number[], strokes: Series
     periods: [], colors: [], strokes: [],
 };
 
-// 설정에 저장하는 이동평균선의 key. 선 전체를 한 번에 켜고 끄며, 설정값은 선마다의 기간이다. 보조지표의 key 는 종류 이름
+// 설정에 저장하는 이동평균선의 key. 선 전체를 한 번에 켜고 끄며, 설정값은 선마다의 기간이다. 보조지표의 key 는 종류 이름(둘째는 SECOND_SUFFIX 를 붙인다)
 const AVERAGE_KEY = 'average';
 const AVERAGE_PERIOD_MAX = 500;
 const AVERAGE_LINES = {min: 1, max: 8};     // 이동평균선의 수
+
+// 차트 아래에 따로 영역을 차지하는 지표는 하나 더 추가할 수 있다. 둘째는 종류 이름에 이것을 붙인 key 로 저장한다(rsi#2).
+// 둘째는 켜짐(on: true)으로 저장되어 있을 때만 있는 것으로 보고, 지우면 저장된 것을 모두 없앤다.
+const SECOND_SUFFIX = '#2';
 
 /** 설정 창에 보이는 지표 한 줄의 정의: 이동평균선 + 보조지표들 */
 interface IndicatorEntry {
@@ -76,7 +80,13 @@ interface IndicatorEntry {
     label: string,
     defaultOn: boolean,
     shape: IndicatorShape,  // 바꿀 수 있는 것: 설정값 칸, 색, 선 개수
+    type?: IndicatorType,   // 보조지표의 종류. 이동평균선은 없다
+    secondKey?: string,     // 하나 더 추가할 수 있는 지표면 그 둘째의 key
+    second?: boolean,       // 하나 더 추가한 둘째인지
 }
+
+/** 엔진에 넘길 지표 하나. 래퍼는 key 를 늘 채워 넘긴다 */
+type PaneConfig = IndicatorConfig & { key: string };
 
 /** 저장된 크기가 숫자면 끌어서 바꿀 수 있는 범위 안으로 맞춰 돌려주고, 아니면 undefined */
 const sizeWithin = (value: number | null | undefined, limit: { min: number, max: number }): number | undefined => (
@@ -123,7 +133,7 @@ const CandleChart = ({
     // 그린 선과 차트 설정(꺼 둔 지표)은 계정에 저장한다.
     const {
         drawings, updateDrawings,
-        indicators: indicatorSettings, setIndicatorOn, setIndicatorValues,
+        indicators: indicatorSettings, setIndicatorOn, setIndicatorValues, removeIndicator,
         chartType: savedChartType, setChartType,
         logScale, setLogScale,
         percentScale, setPercentScale,
@@ -298,22 +308,32 @@ const CandleChart = ({
                 lines: AVERAGE_LINES,
             },
         }] : []),
-        ...indicators.map(type => {
-            const {label, defaultOn} = INDICATORS[type];
-            return {key: type, label, defaultOn, shape: INDICATORS[type]};
+        ...indicators.flatMap((type): IndicatorEntry[] => {
+            const {label, defaultOn, placement} = INDICATORS[type];
+            const first = {key: type, label, defaultOn, shape: INDICATORS[type], type};
+            if (placement !== 'pane') return [first];
+            const secondKey = `${type}${SECOND_SUFFIX}`;
+            return [
+                {...first, secondKey},
+                {key: secondKey, label: `${label} 2`, defaultOn: false, shape: INDICATORS[type], type, second: true},
+            ];
         }),
     ], [movingAverages, indicators]);
 
-    // 저장된 설정을 입혀 설정 창에 보일 상태로 만든다.
+    // 저장된 설정을 입혀 설정 창에 보일 상태로 만든다. entries 와 같은 순서이고, 추가하지 않은 둘째도 꺼진 채로 들어 있다.
     const indicatorOptions = useMemo<ChartIndicatorOption[]>(() => entries.map(entry => {
         const saved = indicatorSettings[entry.key];
         const {lines} = entry.shape;
         const resolved = resolveIndicator(entry.shape, saved);
         const initial = resolveIndicator(entry.shape);
+        const on = saved?.on ?? entry.defaultOn;
         return {
             key: entry.key,
             label: entry.label,
-            on: saved?.on ?? entry.defaultOn,
+            on,
+            // 켜 둔 지표에 둘째가 아직 없을 때만 하나 더 추가할 수 있다
+            canDuplicate: on && entry.secondKey !== undefined && indicatorSettings[entry.secondKey]?.on !== true,
+            duplicate: entry.second === true,
             params: resolved.paramSpecs.map((spec, order) => ({...spec, value: resolved.params[order]})),
             colors: resolved.colorSpecs.map((spec, order) => ({
                 label: spec.label, value: resolved.colors[order], width: resolved.widths[order], dashed: resolved.dashes[order],
@@ -338,30 +358,35 @@ const CandleChart = ({
             : NO_MOVING_AVERAGES;
     }, [indicatorOptions]);
     // 별도 영역 지표는 저장해 둔 순서대로 놓는다. 그 순서에 없는 지표는 뒤에 정해진 순서로 놓인다.
-    const activeIndicators = useMemo<IndicatorConfig[]>(() => {
-        const configs = indicatorOptions
-            .filter(option => option.on && option.key !== AVERAGE_KEY)
-            .map(option => ({
-                type: option.key as IndicatorType,
+    const activeIndicators = useMemo<PaneConfig[]>(() => {
+        const configs = indicatorOptions.flatMap((option, order): PaneConfig[] => {
+            const {type} = entries[order];
+            return option.on && type ? [{
+                key: option.key,
+                type,
                 params: option.params.map(param => param.value),
                 colors: option.colors.map(color => color.value),
                 widths: option.colors.map(color => color.width),
                 dashes: option.colors.map(color => color.dashed),
-            }));
+            }] : [];
+        });
         const isPane = (config: IndicatorConfig) => INDICATORS[config.type].placement === 'pane';
-        const rank = (config: IndicatorConfig) => {
-            const order = savedPaneOrder?.indexOf(config.type) ?? -1;
+        const rank = (config: PaneConfig) => {
+            const order = savedPaneOrder?.indexOf(config.key) ?? -1;
             return order < 0 ? Number.MAX_SAFE_INTEGER : order;
         };
         return [
             ...configs.filter(config => !isPane(config)),
             ...configs.filter(isPane).sort((a, b) => rank(a) - rank(b)),
         ];
-    }, [indicatorOptions, savedPaneOrder]);
-    // 설정 창의 "지표 영역 순서"에 보일 것: 켜 둔 별도 영역 지표를 차트에 놓인 순서대로
-    const paneItems = activeIndicators
-        .filter(config => INDICATORS[config.type].placement === 'pane')
-        .map(config => ({key: config.type as string, label: INDICATORS[config.type].label}));
+    }, [entries, indicatorOptions, savedPaneOrder]);
+    // 켜 둔 별도 영역 지표. 차트에 놓인 순서대로
+    const activePanes = activeIndicators.filter(config => INDICATORS[config.type].placement === 'pane');
+    // 설정 창의 "지표 영역 순서"에 보일 것
+    const paneItems = activePanes.map(config => ({
+        key: config.key,
+        label: entries.find(entry => entry.key === config.key)?.label ?? config.key,
+    }));
     /** 지표 영역 하나를 한 칸 위나 아래로 옮긴다. 꺼 둔 지표의 순서는 뒤에 그대로 남긴다. */
     const movePane = (key: string, step: -1 | 1) => {
         const keys = paneItems.map(item => item.key);
@@ -380,32 +405,38 @@ const CandleChart = ({
             // 전체 화면에서는 높이를 정해 주지 않는다. 엔진이 화면 높이에서 지표 영역을 뺀 나머지를 쓴다.
             mainHeight: fullscreen ? undefined : sizeWithin(savedMainHeight, MAIN_HEIGHT_LIMIT) ?? height,
             volumeRatio: sizeWithin(savedVolumeRatio, VOLUME_RATIO_LIMIT),
-            indicators: Object.fromEntries(indicators.map(type => (
-                [type, sizeWithin(indicatorSettings[type]?.height, INDICATOR_HEIGHT_LIMIT)]
-            ))) as Partial<Record<IndicatorType, number>>,
+            indicators: Object.fromEntries(entries.filter(entry => entry.type).map(entry => (
+                [entry.key, sizeWithin(indicatorSettings[entry.key]?.height, INDICATOR_HEIGHT_LIMIT)]
+            ))) as Partial<Record<string, number>>,
         };
         if (resizing?.target === 'main') return fullscreen ? saved : {...saved, mainHeight: resizing.height ?? height};
         if (resizing?.target === 'volume') return {...saved, volumeRatio: resizing.ratio ?? undefined};
         if (resizing?.target === 'indicator') {
-            return {...saved, indicators: {...saved.indicators, [resizing.type]: resizing.height ?? undefined}};
+            return {...saved, indicators: {...saved.indicators, [resizing.key]: resizing.height ?? undefined}};
         }
         return saved;
-    }, [savedMainHeight, savedVolumeRatio, indicatorSettings, indicators, height, resizing, fullscreen]);
+    }, [savedMainHeight, savedVolumeRatio, indicatorSettings, entries, height, resizing, fullscreen]);
     // 차트 전체 높이: 가격+거래량 + 차트 아래에 따로 영역을 차지하는 지표들. 전체 화면에서는 남는 높이를 다 쓴다.
-    const chartHeight = fullscreen ? '100%' : activeIndicators
-        .filter(config => INDICATORS[config.type].placement === 'pane')
-        .reduce((sum, config) => sum + (paneSizes.indicators[config.type] ?? INDICATOR_PANE_HEIGHT), paneSizes.mainHeight ?? height);
+    const chartHeight = fullscreen ? '100%' : activePanes.reduce(
+        (sum, config) => sum + (paneSizes.indicators[config.key] ?? INDICATOR_PANE_HEIGHT),
+        paneSizes.mainHeight ?? height,
+    );
 
     const resizePane = (change: PaneResize, done: boolean) => {
         setResizing(change);
         if (!done) return;
         if (change.target === 'main') setMainHeight(change.height);
         else if (change.target === 'volume') setVolumeRatio(change.ratio);
-        else setIndicatorHeight(change.type, change.height);
+        else setIndicatorHeight(change.key, change.height);
     };
 
     const toggleIndicator = (key: string, on: boolean) => {
         setIndicatorOn(key, on, entries.find(entry => entry.key === key)?.defaultOn ?? true);
+    };
+    /** 같은 지표를 하나 더 추가한다. 둘째는 기본 설정값으로 시작한다. */
+    const duplicateIndicator = (key: string) => {
+        const secondKey = entries.find(entry => entry.key === key)?.secondKey;
+        if (secondKey) setIndicatorOn(secondKey, true, false);
     };
 
     // 엔진은 한 번만 만들어지므로, 엔진이 부를 함수는 ref 로 최신 것을 가리키게 한다.
@@ -669,8 +700,11 @@ const CandleChart = ({
                     setSettingsOpen(false);
                     saveNow();      // 창을 닫으면 다 바꾼 것으로 보고 기다리지 않고 저장한다
                 }}
-                indicatorOptions={indicatorOptions}
+                // 추가하지 않은 둘째는 보이지 않는다
+                indicatorOptions={indicatorOptions.filter(option => !option.duplicate || option.on)}
                 onToggleIndicator={toggleIndicator}
+                onIndicatorDuplicate={duplicateIndicator}
+                onIndicatorRemove={removeIndicator}
                 onIndicatorChange={setIndicatorValues}
                 onIndicatorReset={key => setIndicatorValues(key, {params: null, colors: null, widths: null, dashes: null})}
                 paneItems={paneItems}

@@ -155,6 +155,9 @@ export interface LineLook extends Required<SeriesStroke> {
 /** 켜 둔 지표 하나와 그 설정값. params 의 순서와 뜻은 INDICATORS 의 params 를 따른다. 비우면 기본값 */
 export interface IndicatorConfig {
     type: IndicatorType,
+    // 이 지표를 가리키는 이름. 같은 종류를 둘 켤 때 서로를 구분하고, 영역 크기(PaneSizes·PaneResize)도 이 이름으로 주고받는다.
+    // 비우면 type 을 쓴다
+    key?: string,
     params?: number[],
     colors?: number[],  // 선마다의 색(style.lineColors 안에서의 순번). 순서와 뜻은 INDICATORS 의 colors 를 따른다. 비우면 기본 색
     widths?: number[],  // 선마다의 굵기. colors 와 같은 순서. 비우면 1
@@ -168,14 +171,14 @@ export interface IndicatorConfig {
 export interface PaneSizes {
     mainHeight?: number,    // 가격+거래량 영역의 높이(날짜축 포함, CSS px). 비우면 요소의 높이에서 지표 영역을 뺀 나머지
     volumeRatio?: number,   // 가격+거래량 높이 중 거래량 영역의 비율
-    indicators?: Partial<Record<IndicatorType, number>>,    // 별도 영역 지표의 영역 높이 (CSS px)
+    indicators?: Partial<Record<string, number>>,   // 별도 영역 지표의 영역 높이 (CSS px). 이름은 IndicatorConfig 의 key
 }
 
 /** 영역 사이의 경계를 끌어 바꾼 크기 하나. 값이 null 이면 기본 크기로 되돌린 것(경계를 더블클릭) */
 export type PaneResize =
     | { target: 'volume', ratio: number | null }        // 가격과 거래량 사이: 거래량 영역의 비율
     | { target: 'main', height: number | null }         // 거래량 아래: 가격+거래량 영역의 높이
-    | { target: 'indicator', type: IndicatorType, height: number | null };  // 지표 영역 아래: 그 영역의 높이
+    | { target: 'indicator', key: string, height: number | null };  // 지표 영역 아래: 그 영역의 높이. key 는 IndicatorConfig 의 key
 
 /** 캔들 한 개가 담는 기간. 실시간 체결이 어느 캔들에 들어갈지 정하는 데 쓴다. */
 export type CandleInterval =

@@ -50,6 +50,8 @@ export interface ChartIndicatorOption {
     key: string,
     label: string,
     on: boolean,
+    canDuplicate: boolean,  // 같은 지표를 하나 더 추가할 수 있는지 (차트 아래에 따로 영역을 차지하는 지표, 둘까지)
+    duplicate: boolean,     // 하나 더 추가해 둔 둘째인지. 켜고 끄는 대신 지운다
     params: ChartIndicatorParam[],
     colors: ChartIndicatorColor[],
     // 설정값 하나가 선 하나인 지표(이동평균선 등)면 선을 더하고 뺄 수 있는지. 그런 지표는 params 와 colors 가 같은 순서의 선들이다
@@ -70,6 +72,8 @@ interface ChartSettingsDialogProps {
     onClose: () => void,
     indicatorOptions: ChartIndicatorOption[],
     onToggleIndicator: (key: string, on: boolean) => void,
+    onIndicatorDuplicate: (key: string) => void,    // 그 지표를 하나 더 추가한다
+    onIndicatorRemove: (key: string) => void,       // 하나 더 추가해 둔 지표를 지운다
     onIndicatorChange: (key: string, change: ChartIndicatorChange) => void,
     onIndicatorReset: (key: string) => void,
     paneItems: ChartPaneItem[],                 // 켜 둔 별도 영역 지표. 차트에 놓인 순서(위에서 아래)
@@ -231,7 +235,8 @@ const IndicatorFields = ({option, onChange}: IndicatorFieldsProps) => {
 
 /** 차트 설정 창. 바꾸는 즉시 차트에 반영된다. */
 const ChartSettingsDialog = ({
-    open, onClose, indicatorOptions, onToggleIndicator, onIndicatorChange, onIndicatorReset, paneItems, onPaneMove,
+    open, onClose, indicatorOptions, onToggleIndicator, onIndicatorDuplicate, onIndicatorRemove,
+    onIndicatorChange, onIndicatorReset, paneItems, onPaneMove,
     drawingToolbar, onDrawingToolbarChange,
     logScale, onLogScaleChange, percentScale, onPercentScaleChange,
     flatByPrevClose, onFlatByPrevCloseChange, drawingCount, onClearDrawings, hiddenDrawingCount, onShowDrawings,
@@ -256,20 +261,43 @@ const ChartSettingsDialog = ({
                 {indicatorOptions.map(option => (
                     <Box key={option.key}>
                         <Stack direction="row" sx={{alignItems: 'center', justifyContent: 'space-between'}}>
-                            <FormControlLabel
-                                label={option.label}
-                                control={
-                                    <Switch
-                                        checked={option.on}
-                                        onChange={(_event, checked) => onToggleIndicator(option.key, checked)}
-                                    />
-                                }
-                            />
-                            {option.customized && (
-                                <Button size="small" onClick={() => onIndicatorReset(option.key)}>기본값으로</Button>
+                            {option.duplicate ? (
+                                // 하나 더 추가한 지표는 켜고 끄지 않고 지운다. 스위치가 없는 만큼 들여 써서 위 지표에 딸린 것으로 보이게 한다.
+                                <Typography sx={{pl: 6, py: 1}}>{option.label}</Typography>
+                            ) : (
+                                <FormControlLabel
+                                    label={option.label}
+                                    control={
+                                        <Switch
+                                            checked={option.on}
+                                            onChange={(_event, checked) => onToggleIndicator(option.key, checked)}
+                                        />
+                                    }
+                                />
                             )}
+                            <Stack direction="row">
+                                {option.customized && (
+                                    <Button size="small" onClick={() => onIndicatorReset(option.key)}>기본값으로</Button>
+                                )}
+                                {option.canDuplicate && (
+                                    <Button
+                                        size="small"
+                                        startIcon={<AddIcon/>}
+                                        onClick={() => onIndicatorDuplicate(option.key)}
+                                    >
+                                        하나 더
+                                    </Button>
+                                )}
+                                {option.duplicate && (
+                                    <Button size="small" color="error" onClick={() => onIndicatorRemove(option.key)}>
+                                        지우기
+                                    </Button>
+                                )}
+                            </Stack>
                         </Stack>
-                        <IndicatorFields option={option} onChange={change => onIndicatorChange(option.key, change)}/>
+                        <Box sx={option.duplicate ? {pl: 6} : undefined}>
+                            <IndicatorFields option={option} onChange={change => onIndicatorChange(option.key, change)}/>
+                        </Box>
                     </Box>
                 ))}
             </Stack>
