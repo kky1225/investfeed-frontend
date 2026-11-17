@@ -36,7 +36,7 @@ const labelColors = {
     neutral: 'default' as const,
 };
 
-const CHART_HEIGHT = 400;   // 차트를 기다리는 동안 보이는 자리의 높이 (차트의 기본 높이와 같다)
+const CHART_HEIGHT = 480;  // 차트를 기다리는 동안 보이는 자리의 높이 (차트의 기본 높이와 같다)
 
 export default function MultiViewPanel({asset, onSearch, onChartExpand, onRemove, streamUpdate}: MultiViewPanelProps) {
     const navigate = useNavigate();

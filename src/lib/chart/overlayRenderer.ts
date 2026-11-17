@@ -6,7 +6,7 @@ import {
     PADDING_TOP,
 } from "./constants.ts";
 import {clamp, isNumber, Layout, paneToValue, Point} from "./layout.ts";
-import {lineColor, Painter} from "./painter.ts";
+import {lineColor, Painter, textColorOf} from "./painter.ts";
 import {LegendItem} from "./indicatorPanes.ts";
 
 // 위 장: 십자선과 값 표시. 마우스가 움직일 때마다 다시 그린다.
@@ -92,7 +92,7 @@ const changeItem = (candle: Candle, previousClose: number | null, decimals: numb
     const change = Number((candle.close - previousClose).toFixed(decimals));
     const amount = `${change > 0 ? '+' : ''}${formatPrice(change, decimals)}`;
     const rate = previousClose > 0 ? ` (${formatPercent(change / previousClose * 100, CHANGE_RATE_DECIMALS)})` : '';
-    const color = change > 0 ? style.upColor : change < 0 ? style.downColor : style.textColor;
+    const color = textColorOf(style, change > 0 ? style.upColor : change < 0 ? style.downColor : style.textColor);
     return [[`${amount}${rate}`, color]];
 };
 

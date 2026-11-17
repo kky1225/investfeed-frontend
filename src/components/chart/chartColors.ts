@@ -19,6 +19,15 @@ export const chartColorVars = (theme: Theme) => ({
     // 하락색은 info.main 대신 primary.main 을 쓴다. 라이트 모드의 info.main 은 밝은 하늘색이라
     // 진한 빨강(error.main)과 무게가 맞지 않고 캔들이 흐려 보인다
     '--chart-down': (theme.vars || theme).palette.primary.main,
+    // 글자로 적을 때의 상승색·하락색. 라이트 모드에서는 캔들 색과 같다.
+    '--chart-up-text': (theme.vars || theme).palette.error.main,
+    '--chart-down-text': (theme.vars || theme).palette.primary.main,
+    // 다크 모드의 error.main 은 어두운 빨강이라 어두운 배경 위의 글자로는 읽기 어렵다. 캔들은 그대로 두고
+    // 글자만 밝게 한다: 빨강은 error.light 에 글자색을 섞고, 파랑은 primary.light 를 쓴다
+    ...theme.applyStyles('dark', {
+        '--chart-up-text': `color-mix(in srgb, ${(theme.vars || theme).palette.error.light} 65%, ${(theme.vars || theme).palette.text.primary})`,
+        '--chart-down-text': (theme.vars || theme).palette.primary.light,
+    }),
     '--chart-text': (theme.vars || theme).palette.text.secondary,
     '--chart-grid': (theme.vars || theme).palette.divider,
     '--chart-background': (theme.vars || theme).palette.background.paper,

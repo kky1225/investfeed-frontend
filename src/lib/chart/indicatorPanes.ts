@@ -6,7 +6,7 @@ import {
 import {createLinearScale, formatVolume, niceTicks} from "./scale.ts";
 import {AXIS_LABEL_OFFSET, LEGEND_HEIGHT} from "./constants.ts";
 import {isNumber, Pane, VisibleRange} from "./layout.ts";
-import {lineColor, Painter} from "./painter.ts";
+import {lineColor, Painter, textColorOf} from "./painter.ts";
 
 // 보조지표 등록부. 지표를 추가하려면 IndicatorType 에 이름을 넣고 INDICATORS 에 하나 등록한다.
 // 그려지는 자리는 세 가지: 가격 영역에 겹침(price) / 거래량 영역에 겹침(volume) / 차트 아래 별도 영역(pane)
@@ -210,8 +210,8 @@ const ichimokuDefinition: IndicatorDefinition = {
                 [`일목 ${conversionPeriod}·${basePeriod}·${spanPeriod}`, style.textColor],
                 [`전환 ${formatWith(format, conversion[index])}`, lineColor(style, conversionColor)],
                 [`기준 ${formatWith(format, base[index])}`, lineColor(style, baseColor)],
-                [`선행1 ${formatWith(format, spanA[index])}`, style.upColor],
-                [`선행2 ${formatWith(format, spanB[index])}`, style.downColor],
+                [`선행1 ${formatWith(format, spanA[index])}`, textColorOf(style, style.upColor)],
+                [`선행2 ${formatWith(format, spanB[index])}`, textColorOf(style, style.downColor)],
             ],
         };
     },
@@ -388,7 +388,7 @@ const macdDefinition: IndicatorDefinition = {
                     [`시그널 ${formatIndicator(signal[index])}`, lineColor(style, signalColor)],
                     [
                         `오실레이터 ${formatIndicator(bar)}`,
-                        !isNumber(bar) ? style.textColor : bar >= 0 ? style.upColor : style.downColor,
+                        !isNumber(bar) ? style.textColor : textColorOf(style, bar >= 0 ? style.upColor : style.downColor),
                     ],
                 ];
             },

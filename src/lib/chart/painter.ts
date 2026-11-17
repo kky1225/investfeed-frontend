@@ -109,6 +109,15 @@ export const candleColor = (candles: Candle[], index: number, style: ChartStyle,
         : style.textColor;
 };
 
+/**
+ * 색을 글자에 쓸 때의 색. 상승색·하락색이면 글자용 색으로 바꾸고, 그 밖의 색은 그대로 돌려준다.
+ * 선·막대·캔들을 그릴 때는 쓰지 않는다.
+ */
+export const textColorOf = (style: ChartStyle, color: string): string =>
+    color === style.upColor ? style.upTextColor ?? color
+        : color === style.downColor ? style.downTextColor ?? color
+        : color;
+
 /** style.lineColors 의 order 번째 색. 모자라면 처음부터 돌려 쓴다. */
 export const lineColor = (style: ChartStyle, order: number): string =>
     style.lineColors.length > 0 ? style.lineColors[order % style.lineColors.length] : style.textColor;
