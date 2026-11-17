@@ -1,4 +1,4 @@
-import {Candle, ChartStyle, ChartType, PriceLine, TimeUnit} from "./types.ts";
+import {Candle, ChartStyle, ChartType, PriceLine, SeriesStroke, TimeUnit} from "./types.ts";
 import {Series} from "./indicators.ts";
 import {
     createLinearScale, createLogScale, decimalsOf, formatPercent, formatPrice, formatVolume, logTicks, niceTicks,
@@ -58,6 +58,7 @@ export interface MainInput {
     range: VisibleRange,
     averages: Series[],         // 이동평균선
     averageColors: number[],    // 이동평균선마다의 색 순번. 없는 자리는 순서대로의 색
+    averageStrokes: SeriesStroke[],     // 이동평균선마다의 굵기·점선. 없는 자리는 굵기 1, 실선
     indicators: PaneIndicator[],        // 위에서 아래로 쌓을 별도 영역 지표
     priceOverlays: OverlayIndicator[],  // 가격 영역에 겹칠 지표
     volumeOverlays: OverlayIndicator[], // 거래량 영역에 겹칠 지표
@@ -306,7 +307,7 @@ const drawHollowCandle = (frame: Frame, index: number, x: number, bodyLeft: numb
  * 가격 영역 지표(볼린저밴드의 채움 등)는 캔들 뒤에, 선들은 캔들 앞에 놓인다.
  */
 const drawCandles = (
-    frame: Frame, averages: Series[], averageColors: number[],
+    frame: Frame, averages: Series[], averageColors: number[], averageStrokes: SeriesStroke[],
     priceOverlays: OverlayIndicator[], volumeOverlays: OverlayIndicator[],
 ) => {
     const {
@@ -364,7 +365,7 @@ const drawCandles = (
         });
 
         averages.forEach((values, order) => {
-            painter.strokeSeries(values, range, priceY, lineColor(style, averageColors[order] ?? order));
+            painter.strokeSeries(values, range, priceY, lineColor(style, averageColors[order] ?? order), averageStrokes[order]);
         });
         frame.comparisons.forEach(({line: comparison, color}) => {
             painter.strokeSeries(comparison.values, range, priceY, lineColor(style, color));
@@ -546,7 +547,7 @@ export const renderMain = (painter: Painter, input: MainInput): Layout | null =>
     const {
         candles, chartType, shapes, logScale, percentScale, priceZoom, priceShift, timeUnit, style, width, range,
         mainHeight, volumeRatio, indicatorHeights,
-        averages, averageColors, indicators, priceOverlays, volumeOverlays, priceLines, comparisons, flatByPrevClose,
+        averages, averageColors, averageStrokes, indicators, priceOverlays, volumeOverlays, priceLines, comparisons, flatByPrevClose,
         axisWidth, valueDecimals, countdown,
     } = input;
 
@@ -645,7 +646,7 @@ export const renderMain = (painter: Painter, input: MainInput): Layout | null =>
     drawVolumeAxis(frame);
     drawTimeAxis(frame);
     drawBorders(frame);
-    drawCandles(frame, averages, averageColors, priceOverlays, volumeOverlays);
+    drawCandles(frame, averages, averageColors, averageStrokes, priceOverlays, volumeOverlays);
     drawExtremes(frame);
     drawComparisonTags(frame);
     drawPriceLines(frame, priceLines, input.activePriceLine, drawCurrentPrice(frame));

@@ -15,6 +15,8 @@ import TextField from "@mui/material/TextField";
 import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
 import AddIcon from "@mui/icons-material/Add";
+import ArrowDownwardIcon from "@mui/icons-material/ArrowDownward";
+import ArrowUpwardIcon from "@mui/icons-material/ArrowUpward";
 import CloseIcon from "@mui/icons-material/Close";
 import ChartColorPicker from "./ChartColorPicker.tsx";
 import ChartComparisonField, {ChartComparisonFieldProps} from "./ChartComparisonField.tsx";
@@ -29,10 +31,18 @@ export interface ChartIndicatorParam {
     step: number,   // 1 이면 정수만 받는다
 }
 
-/** 색을 바꿀 수 있는 선 하나 */
+/** 모양(색·굵기·점선)을 바꿀 수 있는 선 하나 */
 export interface ChartIndicatorColor {
     label: string,
     value: number,  // 차트의 선 색 목록에서의 순번
+    width: number,  // 굵기 단계
+    dashed: boolean,
+}
+
+/** 차트 아래에 따로 영역을 차지하는 지표 하나 (켜 둔 것). 순서를 바꿀 때 쓴다 */
+export interface ChartPaneItem {
+    key: string,
+    label: string,
 }
 
 /** 설정 창의 지표 한 줄 */
@@ -44,13 +54,15 @@ export interface ChartIndicatorOption {
     colors: ChartIndicatorColor[],
     // 설정값 하나가 선 하나인 지표(이동평균선 등)면 선을 더하고 뺄 수 있는지. 그런 지표는 params 와 colors 가 같은 순서의 선들이다
     lines: { canAdd: boolean, canRemove: boolean } | null,
-    customized: boolean,    // 설정값·색·선 개수를 기본에서 바꿔 둔 상태인지
+    customized: boolean,    // 설정값·선 모양·선 개수를 기본에서 바꿔 둔 상태인지
 }
 
 /** 지표에서 바꾼 것. 준 항목만 바뀐다 */
 export interface ChartIndicatorChange {
     params?: number[],
     colors?: number[],
+    widths?: number[],
+    dashes?: boolean[],
 }
 
 interface ChartSettingsDialogProps {
@@ -60,7 +72,9 @@ interface ChartSettingsDialogProps {
     onToggleIndicator: (key: string, on: boolean) => void,
     onIndicatorChange: (key: string, change: ChartIndicatorChange) => void,
     onIndicatorReset: (key: string) => void,
-    drawingToolbar: boolean,                    // 그리기 도구 모음을 보일지
+    paneItems: ChartPaneItem[],                 // 켜 둔 별도 영역 지표. 차트에 놓인 순서(위에서 아래)
+    onPaneMove: (key: string, step: -1 | 1) => void,   // 그 지표의 영역을 한 칸 위(-1)나 아래(1)로 옮긴다
+    drawingToolbar: boolean,                   // 그리기 도구 모음을 보일지
     onDrawingToolbarChange: (visible: boolean) => void,
     logScale: boolean,                          // 가격축을 로그로 할지
     onLogScaleChange: (enabled: boolean) => void,
@@ -123,16 +137,28 @@ interface IndicatorFieldsProps {
     onChange: (change: ChartIndicatorChange) => void,
 }
 
-/** 지표 한 줄의 설정값 칸과 색 단추. 선을 더하고 뺄 수 있는 지표는 선마다 "기간 · 색 · 지우기"를 한 묶음으로 놓는다. */
+/**
+ * 지표 한 줄의 설정값 칸과 선 모양 단추(누르면 색·굵기·점선을 고른다).
+ * 선을 더하고 뺄 수 있는 지표는 선마다 "기간 · 모양 · 지우기"를 한 묶음으로 놓는다.
+ */
 const IndicatorFields = ({option, onChange}: IndicatorFieldsProps) => {
     const values = option.params.map(param => param.value);
     const colors = option.colors.map(color => color.value);
-    const replaced = (list: number[], order: number, value: number) => list.map((item, index) => index === order ? value : item);
+    const widths = option.colors.map(color => color.width);
+    const dashes = option.colors.map(color => color.dashed);
+    const replaced = <T,>(list: T[], order: number, value: T) => list.map((item, index) => index === order ? value : item);
+    const without = <T,>(list: T[], order: number) => list.filter((_item, index) => index !== order);
     const colorPicker = (color: ChartIndicatorColor, order: number) => (
         <ChartColorPicker
             label={`${option.label} ${color.label}`}
             value={color.value}
             onChange={value => onChange({colors: replaced(colors, order, value)})}
+            stroke={{
+                width: color.width,
+                dashed: color.dashed,
+                onWidthChange: width => onChange({widths: replaced(widths, order, width)}),
+                onDashedChange: dashed => onChange({dashes: replaced(dashes, order, dashed)}),
+            }}
         />
     );
     const paramField = (param: ChartIndicatorParam, order: number) => (
@@ -158,8 +184,10 @@ const IndicatorFields = ({option, onChange}: IndicatorFieldsProps) => {
                                     size="small"
                                     aria-label={`${option.label} ${param.label} 지우기`}
                                     onClick={() => onChange({
-                                        params: values.filter((_value, index) => index !== order),
-                                        colors: colors.filter((_color, index) => index !== order),
+                                        params: without(values, order),
+                                        colors: without(colors, order),
+                                        widths: without(widths, order),
+                                        dashes: without(dashes, order),
                                     })}
                                 >
                                     <CloseIcon fontSize="inherit"/>
@@ -172,10 +200,12 @@ const IndicatorFields = ({option, onChange}: IndicatorFieldsProps) => {
                     <Button
                         size="small"
                         startIcon={<AddIcon/>}
-                        // 새 선의 기간은 마지막 선의 2배, 색은 다음 순번
+                        // 새 선의 기간은 마지막 선의 2배, 색은 다음 순번, 굵기·점선은 마지막 선과 같게
                         onClick={() => onChange({
                             params: [...values, Math.min(last.max, last.value * 2)],
                             colors: [...colors, colors.length],
+                            widths: [...widths, widths[widths.length - 1]],
+                            dashes: [...dashes, dashes[dashes.length - 1]],
                         })}
                     >
                         선 추가
@@ -201,7 +231,7 @@ const IndicatorFields = ({option, onChange}: IndicatorFieldsProps) => {
 
 /** 차트 설정 창. 바꾸는 즉시 차트에 반영된다. */
 const ChartSettingsDialog = ({
-    open, onClose, indicatorOptions, onToggleIndicator, onIndicatorChange, onIndicatorReset,
+    open, onClose, indicatorOptions, onToggleIndicator, onIndicatorChange, onIndicatorReset, paneItems, onPaneMove,
     drawingToolbar, onDrawingToolbarChange,
     logScale, onLogScaleChange, percentScale, onPercentScaleChange,
     flatByPrevClose, onFlatByPrevCloseChange, drawingCount, onClearDrawings, hiddenDrawingCount, onShowDrawings,
@@ -243,6 +273,51 @@ const ChartSettingsDialog = ({
                     </Box>
                 ))}
             </Stack>
+
+            {/* 영역이 둘 이상일 때만 순서를 바꿀 것이 있다. */}
+            {paneItems.length > 1 && (
+                <>
+                    <Divider sx={{my: 2}}/>
+                    <Typography variant="subtitle2" sx={{color: 'text.secondary', mb: 1}}>지표 영역 순서</Typography>
+                    <Typography variant="body2" sx={{color: 'text.secondary', mb: 1}}>
+                        차트 아래에 놓이는 순서입니다. 위에 적힌 지표가 차트에서도 위에 놓입니다.
+                    </Typography>
+                    <Stack>
+                        {paneItems.map((item, order) => (
+                            <Stack key={item.key} direction="row" sx={{alignItems: 'center', justifyContent: 'space-between'}}>
+                                <Typography variant="body2">{order + 1}. {item.label}</Typography>
+                                <Stack direction="row">
+                                    <Tooltip title="위로">
+                                        {/* 끝에 있는 단추는 누를 수 없지만 말풍선은 뜨도록 한 겹 감싼다. */}
+                                        <span>
+                                            <IconButton
+                                                size="small"
+                                                aria-label={`${item.label} 영역을 위로`}
+                                                disabled={order === 0}
+                                                onClick={() => onPaneMove(item.key, -1)}
+                                            >
+                                                <ArrowUpwardIcon fontSize="inherit"/>
+                                            </IconButton>
+                                        </span>
+                                    </Tooltip>
+                                    <Tooltip title="아래로">
+                                        <span>
+                                            <IconButton
+                                                size="small"
+                                                aria-label={`${item.label} 영역을 아래로`}
+                                                disabled={order === paneItems.length - 1}
+                                                onClick={() => onPaneMove(item.key, 1)}
+                                            >
+                                                <ArrowDownwardIcon fontSize="inherit"/>
+                                            </IconButton>
+                                        </span>
+                                    </Tooltip>
+                                </Stack>
+                            </Stack>
+                        ))}
+                    </Stack>
+                </>
+            )}
 
             <Divider sx={{my: 2}}/>
 

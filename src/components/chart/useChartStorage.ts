@@ -10,7 +10,8 @@ import type {Drawing} from "../../lib/chart/types.ts";
 import {loadDrawings, saveDrawings} from "../../lib/chart/drawingStorage.ts";
 import {clearChartSettings, loadChartSettings} from "../../lib/chart/settingsStorage.ts";
 
-const SAVE_DELAY_MS = 500;      // 선을 끌어 옮기는 동안 매번 저장하지 않도록 마지막 변경 뒤 이만큼 기다린다
+// 선을 끌어 옮기거나 설정을 연달아 바꾸는 동안 매번 저장하지 않도록 마지막 변경 뒤 이만큼 기다린다
+const SAVE_DELAY_MS = 500;
 const SETTINGS_KEY = ['chartSettings'];
 const NO_DRAWINGS: Drawing[] = [];
 // 아무것도 바꾸지 않은 상태
@@ -21,6 +22,32 @@ const DEFAULT_SETTING: ChartSetting = {
 const LEGACY_TOOLBAR_KEY = 'drawingToolbar';    // 예전 브라우저 저장분에서 그리기 도구 모음을 숨겼다는 표시
 
 const reportSaveError = (error: unknown) => console.error(error);
+
+/**
+ * 저장을 모아서 보낸다. schedule 로 맡긴 저장은 마지막으로 맡긴 뒤 SAVE_DELAY_MS 가 지나면 한 번만 실행되고,
+ * 그 사이에 다시 맡기면 앞의 것은 버린다. flush 는 밀린 저장을 기다리지 않고 바로 실행한다.
+ */
+const useDelayedSave = () => {
+    const pending = useRef<{ timer: ReturnType<typeof setTimeout>, run: () => void } | null>(null);
+    const flush = useCallback(() => {
+        const current = pending.current;
+        if (!current) return;
+        clearTimeout(current.timer);
+        pending.current = null;
+        current.run();
+    }, []);
+    const schedule = useCallback((run: () => void) => {
+        if (pending.current) clearTimeout(pending.current.timer);
+        pending.current = {
+            run,
+            timer: setTimeout(() => {
+                pending.current = null;
+                run();
+            }, SAVE_DELAY_MS),
+        };
+    }, []);
+    return {schedule, flush};
+};
 
 /**
  * 차트 설정과 그린 선을 계정에 저장한다. (설정은 회원당 하나, 선은 회원 + 종목별)
@@ -50,15 +77,8 @@ export const useChartStorage = (assetType: AssetType | undefined, assetCode: str
     const drawings = drawingsReady ? drawingsQuery.data ?? NO_DRAWINGS : localDrawings;
 
     // 밀린 저장. 종목이 바뀌거나 화면을 떠날 때는 기다리지 않고 바로 보낸다.
-    const pendingSave = useRef<{ timer: ReturnType<typeof setTimeout>, run: () => void } | null>(null);
-    const flushSave = useCallback(() => {
-        const pending = pendingSave.current;
-        if (!pending) return;
-        clearTimeout(pending.timer);
-        pendingSave.current = null;
-        pending.run();
-    }, []);
-    useEffect(() => flushSave, [flushSave, drawingsKey]);
+    const {schedule: scheduleDrawingSave, flush: flushDrawingSave} = useDelayedSave();
+    useEffect(() => flushDrawingSave, [flushDrawingSave, drawingsKey]);
 
     const updateDrawings = (next: Drawing[]) => {
         if (!assetType || !assetCode || !drawingsReady) {
@@ -66,17 +86,9 @@ export const useChartStorage = (assetType: AssetType | undefined, assetCode: str
             return;
         }
         queryClient.setQueryData(drawingsKey, next);
-        if (pendingSave.current) clearTimeout(pendingSave.current.timer);
-        const run = () => {
+        scheduleDrawingSave(() => {
             saveChartDrawings(assetType, assetCode, next).catch(reportSaveError);
-        };
-        pendingSave.current = {
-            run,
-            timer: setTimeout(() => {
-                pendingSave.current = null;
-                run();
-            }, SAVE_DELAY_MS),
-        };
+        });
     };
 
     // 예전에 브라우저에 저장해 둔 선을 계정으로 한 번 옮긴다. 서버에 이미 선이 있으면 서버 것을 쓴다.
@@ -114,16 +126,26 @@ export const useChartStorage = (assetType: AssetType | undefined, assetCode: str
     // 영역 크기. 바꾼 적이 없으면 null 이고 차트가 기본 크기를 쓴다
     const volumeRatio = settingQuery.data?.volumeRatio ?? null;
     const mainHeight = settingQuery.data?.mainHeight ?? null;
+    // 별도 영역 지표를 놓는 순서. 바꾼 적이 없으면 null 이고 정해진 순서를 쓴다
+    const paneOrder = settingQuery.data?.paneOrder ?? null;
+
+    // 밀린 설정 저장. 화면을 떠날 때는 기다리지 않고 바로 보낸다.
+    const {schedule: scheduleSettingSave, flush: flushSettingSave} = useDelayedSave();
+    useEffect(() => flushSettingSave, [flushSettingSave]);
 
     // 설정은 통째로 저장하므로, 바꾸는 항목 말고는 지금 값을 그대로 실어 보낸다.
+    // 화면은 바로 바꾸고, 저장은 연달아 바꾼 것을 모아 마지막 상태만 한 번 보낸다.
     const saveSetting = (change: Partial<ChartSetting>) => {
         if (!settingReady) return;
         const next: ChartSetting = {
             indicators, chartType, logScale, percentScale, drawingToolbar, flatByPrevClose, magnet,
-            magnetIndicators, volumeRatio, mainHeight, ...change,
+            magnetIndicators, volumeRatio, mainHeight, paneOrder, ...change,
         };
         queryClient.setQueryData(SETTINGS_KEY, next);
-        saveChartSetting(next).catch(reportSaveError);
+        scheduleSettingSave(() => {
+            // 보내는 시점에 화면이 쓰고 있는 설정을 보낸다
+            saveChartSetting(queryClient.getQueryData<ChartSetting>(SETTINGS_KEY) ?? next).catch(reportSaveError);
+        });
     };
 
     /** 지표 하나의 바꾼 내용을 고친다. 바꾼 것이 하나도 남지 않으면 그 지표를 목록에서 뺀다. */
@@ -131,7 +153,7 @@ export const useChartStorage = (assetType: AssetType | undefined, assetCode: str
         const merged = {...indicators[key], ...change};
         const rest = Object.fromEntries(Object.entries(indicators).filter(([name]) => name !== key));
         const hasOverride = typeof merged.on === 'boolean' || Array.isArray(merged.params) || Array.isArray(merged.colors)
-            || typeof merged.height === 'number';
+            || Array.isArray(merged.widths) || Array.isArray(merged.dashes) || typeof merged.height === 'number';
         saveSetting({indicators: hasOverride ? {...rest, [key]: merged} : rest});
     };
 
@@ -141,10 +163,12 @@ export const useChartStorage = (assetType: AssetType | undefined, assetCode: str
     };
 
     /**
-     * 지표의 설정값(기간 등)이나 선 색을 바꾼다. 준 항목만 바뀌고, null 을 주면 저장한 값을 지워 기본값으로 돌린다.
-     * 선을 지울 때처럼 둘이 함께 바뀌는 경우는 한 번에 준다.
+     * 지표의 설정값(기간 등)이나 선 모양(색·굵기·점선)을 바꾼다. 준 항목만 바뀌고, null 을 주면 저장한 값을 지워
+     * 기본값으로 돌린다. 선을 지울 때처럼 여럿이 함께 바뀌는 경우는 한 번에 준다.
      */
-    const setIndicatorValues = (key: string, change: Pick<ChartIndicatorSetting, 'params' | 'colors'>) => {
+    const setIndicatorValues = (
+        key: string, change: Pick<ChartIndicatorSetting, 'params' | 'colors' | 'widths' | 'dashes'>,
+    ) => {
         changeIndicator(key, change);
     };
 
@@ -159,6 +183,7 @@ export const useChartStorage = (assetType: AssetType | undefined, assetCode: str
     const setVolumeRatio = (ratio: number | null) => saveSetting({volumeRatio: ratio});
     const setMainHeight = (height: number | null) => saveSetting({mainHeight: height});
     const setIndicatorHeight = (key: string, height: number | null) => changeIndicator(key, {height});
+    const setPaneOrder = (order: string[]) => saveSetting({paneOrder: order});
 
     // 예전에 브라우저에 저장해 둔 설정(끈 항목 목록)을 계정으로 한 번 옮긴다. 서버에 이미 설정이 있으면 서버 것을 쓴다.
     const serverSetting = settingQuery.data;
@@ -195,5 +220,6 @@ export const useChartStorage = (assetType: AssetType | undefined, assetCode: str
         volumeRatio, setVolumeRatio,
         mainHeight, setMainHeight,
         setIndicatorHeight,
+        paneOrder, setPaneOrder,
     };
 };

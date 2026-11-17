@@ -5,6 +5,8 @@ export interface ChartIndicatorSetting {
     on?: boolean | null;        // 켜짐 여부
     params?: number[] | null;   // 설정값 (기간 등). 순서는 설정 창의 칸 순서
     colors?: number[] | null;   // 선마다의 색. 차트의 선 색 목록에서의 순번. 순서는 설정 창의 선 순서
+    widths?: number[] | null;   // 선마다의 굵기(1~3). colors 와 같은 순서
+    dashes?: boolean[] | null;  // 선마다 점선인지. colors 와 같은 순서
     height?: number | null;     // 차트 아래에 따로 영역을 차지하는 지표의 영역 높이(px)
 }
 
@@ -21,6 +23,9 @@ export interface ChartSetting {
     magnetIndicators?: boolean;     // 자석을 가격 영역의 지표 선(이동평균선 등)에도 붙일지. 비우면 붙이지 않는다
     volumeRatio?: number | null;    // 가격+거래량 높이 중 거래량 영역의 비율. 비우면 기본 비율
     mainHeight?: number | null;     // 가격+거래량 영역의 높이(px). 비우면 화면이 정한 높이
+    // 차트 아래에 따로 영역을 차지하는 지표(RSI, MACD 등)를 위에서 아래로 놓는 순서. 지표 이름의 목록이고,
+    // 여기 없는 지표는 그 뒤에 정해진 순서로 놓인다. 비우면 정해진 순서
+    paneOrder?: string[] | null;
 }
 
 /** 회원이 한 종목 차트에 그린 선 */

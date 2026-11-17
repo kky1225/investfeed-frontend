@@ -1,14 +1,27 @@
 import {useState} from "react";
+import Box from "@mui/material/Box";
 import ButtonBase from "@mui/material/ButtonBase";
+import Divider from "@mui/material/Divider";
 import Popover from "@mui/material/Popover";
 import Stack from "@mui/material/Stack";
 import Tooltip from "@mui/material/Tooltip";
+import {ChartToolbarButton} from "./ChartToolbarControls.tsx";
 import {chartColorVars, LINE_COLOR_VARS} from "./chartColors.ts";
+import {SERIES_WIDTHS} from "../../lib/chart/types.ts";
+
+/** 선의 굵기와 점선. 주면 색 아래에 굵기·점선을 고르는 줄이 더 나온다 */
+export interface ChartLineStroke {
+    width: number,
+    dashed: boolean,
+    onWidthChange: (width: number) => void,
+    onDashedChange: (dashed: boolean) => void,
+}
 
 interface ChartColorPickerProps {
     label: string,      // 어느 선의 색인지 (예: "이동평균선 선 1")
     value: number,      // 선 색 목록에서의 순번
     onChange: (value: number) => void,
+    stroke?: ChartLineStroke,
 }
 
 const SWATCH_SIZE = 16;
@@ -21,16 +34,23 @@ const swatchSx = (order: number) => ({
     backgroundColor: `var(${LINE_COLOR_VARS[order % LINE_COLOR_VARS.length]})`,
 });
 
-/** 선 색 하나를 고르는 단추. 누르면 차트의 선 색 목록이 뜨고 그 안에서만 고른다. */
-const ChartColorPicker = ({label, value, onChange}: ChartColorPickerProps) => {
+// 골라 둔 항목의 표시 (도형 꾸미기 패널과 같다)
+const selectedSx = {color: 'primary.main', backgroundColor: 'action.selected'};
+
+/**
+ * 선 하나의 모양을 고르는 단추. 누르면 차트의 선 색 목록이 뜨고 그 안에서만 고른다.
+ * stroke 를 주면 굵기와 점선도 같은 자리에서 고른다. 색을 고르면 닫히고, 굵기·점선은 고르는 동안 열려 있다.
+ */
+const ChartColorPicker = ({label, value, onChange, stroke}: ChartColorPickerProps) => {
     const [anchor, setAnchor] = useState<HTMLElement | null>(null);
     const selected = value % LINE_COLOR_VARS.length;
+    const title = stroke ? `${label} 색·굵기` : `${label} 색`;
 
     return (
         <>
-            <Tooltip title={`${label} 색`}>
+            <Tooltip title={title}>
                 <ButtonBase
-                    aria-label={`${label} 색`}
+                    aria-label={title}
                     aria-haspopup="true"
                     onClick={event => setAnchor(event.currentTarget)}
                     sx={{...swatchSx(value), border: 1, borderColor: 'divider', flexShrink: 0}}
@@ -64,6 +84,38 @@ const ChartColorPicker = ({label, value, onChange}: ChartColorPickerProps) => {
                         />
                     ))}
                 </Stack>
+                {stroke && (
+                    <>
+                        <Divider/>
+                        <Stack direction="row" spacing={0.5} sx={{px: 1, py: 0.5, alignItems: 'center'}}>
+                            {SERIES_WIDTHS.map(width => (
+                                <Tooltip key={width} title={`굵기 ${width}`}>
+                                    <ChartToolbarButton
+                                        aria-label={`굵기 ${width}`}
+                                        aria-pressed={width === stroke.width}
+                                        onClick={() => {
+                                            if (width !== stroke.width) stroke.onWidthChange(width);
+                                        }}
+                                        sx={width === stroke.width ? selectedSx : undefined}
+                                    >
+                                        <Box sx={{width: 16, height: width + 1, backgroundColor: 'currentColor', borderRadius: 1}}/>
+                                    </ChartToolbarButton>
+                                </Tooltip>
+                            ))}
+                            <Divider orientation="vertical" flexItem sx={{my: 0.5}}/>
+                            <Tooltip title={stroke.dashed ? '실선으로' : '점선으로'}>
+                                <ChartToolbarButton
+                                    aria-label="점선"
+                                    aria-pressed={stroke.dashed}
+                                    onClick={() => stroke.onDashedChange(!stroke.dashed)}
+                                    sx={stroke.dashed ? selectedSx : undefined}
+                                >
+                                    <Box sx={{width: 16, borderTop: '2px dashed', borderColor: 'currentColor'}}/>
+                                </ChartToolbarButton>
+                            </Tooltip>
+                        </Stack>
+                    </>
+                )}
             </Popover>
         </>
     );

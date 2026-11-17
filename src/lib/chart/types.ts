@@ -138,11 +138,27 @@ export type IndicatorType =
     | 'volumeAverage'                               // 거래량 영역
     | 'rsi' | 'macd' | 'stochastic' | 'obv' | 'atr';    // 별도 영역
 
+/** 이동평균선·지표 선의 굵기 단계 (설정 창에서 고르는 값, 백엔드 검증과 같은 범위 안) */
+export const SERIES_WIDTHS = [1, 2, 3];
+
+/** 선 하나를 긋는 모양. 비운 항목은 굵기 1, 실선 */
+export interface SeriesStroke {
+    width?: number,     // SERIES_WIDTHS 중 하나
+    dashed?: boolean,
+}
+
+/** 지표의 선 하나가 그려지는 모양: 색(style.lineColors 안에서의 순번) · 굵기 · 점선 */
+export interface LineLook extends Required<SeriesStroke> {
+    color: number,
+}
+
 /** 켜 둔 지표 하나와 그 설정값. params 의 순서와 뜻은 INDICATORS 의 params 를 따른다. 비우면 기본값 */
 export interface IndicatorConfig {
     type: IndicatorType,
     params?: number[],
     colors?: number[],  // 선마다의 색(style.lineColors 안에서의 순번). 순서와 뜻은 INDICATORS 의 colors 를 따른다. 비우면 기본 색
+    widths?: number[],  // 선마다의 굵기. colors 와 같은 순서. 비우면 1
+    dashes?: boolean[], // 선마다 점선인지. colors 와 같은 순서. 비우면 그 선의 기본 모양
 }
 
 /**

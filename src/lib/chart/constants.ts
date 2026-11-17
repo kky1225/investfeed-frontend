@@ -16,7 +16,8 @@ export const PADDING_TOP = 8;
 export const FONT_SIZE = 11;
 export const AXIS_LABEL_OFFSET = 6;
 export const BODY_RATIO = 0.7;          // 한 칸 중 캔들 몸통이 차지하는 비율
-export const SERIES_LINE_WIDTH = 1;     // 이동평균선·지표선 굵기. 캔들을 가리지 않게 가늘게 둔다
+export const SERIES_LINE_WIDTH = 1;     // 이동평균선·지표선 굵기(1단계). 캔들을 가리지 않게 가늘게 둔다
+export const SERIES_DASH = [4, 3];      // 점선으로 긋는 이동평균선·지표선의 무늬
 export const DRAG_THRESHOLD = 3;        // 이만큼 움직여야 드래그로 본다
 
 // 축 위에 덧붙이는 라벨 (십자선, 현재가, 가격선, 수평선)

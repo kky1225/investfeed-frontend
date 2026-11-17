@@ -27,7 +27,7 @@ import {
 import {
     Candle, CandleInterval, CHART_TYPES, ChartType, ContextMenuRequest, Drawing, DrawingState, DrawingStyle,
     FIBONACCI_DEFAULT_LEVELS, DrawingTool, IndicatorConfig, IndicatorType,
-    MAGNET_MODES, MagnetMode, MAX_DRAWING_TEXT_LENGTH, PaneResize, PriceLine, TextRequest, TimeUnit,
+    MAGNET_MODES, MagnetMode, MAX_DRAWING_TEXT_LENGTH, PaneResize, PriceLine, SeriesStroke, TextRequest, TimeUnit,
 } from "../../lib/chart/types.ts";
 import ChartTypeSelect from "./ChartTypeSelect.tsx";
 import type {AssetType} from "../../type/NotificationType.ts";
@@ -60,7 +60,9 @@ export interface CandleChartProps {
 const DEFAULT_MOVING_AVERAGES = [5, 20, 60, 120];
 const DEFAULT_INDICATORS = Object.keys(INDICATORS) as IndicatorType[];
 const NO_PRICE_LINES: PriceLine[] = [];
-const NO_MOVING_AVERAGES: { periods: number[], colors: number[] } = {periods: [], colors: []};
+const NO_MOVING_AVERAGES: { periods: number[], colors: number[], strokes: SeriesStroke[] } = {
+    periods: [], colors: [], strokes: [],
+};
 
 // 설정에 저장하는 이동평균선의 key. 선 전체를 한 번에 켜고 끄며, 설정값은 선마다의 기간이다. 보조지표의 key 는 종류 이름
 const AVERAGE_KEY = 'average';
@@ -80,7 +82,7 @@ const sizeWithin = (value: number | null | undefined, limit: { min: number, max:
     typeof value === 'number' && Number.isFinite(value) ? Math.min(limit.max, Math.max(limit.min, value)) : undefined
 );
 
-const sameNumbers = (a: number[], b: number[]) => a.length === b.length && a.every((value, order) => value === b[order]);
+const sameValues = <T,>(a: T[], b: T[]) => a.length === b.length && a.every((value, order) => value === b[order]);
 
 // Alt 와 함께 누르는 그리기 단축키 (KeyboardEvent.code)
 const TOOL_SHORTCUTS: Record<string, DrawingTool | undefined> = {
@@ -131,6 +133,7 @@ const CandleChart = ({
         volumeRatio: savedVolumeRatio, setVolumeRatio,
         mainHeight: savedMainHeight, setMainHeight,
         setIndicatorHeight,
+        paneOrder: savedPaneOrder, setPaneOrder,
     } = useChartStorage(assetType, assetCode);
     // 비교 종목. 저장하지 않고 화면을 여는 동안만 들고 있으며, 종목이 바뀌면 비운다.
     const {
@@ -183,7 +186,7 @@ const CandleChart = ({
      * 기본 비율과 같으면 저장하지 않는다(비워 둔다).
      */
     const changeSelectedLevels = (levels: number[]) => {
-        const stored = sameNumbers(levels, FIBONACCI_DEFAULT_LEVELS) ? null : levels;
+        const stored = sameValues(levels, FIBONACCI_DEFAULT_LEVELS) ? null : levels;
         setNewLevels(stored);
         changeDrawings(drawings.map(drawing => (
             drawing.id === selectedId && drawing.type === 'fibonacci' ? {...drawing, levels: stored} : drawing
@@ -303,36 +306,69 @@ const CandleChart = ({
     const indicatorOptions = useMemo<ChartIndicatorOption[]>(() => entries.map(entry => {
         const saved = indicatorSettings[entry.key];
         const {lines} = entry.shape;
-        const resolved = resolveIndicator(entry.shape, saved?.params, saved?.colors);
-        const initial = resolveIndicator(entry.shape, null, null);
+        const resolved = resolveIndicator(entry.shape, saved);
+        const initial = resolveIndicator(entry.shape);
         return {
             key: entry.key,
             label: entry.label,
             on: saved?.on ?? entry.defaultOn,
             params: resolved.paramSpecs.map((spec, order) => ({...spec, value: resolved.params[order]})),
-            colors: resolved.colorSpecs.map((spec, order) => ({label: spec.label, value: resolved.colors[order]})),
+            colors: resolved.colorSpecs.map((spec, order) => ({
+                label: spec.label, value: resolved.colors[order], width: resolved.widths[order], dashed: resolved.dashes[order],
+            })),
             lines: lines
                 ? {canAdd: resolved.params.length < lines.max, canRemove: resolved.params.length > lines.min}
                 : null,
-            customized: !sameNumbers(resolved.params, initial.params) || !sameNumbers(resolved.colors, initial.colors),
+            customized: !sameValues(resolved.params, initial.params) || !sameValues(resolved.colors, initial.colors)
+                || !sameValues(resolved.widths, initial.widths) || !sameValues(resolved.dashes, initial.dashes),
         };
     }), [entries, indicatorSettings]);
 
-    // 엔진에 넘길 것: 켜 둔 이동평균선의 기간과 색, 켜 둔 보조지표의 설정값과 색
+    // 엔진에 넘길 것: 켜 둔 이동평균선의 기간과 선 모양, 켜 둔 보조지표의 설정값과 선 모양
     const activeAverages = useMemo(() => {
         const option = indicatorOptions.find(item => item.key === AVERAGE_KEY);
         return option?.on
-            ? {periods: option.params.map(param => param.value), colors: option.colors.map(color => color.value)}
+            ? {
+                periods: option.params.map(param => param.value),
+                colors: option.colors.map(color => color.value),
+                strokes: option.colors.map(({width, dashed}) => ({width, dashed})),
+            }
             : NO_MOVING_AVERAGES;
     }, [indicatorOptions]);
-    const activeIndicators = useMemo<IndicatorConfig[]>(() => indicatorOptions
-        .filter(option => option.on && option.key !== AVERAGE_KEY)
-        .map(option => ({
-            type: option.key as IndicatorType,
-            params: option.params.map(param => param.value),
-            colors: option.colors.map(color => color.value),
-        })),
-    [indicatorOptions]);
+    // 별도 영역 지표는 저장해 둔 순서대로 놓는다. 그 순서에 없는 지표는 뒤에 정해진 순서로 놓인다.
+    const activeIndicators = useMemo<IndicatorConfig[]>(() => {
+        const configs = indicatorOptions
+            .filter(option => option.on && option.key !== AVERAGE_KEY)
+            .map(option => ({
+                type: option.key as IndicatorType,
+                params: option.params.map(param => param.value),
+                colors: option.colors.map(color => color.value),
+                widths: option.colors.map(color => color.width),
+                dashes: option.colors.map(color => color.dashed),
+            }));
+        const isPane = (config: IndicatorConfig) => INDICATORS[config.type].placement === 'pane';
+        const rank = (config: IndicatorConfig) => {
+            const order = savedPaneOrder?.indexOf(config.type) ?? -1;
+            return order < 0 ? Number.MAX_SAFE_INTEGER : order;
+        };
+        return [
+            ...configs.filter(config => !isPane(config)),
+            ...configs.filter(isPane).sort((a, b) => rank(a) - rank(b)),
+        ];
+    }, [indicatorOptions, savedPaneOrder]);
+    // 설정 창의 "지표 영역 순서"에 보일 것: 켜 둔 별도 영역 지표를 차트에 놓인 순서대로
+    const paneItems = activeIndicators
+        .filter(config => INDICATORS[config.type].placement === 'pane')
+        .map(config => ({key: config.type as string, label: INDICATORS[config.type].label}));
+    /** 지표 영역 하나를 한 칸 위나 아래로 옮긴다. 꺼 둔 지표의 순서는 뒤에 그대로 남긴다. */
+    const movePane = (key: string, step: -1 | 1) => {
+        const keys = paneItems.map(item => item.key);
+        const from = keys.indexOf(key);
+        const to = from + step;
+        if (from < 0 || to < 0 || to >= keys.length) return;
+        [keys[from], keys[to]] = [keys[to], keys[from]];
+        setPaneOrder([...keys, ...(savedPaneOrder ?? []).filter(item => !keys.includes(item))]);
+    };
 
     // 영역 크기: 저장된 값에, 지금 경계를 끌어 바꾸고 있는 값을 덮어쓴다. 끄는 동안에는 저장하지 않고 손을 뗄 때 저장한다.
     // (손을 뗀 뒤에도 그 값을 들고 있는다. 저장된 값이 뒤늦게 바뀌는 사이에 높이가 잠깐 되돌아가지 않게 하기 위함)
@@ -430,7 +466,7 @@ const CandleChart = ({
     }, [seriesKey]);
 
     useEffect(() => {
-        engineRef.current?.setMovingAverages(activeAverages.periods, activeAverages.colors);
+        engineRef.current?.setMovingAverages(activeAverages.periods, activeAverages.colors, activeAverages.strokes);
     }, [activeAverages]);
 
     useEffect(() => {
@@ -624,7 +660,9 @@ const CandleChart = ({
                 indicatorOptions={indicatorOptions}
                 onToggleIndicator={toggleIndicator}
                 onIndicatorChange={setIndicatorValues}
-                onIndicatorReset={key => setIndicatorValues(key, {params: null, colors: null})}
+                onIndicatorReset={key => setIndicatorValues(key, {params: null, colors: null, widths: null, dashes: null})}
+                paneItems={paneItems}
+                onPaneMove={movePane}
                 drawingToolbar={toolbarVisible}
                 onDrawingToolbarChange={setDrawingToolbar}
                 logScale={logScale}

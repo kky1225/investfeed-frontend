@@ -1,6 +1,6 @@
 import {
     Anchor, Candle, ChartStyle, ChartType, Comparison, ContextMenuRequest, Drawing, DrawingStyle, DrawingTool, IndicatorConfig, IndicatorType, MagnetMode,
-    CandleInterval, PaneResize, PaneSizes, PriceLine, TextRequest, TimeUnit,
+    CandleInterval, PaneResize, PaneSizes, PriceLine, SeriesStroke, TextRequest, TimeUnit,
 } from "./types.ts";
 import {bucketEnd} from "./realtime.ts";
 import {heikinAshi, movingAverage, Series} from "./indicators.ts";
@@ -123,6 +123,7 @@ export class CandleChartEngine {
     private averagePeriods: number[] = [];
     private averages: Series[] = [];        // averagePeriods 와 같은 순서
     private averageColors: number[] = [];   // 이동평균선마다의 색 순번. 비어 있거나 모자라면 순서대로의 색
+    private averageStrokes: SeriesStroke[] = [];    // 이동평균선마다의 굵기·점선
     private indicatorConfigs: IndicatorConfig[] = [];
     // indicatorConfigs 를 계산해 그려지는 자리별로 나눈 것
     private paneIndicators: PaneIndicator[] = [];
@@ -282,11 +283,12 @@ export class CandleChartEngine {
 
     /**
      * 그릴 이동평균선의 기간들 (예: [5, 20, 60, 120])과 선마다의 색(style.lineColors 안에서의 순번).
-     * 색을 주지 않으면 순서대로의 색을 쓴다.
+     * 색을 주지 않으면 순서대로의 색을 쓴다. strokes 는 선마다의 굵기·점선이고, 주지 않으면 굵기 1 의 실선이다.
      */
-    setMovingAverages(periods: number[], colors: number[] = []) {
+    setMovingAverages(periods: number[], colors: number[] = [], strokes: SeriesStroke[] = []) {
         this.averagePeriods = periods;
         this.averageColors = colors;
+        this.averageStrokes = strokes;
         this.computeSeries();
         this.scheduleDraw();
     }
@@ -1169,6 +1171,7 @@ export class CandleChartEngine {
             range: visibleRange(this.resolveView(), this.candles.length, this.plotWidth()),
             averages: this.averages,
             averageColors: this.averageColors,
+            averageStrokes: this.averageStrokes,
             indicators: this.paneIndicators,
             priceOverlays: this.priceOverlays,
             volumeOverlays: this.volumeOverlays,

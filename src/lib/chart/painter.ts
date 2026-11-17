@@ -1,6 +1,6 @@
-import {Candle, ChartStyle} from "./types.ts";
+import {Candle, ChartStyle, SeriesStroke} from "./types.ts";
 import {Series} from "./indicators.ts";
-import {BODY_RATIO, FONT_SIZE, SERIES_LINE_WIDTH} from "./constants.ts";
+import {BODY_RATIO, FONT_SIZE, SERIES_DASH, SERIES_LINE_WIDTH} from "./constants.ts";
 import {isNumber, VisibleRange} from "./layout.ts";
 
 /**
@@ -54,19 +54,19 @@ export class Painter {
 
     /**
      * 지표 값을 선으로 잇는다. 화면 가장자리에서 끊겨 보이지 않게 양옆 한 칸씩 더 잇는다.
-     * 값이 캔들보다 길면(앞으로 밀어 그리는 지표) 마지막 캔들 뒤의 빈 구간까지 잇는다. dash 를 주면 점선,
+     * 값이 캔들보다 길면(앞으로 밀어 그리는 지표) 마지막 캔들 뒤의 빈 구간까지 잇는다. stroke 로 굵기와 점선을 정하고,
      * startsAt 을 주면 그 순번들에서 선을 끊고 새로 시작한다(날마다 새로 계산하는 지표).
      */
     strokeSeries(
         values: Series, range: VisibleRange, toY: (value: number) => number, color: string,
-        dash?: number[], startsAt?: Set<number>,
+        stroke?: SeriesStroke, startsAt?: Set<number>,
     ) {
         const ctx = this.ctx;
         const {start, end} = this.seriesSpan(values, range);
         ctx.strokeStyle = color;
-        ctx.lineWidth = Math.max(1, Math.round(SERIES_LINE_WIDTH * this.dpr));
+        ctx.lineWidth = Math.max(1, Math.round(SERIES_LINE_WIDTH * (stroke?.width ?? 1) * this.dpr));
         ctx.lineJoin = 'round';
-        ctx.setLineDash(dash ? dash.map(length => this.px(length)) : []);
+        ctx.setLineDash(stroke?.dashed ? SERIES_DASH.map(length => this.px(length)) : []);
         ctx.beginPath();
         let started = false;
         for (let index = start; index < end; index++) {

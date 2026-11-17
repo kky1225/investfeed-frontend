@@ -1,4 +1,4 @@
-import {Candle, ChartStyle, IndicatorConfig, IndicatorType, TimeUnit} from "./types.ts";
+import {Candle, ChartStyle, IndicatorConfig, IndicatorType, LineLook, SERIES_WIDTHS, TimeUnit} from "./types.ts";
 import {
     averageTrueRange, bollinger, exponentialMovingAverage, ichimoku, macd, onBalanceVolume, relativeStrength, Series,
     stochastic, volumeAverage, volumeWeightedAverage,
@@ -20,7 +20,6 @@ const STOCHASTIC_LEVELS = [80, 20];
 const MAX_LINES = 8;                // 선 개수를 바꿀 수 있는 지표(지수이동평균)의 최대 선 수
 
 const CLOUD_FILL_ALPHA = 0.12;      // 일목균형표의 구름 채움
-const EMA_DASH = [4, 3];            // 지수이동평균은 점선으로 그려 단순 이동평균선과 구분한다
 const LINE_PANE_PADDING = 0.1;      // 값의 범위가 정해져 있지 않은 선 지표(OBV, ATR)의 위아래 여백 비율
 const LINE_PANE_TICKS = 2;
 
@@ -86,10 +85,14 @@ export interface IndicatorContext {
     formatPrice: (value: number) => string,     // 캔들 가격과 같은 자릿수의 표기. 가격 단위의 지표(ATR)가 쓴다
 }
 
-/** 사용자가 색을 바꿀 수 있는 선 하나. 색은 style.lineColors 안에서의 순번 */
+/** 사용자가 모양(색·굵기·점선)을 바꿀 수 있는 선 하나. 색은 style.lineColors 안에서의 순번 */
 export interface IndicatorColor {
     label: string,
     default: number,
+    dashed?: boolean,   // 처음 상태가 점선인지. 비우면 실선
+    // 저장된 색이 없을 때 따를 다른 선의 순번. 한 색으로 칠하던 선들을 나눈 지표(볼린저밴드)가
+    // 예전에 저장한 색을 그대로 이어 쓰게 한다
+    inherit?: number,
 }
 
 /** 지표에서 사용자가 바꿀 수 있는 것의 모양. 설정 창과 저장된 값의 해석이 이것을 따른다. */
@@ -107,12 +110,23 @@ export interface IndicatorDefinition extends IndicatorShape {
     label: string,
     placement: IndicatorInstance['placement'],
     defaultOn: boolean,     // 처음 쓰는 사람에게 켜져 있는지
-    /** params 와 colors 는 resolveIndicator 를 거친 값(개수와 범위가 맞음) */
-    create: (candles: Candle[], params: number[], colors: number[], context: IndicatorContext) => IndicatorInstance,
+    /** params 와 looks(colors 와 같은 순서의 선 모양)는 resolveIndicator 를 거친 값(개수와 범위가 맞음) */
+    create: (candles: Candle[], params: number[], looks: LineLook[], context: IndicatorContext) => IndicatorInstance,
 }
 
 const period = (label: string, value: number): IndicatorParam => ({label, default: value, min: 1, max: 500, step: 1});
-const swatch = (label: string, order: number): IndicatorColor => ({label, default: order});
+const swatch = (label: string, order: number, more?: Pick<IndicatorColor, 'dashed' | 'inherit'>): IndicatorColor => (
+    {label, default: order, ...more}
+);
+
+/** 선 하나를 정해 둔 모양(색·굵기·점선)대로 긋는다. */
+const strokeLook = (
+    painter: Painter, style: ChartStyle, values: Series, range: VisibleRange, toY: (value: number) => number,
+    look: LineLook, startsAt?: Set<number>,
+) => painter.strokeSeries(values, range, toY, lineColor(style, look.color), look, startsAt);
+
+/** 선의 색. 값 표시의 글자색으로도 쓴다 */
+const colorOf = (style: ChartStyle, look: LineLook): string => lineColor(style, look.color);
 
 export const formatIndicator = (value: number | null | undefined): string =>
     isNumber(value) ? value.toLocaleString('ko-KR', {maximumFractionDigits: 2}) : '-';
@@ -123,12 +137,12 @@ const formatWith = (format: (value: number) => string, value: number | null | un
 /** 0~100 범위의 선 지표(RSI, 스토캐스틱)가 함께 쓰는 그리기 */
 const drawPercentPane = (
     {painter, range, style, plotWidth, top, bottom, scaleTop, scaleBottom, guide}: PaneDrawContext,
-    levels: number[], lines: [Series, number][],
+    levels: number[], lines: [Series, LineLook][],
 ) => {
     const toY = createLinearScale(0, 100, scaleTop, scaleBottom);
     levels.forEach(level => guide(toY(level), String(level)));
     painter.clipped(top, bottom, plotWidth, () => {
-        lines.forEach(([values, color]) => painter.strokeSeries(values, range, toY, lineColor(style, color)));
+        lines.forEach(([values, look]) => strokeLook(painter, style, values, range, toY, look));
     });
     return {min: 0, max: 100};
 };
@@ -139,7 +153,7 @@ const drawPercentPane = (
  */
 const drawLinePane = (
     {painter, range, style, plotWidth, top, bottom, scaleTop, scaleBottom, guide}: PaneDrawContext,
-    values: Series, color: number, format: (value: number) => string,
+    values: Series, look: LineLook, format: (value: number) => string,
 ) => {
     const visible = values.slice(range.from, range.from + range.count).filter(isNumber);
     const lowest = visible.length > 0 ? Math.min(...visible) : 0;
@@ -150,7 +164,7 @@ const drawLinePane = (
     const toY = createLinearScale(min, max, scaleTop, scaleBottom);
     niceTicks(min, max, LINE_PANE_TICKS).values.forEach(value => guide(toY(value), format(value)));
     painter.clipped(top, bottom, plotWidth, () => {
-        painter.strokeSeries(values, range, toY, lineColor(style, color));
+        strokeLook(painter, style, values, range, toY, look);
     });
     return {min, max};
 };
@@ -162,7 +176,7 @@ const ichimokuDefinition: IndicatorDefinition = {
     params: [period('전환선', 9), period('기준선', 26), period('선행스팬2', 52)],
     // 선행스팬 두 개와 구름은 상승색·하락색으로 뜻을 나타내므로 바꿀 수 없다.
     colors: [swatch('전환선', 2), swatch('기준선', 5), swatch('후행스팬', 3)],
-    create: (candles, [conversionPeriod, basePeriod, spanPeriod], [conversionColor, baseColor, laggingColor]) => {
+    create: (candles, [conversionPeriod, basePeriod, spanPeriod], [conversionLook, baseLook, laggingLook]) => {
         const {conversion, base, spanA, spanB, lagging} = ichimoku(candles, conversionPeriod, basePeriod, spanPeriod);
         return {
             placement: 'price',
@@ -202,14 +216,14 @@ const ichimokuDefinition: IndicatorDefinition = {
 
                 painter.strokeSeries(spanA, range, toY, style.upColor);
                 painter.strokeSeries(spanB, range, toY, style.downColor);
-                painter.strokeSeries(lagging, range, toY, lineColor(style, laggingColor));
-                painter.strokeSeries(base, range, toY, lineColor(style, baseColor));
-                painter.strokeSeries(conversion, range, toY, lineColor(style, conversionColor));
+                strokeLook(painter, style, lagging, range, toY, laggingLook);
+                strokeLook(painter, style, base, range, toY, baseLook);
+                strokeLook(painter, style, conversion, range, toY, conversionLook);
             },
             legend: (index, style, format) => [
                 [`일목 ${conversionPeriod}·${basePeriod}·${spanPeriod}`, style.textColor],
-                [`전환 ${formatWith(format, conversion[index])}`, lineColor(style, conversionColor)],
-                [`기준 ${formatWith(format, base[index])}`, lineColor(style, baseColor)],
+                [`전환 ${formatWith(format, conversion[index])}`, colorOf(style, conversionLook)],
+                [`기준 ${formatWith(format, base[index])}`, colorOf(style, baseLook)],
                 [`선행1 ${formatWith(format, spanA[index])}`, textColorOf(style, style.upColor)],
                 [`선행2 ${formatWith(format, spanB[index])}`, textColorOf(style, style.downColor)],
             ],
@@ -222,22 +236,21 @@ const emaDefinition: IndicatorDefinition = {
     placement: 'price',
     defaultOn: false,
     params: [period('선 1', 12), period('선 2', 26)],
-    colors: [swatch('선 1', 0), swatch('선 2', 1)],
+    // 단순 이동평균선과 구분되게 처음에는 점선으로 그린다.
+    colors: [swatch('선 1', 0, {dashed: true}), swatch('선 2', 1, {dashed: true})],
     lines: {min: 1, max: MAX_LINES},
-    create: (candles, periods, colors) => {
+    create: (candles, periods, looks) => {
         const lines = periods.map(length => exponentialMovingAverage(candles, length));
         return {
             placement: 'price',
             series: lines,
             draw: ({painter, range, style, toY}) => {
-                lines.forEach((values, order) => {
-                    painter.strokeSeries(values, range, toY, lineColor(style, colors[order]), EMA_DASH);
-                });
+                lines.forEach((values, order) => strokeLook(painter, style, values, range, toY, looks[order]));
             },
             legend: (index, style, format) => [
                 ['지수이평', style.textColor],
                 ...lines.map((values, order): LegendItem => (
-                    [`${periods[order]} ${formatWith(format, values[index])}`, lineColor(style, colors[order])]
+                    [`${periods[order]} ${formatWith(format, values[index])}`, colorOf(style, looks[order])]
                 )),
             ],
         };
@@ -250,7 +263,7 @@ const vwapDefinition: IndicatorDefinition = {
     defaultOn: false,
     params: [],
     colors: [swatch('선', 2)],
-    create: (candles, _params, [vwapColor], {timeUnit}) => {
+    create: (candles, _params, [vwapLook], {timeUnit}) => {
         // 일봉 이상에서는 하루가 캔들 한 개라 계산할 것이 없으므로 그리지 않는다.
         const values = timeUnit === 'minute' ? volumeWeightedAverage(candles) : [];
         // 날이 바뀌어 새로 계산을 시작하는 순번. 앞날의 선과 잇지 않는다.
@@ -262,11 +275,11 @@ const vwapDefinition: IndicatorDefinition = {
             placement: 'price',
             series: [values],
             draw: ({painter, range, style, toY}) => {
-                painter.strokeSeries(values, range, toY, lineColor(style, vwapColor), undefined, dayStarts);
+                strokeLook(painter, style, values, range, toY, vwapLook, dayStarts);
             },
             legend: (index, style, format) => values.length === 0 ? [] : [
                 ['VWAP', style.textColor],
-                [formatWith(format, values[index]), lineColor(style, vwapColor)],
+                [formatWith(format, values[index]), colorOf(style, vwapLook)],
             ],
         };
     },
@@ -278,15 +291,15 @@ const obvDefinition: IndicatorDefinition = {
     defaultOn: false,
     params: [],
     colors: [swatch('선', 5)],
-    create: (candles, _params, [obvColor]) => {
+    create: (candles, _params, [obvLook]) => {
         const values = onBalanceVolume(candles);
         return {
             placement: 'pane',
             format: formatVolume,
-            draw: context => drawLinePane(context, values, obvColor, formatVolume),
+            draw: context => drawLinePane(context, values, obvLook, formatVolume),
             legend: (index, style) => [
                 ['OBV', style.textColor],
-                [formatWith(formatVolume, values[index]), lineColor(style, obvColor)],
+                [formatWith(formatVolume, values[index]), colorOf(style, obvLook)],
             ],
         };
     },
@@ -298,15 +311,15 @@ const atrDefinition: IndicatorDefinition = {
     defaultOn: false,
     params: [period('기간', 14)],
     colors: [swatch('선', 1)],
-    create: (candles, [length], [atrColor], {formatPrice}) => {
+    create: (candles, [length], [atrLook], {formatPrice}) => {
         const values = averageTrueRange(candles, length);
         return {
             placement: 'pane',
             format: formatPrice,
-            draw: context => drawLinePane(context, values, atrColor, formatPrice),
+            draw: context => drawLinePane(context, values, atrLook, formatPrice),
             legend: (index, style) => [
                 [`ATR ${length}`, style.textColor],
-                [formatWith(formatPrice, values[index]), lineColor(style, atrColor)],
+                [formatWith(formatPrice, values[index]), colorOf(style, atrLook)],
             ],
         };
     },
@@ -318,14 +331,14 @@ const rsiDefinition: IndicatorDefinition = {
     defaultOn: true,
     params: [period('기간', 14)],
     colors: [swatch('선', 2)],
-    create: (candles, [length], [rsiColor]) => {
+    create: (candles, [length], [rsiLook]) => {
         const values = relativeStrength(candles, length);
         return {
             placement: 'pane',
-            draw: context => drawPercentPane(context, RSI_LEVELS, [[values, rsiColor]]),
+            draw: context => drawPercentPane(context, RSI_LEVELS, [[values, rsiLook]]),
             legend: (index, style) => [
                 [`RSI ${length}`, style.textColor],
-                [formatIndicator(values[index]), lineColor(style, rsiColor)],
+                [formatIndicator(values[index]), colorOf(style, rsiLook)],
             ],
         };
     },
@@ -338,7 +351,7 @@ const macdDefinition: IndicatorDefinition = {
     params: [period('단기', 12), period('장기', 26), period('시그널', 9)],
     // 오실레이터 막대는 상승색·하락색으로 뜻을 나타내므로 바꿀 수 없다.
     colors: [swatch('MACD', 4), swatch('시그널', 1)],
-    create: (candles, [fast, slow, signalLength], [macdColor, signalColor]) => {
+    create: (candles, [fast, slow, signalLength], [macdLook, signalLook]) => {
         const {macd: macdLine, signal, histogram} = macd(candles, fast, slow, signalLength);
         return {
             placement: 'pane',
@@ -375,8 +388,8 @@ const macdDefinition: IndicatorDefinition = {
                     }
                     ctx.globalAlpha = 1;
 
-                    painter.strokeSeries(macdLine, range, toY, lineColor(style, macdColor));
-                    painter.strokeSeries(signal, range, toY, lineColor(style, signalColor));
+                    strokeLook(painter, style, macdLine, range, toY, macdLook);
+                    strokeLook(painter, style, signal, range, toY, signalLook);
                 });
                 return {min: -extent, max: extent};
             },
@@ -384,8 +397,8 @@ const macdDefinition: IndicatorDefinition = {
                 const bar = histogram[index];
                 return [
                     [`MACD ${fast}·${slow}·${signalLength}`, style.textColor],
-                    [`MACD ${formatIndicator(macdLine[index])}`, lineColor(style, macdColor)],
-                    [`시그널 ${formatIndicator(signal[index])}`, lineColor(style, signalColor)],
+                    [`MACD ${formatIndicator(macdLine[index])}`, colorOf(style, macdLook)],
+                    [`시그널 ${formatIndicator(signal[index])}`, colorOf(style, signalLook)],
                     [
                         `오실레이터 ${formatIndicator(bar)}`,
                         !isNumber(bar) ? style.textColor : textColorOf(style, bar >= 0 ? style.upColor : style.downColor),
@@ -402,15 +415,15 @@ const stochasticDefinition: IndicatorDefinition = {
     defaultOn: false,
     params: [period('기간', 14), period('%K', 3), period('%D', 3)],
     colors: [swatch('%K', 4), swatch('%D', 1)],
-    create: (candles, [length, smoothK, smoothD], [kColor, dColor]) => {
+    create: (candles, [length, smoothK, smoothD], [kLook, dLook]) => {
         const {k, d} = stochastic(candles, length, smoothK, smoothD);
         return {
             placement: 'pane',
-            draw: context => drawPercentPane(context, STOCHASTIC_LEVELS, [[k, kColor], [d, dColor]]),
+            draw: context => drawPercentPane(context, STOCHASTIC_LEVELS, [[k, kLook], [d, dLook]]),
             legend: (index, style) => [
                 [`스토캐스틱 ${length}·${smoothK}·${smoothD}`, style.textColor],
-                [`%K ${formatIndicator(k[index])}`, lineColor(style, kColor)],
-                [`%D ${formatIndicator(d[index])}`, lineColor(style, dColor)],
+                [`%K ${formatIndicator(k[index])}`, colorOf(style, kLook)],
+                [`%D ${formatIndicator(d[index])}`, colorOf(style, dLook)],
             ],
         };
     },
@@ -421,15 +434,16 @@ const bollingerDefinition: IndicatorDefinition = {
     placement: 'price',
     defaultOn: false,
     params: [period('기간', 20), {label: '배수', default: 2, min: 0.1, max: 10, step: 0.1}],
-    colors: [swatch('밴드', 5)],
-    create: (candles, [length, multiplier], [bandColor]) => {
+    // 예전에는 세 선을 한 색으로 칠했다. 그때 저장한 색(첫 칸)을 가운데·아래 선도 이어 쓴다.
+    colors: [swatch('위', 5), swatch('가운데', 5, {inherit: 0}), swatch('아래', 5, {inherit: 0})],
+    create: (candles, [length, multiplier], [upperLook, middleLook, lowerLook]) => {
         const {upper, middle, lower} = bollinger(candles, length, multiplier);
+        const lines: [Series, LineLook][] = [[upper, upperLook], [middle, middleLook], [lower, lowerLook]];
         return {
             placement: 'price',
             series: [upper, lower],
             draw: ({painter, range, style, toY}) => {
                 const ctx = painter.ctx;
-                const color = lineColor(style, bandColor);
 
                 // 위·아래 선 사이를 옅게 채운다. 선과 같이 양옆 한 칸씩 더 잡아 가장자리에서 끊겨 보이지 않게 한다.
                 const start = Math.max(0, range.from - 1);
@@ -450,19 +464,16 @@ const bollingerDefinition: IndicatorDefinition = {
                     [...edges].reverse().forEach(edge => ctx.lineTo(edge.x, edge.bottom));
                     ctx.closePath();
                     ctx.globalAlpha = BAND_FILL_ALPHA;
-                    ctx.fillStyle = color;
+                    ctx.fillStyle = colorOf(style, upperLook);     // 채움은 위 선의 색을 따른다
                     ctx.fill();
                     ctx.globalAlpha = 1;
                 }
 
-                [upper, middle, lower].forEach(values => painter.strokeSeries(values, range, toY, color));
+                lines.forEach(([values, look]) => strokeLook(painter, style, values, range, toY, look));
             },
             legend: (index, style, format) => [
                 [`볼린저 ${length}·${multiplier}`, style.textColor],
-                [
-                    [upper, middle, lower].map(values => formatWith(format, values[index])).join(' · '),
-                    lineColor(style, bandColor),
-                ],
+                ...lines.map(([values, look]): LegendItem => [formatWith(format, values[index]), colorOf(style, look)]),
             ],
         };
     },
@@ -474,17 +485,17 @@ const volumeAverageDefinition: IndicatorDefinition = {
     defaultOn: false,
     params: [period('기간', 20)],
     colors: [swatch('선', 1)],
-    create: (candles, [length], [averageColor]) => {
+    create: (candles, [length], [averageLook]) => {
         const values = volumeAverage(candles, length);
         return {
             placement: 'volume',
             series: [values],
             draw: ({painter, range, style, toY}) => {
-                painter.strokeSeries(values, range, toY, lineColor(style, averageColor));
+                strokeLook(painter, style, values, range, toY, averageLook);
             },
             legend: (index, style, format) => [
                 [`거래량 이평 ${length}`, style.textColor],
-                [formatWith(format, values[index]), lineColor(style, averageColor)],
+                [formatWith(format, values[index]), colorOf(style, averageLook)],
             ],
         };
     },
@@ -519,16 +530,29 @@ export interface ResolvedIndicator {
     colorSpecs: IndicatorColor[],   // 색을 바꿀 수 있는 선들
     params: number[],               // paramSpecs 와 같은 순서의 값
     colors: number[],               // colorSpecs 와 같은 순서의 색 순번
+    widths: number[],               // colorSpecs 와 같은 순서의 굵기
+    dashes: boolean[],              // colorSpecs 와 같은 순서의 점선 여부
 }
 
+/** 지표 하나에 대해 저장해 둔 값. 비운 항목은 기본값을 쓴다 */
+export interface IndicatorOverride {
+    params?: number[] | null,
+    colors?: number[] | null,
+    widths?: number[] | null,
+    dashes?: boolean[] | null,
+}
+
+/** 맞춘 결과에서 선마다의 모양을 꺼낸다. */
+export const looksOf = ({colors, widths, dashes}: ResolvedIndicator): LineLook[] =>
+    colors.map((color, order) => ({color, width: widths[order], dashed: dashes[order]}));
+
 /**
- * 저장된 설정값과 색을 지표의 모양에 맞춘다. 빠졌거나 쓸 수 없는 값은 기본값으로 채운다.
+ * 저장된 설정값과 선 모양을 지표의 모양에 맞춘다. 빠졌거나 쓸 수 없는 값은 기본값으로 채운다.
  * 선 개수를 바꿀 수 있는 지표는 저장된 설정값의 개수가 선의 수가 된다(범위 안으로 맞춘다).
  * 처음 상태에 없던 선은 마지막 선의 정의를 따르고, 색은 순번대로 돌려 쓴다.
  */
-export const resolveIndicator = (
-    shape: IndicatorShape, params: number[] | null | undefined, colors: number[] | null | undefined,
-): ResolvedIndicator => {
+export const resolveIndicator = (shape: IndicatorShape, saved?: IndicatorOverride | null): ResolvedIndicator => {
+    const {params, colors, widths, dashes} = saved ?? {};
     const {lines} = shape;
     const count = lines
         ? Math.min(lines.max, Math.max(lines.min, params?.length ?? shape.params.length))
@@ -540,27 +564,39 @@ export const resolveIndicator = (
         : shape.params;
     const colorSpecs = lines
         ? Array.from({length: count}, (_unused, order): IndicatorColor => (
-            shape.colors[order] ?? {label: `선 ${order + 1}`, default: order}
+            shape.colors[order]
+            ?? {label: `선 ${order + 1}`, default: order, dashed: shape.colors[shape.colors.length - 1]?.dashed}
         ))
         : shape.colors;
+    const savedColor = (order: number): number | undefined => {
+        const value = colors?.[order];
+        return typeof value === 'number' && Number.isInteger(value) && value >= 0 ? value : undefined;
+    };
     return {
         paramSpecs,
         colorSpecs,
         params: normalizeParams(paramSpecs, params ?? undefined),
-        colors: colorSpecs.map((spec, order) => {
-            const value = colors?.[order];
-            return typeof value === 'number' && Number.isInteger(value) && value >= 0 ? value : spec.default;
+        colors: colorSpecs.map((spec, order) => (
+            savedColor(order) ?? (spec.inherit === undefined ? undefined : savedColor(spec.inherit)) ?? spec.default
+        )),
+        widths: colorSpecs.map((_spec, order) => {
+            const value = widths?.[order];
+            return typeof value === 'number' && SERIES_WIDTHS.includes(value) ? value : SERIES_WIDTHS[0];
+        }),
+        dashes: colorSpecs.map((spec, order) => {
+            const value = dashes?.[order];
+            return typeof value === 'boolean' ? value : spec.dashed ?? false;
         }),
     };
 };
 
-/** 설정값과 색을 맞춘 뒤 캔들로 지표를 계산한다. */
+/** 설정값과 선 모양을 맞춘 뒤 캔들로 지표를 계산한다. */
 export const createIndicator = (
     config: IndicatorConfig, candles: Candle[], context: IndicatorContext,
 ): IndicatorInstance => {
     const definition = INDICATORS[config.type];
-    const {params, colors} = resolveIndicator(definition, config.params, config.colors);
-    return definition.create(candles, params, colors, context);
+    const resolved = resolveIndicator(definition, config);
+    return definition.create(candles, resolved.params, looksOf(resolved), context);
 };
 
 /** 별도 영역 지표 하나를 그린다. 위쪽 한 줄은 값 표시(위 장)가 쓰도록 비워 둔다. */
