@@ -11,7 +11,7 @@ import {
 import {decimalsOf, formatCountdown, formatPercent, formatPrice} from "./scale.ts";
 import {alignCloses, ComparisonAlign, comparisonPercent} from "./comparison.ts";
 import {clamp, isNumber, Layout, paneToValue, Point, View} from "./layout.ts";
-import {clampView, defaultView, logicalAt, visibleRange, zoomedView} from "./viewport.ts";
+import {clampView, defaultView, futureMargin, logicalAt, visibleRange, zoomedView} from "./viewport.ts";
 import {candleColor, lineColor, Painter} from "./painter.ts";
 import {createIndicator, LegendItem, OverlayIndicator, PaneIndicator} from "./indicatorPanes.ts";
 import {PANE_GAP, renderMain} from "./mainRenderer.ts";
@@ -31,6 +31,8 @@ const DECIMAL_SAMPLE_SIZE = 300;    // 가격의 소수 자릿수를 알아낼 �
 const PRICE_ZOOM_RATE = 0.005;
 const MIN_PRICE_ZOOM = 0.2;
 const MAX_PRICE_ZOOM = 10;
+const MAX_PRICE_SHIFT = 5;      // 가격 범위를 위아래로 옮길 수 있는 한계 (보이는 범위의 몇 배)
+const LONG_PRESS_MS = 400;      // 손가락을 이만큼 움직이지 않고 누르고 있으면 십자선을 띄운다
 // 영역 사이의 경계를 잡을 수 있는 거리 (경계선의 위아래로, CSS px). 손가락은 넓게 잡는다
 const BOUNDARY_REACH = 4;
 const BOUNDARY_TOUCH_REACH = 12;
@@ -56,7 +58,9 @@ type Boundary =
     | { target: 'indicator', type: IndicatorType, start: number };
 
 type Gesture =
-    | { type: 'pan', startX: number, startRightEdge: number, moved: boolean }
+    // vertical: 위아래로도 옮기는지(가격축을 손으로 맞춰 둔 상태에서 마우스로 끌 때). startShift 는 시작할 때의 priceShift
+    | { type: 'pan', startX: number, startY: number, startRightEdge: number, startShift: number, vertical: boolean, moved: boolean }
+    | { type: 'crosshair' }     // 손가락으로 길게 눌러 십자선을 옮기는 중. 차트는 움직이지 않는다
     | { type: 'pinch', startDistance: number, startSpacing: number, anchor: number };  // anchor: 두 손가락 가운데의 순번
 
 /**
@@ -98,6 +102,9 @@ export class CandleChartEngine {
     private logScale = false;
     private percentScale = false;
     private priceZoom = 1;                  // 가격축 세로 배율. 1 이면 보이는 구간에 맞춤
+    // 가격 범위를 위아래로 옮긴 정도(보이는 범위의 몇 배). 가격축을 손으로 맞춰 둔 상태에서 차트를 위아래로 끌면 바뀐다
+    private priceShift = 0;
+    private longPressTimer = 0;
     private scaleDrag: { pointerId: number, startY: number, startZoom: number } | null = null;  // 가격축을 끄는 중
 
     private paneSizes: PaneSizes = {};      // 바깥에서 정해 준 영역 크기
@@ -193,6 +200,7 @@ export class CandleChartEngine {
         container.addEventListener('wheel', this.handleWheel, {passive: false});
         container.addEventListener('dblclick', this.handleDoubleClick);
         container.addEventListener('touchstart', this.handleTouchStart, {passive: false});
+        container.addEventListener('touchmove', this.handleTouchMove, {passive: false});
         container.addEventListener('contextmenu', this.handleContextMenu);
         // 이동·확대 키는 차트를 클릭하지 않아도 마우스가 위에 있으면 받도록 창 전체에서 듣는다.
         window.addEventListener('keydown', this.handleNavigationKey);
@@ -216,7 +224,7 @@ export class CandleChartEngine {
         // 밀지 않으면 다음 움직임에서 옛 순번으로 되돌아가 화면이 맨 왼쪽으로 튄다.
         if (this.gesture && prepended > 0) {
             if (this.gesture.type === 'pan') this.gesture.startRightEdge += prepended;
-            else this.gesture.anchor += prepended;
+            else if (this.gesture.type === 'pinch') this.gesture.anchor += prepended;
         }
 
         // 최근 캔들을 보고 있었다면 새 캔들이 붙어도 계속 최근을 보게 따라간다.
@@ -363,16 +371,21 @@ export class CandleChartEngine {
         this.scheduleDraw();
     }
 
-    /** 확대 정도는 그대로 두고 가장 최근 캔들이 오른쪽 끝에 오도록 이동한다. */
+    /**
+     * 확대 정도는 그대로 두고 가장 최근 캔들이 오른쪽 끝에 오도록 이동한다.
+     * 마지막 캔들 뒤까지 그려지는 지표(일목균형표의 구름)가 켜져 있으면 그만큼 오른쪽을 비워 둔다.
+     */
     scrollToLatest() {
         const view = this.resolveView();
-        this.setView({...view, rightEdge: Math.max(this.candles.length, this.plotWidth() / view.spacing)});
+        const bars = this.plotWidth() / view.spacing;
+        this.setView({...view, rightEdge: Math.max(this.candles.length + futureMargin(this.futureBars(), bars), bars)});
     }
 
-    /** 가격축을 끌어 바꾼 세로 배율을 되돌려 보이는 구간에 다시 맞춘다. */
+    /** 가격축을 끌어 바꾼 세로 배율과 위아래로 옮긴 것을 되돌려 보이는 구간에 다시 맞춘다. */
     resetPriceScale() {
-        if (this.priceZoom === 1) return;
+        if (!this.priceAdjusted()) return;
         this.priceZoom = 1;
+        this.priceShift = 0;
         this.scheduleDraw();
     }
 
@@ -398,6 +411,7 @@ export class CandleChartEngine {
     resetView() {
         this.view = null;
         this.priceZoom = 1;
+        this.priceShift = 0;
         this.scheduleDraw();
     }
 
@@ -425,6 +439,8 @@ export class CandleChartEngine {
         this.frame = 0;
         this.overlayFrame = 0;
         window.clearInterval(this.countdownTimer);
+        window.clearTimeout(this.longPressTimer);
+        this.container.removeEventListener('touchmove', this.handleTouchMove);
         this.container.removeEventListener('keydown', this.handleKeyDown);
         this.container.removeEventListener('pointerdown', this.handlePointerDown);
         this.container.removeEventListener('pointermove', this.handlePointerMove);
@@ -506,11 +522,31 @@ export class CandleChartEngine {
 
         this.activePointers.set(event.pointerId, point);
         this.container.setPointerCapture(event.pointerId);
-        this.beginGesture();
-        // 터치는 누른 자리에 십자선을 띄운다. 움직이기 시작하면 지운다.
-        this.pointer = this.activePointers.size === 1 ? point : null;
+        this.beginGesture(event.pointerType === 'touch');
+        if (event.pointerType === 'touch') {
+            // 손가락은 누르자마자 십자선을 띄우지 않는다. 움직이지 않고 누르고 있으면 그때 띄우고,
+            // 그 뒤로는 손가락을 따라 십자선만 움직인다(차트는 그대로). 그냥 끌면 차트가 이동한다.
+            window.clearTimeout(this.longPressTimer);
+            if (this.activePointers.size === 1) {
+                this.longPressTimer = window.setTimeout(() => this.beginTouchCrosshair(event.pointerId), LONG_PRESS_MS);
+            } else {
+                this.pointer = null;
+            }
+        } else {
+            this.pointer = this.activePointers.size === 1 ? point : null;
+        }
         this.scheduleOverlay();
     };
+
+    /** 길게 누른 손가락이 그대로 있으면 그 자리에 십자선을 띄우고, 손을 뗄 때까지 십자선을 옮기는 동작으로 바꾼다. */
+    private beginTouchCrosshair(pointerId: number) {
+        const point = this.activePointers.get(pointerId);
+        const gesture = this.gesture;
+        if (!point || this.activePointers.size !== 1 || gesture?.type !== 'pan' || gesture.moved) return;
+        this.gesture = {type: 'crosshair'};
+        this.pointer = point;
+        this.scheduleOverlay();
+    }
 
     private readonly handlePointerMove = (event: PointerEvent) => {
         const point = this.localPoint(event);
@@ -550,7 +586,7 @@ export class CandleChartEngine {
 
         this.activePointers.set(event.pointerId, point);
         const changed = this.applyGesture();
-        if (event.pointerType !== 'touch') {
+        if (event.pointerType !== 'touch' || this.gesture?.type === 'crosshair') {
             this.pointer = point;
         } else if (changed) {
             this.pointer = null;
@@ -590,8 +626,14 @@ export class CandleChartEngine {
         if (this.container.hasPointerCapture(event.pointerId)) {
             this.container.releasePointerCapture(event.pointerId);
         }
+        window.clearTimeout(this.longPressTimer);
+        // 손가락으로 짧게 누르고 떼면 떠 있던 십자선을 지운다. (길게 눌러 띄운 십자선은 손을 떼도 남는다.)
+        if (event.pointerType === 'touch' && event.type === 'pointerup' && this.gesture?.type === 'pan' && !this.gesture.moved) {
+            this.pointer = null;
+            this.scheduleOverlay();
+        }
         // 손가락 하나가 남았으면 그 자리에서 드래그를 이어 간다.
-        this.beginGesture();
+        this.beginGesture(event.pointerType === 'touch');
     };
 
     /**
@@ -619,11 +661,12 @@ export class CandleChartEngine {
 
     /**
      * 우클릭: 브라우저의 메뉴 대신 차트의 메뉴를 띄우도록 알린다. 도형 위면 그 도형을 선택한다.
-     * 그리기 도구를 고른 동안에는 아무 메뉴도 띄우지 않고, 터치의 길게 누르기는 브라우저에 맡긴다.
+     * 그리기 도구를 고른 동안에는 아무 메뉴도 띄우지 않는다. 터치의 길게 누르기는 십자선을 띄우는 데 쓰므로
+     * 브라우저의 메뉴만 막고 차트의 메뉴는 띄우지 않는다.
      */
     private readonly handleContextMenu = (event: MouseEvent) => {
-        if ((event as PointerEvent).pointerType === 'touch') return;
         event.preventDefault();
+        if ((event as PointerEvent).pointerType === 'touch') return;
         if (this.drawingLayer.activeTool) return;
         // 십자선이 떠 있고 누른 자리가 그 근처면 십자선의 자리를 쓴다. 트랙패드의 두 손가락 클릭은 누르는 순간
         // 페이지를 몇 px 스크롤시키곤 하는데, 그러면 마우스는 그대로여도 차트가 밀려 누른 자리의 가격이 화면에 보이던
@@ -649,8 +692,26 @@ export class CandleChartEngine {
             drawingId: this.drawingLayer.selectAt(point),
             price,
             priceText: price === null ? null : formatPrice(price, this.valueDecimals),
-            priceScaled: this.priceZoom !== 1,
+            priceScaled: this.priceAdjusted(),
         });
+    };
+
+    /** 가격축을 손으로 맞춰 둔 상태인지 (세로 배율을 바꿨거나 위아래로 옮겼거나) */
+    private priceAdjusted(): boolean {
+        return this.priceZoom !== 1 || this.priceShift !== 0;
+    }
+
+    /** 마지막 캔들 뒤까지 값이 있는 가격 영역 지표가 차지하는 칸 수 (일목균형표의 선행스팬) */
+    private futureBars(): number {
+        const longest = this.priceOverlays.reduce(
+            (most, overlay) => overlay.series.reduce((length, series) => Math.max(length, series.length), most), 0,
+        );
+        return Math.max(0, longest - this.candles.length);
+    }
+
+    /** 손가락으로 십자선을 옮기는 동안에는 페이지가 세로로 스크롤되지 않게 막는다. */
+    private readonly handleTouchMove = (event: TouchEvent) => {
+        if (this.gesture?.type === 'crosshair' && event.cancelable) event.preventDefault();
     };
 
     /**
@@ -743,7 +804,14 @@ export class CandleChartEngine {
             && point.x >= this.layout!.plotWidth && point.y >= pane!.top && point.y <= pane!.bottom;
     }
 
-    private readonly handlePointerLeave = (event: PointerEvent) => {
+    /** 가격 영역의 그림 안인지 (가격축 제외) */
+    private isInPricePane(point: Point): boolean {
+        const pane = this.layout?.panes[0];
+        return Boolean(this.layout && pane)
+            && point.x < this.layout!.plotWidth && point.y >= pane!.top && point.y <= pane!.bottom;
+    }
+
+    private readonly handlePointerLeave =(event: PointerEvent) => {
         // 터치는 손을 떼도 십자선을 남겨 값을 읽을 수 있게 한다.
         if (event.pointerType === 'touch') return;
         this.hovered = false;
@@ -816,11 +884,21 @@ export class CandleChartEngine {
     };
 
     /** 지금 누르고 있는 포인터 수에 맞춰 드래그(1개)·두 손가락 확대(2개)의 기준점을 다시 잡는다. */
-    private beginGesture() {
+    private beginGesture(touch = false) {
         const points = [...this.activePointers.values()];
         const view = this.resolveView();
         if (points.length === 1) {
-            this.gesture = {type: 'pan', startX: points[0].x, startRightEdge: view.rightEdge, moved: false};
+            this.gesture = {
+                type: 'pan',
+                startX: points[0].x,
+                startY: points[0].y,
+                startRightEdge: view.rightEdge,
+                startShift: this.priceShift,
+                // 가격축을 손으로 맞춰 둔 상태에서 가격 영역을 마우스로 끌 때만 위아래로도 옮긴다.
+                // 손가락의 세로 끌기는 페이지 스크롤이라 받지 않는다.
+                vertical: !touch && this.priceAdjusted() && this.isInPricePane(points[0]),
+                moved: false,
+            };
         } else if (points.length === 2) {
             const middle = (points[0].x + points[1].x) / 2;
             this.gesture = {
@@ -843,8 +921,15 @@ export class CandleChartEngine {
 
         if (gesture.type === 'pan' && points.length === 1) {
             const delta = points[0].x - gesture.startX;
-            if (!gesture.moved && Math.abs(delta) < DRAG_THRESHOLD) return false;
+            const deltaY = gesture.vertical ? points[0].y - gesture.startY : 0;
+            if (!gesture.moved && Math.abs(delta) < DRAG_THRESHOLD && Math.abs(deltaY) < DRAG_THRESHOLD) return false;
             gesture.moved = true;
+            const pane = this.layout?.panes[0];
+            if (gesture.vertical && pane) {
+                // 아래로 끌면 캔들이 따라 내려오도록 가격 범위를 위로 옮긴다.
+                const scaleHeight = Math.max(1, pane.scaleBottom - pane.scaleTop);
+                this.priceShift = clamp(gesture.startShift + deltaY / scaleHeight, -MAX_PRICE_SHIFT, MAX_PRICE_SHIFT);
+            }
             const view = this.resolveView();
             this.setView({...view, rightEdge: gesture.startRightEdge - delta / view.spacing});
             return true;
@@ -900,7 +985,7 @@ export class CandleChartEngine {
     private resolveView(): View {
         return this.view
             ? clampView(this.view, this.candles.length, this.plotWidth())
-            : defaultView(this.candles.length, this.plotWidth());
+            : defaultView(this.candles.length, this.plotWidth(), this.futureBars());
     }
 
     private setView(view: View) {
@@ -996,6 +1081,7 @@ export class CandleChartEngine {
             // 비교 종목은 등락률로만 견줄 수 있으므로, 있는 동안에는 설정과 상관없이 퍼센트 축으로 그린다.
             percentScale: this.percentScale || this.comparisons.length > 0,
             priceZoom: this.priceZoom,
+            priceShift: this.priceShift,
             timeUnit: this.timeUnit,
             style,
             width: this.width,

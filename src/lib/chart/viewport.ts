@@ -17,10 +17,23 @@ export const clampView = (view: View, total: number, plotWidth: number): View =>
     return {spacing, rightEdge: clamp(view.rightEdge, keep, Math.max(keep, total + bars - keep))};
 };
 
-/** 기본 보기: 최근 캔들을 오른쪽 끝에 맞춘다. 캔들이 적어 다 들어가면 왼쪽부터 채운다. */
-export const defaultView = (total: number, plotWidth: number): View => {
-    const spacing = clamp(plotWidth / Math.max(1, total), DEFAULT_MIN_BAR_SPACING, DEFAULT_MAX_BAR_SPACING);
-    return {spacing, rightEdge: Math.max(total, plotWidth / spacing)};
+const MAX_FUTURE_RATIO = 1 / 3;     // 마지막 캔들 뒤로 비워 두는 칸은 화면의 이 비율까지만
+
+/**
+ * 마지막 캔들 뒤에 비워 둘 칸 수. future: 마지막 캔들 뒤까지 그려지는 지표가 차지하는 칸 수, bars: 화면에 들어가는 칸 수.
+ * 화면이 좁을 때 캔들이 밀려나지 않게 화면의 일부까지만 비운다.
+ */
+export const futureMargin = (future: number, bars: number): number =>
+    Math.max(0, Math.min(future, Math.floor(bars * MAX_FUTURE_RATIO)));
+
+/**
+ * 기본 보기: 최근 캔들을 오른쪽 끝에 맞춘다. 캔들이 적어 다 들어가면 왼쪽부터 채운다.
+ * future 를 주면 마지막 캔들 뒤로 그만큼(화면의 일부까지만) 비워 둔다.
+ */
+export const defaultView = (total: number, plotWidth: number, future = 0): View => {
+    const spacing = clamp(plotWidth / Math.max(1, total + future), DEFAULT_MIN_BAR_SPACING, DEFAULT_MAX_BAR_SPACING);
+    const bars = plotWidth / spacing;
+    return {spacing, rightEdge: Math.max(total + futureMargin(future, bars), bars)};
 };
 
 export const visibleRange = (view: View, total: number, plotWidth: number): VisibleRange => {

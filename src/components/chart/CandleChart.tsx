@@ -9,6 +9,7 @@ import Button from "@mui/material/Button";
 import Typography from "@mui/material/Typography";
 import Tooltip from "@mui/material/Tooltip";
 import SettingsIcon from "@mui/icons-material/Settings";
+import FullscreenExitIcon from "@mui/icons-material/FullscreenExit";
 import KeyboardDoubleArrowRightIcon from "@mui/icons-material/KeyboardDoubleArrowRight";
 import ChartDrawingStylePanel from "./ChartDrawingStylePanel.tsx";
 import ChartSettingsDialog, {ChartIndicatorOption} from "./ChartSettingsDialog.tsx";
@@ -224,6 +225,34 @@ const CandleChart = ({
     };
     const [atLatest, setAtLatest] = useState(true);
     const [settingsOpen, setSettingsOpen] = useState(false);
+    // 전체 화면: 차트를 창 가득 덮어 띄우고, 브라우저도 전체 화면으로 바꾼다. 브라우저가 거절해도(지원하지 않는 기기 등)
+    // 창 가득 띄우는 것은 그대로 된다. 설정 창과 메뉴는 화면 다른 곳에 따로 그려지므로, 차트 요소만 브라우저의
+    // 전체 화면으로 올리면 보이지 않는다. 그래서 페이지 전체를 올리고 차트는 그 위에 덮는다.
+    const [fullscreen, setFullscreen] = useState(false);
+    const changeFullscreen = (next: boolean) => {
+        setFullscreen(next);
+        if (next) document.documentElement.requestFullscreen?.().catch(() => undefined);
+        else if (document.fullscreenElement) document.exitFullscreen().catch(() => undefined);
+    };
+    useEffect(() => {
+        if (!fullscreen) return;
+        // Esc 로 브라우저의 전체 화면에서 나오면 차트도 원래 자리로 돌린다.
+        const handleChange = () => {
+            if (!document.fullscreenElement) setFullscreen(false);
+        };
+        document.addEventListener('fullscreenchange', handleChange);
+        // 덮여 있는 페이지가 뒤에서 스크롤되지 않게 한다. body 는 설정 창·메뉴가 열고 닫힐 때 같은 값을 바꿨다가
+        // 되돌리므로(설정 창에서 전체 화면을 누르면 순서가 엇갈린다) 그 위의 html 에 건다.
+        const root = document.documentElement;
+        const overflow = root.style.overflow;
+        root.style.overflow = 'hidden';
+        return () => {
+            document.removeEventListener('fullscreenchange', handleChange);
+            root.style.overflow = overflow;
+            // 전체 화면인 채로 다른 화면으로 넘어가면 브라우저의 전체 화면도 끝낸다.
+            if (document.fullscreenElement) document.exitFullscreen().catch(() => undefined);
+        };
+    }, [fullscreen]);
     // 우클릭 메뉴. 엔진이 누른 자리와 그 자리의 가격·도형을 알려 주면 그 자리에 띄운다.
     // 닫히는 동안에도 항목이 그대로 보이도록, 내용(contextMenu)은 남겨 두고 열림 여부만 따로 바꾼다.
     const [contextMenu, setContextMenu] = useState<ContextMenuRequest | null>(null);
@@ -305,23 +334,24 @@ const CandleChart = ({
     const [resizing, setResizing] = useState<PaneResize | null>(null);
     const paneSizes = useMemo(() => {
         const saved = {
-            mainHeight: sizeWithin(savedMainHeight, MAIN_HEIGHT_LIMIT) ?? height,
+            // 전체 화면에서는 높이를 정해 주지 않는다. 엔진이 화면 높이에서 지표 영역을 뺀 나머지를 쓴다.
+            mainHeight: fullscreen ? undefined : sizeWithin(savedMainHeight, MAIN_HEIGHT_LIMIT) ?? height,
             volumeRatio: sizeWithin(savedVolumeRatio, VOLUME_RATIO_LIMIT),
             indicators: Object.fromEntries(indicators.map(type => (
                 [type, sizeWithin(indicatorSettings[type]?.height, INDICATOR_HEIGHT_LIMIT)]
             ))) as Partial<Record<IndicatorType, number>>,
         };
-        if (resizing?.target === 'main') return {...saved, mainHeight: resizing.height ?? height};
+        if (resizing?.target === 'main') return fullscreen ? saved : {...saved, mainHeight: resizing.height ?? height};
         if (resizing?.target === 'volume') return {...saved, volumeRatio: resizing.ratio ?? undefined};
         if (resizing?.target === 'indicator') {
             return {...saved, indicators: {...saved.indicators, [resizing.type]: resizing.height ?? undefined}};
         }
         return saved;
-    }, [savedMainHeight, savedVolumeRatio, indicatorSettings, indicators, height, resizing]);
-    // 차트 전체 높이: 가격+거래량 + 차트 아래에 따로 영역을 차지하는 지표들
-    const chartHeight = activeIndicators
+    }, [savedMainHeight, savedVolumeRatio, indicatorSettings, indicators, height, resizing, fullscreen]);
+    // 차트 전체 높이: 가격+거래량 + 차트 아래에 따로 영역을 차지하는 지표들. 전체 화면에서는 남는 높이를 다 쓴다.
+    const chartHeight = fullscreen ? '100%' : activeIndicators
         .filter(config => INDICATORS[config.type].placement === 'pane')
-        .reduce((sum, config) => sum + (paneSizes.indicators[config.type] ?? INDICATOR_PANE_HEIGHT), paneSizes.mainHeight);
+        .reduce((sum, config) => sum + (paneSizes.indicators[config.type] ?? INDICATOR_PANE_HEIGHT), paneSizes.mainHeight ?? height);
 
     const resizePane = (change: PaneResize, done: boolean) => {
         setResizing(change);
@@ -340,7 +370,10 @@ const CandleChart = ({
     const stepHistoryRef = useRef(stepHistory);
     const loadOlderRef = useRef(onLoadOlder);
     const resizePaneRef = useRef(resizePane);
+    // Esc 로 전체 화면을 끝낼지 정할 때 본다: 그리기 도구를 고른 중이면 도구만 풀고, 브라우저가 전체 화면이면 브라우저가 끝낸다
+    const leaveFullscreenRef = useRef<(() => void) | null>(null);
     useEffect(() => {
+        leaveFullscreenRef.current = fullscreen && !tool ? () => changeFullscreen(false) : null;
         resizePaneRef.current = resizePane;
         drawingsRef.current = drawings;
         changeDrawingsRef.current = changeDrawings;
@@ -488,6 +521,7 @@ const CandleChart = ({
             const target = event.target instanceof HTMLElement ? event.target : null;
             if (target?.closest('input, textarea, select, [contenteditable="true"]')) return;
             if (event.key === 'Escape') {
+                if (!document.fullscreenElement) leaveFullscreenRef.current?.();
                 setTool(null);
                 return;
             }
@@ -508,7 +542,18 @@ const CandleChart = ({
     }, []);
 
     return (
-        <Box>
+        <Box
+            sx={fullscreen ? {
+                // 창 가득 덮는다. 설정 창·메뉴(modal)보다는 아래에 둔다.
+                position: 'fixed',
+                inset: 0,
+                zIndex: theme => theme.zIndex.modal - 1,
+                display: 'flex',
+                flexDirection: 'column',
+                pt: 1,
+                backgroundColor: 'background.default',
+            } : undefined}
+        >
             {/* 위쪽 한 줄에 모든 버튼을 모은다: 화면별 버튼(주기 등) · 차트 종류 · 그리기 도구 모음 · 안내 … 최근으로 이동 · 차트 설정 */}
             <Stack direction="row" spacing={1} sx={{px: 2, pb: 1, alignItems: 'center', minHeight: 40}}>
                 {toolbarStart}
@@ -545,6 +590,14 @@ const CandleChart = ({
                             onClick={() => engineRef.current?.scrollToLatest()}
                         >
                             <KeyboardDoubleArrowRightIcon/>
+                        </ChartToolbarButton>
+                    </Tooltip>
+                )}
+                {/* 전체 화면일 때만 보인다. 터치 화면에는 Esc 와 우클릭이 없어 나갈 버튼이 필요하다. */}
+                {fullscreen && (
+                    <Tooltip title="전체 화면 끝내기">
+                        <ChartToolbarButton aria-label="전체 화면 끝내기" onClick={() => changeFullscreen(false)}>
+                            <FullscreenExitIcon/>
                         </ChartToolbarButton>
                     </Tooltip>
                 )}
@@ -585,6 +638,8 @@ const CandleChart = ({
                     onAdd: addComparison,
                     onRemove: removeComparison,
                 }}
+                fullscreen={fullscreen}
+                onFullscreenChange={changeFullscreen}
             />
             {/* 우클릭 메뉴. 도형 위에서는 그 도형의 메뉴, 빈 곳에서는 차트의 메뉴. 해당하지 않는 항목은 보이지 않는다. */}
             <Menu
@@ -666,12 +721,15 @@ const CandleChart = ({
                             가격축 원래대로
                         </MenuItem>
                     ),
+                    <MenuItem key="fullscreen" onClick={() => runMenuAction(() => changeFullscreen(!fullscreen))}>
+                        {fullscreen ? '전체 화면 끝내기' : '전체 화면으로 보기'}
+                    </MenuItem>,
                     <MenuItem key="settings" onClick={() => runMenuAction(() => setSettingsOpen(true), false)}>
                         차트 설정
                     </MenuItem>,
                 ]}
             </Menu>
-            <Stack direction="row">
+            <Stack direction="row" sx={fullscreen ? {flex: 1, minHeight: 0} : undefined}>
                 {/* 차트 색은 CSS 변수로 둔다. 캔버스(엔진)와 꾸미기 패널의 색 단추가 같은 값을 쓴다. */}
                 <Box
                     sx={(theme) => ({

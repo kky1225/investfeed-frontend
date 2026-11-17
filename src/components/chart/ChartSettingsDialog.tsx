@@ -73,6 +73,8 @@ interface ChartSettingsDialogProps {
     hiddenDrawingCount: number,                 // 그중 숨겨 둔 선의 수
     onShowDrawings: () => void,                 // 숨겨 둔 선을 모두 다시 보이게 한다
     comparison?: ChartComparisonFieldProps,     // 종목 비교. 비교를 쓸 수 있는 화면에서만 준다
+    fullscreen: boolean,                        // 차트를 화면 가득 띄워 둔 상태인지
+    onFullscreenChange: (fullscreen: boolean) => void,
 }
 
 interface ParamFieldProps {
@@ -203,7 +205,7 @@ const ChartSettingsDialog = ({
     drawingToolbar, onDrawingToolbarChange,
     logScale, onLogScaleChange, percentScale, onPercentScaleChange,
     flatByPrevClose, onFlatByPrevCloseChange, drawingCount, onClearDrawings, hiddenDrawingCount, onShowDrawings,
-    comparison,
+    comparison, fullscreen, onFullscreenChange,
 }: ChartSettingsDialogProps) => (
     // 창은 화면 다른 곳에 따로 그려지므로, 색 단추가 차트의 색을 쓸 수 있게 색 변수를 걸어 준다.
     <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth sx={chartColorVars}>
@@ -253,7 +255,8 @@ const ChartSettingsDialog = ({
             </FormGroup>
             <Typography variant="body2" sx={{color: 'text.secondary'}}>
                 켜면 같은 등락률이 같은 높이로 그려집니다. 가격이 크게 오르내린 긴 구간을 볼 때 초반 움직임이 잘 보입니다.
-                오른쪽 가격축을 위아래로 끌면 세로 크기를 바꿀 수 있고, 더블클릭하면 원래대로 돌아옵니다.
+                오른쪽 가격축을 위아래로 끌면 세로 크기를 바꿀 수 있고, 그 뒤에는 차트를 위아래로도 끌 수 있습니다.
+                가격축을 더블클릭하면 원래대로 돌아옵니다.
             </Typography>
             <FormGroup sx={{mt: 1}}>
                 <FormControlLabel
@@ -318,6 +321,16 @@ const ChartSettingsDialog = ({
             )}
         </DialogContent>
         <DialogActions>
+            {/* 전체 화면은 차트를 봐야 하므로 누르면 창도 닫는다. */}
+            <Button
+                onClick={() => {
+                    onFullscreenChange(!fullscreen);
+                    onClose();
+                }}
+                sx={{mr: 'auto'}}
+            >
+                {fullscreen ? '전체 화면 끝내기' : '전체 화면으로 보기'}
+            </Button>
             <Button onClick={onClose}>닫기</Button>
         </DialogActions>
     </Dialog>

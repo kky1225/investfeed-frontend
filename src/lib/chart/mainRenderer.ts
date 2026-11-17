@@ -39,9 +39,11 @@ export interface MainInput {
     logScale: boolean,          // 가격축을 로그로
     percentScale: boolean,      // 가격축에 가격 대신 등락률(%)을 적는다. 기준은 보이는 첫 캔들의 종가
     priceZoom: number,         // 가격축 세로 배율. 1 이면 보이는 구간에 딱 맞추고, 클수록 범위가 넓어져 캔들이 납작해진다
+    // 가격 범위를 위아래로 옮긴 정도. 보이는 범위의 몇 배인지로 적는다(0 이면 가운데, 양수면 범위가 위로 가서 캔들이 내려간다)
+    priceShift: number,
     timeUnit: TimeUnit,
     style: ChartStyle,
-    width: number,              // 캔버스 너비 (CSS px)
+    width: number,             // 캔버스 너비 (CSS px)
     mainHeight: number,         // 가격+거래량 영역의 높이. 날짜축을 포함한다 (CSS px)
     volumeRatio: number,        // 가격+거래량 높이 중 거래량 영역의 비율
     indicatorHeights: number[], // indicators 와 같은 순서의 영역 높이 (CSS px)
@@ -489,7 +491,7 @@ const drawPriceLines = (frame: Frame, priceLines: PriceLine[]) => {
 /** 아래 장 전체를 그리고, 그린 배치를 돌려준다. 그릴 자리가 없으면 null. 캔버스는 부르는 쪽에서 지운다. */
 export const renderMain = (painter: Painter, input: MainInput): Layout | null => {
     const {
-        candles, chartType, shapes, logScale, percentScale, priceZoom, timeUnit, style, width, range,
+        candles, chartType, shapes, logScale, percentScale, priceZoom, priceShift, timeUnit, style, width, range,
         mainHeight, volumeRatio, indicatorHeights,
         averages, averageColors, indicators, priceOverlays, volumeOverlays, priceLines, comparisons, flatByPrevClose,
         axisWidth, valueDecimals, countdown,
@@ -547,8 +549,9 @@ export const renderMain = (painter: Painter, input: MainInput): Layout | null =>
     const axisHigh = toAxis(highest);
     const axisLow = toAxis(lowest);
     const padding = (axisHigh - axisLow) * 0.05 || (logScale ? 0.01 : highest * 0.01 || 1);
-    const center = (axisHigh + axisLow) / 2;
     const half = ((axisHigh - axisLow) / 2 + padding) * priceZoom;
+    // priceShift 는 화면에 보이는 범위(위아래 전체)의 몇 배만큼 범위를 위로 옮길지다.
+    const center = (axisHigh + axisLow) / 2 + priceShift * half * 2;
     const priceMin = fromAxis(center - half);
     const priceMax = fromAxis(center + half);
 
