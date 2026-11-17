@@ -65,13 +65,17 @@ const fetchPage = async (chartType: string, target: ComparisonTarget, cursor: st
 
 /**
  * 상세 화면의 차트에 넘길 종목 비교 조회.
- * market: 보고 있는 화면의 종류, chartType: 지금 주기(MINUTE_5, DAY …).
+ * market: 보고 있는 화면의 종류, chartType: 지금 주기(MINUTE_5, DAY …),
+ * selfCode: 보고 있는 종목의 코드(차트의 저장 기준과 다를 때만).
  * 일봉·주봉·월봉·연봉은 종류를 섞어 비교하고, 분봉은 거래 시간이 달라 같은 종류끼리만 비교한다.
  */
-export const createComparisonSource = (market: ComparisonMarket, chartType: string): ChartComparisonSource => {
+export const createComparisonSource = (
+    market: ComparisonMarket, chartType: string, selfCode?: string,
+): ChartComparisonSource => {
     const align = ALIGN_BY[chartType] ?? 'time';
     return {
         market,
+        selfCode,
         mixed: align !== 'time',
         align,
         search,

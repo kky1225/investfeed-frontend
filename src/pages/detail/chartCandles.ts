@@ -13,8 +13,8 @@ export interface KiwoomChartRow {
     trdeQty?: string | null,
 }
 
-/** 키움 차트 시각(yyyyMMdd 또는 yyyyMMddHHmmss) → epoch ms. 월·일이 없으면 1로 본다. */
-export const parseChartTime = (dt: string): number => new Date(
+/** 키움 차트 시각(yyyy, yyyyMMdd 또는 yyyyMMddHHmmss) → epoch ms. 월·일이 없으면 1로 본다. 연도도 없으면 NaN */
+export const parseChartTime = (dt: string): number => dt.length < 4 ? NaN : new Date(
     Number(dt.slice(0, 4)),
     (Number(dt.slice(4, 6)) || 1) - 1,
     Number(dt.slice(6, 8)) || 1,
@@ -33,7 +33,7 @@ const isValid = (candle: Candle) => (
 /** 키움 차트 목록을 캔들(오래된 순)로 바꾼다. 값이 깨진 항목은 버린다. */
 export const kiwoomCandles = (list: KiwoomChartRow[]): Candle[] => list
     .map(item => ({
-        time: parseChartTime(item.dt ?? ''),
+        time: parseChartTime((item.dt ?? '').replace(/\s+/g, '')),
         open: parseChartPrice(item.openPric),
         high: parseChartPrice(item.highPric),
         low: parseChartPrice(item.lowPric),

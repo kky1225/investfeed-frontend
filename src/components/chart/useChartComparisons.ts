@@ -29,6 +29,8 @@ export const comparisonKey = (market: ComparisonMarket, code: string) => `${mark
  */
 export interface ChartComparisonSource {
     market: ComparisonMarket,   // 보고 있는 화면의 종류
+    // 보고 있는 종목의 코드(검색 결과의 code 와 같은 표기). 저장 기준(assetCode)과 다를 때만 준다 (미국 종목은 저장할 때 _US 가 붙는다)
+    selfCode?: string,
     // 지금 주기에서 다른 종류의 종목도 비교할 수 있는지. 분봉은 거래 시간이 달라 같은 종류끼리만 비교한다
     mixed: boolean,
     align: ComparisonAlign,     // 두 종목의 캔들을 무엇으로 맞출지

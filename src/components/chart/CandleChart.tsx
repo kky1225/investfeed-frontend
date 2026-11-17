@@ -578,7 +578,9 @@ const CandleChart = ({
                     max: MAX_COMPARISONS,
                     market: comparison.market,
                     mixed: comparison.mixed,
-                    selfKey: assetCode ? comparisonKey(comparison.market, assetCode) : undefined,
+                    selfKey: (comparison.selfCode ?? assetCode)
+                        ? comparisonKey(comparison.market, (comparison.selfCode ?? assetCode) as string)
+                        : undefined,
                     onSearch: comparison.search,
                     onAdd: addComparison,
                     onRemove: removeComparison,
