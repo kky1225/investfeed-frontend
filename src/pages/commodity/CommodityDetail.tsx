@@ -15,13 +15,15 @@ import Stack from "@mui/material/Stack";
 import Chip from "@mui/material/Chip";
 import ToggleButton from "@mui/material/ToggleButton";
 import MenuItem from "@mui/material/MenuItem";
-import {styled} from "@mui/material/styles";
-import ToggleButtonGroup, {toggleButtonGroupClasses} from "@mui/material/ToggleButtonGroup";
-import CandlestickChartIcon from "@mui/icons-material/CandlestickChart";
-import StackedLineChartIcon from "@mui/icons-material/StackedLineChart";
+import {Theme} from "@mui/material/styles";
+import useMediaQuery from "@mui/material/useMediaQuery";
+import ArrowDropDownIcon from "@mui/icons-material/ArrowDropDown";
 import InvestorBarChart from "../../components/InvestorBarChart.tsx";
+import CandleChart from "../../components/chart/CandleChart.tsx";
+import {ChartToolbarGroup} from "../../components/chart/ChartToolbarControls.tsx";
+import {CandleInterval, TimeUnit} from "../../lib/chart/types.ts";
+import {kiwoomCandles as toCandles} from "../detail/chartCandles.ts";
 import {
-    CommodityChart,
     CommodityChartType,
     CommodityDetailReq,
     CommodityDetailRes,
@@ -32,29 +34,36 @@ import {fetchCommodityDetail, fetchCommodityStream} from "../../api/commodity/Co
 import {useMarketWebSocket} from "../detail/useMarketWebSocket.ts";
 import ErrorIcon from "@mui/icons-material/Error";
 import HelpIcon from "@mui/icons-material/Help";
-import CommodityDetailLineChart, {CommodityDetailLineChartProps} from "../../components/CommodityDetailLineChart.tsx";
+import {CommodityDetailLineChartProps} from "../../components/CommodityDetailLineChart.tsx";
 import {MarketType} from "../../type/timeType.ts";
 import {renderChangeAmount} from "../../components/CustomRender.tsx";
 import FreshnessIndicator from "../../components/FreshnessIndicator.tsx";
 import {usePollingQuery} from "../../lib/pollingQuery.ts";
 import {parseKiwoomStamp} from "../../lib/tradeStamp.ts";
 
-const StyledToggleButtonGroup = styled(ToggleButtonGroup)(({ theme }) => ({
-    border: 'none',
-    boxShadow: 'none',
-    [`& .${toggleButtonGroupClasses.grouped}`]: {
-        border: 0,
-        borderRadius: theme.shape.borderRadius,
-        [`&.${toggleButtonGroupClasses.disabled}`]: {
-            border: 0,
-        },
-    },
-    [`& .${toggleButtonGroupClasses.middleButton},& .${toggleButtonGroupClasses.lastButton}`]:
-        {
-            marginLeft: -1,
-            borderLeft: '1px solid transparent',
-        },
-}));
+// 날짜 눈금 표기 단위. 주봉은 날짜까지 적는다
+const CHART_TIME_UNIT: Record<CommodityChartType, TimeUnit> = {
+    [CommodityChartType.MINUTE_1]: 'minute',
+    [CommodityChartType.MINUTE_3]: 'minute',
+    [CommodityChartType.MINUTE_5]: 'minute',
+    [CommodityChartType.MINUTE_10]: 'minute',
+    [CommodityChartType.MINUTE_30]: 'minute',
+    [CommodityChartType.DAY]: 'day',
+    [CommodityChartType.WEEK]: 'day',
+    [CommodityChartType.MONTH]: 'month',
+};
+
+// 분봉 한 개가 담는 기간. 차트가 캔들 마감까지 남은 시간을 적는 데 쓴다 (일봉 이상은 적지 않는다)
+const CHART_INTERVAL: Partial<Record<CommodityChartType, CandleInterval>> = {
+    [CommodityChartType.MINUTE_1]: {unit: 'minute', count: 1},
+    [CommodityChartType.MINUTE_3]: {unit: 'minute', count: 3},
+    [CommodityChartType.MINUTE_5]: {unit: 'minute', count: 5},
+    [CommodityChartType.MINUTE_10]: {unit: 'minute', count: 10},
+    [CommodityChartType.MINUTE_30]: {unit: 'minute', count: 30},
+};
+
+// 그린 선을 저장할 때 종목 코드와 겹치지 않게 원자재 코드 뒤에 붙이는 말
+const COMMODITY_ASSET_SUFFIX = '_COMMODITY';
 
 interface CommodityRangeProps {
     value: number;
@@ -212,38 +221,9 @@ const CommodityDetail = () => {
     const baseCommodityChartData = useMemo<CommodityDetailLineChartProps>(() => {
         if (!result) return INITIAL_CHART_DATA;
         try {
-            const {commodityInfo, commodityChartList} = result;
+            const {commodityInfo} = result;
 
-            let dateList;
-            let lineData, barDataList;
-
-            switch (req.chartType) {
-                case CommodityChartType.MINUTE_1:
-                case CommodityChartType.MINUTE_3:
-                case CommodityChartType.MINUTE_5:
-                case CommodityChartType.MINUTE_10:
-                case CommodityChartType.MINUTE_30: {
-                    dateList = commodityChartList.map((item: CommodityChart) => {
-                        return `${item.dt.slice(0, 4)}.${item.dt.slice(4, 6)}.${item.dt.slice(6, 8)} ${item.dt.slice(8, 10)}:${item.dt.slice(10, 12)}`
-                    }).reverse();
-                    lineData = commodityChartList.map((item: CommodityChart) => item.curPrc.replace(/^[+-]/, '')).reverse();
-                    barDataList = commodityChartList.map((item: CommodityChart) => Number(item.trdeQty)).reverse();
-                    break;
-                }
-                case CommodityChartType.DAY:
-                case CommodityChartType.WEEK:
-                case CommodityChartType.MONTH: {
-                    dateList = commodityChartList.map((item: CommodityChart) => {
-                        return `${item.dt.slice(0, 4)}.${item.dt.slice(4, 6)}.${item.dt.slice(6, 8)}`
-                    }).reverse();
-                    lineData = commodityChartList.map((item: CommodityChart) => item.curPrc).reverse();
-                    barDataList = commodityChartList.map((item: CommodityChart) => Number(item.trdeQty)).reverse();
-                    break;
-                }
-                default:
-                    return INITIAL_CHART_DATA;
-            }
-
+            // 차트는 캔들 차트가 따로 그린다. 여기서는 머리의 가격·등락·시각만 만든다.
             const year = commodityInfo.tm.substring(0, 4);
             const month = commodityInfo.tm.substring(4, 6);
             const day = commodityInfo.tm.substring(6, 8);
@@ -273,17 +253,29 @@ const CommodityDetail = () => {
                         area: true,
                         stackOrder: 'ascending',
                         color: chartColor(commodityInfo.predPreSig),
-                        data: lineData,
+                        data: [],
                     }
                 ],
-                barDataList: barDataList,
-                dateList: dateList
+                barDataList: [],
+                dateList: []
             } as unknown as CommodityDetailLineChartProps;
         } catch (err) {
             console.error(err);
             return INITIAL_CHART_DATA;
         }
-    }, [result, req.chartType, id]);
+    }, [result, id]);
+
+    // 차트 캔들. 실시간 가격은 마지막 캔들의 종가·고가·저가에만 반영하고, 새 캔들은 주기적 조회로 받는다.
+    const candleList = useMemo(() => toCandles(result?.commodityChartList ?? []), [result]);
+    const candles = useMemo(() => {
+        const last = candleList[candleList.length - 1];
+        const price = livePrice ? Number(livePrice.value.replace(/,/g, '')) : NaN;
+        if (!last || !livePrice || !Number.isFinite(price) || price <= 0 || livePrice.stamp < last.time) return candleList;
+        return [
+            ...candleList.slice(0, -1),
+            {...last, close: price, high: Math.max(last.high, price), low: Math.min(last.low, price)},
+        ];
+    }, [candleList, livePrice]);
 
     // dayRange — WS 갱신 없음
     const dayRange = useMemo<CommodityRangeProps[]>(() => {
@@ -363,7 +355,6 @@ const CommodityDetail = () => {
     }, [baseCommodityChartData, livePrice]);
 
     const [toggle, setToggle] = useState('DAY');
-    const [formats, setFormats] = useState('line');
     const minute = useRef('1');
 
     const labelColors = {
@@ -439,14 +430,47 @@ const CommodityDetail = () => {
         })
     }
 
-    const handleFormat = (
-        _event: MouseEvent<HTMLElement>,
-        newFormats: string,
-    ) => {
-        if(newFormats !== null) {
-            setFormats(newFormats);
-        }
-    };
+    // 주기(분·일·주·월) 버튼. 넓은 화면에서는 차트 위쪽 줄에, 좁은 화면(md 미만)에서는 차트 아래에 놓는다.
+    const isNarrow = useMediaQuery((theme: Theme) => theme.breakpoints.down('md'));
+    const chartControls = (
+        <ChartToolbarGroup
+            size="small"
+            value={toggle}
+            exclusive
+            onChange={handleAlignment}
+            aria-label="차트 주기"
+        >
+            <ToggleButton value="MINUTE" key="MINUTE" aria-label="MINUTE">
+                {/* 버튼 안의 선택 상자는 글자 크기·색을 버튼에서 물려받고, 화살표는 작은 아래 화살표 하나만 둔다. */}
+                <Select
+                    size="small"
+                    value={minute.current}
+                    onChange={handleOptionChange}
+                    variant="standard"
+                    disableUnderline
+                    IconComponent={ArrowDropDownIcon}
+                    sx={{
+                        boxShadow: 'none',
+                        backgroundColor: 'transparent',
+                        border: 'none',
+                        padding: 0,
+                        font: 'inherit',
+                        color: 'inherit',
+                        '& .MuiSelect-select': {py: 0, pl: 0, minHeight: 0},
+                        '& .MuiSelect-icon': {color: 'inherit'},
+                    }}
+                >
+                    <MenuItem value="1">1분</MenuItem>
+                    <MenuItem value="3">3분</MenuItem>
+                    <MenuItem value="5">5분</MenuItem>
+                    <MenuItem value="30">30분</MenuItem>
+                </Select>
+            </ToggleButton>
+            <ToggleButton value="DAY" key="DAY" aria-label="DAY">일</ToggleButton>
+            <ToggleButton value="WEEK" key="WEEK" aria-label="WEEK">주</ToggleButton>
+            <ToggleButton value="MONTH" key="MONTH" aria-label="MONTH">월</ToggleButton>
+        </ChartToolbarGroup>
+    );
 
     function orderWarningMsg(type: string): string {
         let message = "";
@@ -535,77 +559,35 @@ const CommodityDetail = () => {
                                 </Stack>
                             </Stack>
                         </CardContent>
-                        <Box sx={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
-                            <Box sx={{ minWidth: 1200 }}>
-                                {loading ? (
-                                    <Skeleton variant="rectangular" height={400} sx={{mx: 2, mb: 2, borderRadius: 1}}/>
-                                ) : (
-                                    <CommodityDetailLineChart {...commodityChartData} />
-                                )}
+                        {!isNarrow && loading && (
+                            <Stack direction="row" spacing={1} sx={{px: 2, pb: 1, alignItems: 'center', minHeight: 40}}>
+                                {chartControls}
+                            </Stack>
+                        )}
+                        {/* 차트는 스스로 이동·확대하므로 화면 너비에 맞춘다. 선·영역 등 차트 종류는 차트 안에서 고른다. */}
+                        {loading ? (
+                            <Skeleton variant="rectangular" height={400} sx={{mx: 2, mb: 2, borderRadius: 1}}/>
+                        ) : (
+                            <CandleChart
+                                candles={candles}
+                                timeUnit={CHART_TIME_UNIT[req.chartType]}
+                                interval={CHART_INTERVAL[req.chartType]}
+                                seriesKey={`${stkCd}-${req.chartType}`}
+                                assetType="STOCK"
+                                assetCode={`${stkCd}${COMMODITY_ASSET_SUFFIX}`}
+                                toolbarStart={isNarrow ? undefined : chartControls}
+                            />
+                        )}
+                        {isNarrow && (
+                            <Box
+                                display="flex"
+                                justifyContent="space-between"
+                                alignItems="center"
+                                flexWrap="wrap"
+                            >
+                                {chartControls}
                             </Box>
-                        </Box>
-                        <Box
-                            display="flex"
-                            justifyContent="space-between"
-                            alignItems="center"
-                            flexWrap="wrap"
-                        >
-                            <StyledToggleButtonGroup
-                                size="small"
-                                value={toggle}
-                                exclusive
-                                onChange={handleAlignment}
-                                aria-label="text alignment"
-                            >
-                                <ToggleButton
-                                    value="MINUTE"
-                                    key="MINUTE"
-                                    aria-label="MINUTE"
-                                    sx={{
-                                        padding: 1
-                                    }}
-                                >
-                                    <Select
-                                        size="small"
-                                        value={minute.current}
-                                        onChange={handleOptionChange}
-                                        variant="standard"
-                                        disableUnderline
-                                        sx={{
-                                            boxShadow: 'none',
-                                            width: 55,
-                                            backgroundColor: 'transparent',
-                                            border: 'none',
-                                            padding: '0 8px',
-                                            justifyContent: 'center',
-                                        }}
-                                    >
-                                        <MenuItem value="1">1분</MenuItem>
-                                        <MenuItem value="3">3분</MenuItem>
-                                        <MenuItem value="5">5분</MenuItem>
-                                        <MenuItem value="30">30분</MenuItem>
-                                    </Select>
-                                </ToggleButton>
-                                <ToggleButton value="DAY" key="DAY" aria-label="DAY">일</ToggleButton>
-                                <ToggleButton value="WEEK" key="WEEK" aria-label="WEEK">주</ToggleButton>
-                                <ToggleButton value="MONTH" key="MONTH" aria-label="MONTH">월</ToggleButton>
-                            </StyledToggleButtonGroup>
-
-                            <StyledToggleButtonGroup
-                                size="small"
-                                value={formats}
-                                exclusive
-                                onChange={handleFormat}
-                                aria-label="text formatting"
-                            >
-                                <ToggleButton value="candle" key="candle" aria-label="candle" disabled>
-                                    <CandlestickChartIcon />
-                                </ToggleButton>
-                                <ToggleButton value="line" key="line" aria-label="line">
-                                    <StackedLineChartIcon />
-                                </ToggleButton>
-                            </StyledToggleButtonGroup>
-                        </Box>
+                        )}
                     </Card>
                 </Grid>
             </Grid>
