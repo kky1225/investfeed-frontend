@@ -9,7 +9,7 @@ import {
     AXIS_LABEL_OFFSET, AXIS_TAG_HEIGHT, FONT_SIZE, LEGEND_LEFT, PRICE_PANE_TOP, TIME_AXIS_HEIGHT,
 } from "./constants.ts";
 import {clamp, isNumber, Layout, VisibleRange} from "./layout.ts";
-import {candleColor, lineColor, Painter} from "./painter.ts";
+import {candleColor, lineColor, Painter, textColorOf} from "./painter.ts";
 import {drawIndicatorPane, OverlayIndicator, PaneIndicator} from "./indicatorPanes.ts";
 
 // 아래 장: 캔들·거래량·이동평균선·축·현재가 선·가격선·보조지표 영역
@@ -22,6 +22,7 @@ const CURRENT_PRICE_DASH = [2, 2];
 const COUNTDOWN_HEIGHT = 14;    // 현재가 라벨 아래에 남은 시간을 적는 줄의 높이
 const PRICE_LINE_DASH = [6, 4];
 const PRICE_LINE_TITLE_OFFSET = 8;  // 선과 그 위 이름 사이
+const ACTIVE_PRICE_LINE_WIDTH = 2;  // 마우스를 올렸거나 끌고 있는 가격선의 굵기 (보통 선의 배수)
 const PRICE_LINE_TITLE_GAP = 18;    // 가격선 사이가 이보다 좁으면 이름이 위 선과 겹치므로 적지 않는다
 
 /** 세로로 차지하는 범위 (기기 픽셀) */
@@ -61,6 +62,7 @@ export interface MainInput {
     priceOverlays: OverlayIndicator[],  // 가격 영역에 겹칠 지표
     volumeOverlays: OverlayIndicator[], // 거래량 영역에 겹칠 지표
     priceLines: PriceLine[],
+    activePriceLine: string | null, // 마우스를 올렸거나 끌고 있는 가격선의 id. 그 선을 강조해 그린다
     // 비교 종목: 주 종목의 캔들 순번에 맞춘 종가와 선 색 순번. 있으면 percentScale 도 켜서 넘길 것
     comparisons: { closes: Series, color: number }[],
     flatByPrevClose: boolean,
@@ -389,7 +391,7 @@ const drawExtremes = (frame: Frame) => {
         const toRight = x + gap + ctx.measureText(`← ${label}`).width <= plotRightPx;
         const half = painter.px(FONT_SIZE) / 2;
         const y = clamp(painter.px(priceY(price)), painter.px(priceTop) + half, painter.px(priceBottom) - half);
-        ctx.fillStyle = color;
+        ctx.fillStyle = textColorOf(style, color);
         ctx.textAlign = toRight ? 'left' : 'right';
         ctx.fillText(toRight ? `← ${label}` : `${label} →`, toRight ? x + gap : x - gap, y);
     };
@@ -487,7 +489,7 @@ const spreadLabels = (centers: number[], height: number, avoid: Span | null): nu
  * 가격선(목표가 등): 점선 + 선 위 이름 + 오른쪽 축에 테두리 라벨. 현재가 라벨(채움)과 구분된다.
  * 선이 촘촘하면 축 라벨은 서로와 현재가 라벨(avoid)을 비켜 위아래로 쌓이고(선은 제자리), 이름은 겹치는 선들 중 맨 위 선에만 적는다.
  */
-const drawPriceLines = (frame: Frame, priceLines: PriceLine[], avoid: Span | null) => {
+const drawPriceLines = (frame: Frame, priceLines: PriceLine[], activeId: string | null, avoid: Span | null) => {
     const {painter, style, priceMin, priceMax, priceY, line, plotRightPx, axisLabelX} = frame;
     const ctx = painter.ctx;
     const labelHeight = painter.px(AXIS_TAG_HEIGHT);
@@ -503,8 +505,11 @@ const drawPriceLines = (frame: Frame, priceLines: PriceLine[], avoid: Span | nul
             : priceLine.tone === 'down' ? style.downColor
             : style.textColor;
         const labelTop = Math.round(labelCenters[order] - labelHeight / 2);
+        // 마우스를 올렸거나 끌고 있는 선은 굵게 긋고 라벨을 채워, 촘촘한 선들 가운데 어느 것이 잡히는지 보이게 한다.
+        const active = priceLine.id !== undefined && priceLine.id === activeId;
+        const labelColor = textColorOf(style, color);
         ctx.strokeStyle = color;
-        ctx.lineWidth = line;
+        ctx.lineWidth = active ? line * ACTIVE_PRICE_LINE_WIDTH : line;
         ctx.setLineDash(PRICE_LINE_DASH.map(length => painter.px(length)));
         ctx.beginPath();
         ctx.moveTo(0, y + line / 2);
@@ -512,13 +517,15 @@ const drawPriceLines = (frame: Frame, priceLines: PriceLine[], avoid: Span | nul
         ctx.stroke();
         ctx.setLineDash([]);
 
-        ctx.fillStyle = style.backgroundColor;
+        ctx.lineWidth = line;
+        ctx.strokeStyle = labelColor;
+        ctx.fillStyle = active ? labelColor : style.backgroundColor;
         ctx.fillRect(plotRightPx, labelTop, frame.axisWidthPx, labelHeight);
         ctx.strokeRect(
             plotRightPx + line / 2, labelTop + line / 2,
             frame.axisWidthPx - line, labelHeight - line,
         );
-        ctx.fillStyle = color;
+        ctx.fillStyle = active ? style.backgroundColor : labelColor;
         ctx.textAlign = 'left';
         // 목표가는 캔들보다 잘게 정해 둘 수 있으므로 필요한 자릿수만큼 더 적는다.
         ctx.fillText(
@@ -527,6 +534,7 @@ const drawPriceLines = (frame: Frame, priceLines: PriceLine[], avoid: Span | nul
         );
         // 바로 위 선과 가까우면 이름을 적지 않는다. 촘촘하게 이어진 선들은 맨 위 선에만 이름이 남는다.
         if (y - previousY >= painter.px(PRICE_LINE_TITLE_GAP)) {
+            ctx.fillStyle = labelColor;
             ctx.fillText(priceLine.title, painter.px(LEGEND_LEFT), y - painter.px(PRICE_LINE_TITLE_OFFSET));
         }
         previousY = y;
@@ -640,7 +648,7 @@ export const renderMain = (painter: Painter, input: MainInput): Layout | null =>
     drawCandles(frame, averages, averageColors, priceOverlays, volumeOverlays);
     drawExtremes(frame);
     drawComparisonTags(frame);
-    drawPriceLines(frame, priceLines, drawCurrentPrice(frame));
+    drawPriceLines(frame, priceLines, input.activePriceLine, drawCurrentPrice(frame));
 
     const indicatorPanes = indicators.map((instance, order) => drawIndicatorPane(
         painter, instance, indicatorTops[order], indicatorTops[order + 1], plotWidth, range, style,
