@@ -255,11 +255,13 @@ const CandleChart = ({
     }, [fullscreen]);
     // 우클릭 메뉴. 엔진이 누른 자리와 그 자리의 가격·도형을 알려 주면 그 자리에 띄운다.
     // 닫히는 동안에도 항목이 그대로 보이도록, 내용(contextMenu)은 남겨 두고 열림 여부만 따로 바꾼다.
-    const [contextMenu, setContextMenu] = useState<ContextMenuRequest | null>(null);
+    // canUndo·canRedo: 메뉴를 띄우는 순간에 되돌리거나 다시 실행할 그리기 변경이 있는지
+    const [contextMenu, setContextMenu] = useState<ContextMenuRequest & { canUndo: boolean, canRedo: boolean } | null>(null);
     const [menuOpen, setMenuOpen] = useState(false);
     const menuDrawing = drawings.find(drawing => drawing.id === contextMenu?.drawingId);    // 메뉴를 띄운 도형
     const openContextMenu = (request: ContextMenuRequest) => {
-        setContextMenu(request);
+        const {undo, redo} = history.current;
+        setContextMenu({...request, canUndo: undo.length > 0, canRedo: redo.length > 0});
         setMenuOpen(true);
     };
     // 메뉴가 닫힌 뒤 차트에 포커스를 돌려줄지. 메뉴에서 설정 창을 열 때는 그 창이 포커스를 가져가므로 돌려주지 않는다.
@@ -665,6 +667,14 @@ const CandleChart = ({
                     },
                 }}
             >
+                {/* 그리기 변경의 실행 취소·다시 실행. 되돌릴 것이 있을 때만 보인다. 단축키는 Ctrl(⌘)+Z, Ctrl(⌘)+Shift+Z */}
+                {contextMenu?.canUndo && (
+                    <MenuItem onClick={() => runMenuAction(() => stepHistory('undo'))}>그리기 실행 취소</MenuItem>
+                )}
+                {contextMenu?.canRedo && (
+                    <MenuItem onClick={() => runMenuAction(() => stepHistory('redo'))}>그리기 다시 실행</MenuItem>
+                )}
+                {(contextMenu?.canUndo || contextMenu?.canRedo) && <Divider/>}
                 {contextMenu?.drawingId ? [
                     <MenuItem
                         key="copy"
@@ -766,15 +776,21 @@ const CandleChart = ({
                         <InputBase
                             key={`${textRequest.id}-${textRequest.x}-${textRequest.y}`}
                             autoFocus
+                            multiline
                             defaultValue={textRequest.text}
-                            placeholder="글자 입력"
+                            placeholder="글자 입력 (Shift+Enter 줄 바꿈)"
                             inputProps={{maxLength: MAX_DRAWING_TEXT_LENGTH, 'aria-label': '차트에 적을 글자'}}
                             onFocus={event => event.target.select()}
                             onBlur={event => closeTextInput(event.target.value)}
                             onKeyDown={event => {
                                 if (event.nativeEvent.isComposing) return;     // 한글 조합 중의 Enter 는 확정이 아니다
-                                if (event.key === 'Enter') closeTextInput((event.target as HTMLInputElement).value);
-                                else if (event.key === 'Escape') closeTextInput();
+                                // Enter 는 확정, Shift+Enter 는 줄 바꿈
+                                if (event.key === 'Enter' && !event.shiftKey) {
+                                    event.preventDefault();
+                                    closeTextInput((event.target as HTMLTextAreaElement).value);
+                                } else if (event.key === 'Escape') {
+                                    closeTextInput();
+                                }
                             }}
                             sx={{
                                 position: 'absolute',

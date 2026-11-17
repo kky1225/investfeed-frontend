@@ -21,7 +21,8 @@ const FILL_ALPHA = 0.1;         // 사각형·채널 안쪽 채움
 const RAY_LENGTH = 20000;       // 반직선을 화면 밖까지 뻗는 길이 (CSS px)
 const MAGNET_DISTANCE = 12;     // 약한 자석: 캔들의 시가·고가·저가·종가가 이만큼 안에 있으면 그 값에 붙는다 (CSS px)
 const TEXT_SIZES = [12, 15, 19];    // 글자 도형의 크기. 꾸미기의 굵기 1~3 에 차례로 대응한다 (CSS px)
-const TEXT_PADDING = 3;         // 글자를 잡을 수 있는 범위를 글자보다 이만큼 넓힌다
+const TEXT_LINE_HEIGHT = 1.3;   // 여러 줄 글자의 줄 간격 (글자 크기의 배수)
+const TEXT_PADDING = 3;        // 글자를 잡을 수 있는 범위를 글자보다 이만큼 넓힌다
 const LABEL_GAP = 2;            // 선과 그 위에 적는 글자 사이
 const GUIDE_ALPHA = 0.5;        // 보조선(피보나치의 두 점을 잇는 선)의 진하기
 const BACKDROP_ALPHA = 0.85;    // 글자 뒤에 까는 바탕의 진하기
@@ -100,6 +101,9 @@ export interface DrawingHost {
 /** 글자 도형의 크기 (CSS px) */
 const textSizeOf = (drawing: DrawingStyle): number =>
     TEXT_SIZES[clamp(Math.round(drawing.lineWidth ?? 1), 1, TEXT_SIZES.length) - 1];
+
+/** 글자 도형의 줄들. 줄 바꿈으로 나눈다 */
+const textLinesOf = (text: string): string[] => text.split('\n');
 
 const createId = (): string => `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
 
@@ -392,7 +396,9 @@ export class DrawingLayer {
         drawings.forEach(drawing => {
             if (drawing.type !== 'text') return;
             ctx.font = `${painter.px(textSizeOf(drawing))}px ${style.fontFamily}`;
-            this.textWidths.set(drawing.id, ctx.measureText(drawing.text).width / painter.dpr);
+            // 여러 줄이면 가장 긴 줄의 너비
+            const widest = Math.max(...textLinesOf(drawing.text).map(textLine => ctx.measureText(textLine).width));
+            this.textWidths.set(drawing.id, widest / painter.dpr);
         });
         painter.useFont(style);
 
@@ -466,7 +472,13 @@ export class DrawingLayer {
                 const {box} = geometry;
                 ctx.textAlign = 'left';
                 ctx.font = `${painter.px(textSizeOf(drawing))}px ${style.fontFamily}`;
-                ctx.fillText(drawing.text, (box.left + TEXT_PADDING) * painter.dpr, (box.top + box.bottom) / 2 * painter.dpr);
+                // 첫 줄의 가운데는 상자 위에서 여백 + 글자 높이의 반만큼 내려온 자리이고, 그 아래로 줄 간격만큼씩 내려간다.
+                const size = textSizeOf(drawing);
+                textLinesOf(drawing.text).forEach((textLine, order) => ctx.fillText(
+                    textLine,
+                    (box.left + TEXT_PADDING) * painter.dpr,
+                    (box.top + TEXT_PADDING + size / 2 + order * size * TEXT_LINE_HEIGHT) * painter.dpr,
+                ));
                 painter.useFont(style);
                 // 선택한 글자는 둘레에 점선 테두리를 친다.
                 if (active) {
@@ -738,9 +750,11 @@ export class DrawingLayer {
                 };
             }
             case 'text': {
-                // from 이 글자의 왼쪽 가운데. 상자는 글자를 잡는 범위이자 선택 테두리다.
+                // from 이 글자(여러 줄이면 전체)의 왼쪽 가운데. 상자는 글자를 잡는 범위이자 선택 테두리다.
                 const at = this.pointOf(drawing.from, layout);
-                const half = textSizeOf(drawing) / 2 + TEXT_PADDING;
+                const size = textSizeOf(drawing);
+                const extraLines = textLinesOf(drawing.text).length - 1;
+                const half = (size + extraLines * size * TEXT_LINE_HEIGHT) / 2 + TEXT_PADDING;
                 const width = (this.textWidths.get(drawing.id) ?? 0) + TEXT_PADDING * 2;
                 return {
                     lines: [],

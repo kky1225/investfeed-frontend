@@ -16,7 +16,10 @@ import EditOutlinedIcon from "@mui/icons-material/EditOutlined";
 import LockOpenOutlinedIcon from "@mui/icons-material/LockOpenOutlined";
 import LockOutlinedIcon from "@mui/icons-material/LockOutlined";
 import {ChartToolbarButton} from "./ChartToolbarControls.tsx";
-import {DrawingStyle, FIBONACCI_LEVEL_CHOICES} from "../../lib/chart/types.ts";
+import InputBase from "@mui/material/InputBase";
+import {DrawingStyle, FIBONACCI_LEVEL_CHOICES, FIBONACCI_LEVEL_LIMIT, MAX_FIBONACCI_LEVELS} from "../../lib/chart/types.ts";
+
+const LEVEL_STEPS = 1000;   // 직접 입력한 비율은 소수 셋째 자리까지만 받는다
 
 interface ChartDrawingStylePanelProps {
     style: DrawingStyle,        // 선택한 도형의 꾸미기
@@ -52,7 +55,19 @@ const ChartDrawingStylePanel = ({
     const toggleLevel = (level: number) => {
         if (!levels || !onLevelsChange) return;
         const next = levels.includes(level) ? levels.filter(item => item !== level) : [...levels, level];
-        if (next.length > 0) onLevelsChange(FIBONACCI_LEVEL_CHOICES.filter(item => next.includes(item)));
+        if (next.length > 0 && next.length <= MAX_FIBONACCI_LEVELS) onLevelsChange([...next].sort((a, b) => a - b));
+    };
+    // 목록에 보일 비율: 정해 둔 것 + 직접 입력해 켜 둔 것. 직접 입력한 비율은 끄면 목록에서 사라진다.
+    const levelChoices = [...new Set([...FIBONACCI_LEVEL_CHOICES, ...(levels ?? [])])].sort((a, b) => a - b);
+    const [customLevel, setCustomLevel] = useState('');
+    const parsedLevel = Math.round(Number(customLevel) * LEVEL_STEPS) / LEVEL_STEPS;
+    const customValid = customLevel.trim() !== '' && Number.isFinite(parsedLevel)
+        && parsedLevel >= FIBONACCI_LEVEL_LIMIT.min && parsedLevel <= FIBONACCI_LEVEL_LIMIT.max;
+    /** 직접 입력한 비율을 켠다. 이미 켜져 있으면 그대로 둔다. */
+    const addCustomLevel = () => {
+        if (!customValid || !levels) return;
+        if (!levels.includes(parsedLevel)) toggleLevel(parsedLevel);
+        setCustomLevel('');
     };
     const widthLabel = onEditText ? '크기' : '굵기';
     const color = style.color ?? DEFAULT_DRAWING_COLOR;
@@ -122,7 +137,7 @@ const ChartDrawingStylePanel = ({
                             size="small"
                             aria-haspopup="menu"
                             onClick={event => setLevelsAnchor(event.currentTarget)}
-                            sx={{minWidth: 0, color: 'text.secondary'}}
+                            sx={{minWidth: 0, color: 'text.secondary', whiteSpace: 'nowrap', flexShrink: 0}}
                         >
                             비율
                         </Button>
@@ -133,7 +148,7 @@ const ChartDrawingStylePanel = ({
                             onClose={() => setLevelsAnchor(null)}
                             slotProps={{list: {dense: true}}}
                         >
-                            {FIBONACCI_LEVEL_CHOICES.map(level => (
+                            {levelChoices.map(level => (
                                 <MenuItem
                                     key={level}
                                     role="menuitemcheckbox"
@@ -144,6 +159,32 @@ const ChartDrawingStylePanel = ({
                                     <ListItemText>{level}</ListItemText>
                                 </MenuItem>
                             ))}
+                            <Divider/>
+                            {/* 목록에 없는 비율을 직접 넣는다. 메뉴가 글자 키를 항목 찾기로 쓰지 않게 키 입력을 여기서 멈춘다. */}
+                            <Stack
+                                direction="row"
+                                spacing={1}
+                                sx={{px: 2, py: 0.5, alignItems: 'center'}}
+                                onKeyDown={event => event.stopPropagation()}
+                            >
+                                <InputBase
+                                    value={customLevel}
+                                    onChange={event => setCustomLevel(event.target.value)}
+                                    onKeyDown={event => {
+                                        if (event.key === 'Enter') addCustomLevel();
+                                        else if (event.key === 'Escape') setLevelsAnchor(null);
+                                    }}
+                                    placeholder="직접 입력"
+                                    inputProps={{
+                                        'aria-label': '비율 직접 입력',
+                                        inputMode: 'decimal',
+                                    }}
+                                    sx={{width: 88, px: 1, typography: 'body2', border: 1, borderColor: 'divider', borderRadius: 1}}
+                                />
+                                <Button size="small" disabled={!customValid} onClick={addCustomLevel} sx={{minWidth: 0}}>
+                                    추가
+                                </Button>
+                            </Stack>
                         </Menu>
                     </>
                 )}

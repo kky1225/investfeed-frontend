@@ -57,9 +57,12 @@ export const MAGNET_MODES: MagnetMode[] = ['off', 'weak', 'strong'];
 /** 피보나치 되돌림에서 고를 수 있는 비율. 앞의 것들은 기본으로 켜져 있고, 뒤의 확장 비율(1 초과)은 꺼져 있다 */
 export const FIBONACCI_DEFAULT_LEVELS = [0, 0.236, 0.382, 0.5, 0.618, 0.786, 1];
 export const FIBONACCI_LEVEL_CHOICES = [...FIBONACCI_DEFAULT_LEVELS, 1.272, 1.618, 2.618];
+// 직접 넣을 수 있는 비율의 범위와, 피보나치 하나에 켜 둘 수 있는 비율의 수 (백엔드 검증과 같은 값)
+export const FIBONACCI_LEVEL_LIMIT = {min: 0, max: 10};
+export const MAX_FIBONACCI_LEVELS = 20;
 
-/** 글자 도형의 최대 길이 */
-export const MAX_DRAWING_TEXT_LENGTH = 100;
+/** 글자 도형의 최대 길이. 줄 바꿈을 포함한다 */
+export const MAX_DRAWING_TEXT_LENGTH = 300;
 
 /**
  * 글자를 입력받아 달라는 요청. 엔진은 캔버스만 그리므로 입력 칸은 바깥(React)에서 띄운다.
