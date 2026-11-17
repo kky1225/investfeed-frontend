@@ -9,6 +9,7 @@ import Button from "@mui/material/Button";
 import Typography from "@mui/material/Typography";
 import Tooltip from "@mui/material/Tooltip";
 import SettingsIcon from "@mui/icons-material/Settings";
+import FullscreenIcon from "@mui/icons-material/Fullscreen";
 import FullscreenExitIcon from "@mui/icons-material/FullscreenExit";
 import KeyboardDoubleArrowRightIcon from "@mui/icons-material/KeyboardDoubleArrowRight";
 import ChartDrawingStylePanel from "./ChartDrawingStylePanel.tsx";
@@ -602,14 +603,15 @@ const CandleChart = ({
                         </ChartToolbarButton>
                     </Tooltip>
                 )}
-                {/* 전체 화면일 때만 보인다. 터치 화면에는 Esc 와 우클릭이 없어 나갈 버튼이 필요하다. */}
-                {fullscreen && (
-                    <Tooltip title="전체 화면 끝내기">
-                        <ChartToolbarButton aria-label="전체 화면 끝내기" onClick={() => changeFullscreen(false)}>
-                            <FullscreenExitIcon/>
-                        </ChartToolbarButton>
-                    </Tooltip>
-                )}
+                {/* 같은 자리에서 들어가기와 나가기가 바뀐다. 터치 화면에는 Esc 와 우클릭이 없어 버튼이 필요하다. */}
+                <Tooltip title={fullscreen ? '전체 화면 끝내기' : '전체 화면으로 보기'}>
+                    <ChartToolbarButton
+                        aria-label={fullscreen ? '전체 화면 끝내기' : '전체 화면으로 보기'}
+                        onClick={() => changeFullscreen(!fullscreen)}
+                    >
+                        {fullscreen ? <FullscreenExitIcon/> : <FullscreenIcon/>}
+                    </ChartToolbarButton>
+                </Tooltip>
                 <Tooltip title="차트 설정">
                     <ChartToolbarButton aria-label="차트 설정" onClick={() => setSettingsOpen(true)}>
                         <SettingsIcon/>
