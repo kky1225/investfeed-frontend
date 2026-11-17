@@ -5,43 +5,23 @@ import Dialog from "@mui/material/Dialog";
 import DialogContent from "@mui/material/DialogContent";
 import IconButton from "@mui/material/IconButton";
 import CloseIcon from "@mui/icons-material/Close";
+import ArrowDropDownIcon from "@mui/icons-material/ArrowDropDown";
 import Box from "@mui/material/Box";
 import Typography from "@mui/material/Typography";
 import Chip from "@mui/material/Chip";
 import Skeleton from "@mui/material/Skeleton";
 import Stack from "@mui/material/Stack";
 import ToggleButton from "@mui/material/ToggleButton";
-import ToggleButtonGroup, {toggleButtonGroupClasses} from "@mui/material/ToggleButtonGroup";
 import MenuItem from "@mui/material/MenuItem";
 import {Select, type SelectChangeEvent} from "@mui/material";
-import {styled} from "@mui/material/styles";
-import StockDetailLineChart, {type CustomStockDetailLineChartProps} from "../../components/StockDetailLineChart.tsx";
-import CryptoDetailLineChart, {type CryptoDetailLineChartProps} from "../../components/CryptoDetailLineChart.tsx";
-import CommodityDetailLineChart, {type CommodityDetailLineChartProps} from "../../components/CommodityDetailLineChart.tsx";
-import {fetchStockChart} from "../../api/stock/StockApi.ts";
-import {fetchMultiViewUsStockChart} from "../../api/multiView/MultiViewApi.ts";
-import {fetchCryptoDetail} from "../../api/crypto/CryptoApi.ts";
-import {fetchCommodityDetail} from "../../api/commodity/CommodityApi.ts";
-import {StockChartType} from "../../type/StockType.ts";
-import {UsStockChartType} from "../../type/UsStockType.ts";
-import {CryptoChartType} from "../../type/CryptoType.ts";
-import {CommodityChartType} from "../../type/CommodityType.ts";
+import CandleChart from "../../components/chart/CandleChart.tsx";
+import {ChartToolbarGroup} from "../../components/chart/ChartToolbarControls.tsx";
 import {renderChangeAmount, signedRate} from "../../components/CustomRender.tsx";
-import type {MultiViewAssetType} from "../../type/MultiViewType.ts";
-
-const StyledToggleButtonGroup = styled(ToggleButtonGroup)(({theme}) => ({
-    border: 'none',
-    boxShadow: 'none',
-    [`& .${toggleButtonGroupClasses.grouped}`]: {
-        border: 0,
-        borderRadius: theme.shape.borderRadius,
-        [`&.${toggleButtonGroupClasses.disabled}`]: {border: 0},
-    },
-    [`& .${toggleButtonGroupClasses.middleButton},& .${toggleButtonGroupClasses.lastButton}`]: {
-        marginLeft: -1,
-        borderLeft: '1px solid transparent',
-    },
-}));
+import type {MultiViewAssetType, SelectedAsset} from "../../type/MultiViewType.ts";
+import {
+    candlesOf, chartStorageOf, chartTypeOf, comparisonOf, fetchMultiViewChart, intervalOf, type MultiViewChartRes,
+    summaryOf, timeUnitOf,
+} from "./multiViewChart.ts";
 
 const labelColors = {
     up: 'error' as const,
@@ -50,41 +30,6 @@ const labelColors = {
 };
 
 const CHART_HEIGHT = 550;
-
-const trendColor = (preSig: string): 'up' | 'down' | 'neutral' => {
-    const sig = Number(preSig);
-    if (sig === 2 || sig === 1) return 'up';
-    if (sig === 4 || sig === 5) return 'down';
-    return 'neutral';
-};
-
-const usdFormat = (n: number) =>
-    n.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 4});
-
-const usDateFormat = (raw: string | null | undefined, showTime: boolean) => {
-    if (!raw) return '';
-    const cleaned = raw.replace(/\s+/g, '');
-    if (cleaned.length < 8) return raw;
-    if (showTime && cleaned.length >= 12) {
-        return `${cleaned.substring(4, 6)}.${cleaned.substring(6, 8)} ${cleaned.substring(8, 10)}:${cleaned.substring(10, 12)}`;
-    }
-    return `${cleaned.substring(0, 4)}.${cleaned.substring(4, 6)}.${cleaned.substring(6, 8)}`;
-};
-
-const cryptoDateFormat = (dateTime: string, showTime: boolean): string => {
-    if (!dateTime) return '';
-    if (dateTime.includes('T')) {
-        const f = dateTime.replace(/-/g, '.').replace('T', ' ');
-        return showTime ? f.substring(0, 16) : f.substring(0, 10);
-    }
-    const cleaned = dateTime.replace(/\s+/g, '');
-    if (cleaned.length >= 8) {
-        const date = `${cleaned.substring(0, 4)}.${cleaned.substring(4, 6)}.${cleaned.substring(6, 8)}`;
-        if (showTime && cleaned.length >= 12) return `${date} ${cleaned.substring(8, 10)}:${cleaned.substring(10, 12)}`;
-        return date;
-    }
-    return dateTime;
-};
 
 interface ChartDetailDialogProps {
     open: boolean;
@@ -96,208 +41,96 @@ interface ChartDetailDialogProps {
 }
 
 export default function ChartDetailDialog({open, onClose, assetType, code, name, stexTp}: ChartDetailDialogProps) {
-    const [chartType, setChartType] = useState("DAY");
+    const [toggle, setToggle] = useState("DAY");
     const [minuteUnit, setMinuteUnit] = useState("1");
+    const chartType = chartTypeOf(toggle, minuteUnit);
 
     const resetKey = `${open}|${code}|${assetType ?? 'none'}`;
     const [prevResetKey, setPrevResetKey] = useState('');
     if (resetKey !== prevResetKey) {
         setPrevResetKey(resetKey);
         if (open) {
-            setChartType("DAY");
+            setToggle("DAY");
             setMinuteUnit("1");
         }
     }
 
+    const asset = useMemo<SelectedAsset | null>(
+        () => (assetType && code ? {type: assetType, code, name, stexTp} : null),
+        [assetType, code, name, stexTp],
+    );
+
     const {data: queryData} = useQuery({
-        queryKey: ['chartDetailDialog', assetType, code, chartType, minuteUnit],
+        queryKey: ['chartDetailDialog', assetType, code, chartType],
         queryFn: async ({signal}) => {
-            if (assetType === 'STOCK') {
-                const chartTypeMap: Record<string, StockChartType> = {
-                    MINUTE: `MINUTE_${minuteUnit}` as StockChartType,
-                    DAY: StockChartType.DAY,
-                    WEEK: StockChartType.WEEK,
-                    MONTH: StockChartType.MONTH,
-                    YEAR: StockChartType.YEAR,
-                };
-                return requireOk(await fetchStockChart(code, {chartType: chartTypeMap[chartType] ?? StockChartType.DAY}, {signal, skipGlobalError: true}), null);
-            }
-            if (assetType === 'US_STOCK') {
-                const chartTypeMap: Record<string, UsStockChartType> = {
-                    MINUTE: `MINUTE_${minuteUnit}` as UsStockChartType,
-                    DAY: UsStockChartType.DAY,
-                    WEEK: UsStockChartType.WEEK,
-                    MONTH: UsStockChartType.MONTH,
-                    YEAR: UsStockChartType.YEAR,
-                };
-                return requireOk(await fetchMultiViewUsStockChart(code, {stexTp: stexTp ?? '', chartType: chartTypeMap[chartType] ?? UsStockChartType.DAY}, {signal, skipGlobalError: true}), null);
-            }
-            if (assetType === 'CRYPTO') {
-                const chartTypeMap: Record<string, CryptoChartType> = {
-                    MINUTE: `MINUTE_${minuteUnit}` as CryptoChartType,
-                    DAY: CryptoChartType.DAY,
-                    WEEK: CryptoChartType.WEEK,
-                    MONTH: CryptoChartType.MONTH,
-                    YEAR: CryptoChartType.YEAR,
-                };
-                return requireOk(await fetchCryptoDetail(code, {chartType: chartTypeMap[chartType] ?? CryptoChartType.DAY}, {signal, skipGlobalError: true}), null);
-            }
-            if (assetType === 'COMMODITY') {
-                const chartTypeMap: Record<string, CommodityChartType> = {
-                    MINUTE: `MINUTE_${minuteUnit}` as CommodityChartType,
-                    DAY: CommodityChartType.DAY,
-                    WEEK: CommodityChartType.WEEK,
-                    MONTH: CommodityChartType.MONTH,
-                };
-                return requireOk(await fetchCommodityDetail(code, {chartType: chartTypeMap[chartType] ?? CommodityChartType.DAY}, {signal, skipGlobalError: true}), null);
-            }
-            return null;
+            if (!asset) return null;
+            return requireOk<MultiViewChartRes | null>(
+                await fetchMultiViewChart(asset, chartType, {signal, skipGlobalError: true}), null,
+            );
         },
-        enabled: open && !!code && !!assetType,
+        enabled: open && !!asset,
     });
 
-    const chartData = useMemo<CustomStockDetailLineChartProps | CryptoDetailLineChartProps | CommodityDetailLineChartProps | null>(() => {
-        if (!queryData) return null;
-        const isMinute = chartType === 'MINUTE';
+    const summary = useMemo(() => {
+        if (!queryData || !asset) return null;
         try {
-            if (assetType === 'STOCK') {
-                const {stockInfo, stockChartList} = (queryData as any) ?? {};
-                if (!stockInfo || !stockChartList) return null;
-
-                const dateList: string[] = stockChartList.map((item: {dt: string}) =>
-                    isMinute
-                        ? `${item.dt.slice(0, 4)}.${item.dt.slice(4, 6)}.${item.dt.slice(6, 8)} ${item.dt.slice(8, 10)}:${item.dt.slice(10, 12)}`
-                        : `${item.dt.slice(0, 4)}.${item.dt.slice(4, 6)}.${item.dt.slice(6, 8)}`
-                ).reverse();
-                const lineData = stockChartList.map((item: {curPrc: string}) =>
-                    isMinute ? Number(item.curPrc.replace(/^[+-]/, '')) : item.curPrc
-                ).reverse();
-                const barDataList: number[] = stockChartList.map((item: {trdeQty: string}) => Number(item.trdeQty)).reverse();
-
-                const tm = stockInfo.tm ?? '';
-                const interval = tm
-                    ? ((Number(tm.substring(8, 10)) >= 20 || Number(tm.substring(8, 10)) < 8)
-                        ? `${tm.substring(0, 4)}.${tm.substring(4, 6)}.${tm.substring(6, 8)} 장마감`
-                        : `${tm.substring(0, 4)}.${tm.substring(4, 6)}.${tm.substring(6, 8)} ${tm.substring(8, 10)}:${tm.substring(10, 12)}`)
-                    : '';
-
-                return {
-                    id: stockInfo.stkCd, title: stockInfo.stkNm,
-                    orderWarning: stockInfo.orderWarning ?? '',
-                    auditInfo: stockInfo.auditInfo ?? '',
-                    state: stockInfo.state ?? '',
-                    value: Number(String(stockInfo.curPrc).replace(/^[+-]/, '')).toLocaleString(),
-                    fluRt: stockInfo.fluRt, predPre: stockInfo.predPre || '0',
-                    openPric: parseFloat(stockInfo.openPric), interval,
-                    trend: trendColor(stockInfo.preSig), nxtEnable: stockInfo.nxtEnable ?? 'N',
-                    seriesData: [{id: code, showMark: false, curve: 'linear', area: true, stackOrder: 'ascending', color: 'grey', data: lineData}],
-                    barDataList, dateList,
-                } as CustomStockDetailLineChartProps;
-            }
-
-            if (assetType === 'US_STOCK') {
-                const {usStockInfo, chartList} = (queryData as any) ?? {};
-                if (!usStockInfo || !chartList) return null;
-
-                const dateList: string[] = chartList.map((item: {dt: string}) => usDateFormat(item.dt, isMinute));
-                const lineData = chartList.map((item: {curPrc: string}) => Number(String(item.curPrc ?? '0').replace(/^[+-]/, '')));
-                const barDataList: number[] = chartList.map((item: {trdeQty: string}) => Number(String(item.trdeQty ?? '0').replace(/^[+-]/, '')));
-
-                const trend = trendColor(String(usStockInfo.predPreSig ?? '3'));
-                const predPre = Number(String(usStockInfo.predPre ?? '0'));
-
-                return {
-                    id: code,
-                    title: `${usStockInfo.stkNm ?? usStockInfo.stkEnm ?? name} (${code})`,
-                    value: usdFormat(Number(String(usStockInfo.curPrc ?? '0').replace(/^[+-]/, ''))),
-                    changeRate: String(usStockInfo.fluRt ?? '0').replace(/^\+/, ''),
-                    changePrice: Number.isFinite(predPre) ? predPre : 0,
-                    interval: '', trend,
-                    seriesData: [{id: code, showMark: false, curve: 'linear', area: true, stackOrder: 'ascending', color: trend === 'up' ? 'red' : trend === 'down' ? 'blue' : 'grey', data: lineData}],
-                    barDataList, dateList,
-                } as CryptoDetailLineChartProps;
-            }
-
-            if (assetType === 'CRYPTO') {
-                const r = queryData as any;
-                if (!r?.chartList || !r?.cryptoInfo) return null;
-
-                // 코인 chartList 는 시간순 정렬되어 있어 reverse 불필요
-                const dateList: string[] = r.chartList.map((item: {dt: string}) => cryptoDateFormat(item.dt, isMinute));
-                const lineData = r.chartList.map((item: {tradePrice: number}) => item.tradePrice);
-                const barDataList: number[] = r.chartList.map((item: {candleAccTradeVolume: number}) => item.candleAccTradeVolume);
-
-                const info = r.cryptoInfo;
-                const trend: 'up' | 'down' | 'neutral' = info.change === 'RISE' ? 'up' : info.change === 'FALL' ? 'down' : 'neutral';
-                const interval = cryptoDateFormat(info.tradeDateTimeKst ?? '', true);
-
-                return {
-                    id: code, title: info.koreanName ?? name,
-                    value: Number(info.tradePrice ?? 0).toLocaleString(),
-                    changeRate: ((info.signedChangeRate ?? 0) * 100).toFixed(2),
-                    changePrice: Number(info.signedChangePrice ?? 0),
-                    interval, trend,
-                    seriesData: [{id: code, showMark: false, curve: 'linear', area: true, stackOrder: 'ascending', color: trend === 'up' ? 'red' : trend === 'down' ? 'blue' : 'grey', data: lineData}],
-                    barDataList, dateList,
-                } as CryptoDetailLineChartProps;
-            }
-
-            if (assetType === 'COMMODITY') {
-                const {commodityInfo, commodityChartList} = (queryData as any) ?? {};
-                if (!commodityInfo || !commodityChartList) return null;
-
-                const dateList: string[] = commodityChartList.map((item: {dt: string}) =>
-                    isMinute
-                        ? `${item.dt.slice(0, 4)}.${item.dt.slice(4, 6)}.${item.dt.slice(6, 8)} ${item.dt.slice(8, 10)}:${item.dt.slice(10, 12)}`
-                        : `${item.dt.slice(0, 4)}.${item.dt.slice(4, 6)}.${item.dt.slice(6, 8)}`
-                ).reverse();
-                const lineData = commodityChartList.map((item: {curPrc: string}) =>
-                    isMinute ? item.curPrc.replace(/^[+-]/, '') : item.curPrc
-                ).reverse();
-                const barDataList: number[] = commodityChartList.map((item: {trdeQty: string}) => Number(item.trdeQty)).reverse();
-
-                const tm = commodityInfo.tm ?? '';
-                const interval = tm
-                    ? ((Number(tm.substring(8, 10)) >= 20 || Number(tm.substring(8, 10)) < 8)
-                        ? `${tm.substring(0, 4)}.${tm.substring(4, 6)}.${tm.substring(6, 8)} 장마감`
-                        : `${tm.substring(0, 4)}.${tm.substring(4, 6)}.${tm.substring(6, 8)} ${tm.substring(8, 10)}:${tm.substring(10, 12)}`)
-                    : '';
-
-                return {
-                    id: code, title: commodityInfo.stkNm, orderWarning: '', auditInfo: '', state: '',
-                    value: Number(String(commodityInfo.curPrc).replace(/^[+-]/, '')).toLocaleString(),
-                    fluRt: commodityInfo.fluRt ?? '0', predPre: commodityInfo.predPre ?? '0',
-                    openPric: parseFloat(commodityInfo.openPric ?? '0'), interval,
-                    trend: trendColor(commodityInfo.preSig ?? '3'), nxtEnable: 'N',
-                    seriesData: [{id: code, showMark: false, curve: 'linear', area: true, stackOrder: 'ascending', color: 'grey', data: lineData}],
-                    barDataList, dateList,
-                } as CommodityDetailLineChartProps;
-            }
+            return summaryOf(asset, queryData);
         } catch (err) {
             console.error(err);
+            return null;
         }
-        return null;
-    }, [queryData, assetType, chartType, code, name]);
+    }, [queryData, asset]);
+
+    const candles = useMemo(() => (queryData && asset ? candlesOf(asset, queryData) : []), [queryData, asset]);
+    const comparison = useMemo(() => (asset ? comparisonOf(asset, chartType) : undefined), [asset, chartType]);
+    const storage = asset ? chartStorageOf(asset) : null;
 
     const handleChartTypeChange = (_: unknown, value: string | null) => {
         if (!value) return;
-        setChartType(value);
+        setToggle(value);
         // 직접 fetch 호출 안 함 — queryKey 변경으로 useQuery 자동 재요청
     };
 
     const handleMinuteChange = (e: SelectChangeEvent) => {
         setMinuteUnit(e.target.value);
-        setChartType("MINUTE");
+        setToggle("MINUTE");
     };
 
-    const trend = chartData?.trend ?? 'neutral';
-    const color = labelColors[trend];
-    const fluRt = chartData
-        ? ('fluRt' in chartData ? chartData.fluRt : ('changeRate' in chartData ? chartData.changeRate : '0'))
-        : '0';
-    const predPre = chartData
-        ? ('predPre' in chartData ? chartData.predPre : String('changePrice' in chartData ? chartData.changePrice : '0'))
-        : '0';
+    // 주기(분·일·주·월·년) 버튼. 차트 위쪽 줄 맨 앞에 놓는다.
+    const chartControls = (
+        <ChartToolbarGroup size="small" value={toggle} exclusive onChange={handleChartTypeChange} aria-label="차트 주기">
+            <ToggleButton value="MINUTE" aria-label="MINUTE">
+                {/* 버튼 안의 선택 상자는 글자 크기·색을 버튼에서 물려받고, 화살표는 작은 아래 화살표 하나만 둔다. */}
+                <Select
+                    size="small"
+                    value={minuteUnit}
+                    onChange={handleMinuteChange}
+                    variant="standard"
+                    disableUnderline
+                    IconComponent={ArrowDropDownIcon}
+                    sx={{
+                        boxShadow: 'none',
+                        backgroundColor: 'transparent',
+                        border: 'none',
+                        padding: 0,
+                        font: 'inherit',
+                        color: 'inherit',
+                        '& .MuiSelect-select': {py: 0, pl: 0, minHeight: 0},
+                        '& .MuiSelect-icon': {color: 'inherit'},
+                    }}
+                >
+                    <MenuItem value="1">1분</MenuItem>
+                    <MenuItem value="3">3분</MenuItem>
+                    <MenuItem value="5">5분</MenuItem>
+                    <MenuItem value="30">30분</MenuItem>
+                </Select>
+            </ToggleButton>
+            <ToggleButton value="DAY">일</ToggleButton>
+            <ToggleButton value="WEEK">주</ToggleButton>
+            <ToggleButton value="MONTH">월</ToggleButton>
+            {assetType !== 'COMMODITY' && <ToggleButton value="YEAR">년</ToggleButton>}
+        </ChartToolbarGroup>
+    );
 
     return (
         <Dialog
@@ -320,19 +153,19 @@ export default function ChartDetailDialog({open, onClose, assetType, code, name,
             <DialogContent sx={{p: 3}}>
                 <Box sx={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2}}>
                     <Typography component="h2" variant="subtitle1">
-                        {chartData?.title ?? name}
+                        {summary?.title ?? name}
                     </Typography>
                     <IconButton size="small" onClick={onClose} title="닫기"><CloseIcon fontSize="small"/></IconButton>
                 </Box>
 
-                {chartData ? (
+                {summary ? (
                     <Stack sx={{justifyContent: 'space-between', mb: 2}}>
                         <Stack direction="row" sx={{alignItems: 'center', gap: 1}}>
-                            <Typography variant="h4" component="p">{chartData.value}</Typography>
-                            {renderChangeAmount(predPre, assetType === 'US_STOCK' ? '달러' : '원')}
-                            <Chip size="small" color={color} label={signedRate(fluRt)}/>
+                            <Typography variant="h4" component="p">{summary.value}</Typography>
+                            {renderChangeAmount(summary.change, assetType === 'US_STOCK' ? '달러' : '원')}
+                            <Chip size="small" color={labelColors[summary.trend]} label={signedRate(summary.rate)}/>
                         </Stack>
-                        <Typography variant="caption" sx={{color: 'text.secondary'}}>{chartData.interval}</Typography>
+                        <Typography variant="caption" sx={{color: 'text.secondary'}}>{summary.interval}</Typography>
                     </Stack>
                 ) : (
                     <Stack sx={{justifyContent: 'space-between', mb: 2}}>
@@ -345,42 +178,24 @@ export default function ChartDetailDialog({open, onClose, assetType, code, name,
                     </Stack>
                 )}
 
-                <Box sx={{minWidth: 600}}>
-                    {!chartData ? (
-                        <Skeleton variant="rectangular" height={CHART_HEIGHT} sx={{borderRadius: 1}}/>
-                    ) : (
-                        <>
-                            {assetType === 'STOCK' && (
-                                <StockDetailLineChart {...(chartData as CustomStockDetailLineChartProps)} height={CHART_HEIGHT}/>
-                            )}
-                            {(assetType === 'US_STOCK' || assetType === 'CRYPTO') && (
-                                <CryptoDetailLineChart {...(chartData as CryptoDetailLineChartProps)} height={CHART_HEIGHT}/>
-                            )}
-                            {assetType === 'COMMODITY' && (
-                                <CommodityDetailLineChart {...(chartData as CommodityDetailLineChartProps)} height={CHART_HEIGHT}/>
-                            )}
-                        </>
-                    )}
-                </Box>
-
-                <Box display="flex" justifyContent="space-between" alignItems="center" flexWrap="wrap" sx={{mt: 1}}>
-                    <StyledToggleButtonGroup size="small" value={chartType} exclusive onChange={handleChartTypeChange}>
-                        <ToggleButton value="MINUTE" sx={{padding: 1}}>
-                            <Select size="small" value={minuteUnit} onChange={handleMinuteChange}
-                                variant="standard" disableUnderline
-                                sx={{boxShadow: 'none', width: 55, backgroundColor: 'transparent', border: 'none', padding: '0 8px', justifyContent: 'center'}}>
-                                <MenuItem value="1">1분</MenuItem>
-                                <MenuItem value="3">3분</MenuItem>
-                                <MenuItem value="5">5분</MenuItem>
-                                <MenuItem value="30">30분</MenuItem>
-                            </Select>
-                        </ToggleButton>
-                        <ToggleButton value="DAY">일</ToggleButton>
-                        <ToggleButton value="WEEK">주</ToggleButton>
-                        <ToggleButton value="MONTH">월</ToggleButton>
-                        {assetType !== 'COMMODITY' && <ToggleButton value="YEAR">년</ToggleButton>}
-                    </StyledToggleButtonGroup>
-                </Box>
+                {/* 상세 화면과 같은 차트. 창의 여백 안에 맞게 차트의 좌우 여백만큼 당긴다. */}
+                {!summary || !asset || !storage ? (
+                    <Skeleton variant="rectangular" height={CHART_HEIGHT} sx={{borderRadius: 1}}/>
+                ) : (
+                    <Box sx={{mx: -2}}>
+                        <CandleChart
+                            candles={candles}
+                            timeUnit={timeUnitOf(chartType)}
+                            interval={intervalOf(asset, chartType)}
+                            seriesKey={`${asset.type}-${asset.code}-${chartType}`}
+                            assetType={storage.assetType}
+                            assetCode={storage.assetCode}
+                            comparison={comparison}
+                            toolbarStart={chartControls}
+                            height={CHART_HEIGHT}
+                        />
+                    </Box>
+                )}
             </DialogContent>
         </Dialog>
     );
