@@ -9,10 +9,12 @@ import {fetchCryptoDetail, fetchCryptoSearch} from "../../api/crypto/CryptoApi.t
 import type {StockCandleRes, StockChartType} from "../../type/StockType.ts";
 import type {UsStockChartType, UsStockDetailRes} from "../../type/UsStockType.ts";
 import type {CryptoChartType, CryptoDetailRes} from "../../type/CryptoType.ts";
+import {fetchIndexDetail, fetchIndexList} from "../../api/index/IndexApi.ts";
+import type {IndexChartType, IndexDetailRes, IndexListRes} from "../../type/IndexType.ts";
 import {requireOk} from "../../lib/apiResponse.ts";
-import {cryptoCandles, kiwoomCandles} from "./chartCandles.ts";
+import {cryptoCandles, indexCandles, kiwoomCandles} from "./chartCandles.ts";
 
-// 종목 비교에 쓰는 검색과 캔들 조회. 국내 주식·미국 주식·코인의 주기 이름이 같아(DAY, WEEK …) 그대로 넘긴다.
+// 종목 비교에 쓰는 검색과 캔들 조회. 국내 주식·미국 주식·코인·지수의 주기 이름이 같아(DAY, WEEK …) 그대로 넘긴다.
 
 // 주기 → 캔들을 맞추는 기준. 여기에 없는 주기(분봉)는 캔들 시각으로 맞춘다
 const ALIGN_BY: Record<string, ComparisonAlign | undefined> = {
@@ -29,6 +31,13 @@ const search = async (market: ComparisonMarket, keyword: string): Promise<Compar
             await fetchUsStockSearch(keyword), '미국 종목 검색',
         );
         return (found ?? []).map(item => ({market, code: item.stkCd, name: item.stkNm, exchange: item.stexTp}));
+    }
+    if (market === 'INDEX') {
+        // 지수는 수가 적어 전체 목록에서 고른다. 검색어가 있으면 이름·코드로 거른다.
+        const found = requireOk<IndexListRes | null>(await fetchIndexList({skipGlobalError: true}), '지수 목록 조회');
+        return (found?.indexList ?? [])
+            .filter(item => !keyword || item.indsNm.includes(keyword) || item.indsCd.includes(keyword))
+            .map(item => ({market, code: item.indsCd, name: item.indsNm}));
     }
     const found = requireOk<{ market: string, koreanName: string }[] | null>(await fetchCryptoSearch(keyword), '코인 검색');
     return (found ?? []).map(item => ({market, code: item.market, name: item.koreanName}));
@@ -55,6 +64,13 @@ const fetchPage = async (chartType: string, target: ComparisonTarget, cursor: st
             '비교 종목 차트 조회',
         );
         return singlePage(kiwoomCandles(detail.chartList ?? []));
+    }
+    if (target.market === 'INDEX') {
+        const detail = requireOk<IndexDetailRes>(
+            await fetchIndexDetail(target.code, {chart_type: chartType as IndexChartType}, {skipGlobalError: true}),
+            '비교 지수 차트 조회',
+        );
+        return singlePage(indexCandles(detail.chartList ?? []));
     }
     const detail = requireOk<CryptoDetailRes>(
         await fetchCryptoDetail(target.code, {chartType: chartType as CryptoChartType}, {skipGlobalError: true}),

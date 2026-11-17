@@ -30,18 +30,33 @@ const isValid = (candle: Candle) => (
     [candle.time, candle.open, candle.high, candle.low, candle.close].every(Number.isFinite)
 );
 
-/** 키움 차트 목록을 캔들(오래된 순)로 바꾼다. 값이 깨진 항목은 버린다. */
-export const kiwoomCandles = (list: KiwoomChartRow[]): Candle[] => list
+/**
+ * 키움 차트 목록을 캔들(오래된 순)로 바꾼다. 값이 깨진 항목은 버린다.
+ * priceScale: 가격에 곱할 값. 지수 차트는 가격이 100배로 온다(265012 → 2650.12).
+ */
+export const kiwoomCandles = (list: KiwoomChartRow[], priceScale = 1): Candle[] => list
     .map(item => ({
         time: parseChartTime((item.dt ?? '').replace(/\s+/g, '')),
-        open: parseChartPrice(item.openPric),
-        high: parseChartPrice(item.highPric),
-        low: parseChartPrice(item.lowPric),
-        close: parseChartPrice(item.curPrc),
+        open: parseChartPrice(item.openPric) * priceScale,
+        high: parseChartPrice(item.highPric) * priceScale,
+        low: parseChartPrice(item.lowPric) * priceScale,
+        close: parseChartPrice(item.curPrc) * priceScale,
         volume: Number(item.trdeQty) || 0,
     }))
     .filter(isValid)
     .sort((a, b) => a.time - b.time);
+
+const INDEX_PRICE_SCALE = 0.01;
+
+/** 지수 차트 목록을 캔들(오래된 순)로 바꾼다. 소수 둘째 자리까지로 맞춘다(곱셈의 끝자리 오차 제거). */
+export const indexCandles = (list: KiwoomChartRow[]): Candle[] => kiwoomCandles(list, INDEX_PRICE_SCALE)
+    .map(candle => ({
+        ...candle,
+        open: Number(candle.open.toFixed(2)),
+        high: Number(candle.high.toFixed(2)),
+        low: Number(candle.low.toFixed(2)),
+        close: Number(candle.close.toFixed(2)),
+    }));
 
 /** 코인 차트 목록을 캔들(오래된 순)로 바꾼다. 숫자가 아닌 행은 뺀다. */
 export const cryptoCandles = (list: CryptoChart[]): Candle[] => list

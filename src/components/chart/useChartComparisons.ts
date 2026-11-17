@@ -5,12 +5,14 @@ import {mergeCandles} from "../../lib/chart/merge.ts";
 import type {CandlePage} from "./useCandleHistory.ts";
 
 /** 비교할 수 있는 종목의 종류 */
-export type ComparisonMarket = 'STOCK' | 'US_STOCK' | 'CRYPTO';
+export type ComparisonMarket = 'STOCK' | 'US_STOCK' | 'CRYPTO' | 'INDEX';
 
-export const COMPARISON_MARKETS: ComparisonMarket[] = ['STOCK', 'US_STOCK', 'CRYPTO'];
+export const COMPARISON_MARKETS: ComparisonMarket[] = ['STOCK', 'US_STOCK', 'CRYPTO', 'INDEX'];
 export const COMPARISON_MARKET_LABELS: Record<ComparisonMarket, string> = {
-    STOCK: '국내', US_STOCK: '미국', CRYPTO: '코인',
+    STOCK: '국내', US_STOCK: '미국', CRYPTO: '코인', INDEX: '지수',
 };
+// 수가 적어 검색어 없이도 전체 목록을 보여 주는 종류. search 에 빈 검색어를 넘기면 전체를 돌려줘야 한다
+export const LISTED_MARKETS: ComparisonMarket[] = ['INDEX'];
 
 /** 비교할 수 있는 종목 하나 */
 export interface ComparisonTarget {

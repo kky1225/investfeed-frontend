@@ -10,7 +10,7 @@ import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
 import CloseIcon from "@mui/icons-material/Close";
 import {
-    COMPARISON_MARKET_LABELS, COMPARISON_MARKETS, ComparisonItem, ComparisonMarket, ComparisonTarget,
+    COMPARISON_MARKET_LABELS, COMPARISON_MARKETS, ComparisonItem, ComparisonMarket, ComparisonTarget, LISTED_MARKETS,
 } from "./useChartComparisons.ts";
 
 export interface ChartComparisonFieldProps {
@@ -25,7 +25,9 @@ export interface ChartComparisonFieldProps {
 }
 
 // 문장 안에서 종류를 가리키는 말
-const MARKET_NOUNS: Record<ComparisonMarket, string> = {STOCK: '국내 종목', US_STOCK: '미국 종목', CRYPTO: '코인'};
+const MARKET_NOUNS: Record<ComparisonMarket, string> = {
+    STOCK: '국내 종목', US_STOCK: '미국 종목', CRYPTO: '코인', INDEX: '지수',
+};
 const SEARCH_DELAY_MS = 300;   // 입력이 멈추고 이만큼 지나면 검색한다
 const SWATCH_SIZE = 12;
 
@@ -46,12 +48,28 @@ const ChartComparisonField = ({
 
     useEffect(() => () => clearTimeout(timer.current), []);
 
+    // 지수처럼 수가 적은 종류는 전체 목록을 한 번 받아 두고, 입력한 글자로 그 안에서 거른다.
+    const listed = LISTED_MARKETS.includes(searchMarket);
+    const [fullList, setFullList] = useState<{ market: ComparisonMarket, targets: ComparisonTarget[] } | null>(null);
+    useEffect(() => {
+        if (!listed) return;
+        let alive = true;
+        onSearch(searchMarket, '')
+            .then(found => {
+                if (alive) setFullList({market: searchMarket, targets: found});
+            })
+            .catch(error => console.error(error));
+        return () => {
+            alive = false;
+        };
+    }, [listed, searchMarket, onSearch]);
+
     const searchFor = (value: string, target: ComparisonMarket) => {
         setInput(value);
         clearTimeout(timer.current);
         const current = ++ticket.current;
         const keyword = value.trim();
-        if (!keyword) {
+        if (!keyword || LISTED_MARKETS.includes(target)) {
             setOptions([]);
             setLoading(false);
             return;
@@ -76,7 +94,12 @@ const ChartComparisonField = ({
 
     // 보고 있는 종목과 이미 더한 종목은 고를 수 없게 뺀다.
     const excluded = [selfKey, ...items.map(item => item.key)];
-    const choices = options.filter(option => !excluded.includes(`${option.market}:${option.code}`));
+    const keyword = input.trim();
+    const found = listed
+        ? (fullList?.market === searchMarket ? fullList.targets : [])
+            .filter(option => !keyword || option.name.includes(keyword) || option.code.includes(keyword))
+        : options;
+    const choices = found.filter(option => !excluded.includes(`${option.market}:${option.code}`));
     const hiddenCount = items.filter(item => !item.shown).length;
 
     return (
@@ -121,13 +144,16 @@ const ChartComparisonField = ({
                         getOptionLabel={option => `${option.name} (${option.code})`}
                         getOptionKey={option => option.code}
                         // 서버가 찾아 준 결과를 그대로 보여 준다.
-                        filterOptions={found => found}
+                        filterOptions={shown => shown}
                         loading={loading}
                         loadingText="검색 중…"
-                        noOptionsText={input.trim() ? '검색 결과가 없습니다.' : '종목 이름을 입력하세요.'}
+                        noOptionsText={keyword || listed ? '검색 결과가 없습니다.' : '종목 이름을 입력하세요.'}
                         blurOnSelect
                         renderInput={params => (
-                            <TextField {...params} label={`비교할 ${MARKET_NOUNS[searchMarket]} 검색`}/>
+                            <TextField
+                                {...params}
+                                label={`비교할 ${MARKET_NOUNS[searchMarket]} ${listed ? '선택' : '검색'}`}
+                            />
                         )}
                     />
                 </Stack>
@@ -182,7 +208,7 @@ const ChartComparisonField = ({
             </Typography>
             <Typography variant="body2" sx={{color: 'text.secondary', mt: 0.5}}>
                 {mixed
-                    ? '일봉·주봉·월봉·연봉에서는 국내 주식·미국 주식·코인을 섞어 비교할 수 있습니다.'
+                    ? '일봉·주봉·월봉·연봉에서는 국내 주식·미국 주식·코인·지수를 섞어 비교할 수 있습니다.'
                     : `분봉에서는 거래 시간이 같은 ${MARKET_NOUNS[market]}끼리만 비교할 수 있습니다.`}
                 {hiddenCount > 0 && ' 다른 종류의 종목은 일봉 이상으로 바꾸면 다시 표시됩니다.'}
             </Typography>
