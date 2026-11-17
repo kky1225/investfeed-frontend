@@ -239,7 +239,7 @@ export default function MemberManagement() {
         {
             field: 'no', headerName: 'No', minWidth: 80,
             renderCell: (params) => {
-                const index = members.findIndex((m: any) => m.id === params.row.id);
+                const index = members.findIndex((m: { id: number }) => m.id === params.row.id);
                 return index + 1;
             }
         },
@@ -310,7 +310,7 @@ export default function MemberManagement() {
     ];
 
     return (
-        <Box sx={{width: '100%', maxWidth: {sm: '100%', md: '1700px'}}}>
+        <Box sx={{width: '100%', maxWidth: {sm: '100%', md: 'var(--page-max-width)'}}}>
             <Box sx={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2}}>
                 <Typography component="h2" variant="h6">
                     회원 관리

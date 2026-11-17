@@ -319,7 +319,7 @@ const RecommendList = () => {
     }, [streamKey]);
 
     return (
-        <Box sx={{width: '100%', maxWidth: {sm: '100%', md: '1700px'}}}>
+        <Box sx={{width: '100%', maxWidth: {sm: '100%', md: 'var(--page-max-width)'}}}>
             <Box sx={{display: 'flex', alignItems: 'center', mb: 1, gap: 2}}>
                 <Stack direction="row" alignItems="center" spacing={0.5}>
                     <Typography component="h2" variant="h6" sx={{lineHeight: 1}}>

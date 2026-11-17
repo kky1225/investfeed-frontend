@@ -228,7 +228,7 @@ export default function MultiViewPage() {
     const gridSize = getGridSize();
 
     return (
-        <Box sx={{width: '100%', maxWidth: {sm: '100%', md: '1700px'}}}>
+        <Box sx={{width: '100%', maxWidth: {sm: '100%', md: 'var(--page-max-width)'}}}>
             <Typography component="h2" variant="h6" sx={{mb: 2}}>
                 멀티 화면
             </Typography>

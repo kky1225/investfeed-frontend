@@ -16,6 +16,7 @@ import {fetchStockSearch} from '../api/stock/StockApi.ts';
 import {fetchCryptoSearch} from '../api/crypto/CryptoApi.ts';
 import {fetchUsStockSearch} from '../api/usStock/UsStockApi.ts';
 import {useNavigate} from 'react-router-dom';
+import PageWidthSelect from './PageWidthSelect.tsx';
 import {useNotification} from '../context/NotificationContext';
 import NotificationPopover from './NotificationPopover';
 import SmartToyOutlinedIcon from '@mui/icons-material/SmartToyOutlined';
@@ -112,7 +113,7 @@ export default function Header() {
                 width: '100%',
                 alignItems: {xs: 'flex-start', md: 'center'},
                 justifyContent: 'space-between',
-                maxWidth: {sm: '100%', md: '1700px'},
+                maxWidth: {sm: '100%', md: 'var(--page-max-width)'},
                 pt: 1.5,
             }}
             spacing={2}
@@ -198,6 +199,7 @@ export default function Header() {
                 >
                     <NotificationsRoundedIcon/>
                 </MenuButton>
+                <PageWidthSelect/>
                 <ColorModeIconDropdown/>
             </Stack>
             <NotificationPopover

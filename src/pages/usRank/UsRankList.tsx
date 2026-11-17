@@ -194,7 +194,7 @@ const UsRankList = () => {
     }
 
     return (
-        <Box sx={{width: '100%', maxWidth: {sm: '100%', md: '1700px'}}}>
+        <Box sx={{width: '100%', maxWidth: {sm: '100%', md: 'var(--page-max-width)'}}}>
             <Box sx={{display: 'flex', alignItems: 'center', mb: 2, gap: 2}}>
                 <Typography component="h2" variant="h6">
                     미국 주식 순위 목록

@@ -370,7 +370,7 @@ export default function CryptoManualHoldingTab({broker}: CryptoManualHoldingTabP
     }));
 
     return (
-        <Box sx={{width: '100%', maxWidth: {sm: '100%', md: '1700px'}}}>
+        <Box sx={{width: '100%', maxWidth: {sm: '100%', md: 'var(--page-max-width)'}}}>
             <HoldingSummaryCard
                 totPurAmt={totPurAmt}
                 totEvltAmt={totEvltAmt}

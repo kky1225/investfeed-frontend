@@ -101,7 +101,7 @@ export default function HoldingPage() {
     };
 
     return (
-        <Box sx={{width: '100%', maxWidth: {sm: '100%', md: '1700px'}}}>
+        <Box sx={{width: '100%', maxWidth: {sm: '100%', md: 'var(--page-max-width)'}}}>
             <Box sx={{display: 'flex', alignItems: 'center', gap: 1, mb: 2}}>
                 <Typography component="h2" variant="h6">
                     주식 계좌

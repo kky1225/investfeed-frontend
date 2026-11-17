@@ -222,7 +222,7 @@ export default function MarketIndexList() {
     };
 
     return (
-        <Box sx={{width: '100%', maxWidth: {sm: '100%', md: '1700px'}}}>
+        <Box sx={{width: '100%', maxWidth: {sm: '100%', md: 'var(--page-max-width)'}}}>
             <Box sx={{display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 3}}>
                 <Typography variant="h6" sx={{fontWeight: 600}}>
                     주요 지수

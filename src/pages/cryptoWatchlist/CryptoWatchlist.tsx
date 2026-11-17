@@ -582,7 +582,7 @@ const CryptoWatchlist = () => {
     }), [items, liveOverlay]);
 
     return (
-        <Box sx={{width: "100%", maxWidth: {sm: "100%", md: "1700px"}}}>
+        <Box sx={{width: "100%", maxWidth: {sm: "100%", md: "var(--page-max-width)"}}}>
             <Typography component="h2" variant="h6" sx={{mb: 2}}>
                 암호화폐 관심 종목
             </Typography>

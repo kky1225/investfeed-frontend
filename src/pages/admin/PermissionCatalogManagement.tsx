@@ -338,7 +338,7 @@ export default function PermissionCatalogManagement() {
     const customPermissions = permissions.filter(p => !p.isSystem);
 
     return (
-        <Box sx={{width: '100%', maxWidth: {sm: '100%', md: '1700px'}}}>
+        <Box sx={{width: '100%', maxWidth: {sm: '100%', md: 'var(--page-max-width)'}}}>
             <Box sx={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2}}>
                 <Typography variant="h5">권한 카탈로그</Typography>
                 <Button variant="contained" startIcon={<AddIcon />} onClick={handleOpenCreate}>

@@ -613,7 +613,7 @@ export default function Monitoring() {
         <LocalizationProvider dateAdapter={AdapterDayjs}>
         <Box sx={{
             width: '100%',
-            maxWidth: {sm: '100%', md: '1700px'},
+            maxWidth: {sm: '100%', md: 'var(--page-max-width)'},
             '& .MuiInputAdornment-root .MuiIconButton-root': {
                 padding: '4px',
                 border: 'none',

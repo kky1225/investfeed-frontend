@@ -238,7 +238,7 @@ export default function CalendarManagement() {
     ];
 
     return (
-        <Box sx={{width: '100%', maxWidth: {sm: '100%', md: '1700px'}}}>
+        <Box sx={{width: '100%', maxWidth: {sm: '100%', md: 'var(--page-max-width)'}}}>
             <Typography component="h2" variant="h6" sx={{mb: 2}}>일정 관리</Typography>
 
             <Tabs value={tab} onChange={(_, v) => setTab(v)} sx={{mb: 2, borderBottom: 1, borderColor: 'divider'}}>

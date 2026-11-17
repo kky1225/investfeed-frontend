@@ -38,7 +38,7 @@ export default function AssetDashboard() {
 
     if (!loading && !data) {
         return (
-            <Box sx={{width: '100%', maxWidth: {sm: '100%', md: '1700px'}}}>
+            <Box sx={{width: '100%', maxWidth: {sm: '100%', md: 'var(--page-max-width)'}}}>
                 <Typography component="h2" variant="h6" sx={{mb: 2}}>
                     통합 자산 대시보드
                 </Typography>
@@ -56,7 +56,7 @@ export default function AssetDashboard() {
     if (apiKeyLoaded && missingBrokerNames.length > 0) {
         const joined = missingBrokerNames.join(', ');
         return (
-            <Box sx={{width: '100%', maxWidth: {sm: '100%', md: '1700px'}, py: 4}}>
+            <Box sx={{width: '100%', maxWidth: {sm: '100%', md: 'var(--page-max-width)'}, py: 4}}>
                 <Typography component="h2" variant="h6" sx={{mb: 3}}>통합 자산 대시보드</Typography>
                 <ApiKeyRequiredEmptyState
                     brokerName={joined}
@@ -70,7 +70,7 @@ export default function AssetDashboard() {
     const cryptoTotal = data?.cryptoSummary.evltAmt ?? 0;
 
     return (
-        <Box sx={{width: '100%', maxWidth: {sm: '100%', md: '1700px'}}}>
+        <Box sx={{width: '100%', maxWidth: {sm: '100%', md: 'var(--page-max-width)'}}}>
             <Box sx={{display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', mb: 2}}>
                 <Box sx={{display: 'flex', alignItems: 'center', gap: 1}}>
                     <Typography component="h2" variant="h6">

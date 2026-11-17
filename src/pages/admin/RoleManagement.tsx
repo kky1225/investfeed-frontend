@@ -259,7 +259,7 @@ export default function RoleManagement() {
     };
 
     return (
-        <Box sx={{width: '100%', maxWidth: {sm: '100%', md: '1700px'}}}>
+        <Box sx={{width: '100%', maxWidth: {sm: '100%', md: 'var(--page-max-width)'}}}>
             <Box sx={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2}}>
                 <Typography variant="h5">역할 관리</Typography>
                 <Box sx={{display: 'flex', gap: 1}}>
