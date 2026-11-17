@@ -6,18 +6,10 @@ import Stack from "@mui/material/Stack";
 import Chip from "@mui/material/Chip";
 import Card from "@mui/material/Card";
 import Skeleton from "@mui/material/Skeleton";
-import {MouseEvent, ReactElement, useEffect, useMemo, useRef, useState} from "react";
-import ArrowDropDownIcon from "@mui/icons-material/ArrowDropDown";
-import ToggleButton from '@mui/material/ToggleButton';
-import {Theme} from "@mui/material/styles";
-import useMediaQuery from "@mui/material/useMediaQuery";
-import {Select, SelectChangeEvent, Slider, Tooltip} from "@mui/material";
-import MenuItem from "@mui/material/MenuItem";
+import {ReactElement, useEffect, useMemo, useState} from "react";
+import {Slider, Tooltip} from "@mui/material";
 import {CryptoDetailLineChartProps} from "../../components/CryptoDetailLineChart.tsx";
-import CandleChart from "../../components/chart/CandleChart.tsx";
-import {ChartToolbarGroup} from "../../components/chart/ChartToolbarControls.tsx";
-import {CandleInterval, TimeUnit} from "../../lib/chart/types.ts";
-import {createComparisonSource} from "../detail/chartComparison.ts";
+import AssetChart from "../detail/AssetChart.tsx";
 import {cryptoCandles as toCandles} from "../detail/chartCandles.ts";
 import {fetchCryptoDetail, fetchCryptoStream} from "../../api/crypto/CryptoApi.ts";
 import {useRealtimeWebSocket} from "../detail/useRealtimeWebSocket.ts";
@@ -43,28 +35,6 @@ interface CryptoTickerData {
     accTradeVolume24h: number;
     tradeDateTimeKst: string;
 }
-
-// 날짜 눈금 표기 단위. 주봉은 날짜까지 적는다
-const CHART_TIME_UNIT: Record<CryptoChartType, TimeUnit> = {
-    [CryptoChartType.MINUTE_1]: 'minute',
-    [CryptoChartType.MINUTE_3]: 'minute',
-    [CryptoChartType.MINUTE_5]: 'minute',
-    [CryptoChartType.MINUTE_10]: 'minute',
-    [CryptoChartType.MINUTE_30]: 'minute',
-    [CryptoChartType.DAY]: 'day',
-    [CryptoChartType.WEEK]: 'day',
-    [CryptoChartType.MONTH]: 'month',
-    [CryptoChartType.YEAR]: 'year',
-};
-
-// 분봉 한 개가 담는 기간. 차트가 캔들 마감까지 남은 시간을 적는 데 쓴다 (일봉 이상은 적지 않는다)
-const CHART_INTERVAL: Partial<Record<CryptoChartType, CandleInterval>> = {
-    [CryptoChartType.MINUTE_1]: {unit: 'minute', count: 1},
-    [CryptoChartType.MINUTE_3]: {unit: 'minute', count: 3},
-    [CryptoChartType.MINUTE_5]: {unit: 'minute', count: 5},
-    [CryptoChartType.MINUTE_10]: {unit: 'minute', count: 10},
-    [CryptoChartType.MINUTE_30]: {unit: 'minute', count: 30},
-};
 
 interface CryptoRangeProps {
     value: number;
@@ -377,97 +347,9 @@ const CryptoDetail = () => {
         },
     });
 
-    // 차트 캔들. 실시간 체결가는 마지막 캔들의 종가·고가·저가에만 반영하고, 새 캔들은 주기적 조회로 받는다.
+    // 차트 캔들. 실시간 체결가는 차트(AssetChart)가 마지막 캔들에만 반영하고, 새 캔들은 주기적 조회로 받는다.
     // (코인 캔들은 거래소가 정한 시각에 나뉘므로, 화면에서 새 캔들을 직접 만들지 않는다.)
     const candleList = useMemo(() => toCandles(result?.chartList ?? []), [result]);
-
-    // 종목 비교: 일봉 이상은 국내·미국·코인을 섞어, 분봉은 코인끼리만 비교한다.
-    const chartComparison = useMemo(() => createComparisonSource('CRYPTO', req.chartType), [req.chartType]);
-    const candles = useMemo(() => {
-        const last = candleList[candleList.length - 1];
-        if (!last || !livePrice || livePrice.stamp < last.time) return candleList;
-        const price = livePrice.tradePrice;
-        return [
-            ...candleList.slice(0, -1),
-            {...last, close: price, high: Math.max(last.high, price), low: Math.min(last.low, price)},
-        ];
-    }, [candleList, livePrice]);
-
-    const [toggle, setToggle] = useState('DAY');
-    const minute = useRef('3');
-
-    const handleAlignment = (
-        _event: MouseEvent<HTMLElement>,
-        newAlignment: string,
-    ) => {
-        if (newAlignment !== null) {
-            setToggle(newAlignment);
-
-            if (newAlignment === 'MINUTE') {
-                newAlignment = newAlignment + '_' + minute.current;
-            }
-
-            setReq({
-                ...req,
-                chartType: newAlignment as CryptoChartType
-            })
-        }
-    };
-
-    function handleOptionChange(event: SelectChangeEvent) {
-        minute.current = event.target.value as string;
-
-        const value = 'MINUTE_' + event.target.value;
-
-        setReq({
-            ...req,
-            chartType: value as CryptoChartType
-        })
-    }
-
-    // 주기(분·일·주·월·년) 버튼. 넓은 화면에서는 차트 위쪽 줄에, 좁은 화면(md 미만)에서는 차트 아래에 놓는다.
-    const isNarrow = useMediaQuery((theme: Theme) => theme.breakpoints.down('md'));
-    const chartControls = (
-        <ChartToolbarGroup
-            size="small"
-            value={toggle}
-            exclusive
-            onChange={handleAlignment}
-            aria-label="차트 주기"
-        >
-            <ToggleButton value="MINUTE" key="MINUTE" aria-label="MINUTE">
-                {/* 버튼 안의 선택 상자는 글자 크기·색을 버튼에서 물려받고, 화살표는 작은 아래 화살표 하나만 둔다. */}
-                <Select
-                    size="small"
-                    value={minute.current}
-                    onChange={handleOptionChange}
-                    variant="standard"
-                    disableUnderline
-                    IconComponent={ArrowDropDownIcon}
-                    sx={{
-                        boxShadow: 'none',
-                        backgroundColor: 'transparent',
-                        border: 'none',
-                        padding: 0,
-                        font: 'inherit',
-                        color: 'inherit',
-                        '& .MuiSelect-select': {py: 0, pl: 0, minHeight: 0},
-                        '& .MuiSelect-icon': {color: 'inherit'},
-                    }}
-                >
-                    <MenuItem value="1">1분</MenuItem>
-                    <MenuItem value="3">3분</MenuItem>
-                    <MenuItem value="5">5분</MenuItem>
-                    <MenuItem value="10">10분</MenuItem>
-                    <MenuItem value="30">30분</MenuItem>
-                </Select>
-            </ToggleButton>
-            <ToggleButton value="DAY" key="DAY" aria-label="DAY">일</ToggleButton>
-            <ToggleButton value="WEEK" key="WEEK" aria-label="WEEK">주</ToggleButton>
-            <ToggleButton value="MONTH" key="MONTH" aria-label="MONTH">월</ToggleButton>
-            <ToggleButton value="YEAR" key="YEAR" aria-label="YEAR">년</ToggleButton>
-        </ChartToolbarGroup>
-    );
 
     const labelColors = {
         up: 'error' as const,
@@ -483,7 +365,7 @@ const CryptoDetail = () => {
     };
 
     return (
-        <Box sx={{ width: '100%', maxWidth: { sm: '100%', md: '1700px' } }}>
+        <Box sx={{ width: '100%', maxWidth: { sm: '100%', md: 'var(--page-max-width)' } }}>
             <Box sx={{ display: 'flex', alignItems: 'center', mb: 2, gap: 2 }}>
                 <Typography component="h2" variant="h6">
                     암호화폐 상세
@@ -534,36 +416,16 @@ const CryptoDetail = () => {
                                 </Stack>
                             </Stack>
                         </CardContent>
-                        {!isNarrow && loading && (
-                            <Stack direction="row" spacing={1} sx={{px: 2, pb: 1, alignItems: 'center', minHeight: 40}}>
-                                {chartControls}
-                            </Stack>
-                        )}
-                        {/* 차트는 스스로 이동·확대하므로 화면 너비에 맞춘다. 선·영역 등 차트 종류는 차트 안에서 고른다. */}
-                        {loading ? (
-                            <Skeleton variant="rectangular" height={400} sx={{mx: 2, mb: 2, borderRadius: 1}}/>
-                        ) : (
-                            <CandleChart
-                                candles={candles}
-                                timeUnit={CHART_TIME_UNIT[req.chartType]}
-                                interval={CHART_INTERVAL[req.chartType]}
-                                seriesKey={`${market}-${req.chartType}`}
-                                assetType="CRYPTO"
-                                assetCode={market}
-                                comparison={chartComparison}
-                                toolbarStart={isNarrow ? undefined : chartControls}
-                            />
-                        )}
-                        {isNarrow && (
-                            <Box
-                                display="flex"
-                                justifyContent="space-between"
-                                alignItems="center"
-                                flexWrap="wrap"
-                            >
-                                {chartControls}
-                            </Box>
-                        )}
+                        <AssetChart
+                            market="CRYPTO"
+                            code={market}
+                            chartType={req.chartType}
+                            onChartTypeChange={chartType => setReq({...req, chartType: chartType as CryptoChartType})}
+                            candles={candleList}
+                            livePrice={livePrice?.tradePrice}
+                            liveStamp={livePrice?.stamp}
+                            loading={loading}
+                        />
                     </Card>
                 </Grid>
             </Grid>

@@ -1,4 +1,4 @@
-import {type MouseEvent, useMemo, useState} from "react";
+import {useMemo, useState} from "react";
 import {usePollingQuery, type PollingFetchConfig} from "../../lib/pollingQuery.ts";
 import FreshnessIndicator from "../../components/FreshnessIndicator.tsx";
 import Box from "@mui/material/Box";
@@ -8,24 +8,18 @@ import CardContent from "@mui/material/CardContent";
 import Chip from "@mui/material/Chip";
 import IconButton from "@mui/material/IconButton";
 import Stack from "@mui/material/Stack";
-import ToggleButton from "@mui/material/ToggleButton";
-import MenuItem from "@mui/material/MenuItem";
-import {Select, type SelectChangeEvent} from "@mui/material";
 import Skeleton from "@mui/material/Skeleton";
 import AddIcon from "@mui/icons-material/Add";
-import ArrowDropDownIcon from "@mui/icons-material/ArrowDropDown";
 import SwapHorizIcon from "@mui/icons-material/SwapHoriz";
 import OpenInFullIcon from "@mui/icons-material/OpenInFull";
 import CloseIcon from "@mui/icons-material/Close";
 import OpenInNewIcon from "@mui/icons-material/OpenInNew";
-import CandleChart from "../../components/chart/CandleChart.tsx";
-import {ChartToolbarGroup} from "../../components/chart/ChartToolbarControls.tsx";
+import AssetChart from "../detail/AssetChart.tsx";
 import {renderChangeAmount, signedRate} from "../../components/CustomRender.tsx";
 import type {MultiViewAssetType, SelectedAsset, StreamUpdate} from "../../type/MultiViewType.ts";
 import {useNavigate} from "react-router-dom";
 import {
-    candlesOf, chartStorageOf, chartTypeOf, comparisonOf, fetchMultiViewChart, intervalOf, type MultiViewChartRes,
-    summaryOf, timeUnitOf, withLivePrice, withStream,
+    candlesOf, fetchMultiViewChart, livePriceOf, type MultiViewChartRes, summaryOf, withStream,
 } from "./multiViewChart.ts";
 
 interface MultiViewPanelProps {
@@ -42,13 +36,11 @@ const labelColors = {
     neutral: 'default' as const,
 };
 
-const CHART_HEIGHT = 300;   // 패널의 가격+거래량 영역 높이
+const CHART_HEIGHT = 400;   // 차트를 기다리는 동안 보이는 자리의 높이 (차트의 기본 높이와 같다)
 
 export default function MultiViewPanel({asset, onSearch, onChartExpand, onRemove, streamUpdate}: MultiViewPanelProps) {
     const navigate = useNavigate();
-    const [toggle, setToggle] = useState('DAY');
-    const [minuteUnit, setMinuteUnit] = useState('1');
-    const chartType = chartTypeOf(toggle, minuteUnit);
+    const [chartType, setChartType] = useState('DAY');
 
     const {data: queryData, lastUpdated, pollError} = usePollingQuery<MultiViewChartRes>(
         ['multiViewPanel', asset?.type, asset?.code, chartType],
@@ -75,25 +67,8 @@ export default function MultiViewPanel({asset, onSearch, onChartExpand, onRemove
         }
     }, [queryData, asset, streamUpdate]);
 
-    // 차트 캔들. 상세 화면과 같은 차트를 쓰고, 그린 선도 상세 화면과 같은 기준으로 저장한다.
+    // 차트 캔들. 차트는 상세 화면과 같은 부품(AssetChart)이라 주기 버튼·그린 선·목표가 선·종목 비교가 상세 화면과 같다.
     const candleList = useMemo(() => (queryData && asset ? candlesOf(asset, queryData) : []), [queryData, asset]);
-    const candles = useMemo(
-        () => (asset ? withLivePrice(asset, chartType, candleList, streamUpdate) : candleList),
-        [asset, chartType, candleList, streamUpdate],
-    );
-    const comparison = useMemo(() => (asset ? comparisonOf(asset, chartType) : undefined), [asset, chartType]);
-
-    const handleAlignment = (_event: MouseEvent<HTMLElement>, newAlignment: string) => {
-        if (newAlignment !== null && asset) {
-            setToggle(newAlignment);
-        }
-    };
-
-    const handleOptionChange = (event: SelectChangeEvent) => {
-        const newMinute = event.target.value as string;
-        setMinuteUnit(newMinute);
-        setToggle('MINUTE');
-    };
 
     const handleNavigate = () => {
         if (!asset) return;
@@ -140,14 +115,9 @@ export default function MultiViewPanel({asset, onSearch, onChartExpand, onRemove
                     <Skeleton width={160}/>
                 </CardContent>
                 <Skeleton variant="rectangular" height={CHART_HEIGHT} sx={{mx: 2, mb: 2, borderRadius: 1}}/>
-                <Box display="flex" justifyContent="space-between" alignItems="center" sx={{px: 2, pb: 2}}>
-                    <Skeleton variant="rounded" width={260} height={32}/>
-                </Box>
             </Card>
         );
     }
-
-    const storage = chartStorageOf(asset);
 
     return (
         <Card variant="outlined" sx={{width: '100%'}}>
@@ -173,51 +143,14 @@ export default function MultiViewPanel({asset, onSearch, onChartExpand, onRemove
                     <Typography variant="caption" sx={{color: 'text.secondary'}}>{summary.interval}</Typography>
                 </Stack>
             </CardContent>
-            {/* 차트는 스스로 이동·확대하므로 패널 너비에 맞춘다. 패널이 좁아 주기 버튼은 차트 아래에 둔다. */}
-            <CandleChart
-                candles={candles}
-                timeUnit={timeUnitOf(chartType)}
-                interval={intervalOf(asset, chartType)}
-                seriesKey={`${asset.type}-${asset.code}-${chartType}`}
-                assetType={storage.assetType}
-                assetCode={storage.assetCode}
-                comparison={comparison}
-                height={CHART_HEIGHT}
+            <AssetChart
+                market={asset.type}
+                code={asset.code}
+                chartType={chartType}
+                onChartTypeChange={setChartType}
+                candles={candleList}
+                livePrice={livePriceOf(asset, chartType, streamUpdate)}
             />
-            <Box display="flex" justifyContent="space-between" alignItems="center" flexWrap="wrap">
-                <ChartToolbarGroup size="small" value={toggle} exclusive onChange={handleAlignment} aria-label="차트 주기">
-                    <ToggleButton value="MINUTE" aria-label="MINUTE">
-                        {/* 버튼 안의 선택 상자는 글자 크기·색을 버튼에서 물려받고, 화살표는 작은 아래 화살표 하나만 둔다. */}
-                        <Select
-                            size="small"
-                            value={minuteUnit}
-                            onChange={handleOptionChange}
-                            variant="standard"
-                            disableUnderline
-                            IconComponent={ArrowDropDownIcon}
-                            sx={{
-                                boxShadow: 'none',
-                                backgroundColor: 'transparent',
-                                border: 'none',
-                                padding: 0,
-                                font: 'inherit',
-                                color: 'inherit',
-                                '& .MuiSelect-select': {py: 0, pl: 0, minHeight: 0},
-                                '& .MuiSelect-icon': {color: 'inherit'},
-                            }}
-                        >
-                            <MenuItem value="1">1분</MenuItem>
-                            <MenuItem value="3">3분</MenuItem>
-                            <MenuItem value="5">5분</MenuItem>
-                            <MenuItem value="30">30분</MenuItem>
-                        </Select>
-                    </ToggleButton>
-                    <ToggleButton value="DAY">일</ToggleButton>
-                    <ToggleButton value="WEEK">주</ToggleButton>
-                    <ToggleButton value="MONTH">월</ToggleButton>
-                    {asset.type !== 'COMMODITY' && <ToggleButton value="YEAR">년</ToggleButton>}
-                </ChartToolbarGroup>
-            </Box>
         </Card>
     );
 }

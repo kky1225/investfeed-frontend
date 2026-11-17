@@ -6,25 +6,18 @@ import Stack from "@mui/material/Stack";
 import Chip from "@mui/material/Chip";
 import Card from "@mui/material/Card";
 import Skeleton from "@mui/material/Skeleton";
-import {MouseEvent, ReactElement, SyntheticEvent, useEffect, useMemo, useRef, useState} from "react";
-import ArrowDropDownIcon from "@mui/icons-material/ArrowDropDown";
-import ToggleButton from '@mui/material/ToggleButton';
-import {Theme} from "@mui/material/styles";
-import useMediaQuery from "@mui/material/useMediaQuery";
-import {Select, SelectChangeEvent, Slider, Tabs, Tab, Tooltip} from "@mui/material";
+import {ReactElement, SyntheticEvent, useEffect, useMemo, useState} from "react";
+import {Slider, Tabs, Tab, Tooltip} from "@mui/material";
 import IconButton from "@mui/material/IconButton";
 import NotificationsActiveIcon from "@mui/icons-material/NotificationsActive";
 import PriceTargetDialog from "../../components/PriceTargetDialog.tsx";
 import WatchlistAddButton from "../../components/WatchlistAddButton.tsx";
-import MenuItem from "@mui/material/MenuItem";
 import Button from "@mui/material/Button";
 import {GridColDef} from "@mui/x-data-grid";
 import CustomDataTable from "../../components/CustomDataTable.tsx";
 import {CryptoDetailLineChartProps} from "../../components/CryptoDetailLineChart.tsx";
-import CandleChart from "../../components/chart/CandleChart.tsx";
-import {ChartToolbarGroup} from "../../components/chart/ChartToolbarControls.tsx";
-import {TimeUnit} from "../../lib/chart/types.ts";
-import {createComparisonSource} from "../detail/chartComparison.ts";
+import AssetChart from "../detail/AssetChart.tsx";
+import {isMinuteChart} from "../detail/assetChart.ts";
 import {kiwoomCandles as toCandles} from "../detail/chartCandles.ts";
 import {fetchUsStockDetail, fetchUsStockDetailStream} from "../../api/usStock/UsStockApi.ts";
 import {fetchNews} from "../../api/news/NewsApi.ts";
@@ -38,18 +31,6 @@ import FreshnessIndicator from "../../components/FreshnessIndicator.tsx";
 import {usePollingQuery} from "../../lib/pollingQuery.ts";
 import {EXCHANGE_LABEL} from "../../lib/exchange.ts";
 
-// 날짜 눈금 표기 단위. 주봉은 날짜까지 적는다
-const CHART_TIME_UNIT: Record<UsStockChartType, TimeUnit> = {
-    [UsStockChartType.MINUTE_1]: 'minute',
-    [UsStockChartType.MINUTE_3]: 'minute',
-    [UsStockChartType.MINUTE_5]: 'minute',
-    [UsStockChartType.MINUTE_10]: 'minute',
-    [UsStockChartType.MINUTE_30]: 'minute',
-    [UsStockChartType.DAY]: 'day',
-    [UsStockChartType.WEEK]: 'day',
-    [UsStockChartType.MONTH]: 'month',
-    [UsStockChartType.YEAR]: 'year',
-};
 
 interface UsStockRangeProps {
     value: number;
@@ -112,14 +93,6 @@ const INITIAL_CHART_DATA: CryptoDetailLineChartProps = {
     barDataList: [],
     dateList: []
 };
-
-const MINUTE_TYPES = [
-    UsStockChartType.MINUTE_1,
-    UsStockChartType.MINUTE_3,
-    UsStockChartType.MINUTE_5,
-    UsStockChartType.MINUTE_10,
-    UsStockChartType.MINUTE_30,
-];
 
 const UsStockDetail = () => {
     const { stexTp: stexTpParam, stkCd: stkCdParam } = useParams();
@@ -338,89 +311,9 @@ const UsStockDetail = () => {
 
     // 차트 캔들. 분봉의 시각은 키움이 주는 미국 동부 시각 그대로다.
     const candleList = useMemo(() => toCandles(result?.chartList ?? []), [result]);
-    // 실시간 가격은 마지막 캔들의 종가·고가·저가에만 반영하고, 새 캔들은 주기적 조회로 받는다.
-    // 일봉 이상은 정규장 캔들이므로, 데이·프리·애프터마켓(sessionBase 가 있을 때)의 가격은 섞지 않는다.
-    const isMinuteChart = MINUTE_TYPES.includes(chartType);
-    const extendedSession = !!result?.sessionBase;
-    const candles = useMemo(() => {
-        const last = candleList[candleList.length - 1];
-        const price = livePrice?.curPrc;
-        if (!last || !price || (!isMinuteChart && extendedSession)) return candleList;
-        return [
-            ...candleList.slice(0, -1),
-            {...last, close: price, high: Math.max(last.high, price), low: Math.min(last.low, price)},
-        ];
-    }, [candleList, livePrice, isMinuteChart, extendedSession]);
-
-    // 종목 비교: 일봉 이상은 국내·미국·코인을 섞어, 분봉은 미국 종목끼리만 비교한다.
-    const chartComparison = useMemo(() => createComparisonSource('US_STOCK', chartType, stkCd), [chartType, stkCd]);
-
-    const [toggle, setToggle] = useState('DAY');
-    const minute = useRef('3');
-
-    const handleAlignment = (
-        _event: MouseEvent<HTMLElement>,
-        newAlignment: string,
-    ) => {
-        if (newAlignment !== null) {
-            setToggle(newAlignment);
-
-            if (newAlignment === 'MINUTE') {
-                newAlignment = newAlignment + '_' + minute.current;
-            }
-
-            setChartType(newAlignment as UsStockChartType);
-        }
-    };
-
-    function handleOptionChange(event: SelectChangeEvent) {
-        minute.current = event.target.value as string;
-        setChartType(('MINUTE_' + event.target.value) as UsStockChartType);
-    }
-
-    // 주기(분·일·주·월·년) 버튼. 넓은 화면에서는 차트 위쪽 줄에, 좁은 화면(md 미만)에서는 차트 아래에 놓는다.
-    const isNarrow = useMediaQuery((theme: Theme) => theme.breakpoints.down('md'));
-    const chartControls = (
-        <ChartToolbarGroup
-            size="small"
-            value={toggle}
-            exclusive
-            onChange={handleAlignment}
-            aria-label="차트 주기"
-        >
-            <ToggleButton value="MINUTE" key="MINUTE" aria-label="MINUTE">
-                {/* 버튼 안의 선택 상자는 글자 크기·색을 버튼에서 물려받고, 화살표는 작은 아래 화살표 하나만 둔다. */}
-                <Select
-                    size="small"
-                    value={minute.current}
-                    onChange={handleOptionChange}
-                    variant="standard"
-                    disableUnderline
-                    IconComponent={ArrowDropDownIcon}
-                    sx={{
-                        boxShadow: 'none',
-                        backgroundColor: 'transparent',
-                        border: 'none',
-                        padding: 0,
-                        font: 'inherit',
-                        color: 'inherit',
-                        '& .MuiSelect-select': {py: 0, pl: 0, minHeight: 0},
-                        '& .MuiSelect-icon': {color: 'inherit'},
-                    }}
-                >
-                    <MenuItem value="1">1분</MenuItem>
-                    <MenuItem value="3">3분</MenuItem>
-                    <MenuItem value="5">5분</MenuItem>
-                    <MenuItem value="10">10분</MenuItem>
-                    <MenuItem value="30">30분</MenuItem>
-                </Select>
-            </ToggleButton>
-            <ToggleButton value="DAY" key="DAY" aria-label="DAY">일</ToggleButton>
-            <ToggleButton value="WEEK" key="WEEK" aria-label="WEEK">주</ToggleButton>
-            <ToggleButton value="MONTH" key="MONTH" aria-label="MONTH">월</ToggleButton>
-            <ToggleButton value="YEAR" key="YEAR" aria-label="YEAR">년</ToggleButton>
-        </ChartToolbarGroup>
-    );
+    // 실시간 가격은 차트(AssetChart)가 마지막 캔들에만 반영한다.
+    // 일봉 이상은 정규장 캔들이므로, 데이·프리·애프터마켓(sessionBase 가 있을 때)의 가격은 넘기지 않는다.
+    const chartLivePrice = !isMinuteChart(chartType) && result?.sessionBase ? null : livePrice?.curPrc;
 
     const labelColors = {
         up: 'error' as const,
@@ -457,7 +350,7 @@ const UsStockDetail = () => {
     }, [info]);
 
     return (
-        <Box sx={{ width: '100%', maxWidth: { sm: '100%', md: '1700px' } }}>
+        <Box sx={{ width: '100%', maxWidth: { sm: '100%', md: 'var(--page-max-width)' } }}>
             <Box sx={{ display: 'flex', alignItems: 'center', mb: 2, gap: 2 }}>
                 <Typography component="h2" variant="h6">
                     미국 주식 상세
@@ -524,37 +417,15 @@ const UsStockDetail = () => {
                                 </Stack>
                             </Stack>
                         </CardContent>
-                        {!isNarrow && loading && (
-                            <Stack direction="row" spacing={1} sx={{px: 2, pb: 1, alignItems: 'center', minHeight: 40}}>
-                                {chartControls}
-                            </Stack>
-                        )}
-                        {/* 차트는 스스로 이동·확대하므로 화면 너비에 맞춘다. 선·영역 등 차트 종류는 차트 안에서 고른다. */}
-                        {loading ? (
-                            <Skeleton variant="rectangular" height={400} sx={{mx: 2, mb: 2, borderRadius: 1}}/>
-                        ) : (
-                            // 분봉 시각이 미국 동부 시각이라 기기 시계와 맞지 않아, 캔들 마감까지 남은 시간(interval)은 넘기지 않는다.
-                            // 그린 선의 저장 기준은 목표가 알림과 같다 (STOCK + 코드 뒤 _US).
-                            <CandleChart
-                                candles={candles}
-                                timeUnit={CHART_TIME_UNIT[chartType]}
-                                seriesKey={`${stexTp}-${stkCd}-${chartType}`}
-                                assetType="STOCK"
-                                assetCode={`${stkCd}_US`}
-                                comparison={chartComparison}
-                                toolbarStart={isNarrow ? undefined : chartControls}
-                            />
-                        )}
-                        {isNarrow && (
-                            <Box
-                                display="flex"
-                                justifyContent="space-between"
-                                alignItems="center"
-                                flexWrap="wrap"
-                            >
-                                {chartControls}
-                            </Box>
-                        )}
+                        <AssetChart
+                            market="US_STOCK"
+                            code={stkCd}
+                            chartType={chartType}
+                            onChartTypeChange={next => setChartType(next as UsStockChartType)}
+                            candles={candleList}
+                            livePrice={chartLivePrice}
+                            loading={loading}
+                        />
                     </Card>
                 </Grid>
             </Grid>

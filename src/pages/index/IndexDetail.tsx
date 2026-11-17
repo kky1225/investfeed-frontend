@@ -6,24 +6,16 @@ import Stack from "@mui/material/Stack";
 import Chip from "@mui/material/Chip";
 import Card from "@mui/material/Card";
 import Skeleton from "@mui/material/Skeleton";
-import {JSX, MouseEvent, ReactElement, useEffect, useMemo, useRef, useState} from "react";
-import ArrowDropDownIcon from "@mui/icons-material/ArrowDropDown";
-import ToggleButton from '@mui/material/ToggleButton';
-import {Theme} from "@mui/material/styles";
-import useMediaQuery from "@mui/material/useMediaQuery";
-import {Accordion, AccordionDetails, AccordionSummary, Select, SelectChangeEvent, Slider, Tab, Tabs, Tooltip} from "@mui/material";
+import {JSX, ReactElement, useEffect, useMemo, useState} from "react";
+import {Accordion, AccordionDetails, AccordionSummary, Slider, Tab, Tabs, Tooltip} from "@mui/material";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
-import MenuItem from "@mui/material/MenuItem";
 import {GridColDef} from "@mui/x-data-grid";
 import CustomDataTable from "../../components/CustomDataTable.tsx";
 import FreshnessIndicator from "../../components/FreshnessIndicator.tsx";
 import {renderTradeColor} from "../../components/CustomRender.tsx";
 import * as React from "react";
 import {CustomIndexDetailLineChartProps} from "../../components/IndexDetailLineChart.tsx";
-import CandleChart from "../../components/chart/CandleChart.tsx";
-import {ChartToolbarGroup} from "../../components/chart/ChartToolbarControls.tsx";
-import {CandleInterval, TimeUnit} from "../../lib/chart/types.ts";
-import {createComparisonSource} from "../detail/chartComparison.ts";
+import AssetChart from "../detail/AssetChart.tsx";
 import {indexCandles as toCandles} from "../detail/chartCandles.ts";
 import InvestorBarChart from "../../components/InvestorBarChart.tsx";
 import {fetchIndexDetail, fetchIndexStream} from "../../api/index/IndexApi.ts";
@@ -50,30 +42,6 @@ import ProgramLineChart from "../../components/ProgramLineChart.tsx";
 import {usePollingQuery} from "../../lib/pollingQuery.ts";
 import {parseKiwoomStamp} from "../../lib/tradeStamp.ts";
 
-// 날짜 눈금 표기 단위. 주봉은 날짜까지 적는다
-const CHART_TIME_UNIT: Record<IndexChartType, TimeUnit> = {
-    [IndexChartType.MINUTE_1]: 'minute',
-    [IndexChartType.MINUTE_3]: 'minute',
-    [IndexChartType.MINUTE_5]: 'minute',
-    [IndexChartType.MINUTE_10]: 'minute',
-    [IndexChartType.MINUTE_30]: 'minute',
-    [IndexChartType.DAY]: 'day',
-    [IndexChartType.WEEK]: 'day',
-    [IndexChartType.MONTH]: 'month',
-    [IndexChartType.YEAR]: 'year',
-};
-
-// 분봉 한 개가 담는 기간. 차트가 캔들 마감까지 남은 시간을 적는 데 쓴다 (일봉 이상은 적지 않는다)
-const CHART_INTERVAL: Partial<Record<IndexChartType, CandleInterval>> = {
-    [IndexChartType.MINUTE_1]: {unit: 'minute', count: 1},
-    [IndexChartType.MINUTE_3]: {unit: 'minute', count: 3},
-    [IndexChartType.MINUTE_5]: {unit: 'minute', count: 5},
-    [IndexChartType.MINUTE_10]: {unit: 'minute', count: 10},
-    [IndexChartType.MINUTE_30]: {unit: 'minute', count: 30},
-};
-
-// 그린 선을 저장할 때 종목 코드와 겹치지 않게 지수 코드 뒤에 붙이는 말
-const INDEX_ASSET_SUFFIX = '_INDEX';
 
 interface IndexRangeProps {
     value: number;
@@ -353,22 +321,9 @@ const IndexDetail = () => {
         }
     }, [result]);
 
-    // 차트 캔들. 실시간 지수는 마지막 캔들의 종가·고가·저가에만 반영하고, 새 캔들은 주기적 조회로 받는다.
+    // 차트 캔들. 실시간 지수는 차트(AssetChart)가 마지막 캔들에만 반영하고, 새 캔들은 주기적 조회로 받는다.
     const candleList = useMemo(() => toCandles(result?.chartList ?? []), [result]);
-    const candles = useMemo(() => {
-        const last = candleList[candleList.length - 1];
-        const price = livePrice ? Number(livePrice.value.replace(/,/g, '')) : NaN;
-        if (!last || !livePrice || !Number.isFinite(price) || price <= 0 || livePrice.stamp < last.time) return candleList;
-        return [
-            ...candleList.slice(0, -1),
-            {...last, close: price, high: Math.max(last.high, price), low: Math.min(last.low, price)},
-        ];
-    }, [candleList, livePrice]);
-
-    // 종목 비교: 일봉 이상은 국내·미국·코인·지수를 섞어, 분봉은 지수끼리만 비교한다.
-    const chartComparison = useMemo(
-        () => createComparisonSource('INDEX', req.chart_type, indsCd), [req.chart_type, indsCd],
-    );
+    const chartLivePrice = livePrice ? Number(livePrice.value.replace(/,/g, '')) : null;
 
     const dayRange = useMemo<IndexRangeProps[]>(() => {
         if (!result) return INITIAL_DAY_RANGE;
@@ -564,81 +519,6 @@ const IndexDetail = () => {
     });
 
 
-    const [toggle, setToggle] = useState('DAY');
-    const minute = useRef('1');
-
-    const handleAlignment = (
-        _event: MouseEvent<HTMLElement>,
-        newAlignment: string,
-    ) => {
-        if(newAlignment !== null) {
-            setToggle(newAlignment);
-
-            if(newAlignment === 'MINUTE') {
-                newAlignment = newAlignment + '_' + minute.current;
-            }
-
-            setReq({
-                ...req,
-                chart_type: newAlignment as IndexChartType
-            })
-        }
-    };
-
-    function handleOptionChange(event: SelectChangeEvent) {
-        minute.current = event.target.value as string
-
-        const value = 'MINUTE_' + event.target.value;
-
-        setReq({
-            ...req,
-            chart_type: value as IndexChartType
-        })
-    }
-
-    // 주기(분·일·주·월·년) 버튼. 넓은 화면에서는 차트 위쪽 줄에, 좁은 화면(md 미만)에서는 차트 아래에 놓는다.
-    const isNarrow = useMediaQuery((theme: Theme) => theme.breakpoints.down('md'));
-    const chartControls = (
-        <ChartToolbarGroup
-            size="small"
-            value={toggle}
-            exclusive
-            onChange={handleAlignment}
-            aria-label="차트 주기"
-        >
-            <ToggleButton value="MINUTE" key="MINUTE" aria-label="MINUTE">
-                {/* 버튼 안의 선택 상자는 글자 크기·색을 버튼에서 물려받고, 화살표는 작은 아래 화살표 하나만 둔다. */}
-                <Select
-                    size="small"
-                    value={minute.current}
-                    onChange={handleOptionChange}
-                    variant="standard"
-                    disableUnderline
-                    IconComponent={ArrowDropDownIcon}
-                    sx={{
-                        boxShadow: 'none',
-                        backgroundColor: 'transparent',
-                        border: 'none',
-                        padding: 0,
-                        font: 'inherit',
-                        color: 'inherit',
-                        '& .MuiSelect-select': {py: 0, pl: 0, minHeight: 0},
-                        '& .MuiSelect-icon': {color: 'inherit'},
-                    }}
-                >
-                    <MenuItem value="1">1분</MenuItem>
-                    <MenuItem value="3">3분</MenuItem>
-                    <MenuItem value="5">5분</MenuItem>
-                    <MenuItem value="30">30분</MenuItem>
-                </Select>
-            </ToggleButton>
-            <ToggleButton value="DAY" key="DAY" aria-label="DAY">일</ToggleButton>
-            <ToggleButton value="WEEK" key="WEEK" aria-label="WEEK">주</ToggleButton>
-            <ToggleButton value="MONTH" key="MONTH" aria-label="MONTH">월</ToggleButton>
-            <ToggleButton value="YEAR" key="YEAR" aria-label="YEAR">년</ToggleButton>
-        </ChartToolbarGroup>
-    );
-
     const labelColors = {
         up: 'error' as const,
         down: 'info' as const,
@@ -654,7 +534,7 @@ const IndexDetail = () => {
     };
 
     return (
-        <Box sx={{ width: '100%', maxWidth: { sm: '100%', md: '1700px' } }}>
+        <Box sx={{ width: '100%', maxWidth: { sm: '100%', md: 'var(--page-max-width)' } }}>
             <Box sx={{ display: 'flex', alignItems: 'center', mb: 2, gap: 2 }}>
                 <Typography component="h2" variant="h6">
                     지수 상세
@@ -699,36 +579,16 @@ const IndexDetail = () => {
                                 </Typography>
                             </Stack>
                         </CardContent>
-                        {!isNarrow && loading && (
-                            <Stack direction="row" spacing={1} sx={{px: 2, pb: 1, alignItems: 'center', minHeight: 40}}>
-                                {chartControls}
-                            </Stack>
-                        )}
-                        {/* 차트는 스스로 이동·확대하므로 화면 너비에 맞춘다. 선·영역 등 차트 종류는 차트 안에서 고른다. */}
-                        {loading ? (
-                            <Skeleton variant="rectangular" height={400} sx={{mx: 2, mb: 2, borderRadius: 1}}/>
-                        ) : (
-                            <CandleChart
-                                candles={candles}
-                                timeUnit={CHART_TIME_UNIT[req.chart_type]}
-                                interval={CHART_INTERVAL[req.chart_type]}
-                                seriesKey={`${indsCd}-${req.chart_type}`}
-                                assetType="STOCK"
-                                assetCode={`${indsCd}${INDEX_ASSET_SUFFIX}`}
-                                comparison={chartComparison}
-                                toolbarStart={isNarrow ? undefined : chartControls}
-                            />
-                        )}
-                        {isNarrow && (
-                            <Box
-                                display="flex"
-                                justifyContent="space-between"
-                                alignItems="center"
-                                flexWrap="wrap"
-                            >
-                                {chartControls}
-                            </Box>
-                        )}
+                        <AssetChart
+                            market="INDEX"
+                            code={indsCd}
+                            chartType={req.chart_type}
+                            onChartTypeChange={chartType => setReq({...req, chart_type: chartType as IndexChartType})}
+                            candles={candleList}
+                            livePrice={chartLivePrice}
+                            liveStamp={livePrice?.stamp}
+                            loading={loading}
+                        />
                     </Card>
                 </Grid>
             </Grid>

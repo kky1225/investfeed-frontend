@@ -1,7 +1,5 @@
 import type {AxiosRequestConfig} from "axios";
-import type {Candle, CandleInterval, TimeUnit} from "../../lib/chart/types.ts";
-import type {ChartComparisonSource} from "../../components/chart/useChartComparisons.ts";
-import type {AssetType} from "../../type/NotificationType.ts";
+import type {Candle} from "../../lib/chart/types.ts";
 import type {SelectedAsset, StreamUpdate} from "../../type/MultiViewType.ts";
 import type {StockChartType, StockDetailRes} from "../../type/StockType.ts";
 import type {UsStockChartType, UsStockDetailRes} from "../../type/UsStockType.ts";
@@ -11,10 +9,11 @@ import type {ApiResponse} from "../../type/AuthType.ts";
 import {
     fetchMultiViewCommodityDetail, fetchMultiViewCryptoDetail, fetchMultiViewStockChart, fetchMultiViewUsStockChart,
 } from "../../api/multiView/MultiViewApi.ts";
-import {createComparisonSource} from "../detail/chartComparison.ts";
+import {isMinuteChart} from "../detail/assetChart.ts";
 import {cryptoCandles, kiwoomCandles} from "../detail/chartCandles.ts";
 
 // 멀티 화면의 패널과 "차트 자세히 보기" 창이 함께 쓰는 것: 차트 조회, 머리(이름·가격·등락) 만들기, 캔들 변환.
+// 차트 자체(주기 버튼, 저장 기준, 종목 비교 …)는 상세 화면과 같은 AssetChart 가 맡는다.
 
 type StockChartRes = Pick<StockDetailRes, 'stockInfo' | 'stockChartList'>;
 type UsStockChartRes = Pick<UsStockDetailRes, 'usStockInfo' | 'chartList'>;
@@ -33,47 +32,6 @@ export interface MultiViewSummary {
     interval: string,   // 기준 시각
     trend: Trend,
 }
-
-/** 차트 주기 버튼의 값(MINUTE, DAY …)과 분 단위를 조회에 쓰는 주기 이름으로 바꾼다. */
-export const chartTypeOf = (toggle: string, minuteUnit: string) => (
-    toggle === 'MINUTE' ? `MINUTE_${minuteUnit}` : toggle
-);
-
-export const isMinuteChart = (chartType: string) => chartType.startsWith('MINUTE');
-
-/** 날짜 눈금 표기 단위. 주봉은 날짜까지 적는다 */
-export const timeUnitOf = (chartType: string): TimeUnit => {
-    if (isMinuteChart(chartType)) return 'minute';
-    if (chartType === 'MONTH') return 'month';
-    if (chartType === 'YEAR') return 'year';
-    return 'day';
-};
-
-// 분봉 한 개가 담는 기간. 차트가 캔들 마감까지 남은 시간을 적는 데 쓴다 (일봉 이상은 적지 않는다)
-const INTERVALS: Record<string, CandleInterval | undefined> = {
-    MINUTE_1: {unit: 'minute', count: 1},
-    MINUTE_3: {unit: 'minute', count: 3},
-    MINUTE_5: {unit: 'minute', count: 5},
-    MINUTE_30: {unit: 'minute', count: 30},
-};
-
-/** 미국 종목의 분봉 시각은 미국 동부 시각이라 기기 시계와 맞지 않아 남은 시간을 적지 않는다. */
-export const intervalOf = (asset: SelectedAsset, chartType: string): CandleInterval | undefined => (
-    asset.type === 'US_STOCK' ? undefined : INTERVALS[chartType]
-);
-
-/** 그린 선을 저장하는 기준. 상세 화면과 같아서 상세에서 그린 선이 그대로 보인다 */
-export const chartStorageOf = (asset: SelectedAsset): { assetType: AssetType, assetCode: string } => {
-    if (asset.type === 'CRYPTO') return {assetType: 'CRYPTO', assetCode: asset.code};
-    if (asset.type === 'US_STOCK') return {assetType: 'STOCK', assetCode: `${asset.code}_US`};
-    if (asset.type === 'COMMODITY') return {assetType: 'STOCK', assetCode: `${asset.code}_COMMODITY`};
-    return {assetType: 'STOCK', assetCode: asset.code};
-};
-
-/** 종목 비교 조회. 원자재는 비교하지 않는다 */
-export const comparisonOf = (asset: SelectedAsset, chartType: string): ChartComparisonSource | undefined => (
-    asset.type === 'COMMODITY' ? undefined : createComparisonSource(asset.type, chartType, asset.code)
-);
 
 export const fetchMultiViewChart = (
     asset: SelectedAsset, chartType: string, config?: AxiosRequestConfig,
@@ -194,18 +152,13 @@ export const withStream = (
 };
 
 /**
- * 실시간 가격을 마지막 캔들의 종가·고가·저가에 반영한다. 새 캔들은 주기적 조회로 받는다.
+ * 차트의 마지막 캔들에 반영할 실시간 가격. 반영하지 않을 때는 null.
  * 미국 종목의 일봉 이상은 정규장 캔들인데 실시간 값은 장외 가격일 수 있어 반영하지 않는다.
  */
-export const withLivePrice = (
-    asset: SelectedAsset, chartType: string, candles: Candle[], stream: StreamUpdate | null | undefined,
-): Candle[] => {
-    const last = candles[candles.length - 1];
-    const price = stream ? Math.abs(Number(stream.value)) : NaN;
-    if (!last || !Number.isFinite(price) || price <= 0) return candles;
-    if (asset.type === 'US_STOCK' && !isMinuteChart(chartType)) return candles;
-    return [
-        ...candles.slice(0, -1),
-        {...last, close: price, high: Math.max(last.high, price), low: Math.min(last.low, price)},
-    ];
+export const livePriceOf = (
+    asset: SelectedAsset, chartType: string, stream: StreamUpdate | null | undefined,
+): number | null => {
+    if (!stream) return null;
+    if (asset.type === 'US_STOCK' && !isMinuteChart(chartType)) return null;
+    return Math.abs(Number(stream.value));
 };

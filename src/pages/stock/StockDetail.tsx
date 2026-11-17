@@ -7,20 +7,13 @@ import Chip from "@mui/material/Chip";
 import Divider from "@mui/material/Divider";
 import Card from "@mui/material/Card";
 import Skeleton from "@mui/material/Skeleton";
-import {useState, MouseEvent, useRef, useEffect, useMemo, useCallback, ReactElement, JSX} from "react";
+import {useState, useRef, useEffect, useMemo, ReactElement, JSX} from "react";
 import HelpIcon from '@mui/icons-material/Help';
 import ErrorIcon from '@mui/icons-material/Error';
-import ToggleButton from '@mui/material/ToggleButton';
-import {ChartToolbarGroup} from "../../components/chart/ChartToolbarControls.tsx";
-import {Accordion, AccordionDetails, AccordionSummary, Select, SelectChangeEvent, Slider, Tab, Tabs, Tooltip} from "@mui/material";
+import {Accordion, AccordionDetails, AccordionSummary, Slider, Tab, Tabs, Tooltip} from "@mui/material";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
-import ArrowDropDownIcon from "@mui/icons-material/ArrowDropDown";
-import {Theme} from "@mui/material/styles";
-import useMediaQuery from "@mui/material/useMediaQuery";
-import MenuItem from "@mui/material/MenuItem";
 import {useParams} from "react-router-dom";
 import {
-    StockCandleRes,
     StockChartType,
     StockDetailReq,
     StockDetailRes,
@@ -30,17 +23,12 @@ import {
     StockVi,
 } from "../../type/StockType.ts";
 import {CustomStockDetailLineChartProps} from "../../components/StockDetailLineChart.tsx";
-import CandleChart from "../../components/chart/CandleChart.tsx";
-import {Candle, CandleInterval, PriceLine, TimeUnit} from "../../lib/chart/types.ts";
-import {useQuery} from "@tanstack/react-query";
-import {fetchPriceTargets} from "../../api/notification/NotificationApi.ts";
-import type {PriceTarget} from "../../type/NotificationType.ts";
+import AssetChart from "../detail/AssetChart.tsx";
+import {candleIntervalOf} from "../detail/assetChart.ts";
+import {Candle} from "../../lib/chart/types.ts";
 import {applyTick} from "../../lib/chart/realtime.ts";
-import {mergeCandles} from "../../lib/chart/merge.ts";
-import {CandlePage, useCandleHistory} from "../../components/chart/useCandleHistory.ts";
-import {createComparisonSource} from "../detail/chartComparison.ts";
 import {kiwoomCandles as toCandles, parseChartPrice} from "../detail/chartCandles.ts";
-import {fetchStockDetail, fetchStockStream, fetchStockProgramChart, fetchStockCandles} from "../../api/stock/StockApi.ts";
+import {fetchStockDetail, fetchStockStream, fetchStockProgramChart} from "../../api/stock/StockApi.ts";
 import {useMarketWebSocket} from "../detail/useMarketWebSocket.ts";
 import {fetchNews} from "../../api/news/NewsApi.ts";
 import InvestorBarChart from "../../components/InvestorBarChart.tsx";
@@ -302,44 +290,12 @@ const INITIAL_TAB_DATA: TabDataShape = {
     daily: { col: [], row: [] },
 };
 
-const CHART_TIME_UNIT: Record<StockChartType, TimeUnit> = {
-    [StockChartType.MINUTE_1]: 'minute',
-    [StockChartType.MINUTE_3]: 'minute',
-    [StockChartType.MINUTE_5]: 'minute',
-    [StockChartType.MINUTE_10]: 'minute',
-    [StockChartType.MINUTE_15]: 'minute',
-    [StockChartType.MINUTE_30]: 'minute',
-    [StockChartType.MINUTE_60]: 'minute',
-    [StockChartType.DAY]: 'day',
-    [StockChartType.WEEK]: 'day',
-    [StockChartType.MONTH]: 'month',
-    [StockChartType.YEAR]: 'year',
-};
-
-// 실시간 체결이 어느 캔들에 들어갈지 정하는 기준. 차트가 캔들 마감까지 남은 시간을 적는 데도 쓴다
-const CHART_INTERVAL: Record<StockChartType, CandleInterval> = {
-    [StockChartType.MINUTE_1]: {unit: 'minute', count: 1},
-    [StockChartType.MINUTE_3]: {unit: 'minute', count: 3},
-    [StockChartType.MINUTE_5]: {unit: 'minute', count: 5},
-    [StockChartType.MINUTE_10]: {unit: 'minute', count: 10},
-    [StockChartType.MINUTE_15]: {unit: 'minute', count: 15},
-    [StockChartType.MINUTE_30]: {unit: 'minute', count: 30},
-    [StockChartType.MINUTE_60]: {unit: 'minute', count: 60},
-    [StockChartType.DAY]: {unit: 'day'},
-    [StockChartType.WEEK]: {unit: 'week'},
-    [StockChartType.MONTH]: {unit: 'month'},
-    [StockChartType.YEAR]: {unit: 'year'},
-};
-
 const StockDetail = () => {
     const { id } = useParams();
     const stkCd = id || "";
     const [req, setReq] = useState<StockDetailReq>({
         chartType: StockChartType.DAY
     });
-
-    const [toggle, setToggle] = useState('DAY');
-    const minute = useRef('1');
 
     // 별도 fetcher (loadProgramChart) + 폴링 누적 패턴이라 useMemo 불가 — useState 유지
     const [programChartData, setProgramChartData] = useState<number[]>([]);
@@ -540,48 +496,16 @@ const StockDetail = () => {
         return toCandles(result.stockChartList);
     }, [result]);
 
-    // 이 종목에 등록한 목표가 알림을 차트에 선으로 표시한다. 목표가 알림 창과 같은 조회를 공유해 등록·삭제가 바로 반영된다.
-    const {data: priceTargets} = useQuery<PriceTarget[]>({
-        queryKey: ['priceTargets'],
-        queryFn: async ({signal}) => requireOk(await fetchPriceTargets({signal, skipGlobalError: true}), [] as PriceTarget[]),
-        refetchOnWindowFocus: false,
-    });
-    const targetLines = useMemo<PriceLine[]>(
-        () => (priceTargets ?? [])
-            .filter(target => target.assetCode === stkCd)
-            .map(target => ({
-                price: target.targetPrice,
-                title: '목표가',
-                tone: target.direction === 'ABOVE' ? 'up' : 'down',
-            })),
-        [priceTargets, stkCd],
-    );
-
     // 실시간 체결을 반영한 캔들. 폴링으로 새 목록이 오면 버리고 그 목록에서 다시 쌓는다.
+    // 과거 구간 이어 받기, 목표가 선, 종목 비교는 차트(AssetChart)가 맡는다.
     const [liveCandles, setLiveCandles] = useState<{ base: Candle[], candles: Candle[] } | null>(null);
     const chartCandles = liveCandles?.base === candleList ? liveCandles.candles : candleList;
-
-    // 과거 구간. 차트 왼쪽 끝에 가까워지면 이전 구간을 이어 받아 앞에 붙인다.
-    // 분봉은 종목 상세 응답에 당일 것만 오므로, 이전 날짜들도 이쪽에서 채운다.
-    const chartSeriesKey = `${stkCd}-${req.chartType}`;
-    const fetchCandlePage = useCallback(async (cursor: string | null): Promise<CandlePage> => {
-        const page = requireOk<StockCandleRes>(
-            await fetchStockCandles(stkCd, {chartType: req.chartType, cursor: cursor ?? undefined}, {skipGlobalError: true}),
-            '과거 차트 조회',
-        );
-        return {candles: toCandles(page.candles), nextCursor: page.nextCursor ?? null};
-    }, [stkCd, req.chartType]);
-    const {history: candleHistory, loadOlder: loadOlderCandles} = useCandleHistory(chartSeriesKey, fetchCandlePage);
-
-    // 종목 비교: 일봉 이상은 국내·미국·코인을 섞어, 분봉은 국내 종목끼리만 비교한다.
-    const chartComparison = useMemo(() => createComparisonSource('STOCK', req.chartType), [req.chartType]);
-    const fullCandles = useMemo(() => mergeCandles(candleHistory, chartCandles), [candleHistory, chartCandles]);
 
     // 폴링 응답에 이미 들어 있는 체결(조회 시각 이전)은 다시 더하지 않는다.
     const chartBaseStamp = result?.stockInfo ? parseTradeStamp(result.stockInfo.tm) : 0;
     const applyChartTick = (time: number, price: number, volume: number) => {
         if (!time || !Number.isFinite(price) || time <= chartBaseStamp || candleList.length === 0) return;
-        const interval = CHART_INTERVAL[req.chartType];
+        const interval = candleIntervalOf(req.chartType);
         setLiveCandles(prev => ({
             base: candleList,
             candles: applyTick(prev?.base === candleList ? prev.candles : candleList, {time, price, volume}, interval),
@@ -864,35 +788,6 @@ const StockDetail = () => {
 
     const expectedColor = expectedPrice?.trend ? labelColors[expectedPrice.trend] : 'default';
 
-    const handleAlignment = (
-        _event: MouseEvent<HTMLElement>,
-        newAlignment: string,
-    ) => {
-        if(newAlignment !== null) {
-            setToggle(newAlignment);
-
-            if(newAlignment === 'MINUTE') {
-                newAlignment = newAlignment + '_' + minute.current;
-            }
-
-            setReq({
-                ...req,
-                chartType: newAlignment as StockChartType
-            })
-        }
-    };
-
-    function handleOptionChange(event: SelectChangeEvent) {
-        minute.current = event.target.value as string
-
-        const value = 'MINUTE_' + event.target.value;
-
-        setReq({
-            ...req,
-            chartType: value as StockChartType
-        })
-    }
-
 
     const handleChange = (_event: React.SyntheticEvent, newValue: string) => {
         if (newValue === 'investor' || newValue === 'program' || newValue === 'shortSelling' || newValue === 'daily' || newValue === 'news') {
@@ -920,57 +815,8 @@ const StockDetail = () => {
         }
     };
 
-    // 주기(분·일·주·월·년)와 캔들/선 전환 버튼. 화면 폭에 따라 놓는 자리가 다르다.
-    // - 넓은 화면: 차트 위쪽 줄 (캔들 차트면 차트의 위쪽 줄 안, 선 차트·로딩 중이면 같은 자리의 줄)
-    // - 좁은 화면(모바일·태블릿 세로): 차트 아래. 한 손으로 쥐었을 때 엄지가 닿는 자리다
-    // 기준은 md(900px). 그보다 좁으면 위쪽 한 줄에 버튼이 다 들어가지 않아 설정 버튼이 잘린다.
-    const isNarrow = useMediaQuery((theme: Theme) => theme.breakpoints.down('md'));
-    const chartControls = (
-            <ChartToolbarGroup
-                size="small"
-                value={toggle}
-                exclusive
-                onChange={handleAlignment}
-                aria-label="차트 주기"
-            >
-                <ToggleButton value="MINUTE" key="MINUTE" aria-label="MINUTE">
-                    {/* 버튼 안의 선택 상자는 글자 크기·색을 버튼에서 물려받고, 화살표는 작은 아래 화살표 하나만 둔다. */}
-                    <Select
-                        size="small"
-                        value={minute.current}
-                        onChange={handleOptionChange}
-                        variant="standard"
-                        disableUnderline
-                        IconComponent={ArrowDropDownIcon}
-                        sx={{
-                            boxShadow: 'none',
-                            backgroundColor: 'transparent',
-                            border: 'none',
-                            padding: 0,
-                            font: 'inherit',
-                            color: 'inherit',
-                            '& .MuiSelect-select': {py: 0, pl: 0, minHeight: 0},
-                            '& .MuiSelect-icon': {color: 'inherit'},
-                        }}
-                    >
-                        <MenuItem value="1">1분</MenuItem>
-                        <MenuItem value="3">3분</MenuItem>
-                        <MenuItem value="5">5분</MenuItem>
-                        <MenuItem value="10">10분</MenuItem>
-                        <MenuItem value="15">15분</MenuItem>
-                        <MenuItem value="30">30분</MenuItem>
-                        <MenuItem value="60">60분</MenuItem>
-                    </Select>
-                </ToggleButton>
-                <ToggleButton value="DAY" key="DAY" aria-label="DAY">일</ToggleButton>
-                <ToggleButton value="WEEK" key="WEEK" aria-label="WEEK">주</ToggleButton>
-                <ToggleButton value="MONTH" key="MONTH" aria-label="MONTH">월</ToggleButton>
-                <ToggleButton value="YEAR" key="YEAR" aria-label="YEAR">년</ToggleButton>
-            </ChartToolbarGroup>
-    );
-
     return (
-        <Box sx={{ width: '100%', maxWidth: { sm: '100%', md: '1700px' } }}>
+        <Box sx={{ width: '100%', maxWidth: { sm: '100%', md: 'var(--page-max-width)' } }}>
             <Box sx={{ display: 'flex', alignItems: 'center', mb: 2, gap: 2 }}>
                 <Typography component="h2" variant="h6">
                     주식 상세
@@ -1117,38 +963,15 @@ const StockDetail = () => {
                                 </Stack>
                             </Stack>
                         </CardContent>
-                        {!isNarrow && loading && (
-                            <Stack direction="row" spacing={1} sx={{px: 2, pb: 1, alignItems: 'center', minHeight: 40}}>
-                                {chartControls}
-                            </Stack>
-                        )}
-                        {/* 차트는 스스로 이동·확대하므로 화면 너비에 맞춘다. 선·영역 등 차트 종류는 차트 안에서 고른다. */}
-                        {loading ? (
-                            <Skeleton variant="rectangular" height={400} sx={{mx: 2, mb: 2, borderRadius: 1}}/>
-                        ) : (
-                            <CandleChart
-                                candles={fullCandles}
-                                timeUnit={CHART_TIME_UNIT[req.chartType]}
-                                interval={CHART_INTERVAL[req.chartType]}
-                                seriesKey={chartSeriesKey}
-                                onLoadOlder={loadOlderCandles}
-                                comparison={chartComparison}
-                                priceLines={targetLines}
-                                assetType="STOCK"
-                                assetCode={stkCd}
-                                toolbarStart={isNarrow ? undefined : chartControls}
-                            />
-                        )}
-                        {isNarrow && (
-                            <Box
-                                display="flex"
-                                justifyContent="space-between"
-                                alignItems="center"
-                                flexWrap="wrap"
-                            >
-                                {chartControls}
-                            </Box>
-                        )}
+                        {/* 실시간 체결은 이 화면이 캔들에 직접 쌓아서 넘긴다(새 캔들도 만든다). 그래서 livePrice 는 주지 않는다. */}
+                        <AssetChart
+                            market="STOCK"
+                            code={stkCd}
+                            chartType={req.chartType}
+                            onChartTypeChange={chartType => setReq({...req, chartType: chartType as StockChartType})}
+                            candles={chartCandles}
+                            loading={loading}
+                        />
                     </Card>
                 </Grid>
             </Grid>
