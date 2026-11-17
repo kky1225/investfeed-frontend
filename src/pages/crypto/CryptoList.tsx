@@ -10,7 +10,10 @@ import FearGreedGauge from "../../components/FearGreedGauge.tsx";
 import FreshnessIndicator from "../../components/FreshnessIndicator.tsx";
 import {fetchCryptoList, fetchCryptoStream} from "../../api/crypto/CryptoApi.ts";
 import {useEffect, useMemo, useRef, useState} from "react";
-import {CryptoChartMinute, CryptoListItem, CryptoListRes, FearGreedItem} from "../../type/CryptoType.ts";
+import {CryptoListItem, CryptoListRes, FearGreedItem} from "../../type/CryptoType.ts";
+import MiniChartModeToggle from "../../components/chart/MiniChartModeToggle.tsx";
+import {useMiniChartMode} from "../../components/chart/useMiniChartMode.ts";
+import {cryptoMinuteCandles} from "../detail/chartCandles.ts";
 import {usePollingQuery} from "../../lib/pollingQuery.ts";
 import {parseTradeStamp} from "../../lib/tradeStamp.ts";
 import {openReconnectingSocket} from "../../lib/reconnectingSocket.ts";
@@ -44,12 +47,6 @@ const trendColor = (change: string): 'up' | 'down' | 'neutral' => {
     return 'neutral';
 };
 
-const chartColor = (change: string) => {
-    if (change === 'RISE') return 'red';
-    if (change === 'FALL') return 'blue';
-    return 'grey';
-};
-
 const cryptoDateFormat = (dateTime: string) => {
     if (!dateTime) return '';
     if (dateTime.includes('T')) {
@@ -74,6 +71,8 @@ const formatTradePrice = (price: number) => {
 };
 
 const CryptoList = () => {
+    // 카드 차트를 선으로 볼지 캔들로 볼지. 목록 화면들이 함께 쓴다.
+    const [chartMode, setChartMode] = useMiniChartMode();
     const [liveOverlay, setLiveOverlay] = useState<Map<string, LiveCryptoUpdate>>(new Map());
     const updateIfNewer = (market: string, incoming: LiveCryptoUpdate) => {
         setLiveOverlay(prev => {
@@ -97,9 +96,6 @@ const CryptoList = () => {
 
         return list.map((item: CryptoListItem) => {
             const live = liveOverlay.get(item.market);
-            const dateList = item.chartMinuteList.map((chart: CryptoChartMinute) =>
-                cryptoDateFormat(chart.candleDateTimeKst)
-            );
             const changeRatePercent = (item.signedChangeRate * 100).toFixed(2);
 
             return {
@@ -111,21 +107,11 @@ const CryptoList = () => {
                 trend: live?.trend ?? trendColor(item.change),
                 interval: live?.interval ?? cryptoDateFormat(item.tradeDateTimeKst),
                 accTradePrice24h: live?.accTradePrice24h ?? formatTradePrice(item.accTradePrice24h),
-                seriesData: [
-                    {
-                        id: item.market,
-                        showMark: false,
-                        curve: 'linear' as const,
-                        area: true,
-                        stackOrder: 'ascending' as const,
-                        color: chartColor(item.change),
-                        data: item.chartMinuteList.map((chart: CryptoChartMinute) => chart.tradePrice),
-                    }
-                ],
-                dateList: dateList,
+                candles: cryptoMinuteCandles(item.chartMinuteList),    // 최근 24시간의 분봉
+                chartMode,
             };
         });
-    }, [result, liveOverlay]);
+    }, [result, liveOverlay, chartMode]);
 
     const fearGreedCurrent: FearGreedItem = result?.fearGreed?.current ?? {value: 0, classification: '', date: ''};
     const fearGreedHistory: FearGreedItem[] = result?.fearGreed?.history ?? [];
@@ -206,6 +192,7 @@ const CryptoList = () => {
                     암호화폐
                 </Typography>
                 <Box sx={{flex: 1}}/>
+                <MiniChartModeToggle mode={chartMode} onChange={setChartMode}/>
                 <FreshnessIndicator lastUpdated={lastUpdated} error={pollError}/>
             </Box>
             <Grid

@@ -1,15 +1,14 @@
-import {useTheme} from "@mui/material/styles";
-import {LineChart, LineSeriesType} from "@mui/x-charts";
-import {MakeOptional} from '@mui/x-internals/types';
 import Card from "@mui/material/Card";
 import CardContent from "@mui/material/CardContent";
 import Typography from "@mui/material/Typography";
 import Stack from "@mui/material/Stack";
 import Chip from "@mui/material/Chip";
-import {lineClasses} from "@mui/x-charts/LineChart";
 import {CardActionArea} from "@mui/material";
 import {useNavigate} from "react-router-dom";
 import {renderChangeAmount} from "./CustomRender.tsx";
+import MiniChart from "./chart/MiniChart.tsx";
+import type {MiniChartMode} from "../lib/chart/MiniChart.ts";
+import type {Candle} from "../lib/chart/types.ts";
 
 export interface CryptoLineChartProps {
     market: string,
@@ -20,31 +19,18 @@ export interface CryptoLineChartProps {
     trend: 'up' | 'down' | 'neutral',
     interval: string,
     accTradePrice24h: string,
-    seriesData: MakeOptional<LineSeriesType, 'type'>[],
-    dateList: string[],
+    candles: Candle[],          // 최근 24시간의 분봉 (오래된 순)
+    chartMode: MiniChartMode,   // 선 / 캔들
 }
 
 const CryptoLineChart = (
-    {market, title, value, changeRate, changePrice, trend, interval, accTradePrice24h, seriesData, dateList}: CryptoLineChartProps,
+    {market, title, value, changeRate, changePrice, trend, interval, accTradePrice24h, candles, chartMode}: CryptoLineChartProps,
 ) => {
-    const theme = useTheme();
     const navigate = useNavigate();
 
     const onClick = (market: string) => {
         navigate(`/crypto/detail/${market}`);
     }
-
-    const numericDates = seriesData[0].data ? seriesData[0].data.map(Number) : [];
-
-    const minY = numericDates.length > 0 ? Math.min(...numericDates) : 0;
-    const maxY = numericDates.length > 0 ? Math.max(...numericDates) : 0;
-    const padding = (maxY - minY) * 0.05;
-
-    const colorPalette = [
-        theme.palette.primary.light,
-        theme.palette.primary.main,
-        theme.palette.primary.dark,
-    ];
 
     const labelColors = {
         up: 'error' as const,
@@ -101,41 +87,8 @@ const CryptoLineChart = (
                     </Stack>
                 </Stack>
             </CardContent>
-            <LineChart
-                colors={colorPalette}
-                xAxis={[
-                    {
-                        scaleType: 'point',
-                        data: dateList,
-                        tickLabelStyle: {
-                            display: 'none'
-                        },
-                        tickInterval: (i: number) => i % 80 === 0,
-                    },
-                ]}
-                yAxis={[
-                    {
-                        valueFormatter: (value: number) => value.toLocaleString(),
-                        width: 80,
-                        min: minY - padding,
-                        max: maxY + padding,
-                    },
-                ]}
-                series={seriesData}
-                margin={{left: 10, right: 20, top: 20, bottom: 20}}
-                grid={{horizontal: true}}
-                sx={{
-                    [`& .${lineClasses.area}`]: {
-                        fill: 'url(#switch-color-id-1)',
-                        filter: 'none',
-                    },
-                    height: {
-                        xs: 250,
-                        sm: 250,
-                        md: 310
-                    }
-                }}
-            />
+            {/* 최근 24시간의 흐름 */}
+            <MiniChart candles={candles} mode={chartMode} trend={trend}/>
         </Card>
         </CardActionArea>
     )

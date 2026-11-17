@@ -12,7 +12,10 @@ import {fetchIndexList, fetchIndexStream} from "../../api/index/IndexApi.ts";
 import {useEffect, useMemo, useRef, useState} from "react";
 import {MarketType} from "../../type/timeType.ts";
 import {fetchMarketInfo, getServerNow, getServerOffset} from "../../lib/serverTime.ts";
-import {ChartMinute, IndexListItem, IndexListRes, IndexStream, IndexStreamRes} from "../../type/IndexType.ts";
+import {IndexListItem, IndexListRes, IndexStream, IndexStreamRes} from "../../type/IndexType.ts";
+import MiniChartModeToggle from "../../components/chart/MiniChartModeToggle.tsx";
+import {useMiniChartMode} from "../../components/chart/useMiniChartMode.ts";
+import {INDEX_PRICE_SCALE, kiwoomMinuteCandles} from "../detail/chartCandles.ts";
 import FreshnessIndicator from "../../components/FreshnessIndicator.tsx";
 import {usePollingQuery} from "../../lib/pollingQuery.ts";
 
@@ -26,18 +29,9 @@ interface LiveIndexUpdate {
 const trendColor = (value: string): 'up' | 'down' | 'neutral' =>
     ["1", "2"].includes(value) ? 'up' : ["4", "5"].includes(value) ? 'down' : 'neutral';
 
-const chartColor = (value: string): 'red' | 'blue' | 'grey' =>
-    ["1", "2"].includes(value) ? 'red' : ["4", "5"].includes(value) ? 'blue' : 'grey';
-
-const indexDateFormat = (cntrTm: string) =>
-    `${cntrTm.slice(0, 4)}.${cntrTm.slice(4, 6)}.${cntrTm.slice(6, 8)} ${cntrTm.slice(8, 10)}:${cntrTm.slice(10, 12)}`;
-
-const parsePrice = (raw: string) => {
-    if (!raw) return null;
-    return Number((parseInt(raw, 10) / 100).toFixed(2));
-};
-
 const IndexList = () => {
+    // 카드 차트를 선으로 볼지 캔들로 볼지. 목록 화면들이 함께 쓴다.
+    const [chartMode, setChartMode] = useMiniChartMode();
     const chartTimer = useRef<number>(0);
     const marketTimer = useRef<number>(0);
 
@@ -78,7 +72,6 @@ const IndexList = () => {
         }
 
         return list.map((indexItem: IndexListItem) => {
-            const newDateList = indexItem.chartMinuteList.map((chart: ChartMinute) => indexDateFormat(chart.cntrTm)).reverse();
             const live = liveOverlay.get(indexItem.indsCd);
 
             return {
@@ -90,21 +83,12 @@ const IndexList = () => {
                 openPric: parseFloat(indexItem.openPric.replace(/^[+-]/, '')),
                 interval: today,
                 trend: live?.trend ?? trendColor(indexItem.predPreSig),
-                seriesData: [
-                    {
-                        id: indexItem.indsCd,
-                        showMark: false,
-                        curve: 'linear',
-                        area: true,
-                        stackOrder: 'ascending',
-                        color: chartColor(indexItem.predPreSig),
-                        data: indexItem.chartMinuteList.map(item => parsePrice(item.curPrc.replace(/^[+-]/, ''))).reverse(),
-                    }
-                ],
-                dateList: newDateList
+                // 당일 분봉. 지수 가격은 100배로 온다
+                candles: kiwoomMinuteCandles(indexItem.chartMinuteList, INDEX_PRICE_SCALE),
+                chartMode,
             };
         });
-    }, [result, liveOverlay]);
+    }, [result, liveOverlay, chartMode]);
 
     const loading = isLoading;
 
@@ -205,6 +189,7 @@ const IndexList = () => {
                     주요 지수
                 </Typography>
                 <Box sx={{flex: 1}}/>
+                <MiniChartModeToggle mode={chartMode} onChange={setChartMode}/>
                 <FreshnessIndicator lastUpdated={lastUpdated} error={pollError}/>
             </Box>
             <Grid

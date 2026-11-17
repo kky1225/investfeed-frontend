@@ -11,7 +11,10 @@ import {fetchMarketInfo, getServerNow, getServerOffset} from "../../lib/serverTi
 import CommodityLineChart, {CommodityLineChartProps} from "../../components/CommodityLineChart.tsx";
 import {fetchCommodityList, fetchCommodityStream} from "../../api/commodity/CommodityApi.ts";
 import FreshnessIndicator from "../../components/FreshnessIndicator.tsx";
-import {ChartMinute, CommodityListItem, CommodityListRes, CommodityStreamRes} from "../../type/CommodityType.ts";
+import {CommodityListItem, CommodityListRes, CommodityStreamRes} from "../../type/CommodityType.ts";
+import MiniChartModeToggle from "../../components/chart/MiniChartModeToggle.tsx";
+import {useMiniChartMode} from "../../components/chart/useMiniChartMode.ts";
+import {kiwoomMinuteCandles} from "../detail/chartCandles.ts";
 import {usePollingQuery} from "../../lib/pollingQuery.ts";
 import {parseKiwoomStamp} from "../../lib/tradeStamp.ts";
 import {openReconnectingSocket, type ReconnectingSocket} from "../../lib/reconnectingSocket.ts";
@@ -27,18 +30,9 @@ interface LiveCommodityUpdate {
 const trendColor = (value: string): 'up' | 'down' | 'neutral' =>
     ["1", "2"].includes(value) ? 'up' : ["4", "5"].includes(value) ? 'down' : 'neutral';
 
-const chartColor = (value: string): 'red' | 'blue' | 'grey' =>
-    ["1", "2"].includes(value) ? 'red' : ["4", "5"].includes(value) ? 'blue' : 'grey';
-
-const commodityDateFormat = (cntrTm: string) =>
-    `${cntrTm.slice(0, 4)}.${cntrTm.slice(4, 6)}.${cntrTm.slice(6, 8)} ${cntrTm.slice(8, 10)}:${cntrTm.slice(10, 12)}`;
-
-const parsePrice = (raw: string) => {
-    if (!raw) return null;
-    return parseInt(raw);
-};
-
 const CommodityList = () => {
+    // 카드 차트를 선으로 볼지 캔들로 볼지. 목록 화면들이 함께 쓴다.
+    const [chartMode, setChartMode] = useMiniChartMode();
     const chartTimer = useRef<number>(0);
     const marketTimer = useRef<number>(0);
     const [liveOverlay, setLiveOverlay] = useState<Map<string, LiveCommodityUpdate>>(new Map());
@@ -73,7 +67,6 @@ const CommodityList = () => {
             : `${year}.${month}.${day} ${hour}:${minute}`;
 
         return list.map((commodityItem: CommodityListItem) => {
-            const newDateList = commodityItem.chartMinuteList.map((chart: ChartMinute) => commodityDateFormat(chart.cntrTm)).reverse();
             const live = liveOverlay.get(commodityItem.stkCd);
 
             return {
@@ -85,21 +78,11 @@ const CommodityList = () => {
                 openPric: parseFloat(commodityItem.openPric.replace(/^[+-]/, '')),
                 interval: today,
                 trend: live?.trend ?? trendColor(commodityItem.predPreSig),
-                seriesData: [
-                    {
-                        id: commodityItem.stkCd,
-                        showMark: false,
-                        curve: 'linear',
-                        area: true,
-                        stackOrder: 'ascending',
-                        color: chartColor(commodityItem.predPreSig),
-                        data: commodityItem.chartMinuteList.map(item => parsePrice(item.curPrc.replace(/^[+-]/, ''))).reverse(),
-                    }
-                ],
-                dateList: newDateList
+                candles: kiwoomMinuteCandles(commodityItem.chartMinuteList),    // 당일 분봉
+                chartMode,
             };
         });
-    }, [result, liveOverlay]);
+    }, [result, liveOverlay, chartMode]);
 
     const loading = isLoading;
 
@@ -218,6 +201,7 @@ const CommodityList = () => {
                     원자재 목록
                 </Typography>
                 <Box sx={{flex: 1}}/>
+                <MiniChartModeToggle mode={chartMode} onChange={setChartMode}/>
                 <FreshnessIndicator lastUpdated={lastUpdated} error={pollError}/>
             </Box>
             <Grid

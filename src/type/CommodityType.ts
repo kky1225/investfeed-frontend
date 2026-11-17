@@ -30,6 +30,10 @@ export interface CommodityListItem {
 export interface ChartMinute {
     curPrc: string,
     cntrTm: string,
+    // 카드를 캔들로 그릴 때 쓴다
+    openPric?: string | null,
+    highPric?: string | null,
+    lowPric?: string | null,
 }
 
 export interface CommodityStreamRes {

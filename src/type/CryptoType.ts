@@ -21,6 +21,10 @@ export interface CryptoListItem {
 export interface CryptoChartMinute {
     tradePrice: number,
     candleDateTimeKst: string,
+    // 카드를 캔들로 그릴 때 쓴다
+    openingPrice?: number | null,
+    highPrice?: number | null,
+    lowPrice?: number | null,
 }
 
 export interface CryptoDetailReq {
