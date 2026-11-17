@@ -10,8 +10,9 @@ import type {Drawing} from "../../lib/chart/types.ts";
 import {loadDrawings, saveDrawings} from "../../lib/chart/drawingStorage.ts";
 import {clearChartSettings, loadChartSettings} from "../../lib/chart/settingsStorage.ts";
 
-// 선을 끌어 옮기거나 설정을 연달아 바꾸는 동안 매번 저장하지 않도록 마지막 변경 뒤 이만큼 기다린다
-const SAVE_DELAY_MS = 500;
+// 마지막 변경 뒤 이만큼 기다렸다가 저장한다(그린 선과 설정 모두). 선을 끌어 옮기거나 설정을 이어서 바꾸는 동안은
+// 저장하지 않는다. 그 전에 저장하려면 saveNow 를 부른다.
+const SAVE_DELAY_MS = 5000;
 const SETTINGS_KEY = ['chartSettings'];
 const NO_DRAWINGS: Drawing[] = [];
 // 아무것도 바꾸지 않은 상태
@@ -24,34 +25,39 @@ const LEGACY_TOOLBAR_KEY = 'drawingToolbar';    // 예전 브라우저 저장분
 const reportSaveError = (error: unknown) => console.error(error);
 
 /**
- * 저장을 모아서 보낸다. schedule 로 맡긴 저장은 마지막으로 맡긴 뒤 SAVE_DELAY_MS 가 지나면 한 번만 실행되고,
+ * 저장을 모아서 보낸다. schedule 로 맡긴 저장은 마지막으로 맡긴 뒤 delayMs 가 지나면 한 번만 실행되고,
  * 그 사이에 다시 맡기면 앞의 것은 버린다. flush 는 밀린 저장을 기다리지 않고 바로 실행한다.
+ * waiting 은 아직 보내지 않은 저장이 있는지.
  */
-const useDelayedSave = () => {
+const useDelayedSave = (delayMs: number) => {
     const pending = useRef<{ timer: ReturnType<typeof setTimeout>, run: () => void } | null>(null);
+    const [waiting, setWaiting] = useState(false);
     const flush = useCallback(() => {
         const current = pending.current;
         if (!current) return;
         clearTimeout(current.timer);
         pending.current = null;
+        setWaiting(false);
         current.run();
     }, []);
     const schedule = useCallback((run: () => void) => {
         if (pending.current) clearTimeout(pending.current.timer);
+        setWaiting(true);
         pending.current = {
             run,
             timer: setTimeout(() => {
                 pending.current = null;
+                setWaiting(false);
                 run();
-            }, SAVE_DELAY_MS),
+            }, delayMs),
         };
-    }, []);
-    return {schedule, flush};
+    }, [delayMs]);
+    return {schedule, flush, waiting};
 };
 
 /**
  * 차트 설정과 그린 선을 계정에 저장한다. (설정은 회원당 하나, 선은 회원 + 종목별)
- * 화면은 먼저 바꾸고 저장은 뒤에서 한다. 조회가 끝나기 전이나 실패했을 때의 변경은 저장하지 않는다
+ * 화면은 먼저 바꾸고 저장은 뒤에서 모아서 한다(마지막 변경 5초 뒤. saveNow 로 바로 보낼 수 있다). 조회가 끝나기 전이나 실패했을 때의 변경은 저장하지 않는다
  * (서버에 있던 내용을 덮어쓰지 않기 위함).
  * 종목을 주지 않으면 그린 선은 이 화면에서만 유지한다.
  */
@@ -77,7 +83,9 @@ export const useChartStorage = (assetType: AssetType | undefined, assetCode: str
     const drawings = drawingsReady ? drawingsQuery.data ?? NO_DRAWINGS : localDrawings;
 
     // 밀린 저장. 종목이 바뀌거나 화면을 떠날 때는 기다리지 않고 바로 보낸다.
-    const {schedule: scheduleDrawingSave, flush: flushDrawingSave} = useDelayedSave();
+    const {
+        schedule: scheduleDrawingSave, flush: flushDrawingSave, waiting: drawingSaveWaiting,
+    } = useDelayedSave(SAVE_DELAY_MS);
     useEffect(() => flushDrawingSave, [flushDrawingSave, drawingsKey]);
 
     const updateDrawings = (next: Drawing[]) => {
@@ -130,8 +138,17 @@ export const useChartStorage = (assetType: AssetType | undefined, assetCode: str
     const paneOrder = settingQuery.data?.paneOrder ?? null;
 
     // 밀린 설정 저장. 화면을 떠날 때는 기다리지 않고 바로 보낸다.
-    const {schedule: scheduleSettingSave, flush: flushSettingSave} = useDelayedSave();
+    const {
+        schedule: scheduleSettingSave, flush: flushSettingSave, waiting: settingSaveWaiting,
+    } = useDelayedSave(SAVE_DELAY_MS);
     useEffect(() => flushSettingSave, [flushSettingSave]);
+
+    // 아직 보내지 않은 저장이 있는지와, 기다리지 않고 지금 보내기 (저장 버튼, 설정 창을 닫을 때)
+    const unsaved = drawingSaveWaiting || settingSaveWaiting;
+    const saveNow = useCallback(() => {
+        flushDrawingSave();
+        flushSettingSave();
+    }, [flushDrawingSave, flushSettingSave]);
 
     // 설정은 통째로 저장하므로, 바꾸는 항목 말고는 지금 값을 그대로 실어 보낸다.
     // 화면은 바로 바꾸고, 저장은 연달아 바꾼 것을 모아 마지막 상태만 한 번 보낸다.
@@ -221,5 +238,6 @@ export const useChartStorage = (assetType: AssetType | undefined, assetCode: str
         mainHeight, setMainHeight,
         setIndicatorHeight,
         paneOrder, setPaneOrder,
+        unsaved, saveNow,
     };
 };

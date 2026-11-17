@@ -9,6 +9,7 @@ import Button from "@mui/material/Button";
 import Typography from "@mui/material/Typography";
 import Tooltip from "@mui/material/Tooltip";
 import SettingsIcon from "@mui/icons-material/Settings";
+import SaveIcon from "@mui/icons-material/Save";
 import FullscreenIcon from "@mui/icons-material/Fullscreen";
 import FullscreenExitIcon from "@mui/icons-material/FullscreenExit";
 import KeyboardDoubleArrowRightIcon from "@mui/icons-material/KeyboardDoubleArrowRight";
@@ -134,6 +135,7 @@ const CandleChart = ({
         mainHeight: savedMainHeight, setMainHeight,
         setIndicatorHeight,
         paneOrder: savedPaneOrder, setPaneOrder,
+        unsaved, saveNow,
     } = useChartStorage(assetType, assetCode);
     // 비교 종목. 저장하지 않고 화면을 여는 동안만 들고 있으며, 종목이 바뀌면 비운다.
     const {
@@ -639,6 +641,13 @@ const CandleChart = ({
                         </ChartToolbarButton>
                     </Tooltip>
                 )}
+                {/* 바꾼 내용은 잠시 뒤 저절로 저장된다. 그 전에 저장하고 싶을 때 누른다. 저장할 것이 없으면 흐리게 보인다. */}
+                <Tooltip title={unsaved ? '지금 저장 (잠시 뒤 자동 저장)' : '모두 저장됨'}>
+                    <ChartToolbarButton aria-label="차트 저장" onClick={saveNow}>
+                        {/* 버튼 색은 위쪽 줄 공통 모양이 정하므로 아이콘에 직접 입힌다 */}
+                        <SaveIcon sx={{color: unsaved ? 'primary.main' : 'text.disabled'}}/>
+                    </ChartToolbarButton>
+                </Tooltip>
                 {/* 같은 자리에서 들어가기와 나가기가 바뀐다. 터치 화면에는 Esc 와 우클릭이 없어 버튼이 필요하다. */}
                 <Tooltip title={fullscreen ? '전체 화면 끝내기' : '전체 화면으로 보기'}>
                     <ChartToolbarButton
@@ -656,7 +665,10 @@ const CandleChart = ({
             </Stack>
             <ChartSettingsDialog
                 open={settingsOpen}
-                onClose={() => setSettingsOpen(false)}
+                onClose={() => {
+                    setSettingsOpen(false);
+                    saveNow();      // 창을 닫으면 다 바꾼 것으로 보고 기다리지 않고 저장한다
+                }}
                 indicatorOptions={indicatorOptions}
                 onToggleIndicator={toggleIndicator}
                 onIndicatorChange={setIndicatorValues}
