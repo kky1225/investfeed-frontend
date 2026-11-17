@@ -331,6 +331,7 @@ const CandleChart = ({
             key: entry.key,
             label: entry.label,
             on,
+            below: entry.type !== undefined && INDICATORS[entry.type].placement === 'pane',
             // 켜 둔 지표에 둘째가 아직 없을 때만 하나 더 추가할 수 있다
             canDuplicate: on && entry.secondKey !== undefined && indicatorSettings[entry.secondKey]?.on !== true,
             duplicate: entry.second === true,

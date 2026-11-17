@@ -50,7 +50,8 @@ export interface ChartIndicatorOption {
     key: string,
     label: string,
     on: boolean,
-    canDuplicate: boolean,  // 같은 지표를 하나 더 추가할 수 있는지 (차트 아래에 따로 영역을 차지하는 지표, 둘까지)
+    below: boolean,         // 차트 아래에 따로 영역을 차지하는 지표인지. 아니면 가격이나 거래량 위에 겹쳐 그린다
+    canDuplicate: boolean,// 같은 지표를 하나 더 추가할 수 있는지 (차트 아래에 따로 영역을 차지하는 지표, 둘까지)
     duplicate: boolean,     // 하나 더 추가해 둔 둘째인지. 켜고 끄는 대신 지운다
     params: ChartIndicatorParam[],
     colors: ChartIndicatorColor[],
@@ -233,6 +234,12 @@ const IndicatorFields = ({option, onChange}: IndicatorFieldsProps) => {
     );
 };
 
+// 지표를 그리는 자리에 따라 둘로 묶어 보인다.
+const INDICATOR_GROUPS = [
+    {below: false, title: '차트 지표', description: '가격이나 거래량 위에 겹쳐 그립니다.'},
+    {below: true, title: '하단 지표', description: '차트 아래에 따로 영역을 차지합니다.'},
+];
+
 /** 차트 설정 창. 바꾸는 즉시 차트에 반영된다. */
 const ChartSettingsDialog = ({
     open, onClose, indicatorOptions, onToggleIndicator, onIndicatorDuplicate, onIndicatorRemove,
@@ -256,51 +263,69 @@ const ChartSettingsDialog = ({
                     <Divider sx={{my: 2}}/>
                 </>
             )}
-            <Typography variant="subtitle2" sx={{color: 'text.secondary', mb: 1}}>지표</Typography>
-            <Stack spacing={1.5}>
-                {indicatorOptions.map(option => (
-                    <Box key={option.key}>
-                        <Stack direction="row" sx={{alignItems: 'center', justifyContent: 'space-between'}}>
-                            {option.duplicate ? (
-                                // 하나 더 추가한 지표는 켜고 끄지 않고 지운다. 스위치가 없는 만큼 들여 써서 위 지표에 딸린 것으로 보이게 한다.
-                                <Typography sx={{pl: 6, py: 1}}>{option.label}</Typography>
-                            ) : (
-                                <FormControlLabel
-                                    label={option.label}
-                                    control={
-                                        <Switch
-                                            checked={option.on}
-                                            onChange={(_event, checked) => onToggleIndicator(option.key, checked)}
+            {INDICATOR_GROUPS
+                .map(group => ({...group, options: indicatorOptions.filter(option => option.below === group.below)}))
+                .filter(group => group.options.length > 0)
+                .map((group, order) => (
+                    <Box key={group.title}>
+                        {order > 0 && <Divider sx={{my: 2}}/>}
+                        <Typography variant="subtitle2" sx={{color: 'text.secondary'}}>{group.title}</Typography>
+                        <Typography variant="body2" sx={{color: 'text.secondary', mb: 1}}>{group.description}</Typography>
+                        <Stack spacing={1.5}>
+                            {group.options.map(option => (
+                                <Box key={option.key}>
+                                    <Stack direction="row" sx={{alignItems: 'center', justifyContent: 'space-between'}}>
+                                        {option.duplicate ? (
+                                            // 하나 더 추가한 지표는 켜고 끄지 않고 지운다. 스위치가 없는 만큼 들여 써서 위 지표에 딸린 것으로 보이게 한다.
+                                            <Typography sx={{pl: 6, py: 1}}>{option.label}</Typography>
+                                        ) : (
+                                            <FormControlLabel
+                                                label={option.label}
+                                                control={
+                                                    <Switch
+                                                        checked={option.on}
+                                                        onChange={(_event, checked) => onToggleIndicator(option.key, checked)}
+                                                    />
+                                                }
+                                            />
+                                        )}
+                                        <Stack direction="row">
+                                            {option.customized && (
+                                                <Button size="small" onClick={() => onIndicatorReset(option.key)}>
+                                                    기본값으로
+                                                </Button>
+                                            )}
+                                            {option.canDuplicate && (
+                                                <Button
+                                                    size="small"
+                                                    startIcon={<AddIcon/>}
+                                                    onClick={() => onIndicatorDuplicate(option.key)}
+                                                >
+                                                    하나 더
+                                                </Button>
+                                            )}
+                                            {option.duplicate && (
+                                                <Button
+                                                    size="small"
+                                                    color="error"
+                                                    onClick={() => onIndicatorRemove(option.key)}
+                                                >
+                                                    지우기
+                                                </Button>
+                                            )}
+                                        </Stack>
+                                    </Stack>
+                                    <Box sx={option.duplicate ? {pl: 6} : undefined}>
+                                        <IndicatorFields
+                                            option={option}
+                                            onChange={change => onIndicatorChange(option.key, change)}
                                         />
-                                    }
-                                />
-                            )}
-                            <Stack direction="row">
-                                {option.customized && (
-                                    <Button size="small" onClick={() => onIndicatorReset(option.key)}>기본값으로</Button>
-                                )}
-                                {option.canDuplicate && (
-                                    <Button
-                                        size="small"
-                                        startIcon={<AddIcon/>}
-                                        onClick={() => onIndicatorDuplicate(option.key)}
-                                    >
-                                        하나 더
-                                    </Button>
-                                )}
-                                {option.duplicate && (
-                                    <Button size="small" color="error" onClick={() => onIndicatorRemove(option.key)}>
-                                        지우기
-                                    </Button>
-                                )}
-                            </Stack>
+                                    </Box>
+                                </Box>
+                            ))}
                         </Stack>
-                        <Box sx={option.duplicate ? {pl: 6} : undefined}>
-                            <IndicatorFields option={option} onChange={change => onIndicatorChange(option.key, change)}/>
-                        </Box>
                     </Box>
                 ))}
-            </Stack>
 
             {/* 영역이 둘 이상일 때만 순서를 바꿀 것이 있다. */}
             {paneItems.length > 1 && (
