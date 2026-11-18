@@ -12,6 +12,18 @@ import {setupSecondaryPassword, verifySecondaryPassword, fetchSecondaryPasswordL
 import {requireOk} from '../lib/apiResponse';
 import {useAuth} from '../context/AuthContext';
 
+const ALREADY_SET_CODE = 'AUTH_4045';   // 2차 비밀번호가 이미 설정되어 있어 첫 설정을 거부했다는 서버 코드
+
+const errorCodeOf = (err: unknown): string | undefined =>
+    (err as { response?: { data?: { code?: string } } }).response?.data?.code;
+
+/** 이미 설정된 2차 비밀번호가 있어 인증만 시도했는데 그 인증이 실패했다. cause 는 인증 요청의 실패 */
+class AlreadySetError extends Error {
+    constructor(readonly cause: unknown) {
+        super('secondary password already set');
+    }
+}
+
 interface SecondaryAuthDialogProps {
     open: boolean;
     mode: 'setup' | 'verify';
@@ -102,9 +114,21 @@ export default function SecondaryAuthDialog({open, mode, onSuccess, onClose}: Se
 
     const setupMutation = useMutation({
         mutationFn: async (code: string) => {
-            requireOk(await setupSecondaryPassword({password: code}), '2차 비밀번호 설정');
+            // 서버는 이미 2차 비밀번호가 있으면 설정을 거부한다(AUTH_4045). 앞선 시도에서 설정은 됐는데 뒤이은 인증만
+            // 실패했거나 다른 기기에서 먼저 만든 경우다. 그때는 설정을 건너뛰고 입력한 값으로 인증만 한다.
+            let alreadySet = false;
+            try {
+                requireOk(await setupSecondaryPassword({password: code}), '2차 비밀번호 설정');
+            } catch (err) {
+                if (errorCodeOf(err) !== ALREADY_SET_CODE) throw err;
+                alreadySet = true;
+            }
             if (user) updateUser({...user, secondaryPasswordEnabled: true});
-            requireOk(await verifySecondaryPassword({password: code}), '2차 비밀번호 인증');
+            try {
+                requireOk(await verifySecondaryPassword({password: code}), '2차 비밀번호 인증');
+            } catch (err) {
+                throw alreadySet ? new AlreadySetError(err) : err;
+            }
         },
         onSuccess: () => {
             resetState();
@@ -112,8 +136,11 @@ export default function SecondaryAuthDialog({open, mode, onSuccess, onClose}: Se
         },
         onError: (err: unknown) => {
             console.error(err);
-            if (!handleLockError(err)) {
-                setError('2차 비밀번호 설정에 실패했습니다.');
+            const alreadySet = err instanceof AlreadySetError;
+            if (!handleLockError(alreadySet ? err.cause : err)) {
+                setError(alreadySet
+                    ? '2차 비밀번호가 이미 설정되어 있습니다. 설정해 둔 2차 비밀번호를 입력해주세요.'
+                    : '2차 비밀번호 설정에 실패했습니다.');
             }
             setStep('input');
             setFirstInput('');
