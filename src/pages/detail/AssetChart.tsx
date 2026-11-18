@@ -10,26 +10,25 @@ import ToggleButton from "@mui/material/ToggleButton";
 import ArrowDropDownIcon from "@mui/icons-material/ArrowDropDown";
 import CandleChart from "../../components/chart/CandleChart.tsx";
 import {ChartToolbarGroup} from "../../components/chart/ChartToolbarControls.tsx";
-import {CandlePage, useCandleHistory} from "../../components/chart/useCandleHistory.ts";
+import {useCandleHistory} from "../../components/chart/useCandleHistory.ts";
 import type {ComparisonMarket} from "../../components/chart/useChartComparisons.ts";
 import {mergeCandles} from "../../lib/chart/merge.ts";
 import type {Candle, PriceLine} from "../../lib/chart/types.ts";
 import {requireOk} from "../../lib/apiResponse.ts";
 import {fetchPriceTargets, updatePriceTarget} from "../../api/notification/NotificationApi.ts";
-import {fetchStockCandles} from "../../api/stock/StockApi.ts";
 import type {PriceTarget} from "../../type/NotificationType.ts";
-import type {StockCandleRes, StockChartType} from "../../type/StockType.ts";
 import {
     ChartMarket, chartStorageOf, countdownIntervalOf, isMinuteChart, MARKET_CHART_RULES, minuteChartType, minutesOf,
     timeUnitOf,
 } from "./assetChart.ts";
-import {kiwoomCandles} from "./chartCandles.ts";
+import {fetchCandlePage, hasCandleHistory} from "./chartHistory.ts";
 import {createComparisonSource} from "./chartComparison.ts";
 
 export interface AssetChartProps {
     market: ChartMarket,
     code: string,
-    chartType: string,      // 지금 주기 (MINUTE_5, DAY …). 조회에 쓰므로 화면이 들고 있다
+    exchange?: string,      // 미국 종목의 거래소 구분(ND·NY·NA). 주면 과거 구간을 이어 받는다
+    chartType: string,    // 지금 주기 (MINUTE_5, DAY …). 조회에 쓰므로 화면이 들고 있다
     onChartTypeChange: (chartType: string) => void,
     candles: Candle[],      // 화면이 조회한 캔들 (오래된 순)
     // 실시간 현재가. 주면 마지막 캔들의 종가·고가·저가에 반영한다(새 캔들은 만들지 않는다).
@@ -44,7 +43,6 @@ const DEFAULT_HEIGHT = 480;
 // 주기 버튼을 차트 위쪽 줄에 함께 놓을 수 있는 최소 너비. 이보다 좁으면 차트 아래에 놓는다(위쪽 줄의 설정 버튼이 잘리지 않게)
 const TOOLBAR_MIN_WIDTH = 640;
 const TOGGLE_MINUTE = 'MINUTE';
-const NO_HISTORY: CandlePage = {candles: [], nextCursor: null};
 
 /**
  * 자산 하나의 차트: 주기 버튼 + 캔들 차트.
@@ -52,7 +50,7 @@ const NO_HISTORY: CandlePage = {candles: [], nextCursor: null};
  * 상세 화면과 멀티 화면이 모두 이것을 쓰므로, 차트 주변을 고칠 때는 이 파일과 assetChart.ts 만 고치면 된다.
  */
 const AssetChart = ({
-    market, code, chartType, onChartTypeChange, candles, livePrice, liveStamp, loading = false,
+    market, code, exchange, chartType, onChartTypeChange, candles, livePrice, liveStamp, loading = false,
     height = DEFAULT_HEIGHT,
 }: AssetChartProps) => {
     const rule = MARKET_CHART_RULES[market];
@@ -122,17 +120,12 @@ const AssetChart = ({
         return () => observer.disconnect();
     }, []);
 
-    // 과거 구간. 차트 왼쪽 끝에 가까워지면 이전 구간을 이어 받아 앞에 붙인다. 조회가 있는 종류(국내 종목)만 한다.
-    const fetchOlder = useCallback(async (cursor: string | null): Promise<CandlePage> => {
-        if (!rule.history) return NO_HISTORY;
-        const page = requireOk<StockCandleRes>(
-            await fetchStockCandles(
-                code, {chartType: chartType as StockChartType, cursor: cursor ?? undefined}, {skipGlobalError: true},
-            ),
-            '과거 차트 조회',
-        );
-        return {candles: kiwoomCandles(page.candles), nextCursor: page.nextCursor ?? null};
-    }, [rule.history, code, chartType]);
+    // 과거 구간. 차트 왼쪽 끝에 가까워지면 이전 구간을 이어 받아 앞에 붙인다.
+    const hasHistory = hasCandleHistory(market, chartType, exchange);
+    const fetchOlder = useCallback(
+        (cursor: string | null) => fetchCandlePage(market, code, chartType, cursor, exchange),
+        [market, code, chartType, exchange],
+    );
     const {history, loadOlder} = useCandleHistory(seriesKey, fetchOlder);
 
     // 실시간 현재가를 마지막 캔들에 반영하고, 과거 구간을 앞에 붙인다.
@@ -223,7 +216,7 @@ const AssetChart = ({
                     seriesKey={seriesKey}
                     assetType={storage.assetType}
                     assetCode={storage.assetCode}
-                    onLoadOlder={rule.history ? loadOlder : undefined}
+                    onLoadOlder={hasHistory ? loadOlder : undefined}
                     comparison={comparison}
                     priceLines={targetLines}
                     onPriceLineMove={handleTargetMove}

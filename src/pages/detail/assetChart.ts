@@ -2,7 +2,7 @@ import type {CandleInterval, TimeUnit} from "../../lib/chart/types.ts";
 import type {AssetType} from "../../type/NotificationType.ts";
 
 // 자산 종류별 차트 규칙. 상세 화면과 멀티 화면이 모두 AssetChart 를 거쳐 이 규칙을 쓴다.
-// 종류마다 다른 것(분봉 단위, 저장 기준, 비교·과거 조회 여부)은 여기 한 곳만 고친다.
+// 종류마다 다른 것(분봉 단위, 저장 기준, 비교 여부)은 여기 한 곳만 고친다. 과거 구간 조회는 chartHistory.ts 가 맡는다.
 
 /** 차트를 보여 주는 자산의 종류 */
 export type ChartMarket = 'STOCK' | 'US_STOCK' | 'CRYPTO' | 'INDEX' | 'COMMODITY';
@@ -17,29 +17,28 @@ interface MarketChartRule {
     assetType: AssetType,
     codeSuffix: string,
     comparison: boolean,    // 종목 비교를 쓰는지
-    history: boolean,       // 과거 구간을 이어 받는 조회가 있는지
 }
 
 export const MARKET_CHART_RULES: Record<ChartMarket, MarketChartRule> = {
     STOCK: {
         minutes: [1, 3, 5, 10, 15, 30, 60], defaultMinute: 1, year: true, countdown: true,
-        assetType: 'STOCK', codeSuffix: '', comparison: true, history: true,
+        assetType: 'STOCK', codeSuffix: '', comparison: true,
     },
     US_STOCK: {
         minutes: [1, 3, 5, 10, 30], defaultMinute: 3, year: true, countdown: false,
-        assetType: 'STOCK', codeSuffix: '_US', comparison: true, history: false,
+        assetType: 'STOCK', codeSuffix: '_US', comparison: true,
     },
     CRYPTO: {
         minutes: [1, 3, 5, 10, 30], defaultMinute: 3, year: true, countdown: true,
-        assetType: 'CRYPTO', codeSuffix: '', comparison: true, history: false,
+        assetType: 'CRYPTO', codeSuffix: '', comparison: true,
     },
     INDEX: {
         minutes: [1, 3, 5, 30], defaultMinute: 1, year: true, countdown: true,
-        assetType: 'STOCK', codeSuffix: '_INDEX', comparison: true, history: false,
+        assetType: 'STOCK', codeSuffix: '_INDEX', comparison: true,
     },
     COMMODITY: {
         minutes: [1, 3, 5, 30], defaultMinute: 1, year: false, countdown: true,
-        assetType: 'STOCK', codeSuffix: '_COMMODITY', comparison: false, history: false,
+        assetType: 'STOCK', codeSuffix: '_COMMODITY', comparison: false,
     },
 };
 

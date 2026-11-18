@@ -420,6 +420,7 @@ const UsStockDetail = () => {
                         <AssetChart
                             market="US_STOCK"
                             code={stkCd}
+                            exchange={stexTp}
                             chartType={chartType}
                             onChartTypeChange={next => setChartType(next as UsStockChartType)}
                             candles={candleList}

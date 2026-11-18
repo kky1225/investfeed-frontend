@@ -126,6 +126,7 @@ export default function ChartDetailDialog({open, onClose, assetType, code, name,
                         <AssetChart
                             market={asset.type}
                             code={asset.code}
+                            exchange={asset.stexTp}
                             chartType={chartType}
                             onChartTypeChange={setChartType}
                             candles={candles}

@@ -146,6 +146,7 @@ export default function MultiViewPanel({asset, onSearch, onChartExpand, onRemove
             <AssetChart
                 market={asset.type}
                 code={asset.code}
+                exchange={asset.stexTp}
                 chartType={chartType}
                 onChartTypeChange={setChartType}
                 candles={candleList}

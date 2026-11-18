@@ -12,7 +12,15 @@ export const fetchCommodityStream = async (items: string[]) => {
     return res.data
 }
 
-export const fetchCommodityDetail = async (stkCd: string, req: CommodityDetailReq, config?: AxiosRequestConfig) => {
+/** 차트의 과거 구간 한 페이지. cursor 없이 부르면 가장 최근 구간, 받은 nextCursor 를 넣으면 그 이전 구간 */
+export const fetchCommodityCandles = async (
+    stkCd: string, req: { chartType: string, cursor?: string }, config?: AxiosRequestConfig,
+) => {
+    const res = await api.get(`/commodities/${stkCd}/candles`, {...config, params: req});
+    return res.data
+}
+
+export const fetchCommodityDetail =async (stkCd: string, req: CommodityDetailReq, config?: AxiosRequestConfig) => {
     const res = await api.get(`/commodities/${stkCd}`, {...config, params: req});
     return res.data
 }
