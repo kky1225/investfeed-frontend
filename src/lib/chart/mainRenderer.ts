@@ -67,7 +67,8 @@ export interface MainInput {
     // 비교 종목: 주 종목의 캔들 순번에 맞춘 종가와 선 색 순번. 있으면 percentScale 도 켜서 넘길 것
     comparisons: { closes: Series, color: number }[],
     flatByPrevClose: boolean,
-    axisWidth: number,         // 오른쪽 가격축 너비 (CSS px)
+    grid: boolean,              // 격자선(가격 눈금의 가로선, 날짜 눈금의 세로선)을 그을지. 눈금 글자와 경계선은 늘 그린다
+    axisWidth: number,      // 오른쪽 가격축 너비 (CSS px)
     valueDecimals: number,      // 캔들 가격의 소수 자릿수
     countdown: string | null,   // 현재가 라벨 아래에 적을, 마지막 캔들이 마감하기까지 남은 시간. 없으면 적지 않는다
 }
@@ -84,6 +85,7 @@ interface Frame {
     range: VisibleRange,
     timeUnit: TimeUnit,
     flatByPrevClose: boolean,
+    grid: boolean,
     plotWidth: number,
     plotBottom: number,     // 날짜축 위
     mainBottom: number,     // 거래량 영역 아래 (보조지표 위)
@@ -137,8 +139,10 @@ const drawPriceAxis = (frame: Frame): number => {
         const y = painter.px(priceY(value));
         if (y - previousY < minGap) return;
         previousY = y;
-        ctx.fillStyle = style.gridColor;
-        ctx.fillRect(0, y, plotRightPx, line);
+        if (frame.grid) {
+            ctx.fillStyle = style.gridColor;
+            ctx.fillRect(0, y, plotRightPx, line);
+        }
         if (y - currentPriceY > -labelClearance && y - currentPriceY < clearanceBelow) return;
         ctx.fillStyle = style.textColor;
         ctx.fillText(labelOf(value), axisLabelX, y);
@@ -161,7 +165,7 @@ const drawVolumeAxis = ({painter, style, volumeMax, volumeY, axisLabelX}: Frame)
  * 날짜 눈금: 세로 격자 + 아래 라벨. 달력의 경계(날·달·분기·해가 바뀌는 첫 캔들)에 놓는다.
  * 경계의 간격이 고르지 않아 글자가 겹치는 자리는 큰 경계를 남기고 작은 쪽을 뺀다.
  */
-const drawTimeAxis = ({painter, style, candles, range, timeUnit, plotBottom, line, plotRightPx, plotBottomPx}: Frame) => {
+const drawTimeAxis = ({painter, style, candles, range, timeUnit, grid, plotBottom, line, plotRightPx, plotBottomPx}: Frame) => {
     const ctx = painter.ctx;
     const gap = painter.px(TIME_LABEL_GAP);
     const placed: { x: number, half: number, label: string }[] = [];
@@ -175,8 +179,10 @@ const drawTimeAxis = ({painter, style, candles, range, timeUnit, plotBottom, lin
             placed.push(tick);
         });
     placed.forEach(({x, label}) => {
-        ctx.fillStyle = style.gridColor;
-        ctx.fillRect(x, 0, line, plotBottomPx);
+        if (grid) {
+            ctx.fillStyle = style.gridColor;
+            ctx.fillRect(x, 0, line, plotBottomPx);
+        }
         ctx.fillStyle = style.textColor;
         ctx.fillText(label, x, painter.px(plotBottom + TIME_AXIS_HEIGHT / 2));
     });
@@ -548,7 +554,7 @@ export const renderMain = (painter: Painter, input: MainInput): Layout | null =>
         candles, chartType, shapes, logScale, percentScale, priceZoom, priceShift, timeUnit, style, width, range,
         mainHeight, volumeRatio, indicatorHeights,
         averages, averageColors, averageStrokes, indicators, priceOverlays, volumeOverlays, priceLines, comparisons, flatByPrevClose,
-        axisWidth, valueDecimals, countdown,
+        grid, axisWidth, valueDecimals, countdown,
     } = input;
 
     // 위에서부터: 가격 / 거래량 / 보조지표들 / 날짜축. 위에서 아래로 쌓으므로 아래 영역의 높이가 바뀌어도 위 영역은 그대로다.
@@ -622,7 +628,7 @@ export const renderMain = (painter: Painter, input: MainInput): Layout | null =>
 
     const plotRightPx = painter.px(plotWidth);
     const frame: Frame = {
-        painter, style, candles, shapes, chartType, logScale, visible, range, timeUnit, flatByPrevClose,
+        painter, style, candles, shapes, chartType, logScale, visible, range, timeUnit, flatByPrevClose, grid,
         plotWidth, plotBottom, mainBottom, priceTop, priceBottom, volumeTop,
         priceMin, priceMax, volumeMax,
         priceY: (logScale ? createLogScale : createLinearScale)(priceMin, priceMax, priceTop, priceBottom),

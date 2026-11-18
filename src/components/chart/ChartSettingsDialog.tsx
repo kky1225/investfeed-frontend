@@ -87,6 +87,9 @@ interface ChartSettingsDialogProps {
     onPercentScaleChange: (enabled: boolean) => void,
     flatByPrevClose: boolean,                  // 시가와 종가가 같은 캔들을 전일 종가 기준으로 색칠할지
     onFlatByPrevCloseChange: (enabled: boolean) => void,
+    grid: boolean,                              // 격자선을 그을지
+    onGridChange: (visible: boolean) => void,
+    onSaveImage: () => void,                    // 지금 보이는 차트를 이미지 파일로 내려받는다
     drawingCount: number,                       // 그려 둔 선의 수
     onClearDrawings: () => void,
     hiddenDrawingCount: number,                 // 그중 숨겨 둔 선의 수
@@ -246,7 +249,7 @@ const ChartSettingsDialog = ({
     onIndicatorChange, onIndicatorReset, paneItems, onPaneMove,
     drawingToolbar, onDrawingToolbarChange,
     logScale, onLogScaleChange, percentScale, onPercentScaleChange,
-    flatByPrevClose, onFlatByPrevCloseChange, drawingCount, onClearDrawings, hiddenDrawingCount, onShowDrawings,
+    flatByPrevClose, onFlatByPrevCloseChange, grid, onGridChange, onSaveImage, drawingCount, onClearDrawings, hiddenDrawingCount, onShowDrawings,
     comparison, fullscreen, onFullscreenChange,
 }: ChartSettingsDialogProps) => (
     // 창은 화면 다른 곳에 따로 그려지므로, 색 단추가 차트의 색을 쓸 수 있게 색 변수를 걸어 준다.
@@ -401,6 +404,19 @@ const ChartSettingsDialog = ({
 
             <Divider sx={{my: 2}}/>
 
+            <Typography variant="subtitle2" sx={{color: 'text.secondary', mb: 1}}>격자</Typography>
+            <FormGroup>
+                <FormControlLabel
+                    label="격자선 표시"
+                    control={<Switch checked={grid} onChange={(_event, checked) => onGridChange(checked)}/>}
+                />
+            </FormGroup>
+            <Typography variant="body2" sx={{color: 'text.secondary'}}>
+                끄면 가격과 날짜 눈금에서 뻗는 가로·세로 선을 긋지 않습니다. 눈금 글자와 지표의 기준선은 그대로입니다.
+            </Typography>
+
+            <Divider sx={{my: 2}}/>
+
             <Typography variant="subtitle2" sx={{color: 'text.secondary', mb: 1}}>캔들</Typography>
             <FormGroup>
                 <FormControlLabel
@@ -459,6 +475,7 @@ const ChartSettingsDialog = ({
             >
                 {fullscreen ? '전체 화면 끝내기' : '전체 화면으로 보기'}
             </Button>
+            <Button onClick={onSaveImage}>이미지로 저장</Button>
             <Button onClick={onClose}>닫기</Button>
         </DialogActions>
     </Dialog>

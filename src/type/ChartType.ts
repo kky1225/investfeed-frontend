@@ -20,7 +20,8 @@ export interface ChartSetting {
     drawingToolbar: boolean;    // 그리기 도구 모음 표시
     flatByPrevClose: boolean;   // 시가와 종가가 같은 캔들의 색을 전일 종가와 비교해 정한다. false 면 상승색
     magnet: string;             // 자석: 도형의 점을 캔들의 시가·고가·저가·종가에 붙이는 정도 (off, weak, strong)
-    magnetIndicators?: boolean;     // 자석을 가격 영역의 지표 선(이동평균선 등)에도 붙일지. 비우면 붙이지 않는다
+    grid?: boolean;                 // 격자선(가로·세로)을 그을지. 비우면 긋는다
+    magnetIndicators?: boolean;    // 자석을 가격 영역의 지표 선(이동평균선 등)에도 붙일지. 비우면 붙이지 않는다
     volumeRatio?: number | null;    // 가격+거래량 높이 중 거래량 영역의 비율. 비우면 기본 비율
     mainHeight?: number | null;     // 가격+거래량 영역의 높이(px). 비우면 화면이 정한 높이
     // 차트 아래에 따로 영역을 차지하는 지표(RSI, MACD 등)를 위에서 아래로 놓는 순서. 지표 이름의 목록이고,

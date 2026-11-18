@@ -141,6 +141,7 @@ const CandleChart = ({
         flatByPrevClose, setFlatByPrevClose,
         magnet: savedMagnet, setMagnet,
         magnetIndicators, setMagnetIndicators,
+        grid, setGrid,
         volumeRatio: savedVolumeRatio, setVolumeRatio,
         mainHeight: savedMainHeight, setMainHeight,
         setIndicatorHeight,
@@ -293,6 +294,24 @@ const CandleChart = ({
     const runMenuAction = (action: () => void, refocus = true) => {
         closeContextMenu(refocus);
         action();
+    };
+    /** 지금 보이는 차트를 PNG 파일로 내려받는다. 파일 이름은 종목 코드와 저장한 시각이다. */
+    const saveImage = () => {
+        const image = engineRef.current?.toImage();
+        if (!image) return;
+        image.toBlob(blob => {
+            if (!blob) return;
+            const now = new Date();
+            const pad = (value: number) => String(value).padStart(2, '0');
+            const stamp = `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}`
+                + `-${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`;
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = ['chart', assetCode, stamp].filter(Boolean).join('-') + '.png';
+            link.click();
+            URL.revokeObjectURL(url);
+        }, 'image/png');
     };
     // 이 차트에서 쓸 수 있는 지표들: 이동평균선(선마다 기간 하나) + 보조지표
     const entries = useMemo<IndicatorEntry[]>(() => [
@@ -516,6 +535,10 @@ const CandleChart = ({
     }, [flatByPrevClose]);
 
     useEffect(() => {
+        engineRef.current?.setGrid(grid);
+    }, [grid]);
+
+    useEffect(() => {
         engineRef.current?.setChartType(chartType);
     }, [chartType]);
 
@@ -718,6 +741,9 @@ const CandleChart = ({
                 onPercentScaleChange={setPercentScale}
                 flatByPrevClose={flatByPrevClose}
                 onFlatByPrevCloseChange={setFlatByPrevClose}
+                grid={grid}
+                onGridChange={setGrid}
+                onSaveImage={saveImage}
                 drawingCount={drawings.length}
                 onClearDrawings={() => changeDrawings([])}
                 hiddenDrawingCount={hiddenCount}
@@ -825,6 +851,9 @@ const CandleChart = ({
                             가격축 원래대로
                         </MenuItem>
                     ),
+                    <MenuItem key="image" onClick={() => runMenuAction(saveImage)}>
+                        이미지로 저장
+                    </MenuItem>,
                     <MenuItem key="fullscreen" onClick={() => runMenuAction(() => changeFullscreen(!fullscreen))}>
                         {fullscreen ? '전체 화면 끝내기' : '전체 화면으로 보기'}
                     </MenuItem>,

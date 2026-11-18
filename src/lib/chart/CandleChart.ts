@@ -120,6 +120,7 @@ export class CandleChartEngine {
     private countdownText: string | null = null;            // 마지막으로 그린 남은 시간
 
     private flatByPrevClose = false;
+    private grid = true;
     private averagePeriods: number[] = [];
     private averages: Series[] = [];        // averagePeriods 와 같은 순서
     private averageColors: number[] = [];   // 이동평균선마다의 색 순번. 비어 있거나 모자라면 순서대로의 색
@@ -279,6 +280,37 @@ export class CandleChartEngine {
     setFlatByPrevClose(enabled: boolean) {
         this.flatByPrevClose = enabled;
         this.scheduleDraw();
+    }
+
+    /** 격자선(가로·세로)을 그을지. 눈금 글자, 축 경계선, 지표의 기준선은 그대로 그린다. */
+    setGrid(visible: boolean) {
+        this.grid = visible;
+        this.scheduleDraw();
+    }
+
+    /**
+     * 지금 보이는 차트를 그림 한 장으로 만든다. 바탕색을 칠하고 아래 장과 위 장을 겹친다.
+     * 십자선은 빼고, 값 표시는 가장 최근 캔들의 것으로 그린다. 그릴 것이 없으면 null.
+     */
+    toImage(): HTMLCanvasElement | null {
+        const style = this.style;
+        if (!style || this.candles.length === 0) return null;
+        const pointer = this.pointer;
+        this.pointer = null;
+        this.drawNow();
+        const image = document.createElement('canvas');
+        image.width = this.mainCanvas.width;
+        image.height = this.mainCanvas.height;
+        const ctx = image.getContext('2d');
+        if (ctx) {
+            ctx.fillStyle = style.backgroundColor;
+            ctx.fillRect(0, 0, image.width, image.height);
+            ctx.drawImage(this.mainCanvas, 0, 0);
+            ctx.drawImage(this.overlayCanvas, 0, 0);
+        }
+        this.pointer = pointer;
+        this.scheduleDraw();
+        return ctx ? image : null;
     }
 
     /**
@@ -1182,6 +1214,7 @@ export class CandleChartEngine {
             activePriceLine: drag?.id ?? this.hoveredPriceLine,
             comparisons: this.comparisons.map(({color}, order) => ({closes: this.comparisonCloses[order] ?? [], color})),
             flatByPrevClose: this.flatByPrevClose,
+            grid: this.grid,
             axisWidth: this.axisWidth,
             valueDecimals: this.valueDecimals,
             countdown: this.countdownText,
