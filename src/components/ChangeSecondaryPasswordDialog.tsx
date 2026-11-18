@@ -143,7 +143,10 @@ export default function ChangeSecondaryPasswordDialog({open, onSuccess, onClose}
             console.error(err);
             const axiosErr = err as { response?: { data?: { code?: string } } };
             const errCode = axiosErr.response?.data?.code ?? '';
-            setError(ERROR_MESSAGES[errCode] ?? '2차 비밀번호 변경에 실패했습니다.');
+            // 변경 요청도 인증과 같은 시도 제한을 받는다. 잠겼으면 첫 단계처럼 남은 시간을 보여 준다.
+            if (!handleLockError(err)) {
+                setError(ERROR_MESSAGES[errCode] ?? '2차 비밀번호 변경에 실패했습니다.');
+            }
             setStep('current');
             setCurrentPassword('');
             setNewPassword('');
