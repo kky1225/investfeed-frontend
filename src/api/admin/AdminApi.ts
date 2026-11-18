@@ -33,7 +33,13 @@ export const resetTotp = async (loginId: string): Promise<ApiResponse<null>> => 
     return res.data;
 };
 
-export const unlockApiKey = async (loginId: string): Promise<ApiResponse<null>> => {
+/** 회원의 2차 비밀번호를 지운다. 회원은 다음에 2차 비밀번호를 새로 만든다 */
+export const resetSecondaryPassword = async (loginId: string): Promise<ApiResponse<null>> => {
+    const res = await api.delete<ApiResponse<null>>(`/admin/members/${loginId}/secondary-password`);
+    return res.data;
+};
+
+export const unlockApiKey =async (loginId: string): Promise<ApiResponse<null>> => {
     const res = await api.patch<ApiResponse<null>>(`/admin/members/${loginId}/api-key-unlock`);
     return res.data;
 };

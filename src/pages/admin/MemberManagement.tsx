@@ -30,7 +30,7 @@ import ListItemIcon from '@mui/material/ListItemIcon';
 import ListItemText from '@mui/material/ListItemText';
 import KeyOffIcon from '@mui/icons-material/KeyOff';
 import VpnKeyIcon from '@mui/icons-material/VpnKey';
-import {createMember, fetchMembers, fetchRoles, lockAccount, unlockAccount, changeRole, resetTotp, unlockApiKey} from '../../api/admin/AdminApi';
+import {createMember, fetchMembers, fetchRoles, lockAccount, unlockAccount, changeRole, resetTotp, resetSecondaryPassword, unlockApiKey} from '../../api/admin/AdminApi';
 import type {CreateMemberReq, MemberRes} from '../../type/AuthType';
 import type {RoleRes} from '../../type/RoleType';
 import {getRoleChipColor, type RoleChipColor} from '../../utils/roleColor';
@@ -83,6 +83,9 @@ export default function MemberManagement() {
         open: false, loginId: '', currentRole: '', newRole: ''
     });
     const [totpResetDialog, setTotpResetDialog] = useState<{ open: boolean; loginId: string }>({
+        open: false, loginId: ''
+    });
+    const [secondaryResetDialog, setSecondaryResetDialog] = useState<{ open: boolean; loginId: string }>({
         open: false, loginId: ''
     });
     const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
@@ -162,6 +165,21 @@ export default function MemberManagement() {
         },
     });
 
+    const resetSecondaryMutation = useMutation({
+        mutationFn: async (loginId: string) => {
+            requireOk(await resetSecondaryPassword(loginId), '2차 비밀번호 초기화');
+            return loginId;
+        },
+        onSuccess: (loginId) => {
+            showAlert(`${loginId} 계정의 2차 비밀번호가 초기화되었습니다.`, 'success');
+            loadMembers();
+        },
+        onError: (err) => {
+            console.error(err);
+            showAlert('2차 비밀번호 초기화에 실패했습니다.', 'error');
+        },
+    });
+
     const changeRoleMutation = useMutation({
         mutationFn: async (vars: ChangeRoleMutationVars) => {
             requireOk(await changeRole(vars.loginId, vars.newRole), '역할 변경');
@@ -210,6 +228,12 @@ export default function MemberManagement() {
         const {loginId} = totpResetDialog;
         setTotpResetDialog({open: false, loginId: ''});
         resetTotpMutation.mutate(loginId);
+    };
+
+    const handleResetSecondary = () => {
+        const {loginId} = secondaryResetDialog;
+        setSecondaryResetDialog({open: false, loginId: ''});
+        resetSecondaryMutation.mutate(loginId);
     };
 
     const handleChangeRole = () => {
@@ -396,6 +420,15 @@ export default function MemberManagement() {
                         <ListItemText>TOTP 초기화</ListItemText>
                     </MenuItem>
                 )}
+                {menuTarget && menuTarget.secondaryPasswordEnabled && (
+                    <MenuItem onClick={() => {
+                        setSecondaryResetDialog({ open: true, loginId: menuTarget.loginId });
+                        setAnchorEl(null);
+                    }}>
+                        <ListItemIcon><KeyOffIcon fontSize="small"/></ListItemIcon>
+                        <ListItemText>2차 비밀번호 초기화</ListItemText>
+                    </MenuItem>
+                )}
                 {menuTarget && menuTarget.apiKeyLocked && (
                     <MenuItem onClick={() => {
                         setConfirmDialog({open: true, loginId: menuTarget.loginId, action: 'api-key-unlock'});
@@ -483,6 +516,22 @@ export default function MemberManagement() {
                 <DialogActions>
                     <Button onClick={() => setTotpResetDialog({open: false, loginId: ''})}>취소</Button>
                     <Button onClick={handleResetTotp} variant="contained" color="error">
+                        초기화
+                    </Button>
+                </DialogActions>
+            </Dialog>
+
+            {/* 2차 비밀번호 초기화 확인 다이얼로그 */}
+            <Dialog open={secondaryResetDialog.open} onClose={() => setSecondaryResetDialog({open: false, loginId: ''})} disableRestoreFocus>
+                <DialogTitle>2차 비밀번호 초기화</DialogTitle>
+                <DialogContent>
+                    <DialogContentText>
+                        <strong>{secondaryResetDialog.loginId}</strong> 계정의 2차 비밀번호를 초기화하시겠습니까? 회원은 다음에 2차 비밀번호를 새로 설정해야 합니다.
+                    </DialogContentText>
+                </DialogContent>
+                <DialogActions>
+                    <Button onClick={() => setSecondaryResetDialog({open: false, loginId: ''})}>취소</Button>
+                    <Button onClick={handleResetSecondary} variant="contained" color="error">
                         초기화
                     </Button>
                 </DialogActions>

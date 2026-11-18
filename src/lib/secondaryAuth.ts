@@ -103,8 +103,10 @@ export const SECONDARY_AUTH_MANUAL_SOURCE = 'manual';
 /**
  * 2차 비밀번호 창을 연다(App.tsx 가 띄운다). 보호된 메뉴로 들어가다 뜬 창과 달리, 취소해도 지금 화면에 머문다.
  * 2차 비밀번호를 아직 만들지 않은 회원에게는 설정 창이 뜬다(서버가 알려 준 값으로 가린다).
+ * 창을 열기 전에 서버에 한 번 더 묻는다. 그 사이 관리자가 2차 비밀번호를 초기화했으면 인증 창이 아니라 설정 창이 떠야 한다.
  */
-export const requestSecondaryAuth = () => {
+export const requestSecondaryAuth = async () => {
+    await syncSecondaryAuth();
     window.dispatchEvent(new CustomEvent('show-secondary-auth', {
         detail: {code: state.passwordSet ? 'AUTH_4040' : 'AUTH_4041', source: SECONDARY_AUTH_MANUAL_SOURCE},
     }));
