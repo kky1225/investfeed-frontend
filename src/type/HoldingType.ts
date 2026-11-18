@@ -57,3 +57,31 @@ export type HoldingListData = {
 } | null;
 
 export type CryptoHoldingListData = HoldingListData;
+
+/** 내 매매를 조회할 종목의 시장 */
+export type StockTradeMarket = 'KR' | 'US';
+
+/** 체결 한 건 */
+export interface StockTrade {
+    broker: string;         // 증권사 이름
+    // 체결 시각. 차트 캔들의 시각과 같은 기준(국내는 한국 시각, 미국은 미국 동부 시각).
+    // yyyyMMddHHmmss, 증권사가 체결 시각을 주지 않으면(키움) yyyyMMdd
+    dt: string;
+    side: 'BUY' | 'SELL';
+    quantity: number;
+    price: number;
+}
+
+/** 증권사별 보유 수량과 평단가 */
+export interface StockTradeHolding {
+    broker: string;
+    quantity: number;
+    avgPrice: number;
+}
+
+/** 한 종목의 내 매매 (차트 표시용) */
+export interface StockTradeRes {
+    trades: StockTrade[];           // 오래된 순
+    holdings: StockTradeHolding[];  // 평단가는 종목 통화 기준 (국내 원, 미국 달러)
+    failedBrokers: string[];        // 조회에 실패해 위 목록에서 빠진 증권사 이름
+}

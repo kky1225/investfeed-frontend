@@ -29,6 +29,7 @@ import {
     Candle, CandleInterval, CHART_TYPES, ChartType, ContextMenuRequest, Drawing, DrawingState, DrawingStyle,
     FIBONACCI_DEFAULT_LEVELS, DrawingTool, IndicatorConfig, IndicatorType,
     MAGNET_MODES, MagnetMode, MAX_DRAWING_TEXT_LENGTH, PaneResize, PriceLine, SeriesStroke, TextRequest, TimeUnit,
+    TradeMarker,
 } from "../../lib/chart/types.ts";
 import ChartTypeSelect from "./ChartTypeSelect.tsx";
 import type {AssetType} from "../../type/NotificationType.ts";
@@ -48,6 +49,10 @@ export interface CandleChartProps {
     priceLines?: PriceLine[],   // 특정 가격에 긋는 가로선 (목표가 등)
     // id 가 있는 가격선을 끌어 다른 가격에 놓으면 부른다. 받아들이려면 바뀐 priceLines 를 넘겨야 한다(넘기지 않으면 선은 제자리로 돌아간다)
     onPriceLineMove?: (id: string, price: number) => void,
+    tradeMarkers?: TradeMarker[],   // 내 매매 표시. 캔들의 time 에 맞춰 넘길 것
+    // 설정 창의 "내 매매 표시" 스위치를 바꾸면 부른다. 주면 설정 창에 그 스위치가 생긴다(내 매매를 조회할 수 있는 화면만 준다)
+    onTradesChange?: (visible: boolean) => void,
+    tradesNotice?: string,          // 내 매매 스위치 아래에 적을 알림 (일부 증권사의 조회 실패 등)
     // 화면 왼쪽 끝이 받아 둔 캔들의 처음에 가까워지면 부른다. 가까운 동안 여러 번 부르므로
     // 받는 쪽에서 요청 중이거나 더 받을 것이 없으면 무시해야 한다 (useCandleHistory 의 loadOlder)
     onLoadOlder?: () => void,
@@ -61,6 +66,7 @@ export interface CandleChartProps {
 const DEFAULT_MOVING_AVERAGES = [5, 20, 60, 120];
 const DEFAULT_INDICATORS = Object.keys(INDICATORS) as IndicatorType[];
 const NO_PRICE_LINES: PriceLine[] = [];
+const NO_TRADE_MARKERS: TradeMarker[] = [];
 const NO_MOVING_AVERAGES: { periods: number[], colors: number[], strokes: SeriesStroke[] } = {
     periods: [], colors: [], strokes: [],
 };
@@ -124,6 +130,7 @@ interface DrawingHistory {
 const CandleChart = ({
     candles, timeUnit, interval, seriesKey, assetType, assetCode, toolbarStart, onLoadOlder, comparison, onPriceLineMove,
     movingAverages = DEFAULT_MOVING_AVERAGES, indicators = DEFAULT_INDICATORS, priceLines = NO_PRICE_LINES,
+    tradeMarkers = NO_TRADE_MARKERS, onTradesChange, tradesNotice,
     height = 400,
 }: CandleChartProps) => {
     const containerRef = useRef<HTMLDivElement>(null);
@@ -142,6 +149,7 @@ const CandleChart = ({
         magnet: savedMagnet, setMagnet,
         magnetIndicators, setMagnetIndicators,
         grid, setGrid,
+        trades, setTrades,
         volumeRatio: savedVolumeRatio, setVolumeRatio,
         mainHeight: savedMainHeight, setMainHeight,
         setIndicatorHeight,
@@ -555,6 +563,10 @@ const CandleChart = ({
     }, [priceLines]);
 
     useEffect(() => {
+        engineRef.current?.setTradeMarkers(tradeMarkers);
+    }, [tradeMarkers]);
+
+    useEffect(() => {
         engineRef.current?.setComparisons(comparisons, comparisonAlign);
     }, [comparisons, comparisonAlign]);
 
@@ -743,6 +755,14 @@ const CandleChart = ({
                 onFlatByPrevCloseChange={setFlatByPrevClose}
                 grid={grid}
                 onGridChange={setGrid}
+                trades={onTradesChange && {
+                    visible: trades,
+                    notice: tradesNotice,
+                    onChange: visible => {
+                        setTrades(visible);
+                        onTradesChange(visible);
+                    },
+                }}
                 onSaveImage={saveImage}
                 drawingCount={drawings.length}
                 onClearDrawings={() => changeDrawings([])}

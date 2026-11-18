@@ -89,7 +89,10 @@ interface ChartSettingsDialogProps {
     onFlatByPrevCloseChange: (enabled: boolean) => void,
     grid: boolean,                              // 격자선을 그을지
     onGridChange: (visible: boolean) => void,
-    onSaveImage: () => void,                    // 지금 보이는 차트를 이미지 파일로 내려받는다
+    // 내 매매(매수·매도 지점, 평단가 선) 표시. 내 매매를 보여 줄 수 있는 화면에서만 준다
+    // notice: 스위치 아래에 적을 알림 (일부 증권사의 조회 실패 등)
+    trades?: { visible: boolean, onChange: (visible: boolean) => void, notice?: string },
+    onSaveImage: () => void,                   // 지금 보이는 차트를 이미지 파일로 내려받는다
     drawingCount: number,                       // 그려 둔 선의 수
     onClearDrawings: () => void,
     hiddenDrawingCount: number,                 // 그중 숨겨 둔 선의 수
@@ -249,7 +252,7 @@ const ChartSettingsDialog = ({
     onIndicatorChange, onIndicatorReset, paneItems, onPaneMove,
     drawingToolbar, onDrawingToolbarChange,
     logScale, onLogScaleChange, percentScale, onPercentScaleChange,
-    flatByPrevClose, onFlatByPrevCloseChange, grid, onGridChange, onSaveImage, drawingCount, onClearDrawings, hiddenDrawingCount, onShowDrawings,
+    flatByPrevClose, onFlatByPrevCloseChange, grid, onGridChange, trades, onSaveImage, drawingCount, onClearDrawings, hiddenDrawingCount, onShowDrawings,
     comparison, fullscreen, onFullscreenChange,
 }: ChartSettingsDialogProps) => (
     // 창은 화면 다른 곳에 따로 그려지므로, 색 단추가 차트의 색을 쓸 수 있게 색 변수를 걸어 준다.
@@ -416,6 +419,29 @@ const ChartSettingsDialog = ({
             </Typography>
 
             <Divider sx={{my: 2}}/>
+
+            {trades && (
+                <>
+                    <Typography variant="subtitle2" sx={{color: 'text.secondary', mb: 1}}>내 매매</Typography>
+                    <FormGroup>
+                        <FormControlLabel
+                            label="내 매매 표시"
+                            control={
+                                <Switch checked={trades.visible} onChange={(_event, checked) => trades.onChange(checked)}/>
+                            }
+                        />
+                    </FormGroup>
+                    <Typography variant="body2" sx={{color: 'text.secondary'}}>
+                        켜면 연동한 증권사의 최근 1년 매수·매도를 캔들에 세모로 표시하고, 보유 중이면 평단가에 선을 긋습니다.
+                        2차 인증을 한 동안에만 보입니다. 체결 시각을 주지 않는 증권사(키움)의 매매는 일봉 이상에서만 표시됩니다.
+                    </Typography>
+                    {trades.notice && (
+                        <Typography variant="body2" sx={{color: 'warning.main', mt: 1}}>{trades.notice}</Typography>
+                    )}
+
+                    <Divider sx={{my: 2}}/>
+                </>
+            )}
 
             <Typography variant="subtitle2" sx={{color: 'text.secondary', mb: 1}}>캔들</Typography>
             <FormGroup>

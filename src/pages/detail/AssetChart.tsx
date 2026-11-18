@@ -23,6 +23,19 @@ import {
 } from "./assetChart.ts";
 import {fetchCandlePage, hasCandleHistory} from "./chartHistory.ts";
 import {createComparisonSource} from "./chartComparison.ts";
+import {averagePriceLineOf, tradeMarkersOf} from "./chartTrades.ts";
+import {useChartTradesSetting} from "../../components/chart/useChartStorage.ts";
+import {fetchStockTrades} from "../../api/holding/HoldingApi.ts";
+import type {StockTradeMarket, StockTradeRes} from "../../type/HoldingType.ts";
+
+// 내 매매를 조회할 수 있는 자산과 그 시장. 여기 없는 자산(코인·지수·원자재)은 설정 창에 스위치가 없다
+const TRADE_MARKETS: Partial<Record<ChartMarket, StockTradeMarket>> = {STOCK: 'KR', US_STOCK: 'US'};
+const NO_TRADES: StockTradeRes = {trades: [], holdings: [], failedBrokers: []};
+// 내 매매의 단가 표기. 원화는 원 단위로, 달러는 소수 둘째~넷째 자리까지
+const TRADE_PRICE_FORMATS: Record<StockTradeMarket, (price: number) => string> = {
+    KR: price => Math.round(price).toLocaleString(),
+    US: price => price.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 4}),
+};
 
 export interface AssetChartProps {
     market: ChartMarket,
@@ -192,6 +205,53 @@ const AssetChart = ({
         [priceTargets, storage.assetType, storage.assetCode, targetMove],
     );
 
+    // 내 매매(매수·매도 지점, 평단가 선). 설정 창에서 켜 두었고 2차 인증을 한 동안에만 표시한다.
+    // 평소 조회는 인증 창을 띄우지 않고(인증 전이면 조용히 실패해 아무것도 그리지 않는다), 스위치를 켜는 순간에만 인증을 묻는다.
+    const tradeMarket = TRADE_MARKETS[market];
+    const tradesOn = useChartTradesSetting() && tradeMarket !== undefined;
+    const tradesKey = useMemo(() => ['chartTrades', tradeMarket, code], [tradeMarket, code]);
+    const fetchTrades = useCallback(async (silent: boolean, signal?: AbortSignal): Promise<StockTradeRes> => {
+        const res = requireOk(
+            await fetchStockTrades(code, tradeMarket ?? 'KR', {signal, skipGlobalError: true, secondaryAuthSilent: silent}),
+            NO_TRADES,
+        );
+        // 응답에 빠지거나 null 인 항목이 있어도(서버가 예전 모양으로 답하는 동안 등) 화면이 깨지지 않게 빈 목록으로 채운다.
+        return {trades: res.trades ?? [], holdings: res.holdings ?? [], failedBrokers: res.failedBrokers ?? []};
+    }, [code, tradeMarket]);
+    const tradesQuery = useQuery({
+        queryKey: tradesKey,
+        queryFn: ({signal}) => fetchTrades(true, signal),
+        enabled: tradesOn,
+        retry: false,
+        staleTime: 0,
+        // 받아 둔 내역을 남겨 두지 않는다. 남겨 두면 다른 종목을 보고 돌아왔을 때 2차 인증이 풀려 있어도 잠깐 다시 그려진다.
+        gcTime: 0,
+        // 창으로 돌아올 때 다시 확인해, 그 사이 2차 인증이 풀렸으면 표시를 지운다.
+        refetchOnWindowFocus: true,
+    });
+    const handleTradesChange = (visible: boolean) => {
+        if (!visible) return;
+        queryClient.fetchQuery({queryKey: tradesKey, queryFn: () => fetchTrades(false), staleTime: 0, gcTime: 0})
+            // 인증을 마쳤으니, 인증 전이라 조용히 실패해 있던 다른 차트(멀티 화면의 다른 패널)도 다시 조회하게 한다.
+            .then(() => queryClient.invalidateQueries({queryKey: ['chartTrades']}))
+            .catch(error => console.error(error));
+    };
+    // 이 화면을 연 뒤에 받은 내역만 보여 준다. 다시 조회했다가 실패하면(인증이 풀림) 앞서 받은 내역도 보여 주지 않는다.
+    const myTrades = tradesOn && tradesQuery.isSuccess && tradesQuery.isFetchedAfterMount ? tradesQuery.data : NO_TRADES;
+    const tradesNotice = myTrades.failedBrokers.length > 0
+        ? `${myTrades.failedBrokers.join(', ')} 조회에 실패해 그 증권사의 매매가 빠져 있습니다.`
+        : undefined;
+    const formatTradePrice = TRADE_PRICE_FORMATS[tradeMarket ?? 'KR'];
+    const tradeMarkers = useMemo(
+        () => tradeMarkersOf(fullCandles, myTrades.trades, minutesOf(chartType), formatTradePrice),
+        [fullCandles, myTrades, chartType, formatTradePrice],
+    );
+    const priceLines = useMemo(() => {
+        // 평단가는 종목 통화 기준이다: 국내는 원 단위, 미국은 달러 소수 넷째 자리까지.
+        const averageLine = averagePriceLineOf(myTrades.holdings, formatTradePrice, tradeMarket === 'US' ? 4 : 0);
+        return averageLine ? [...targetLines, averageLine] : targetLines;
+    }, [targetLines, myTrades, formatTradePrice, tradeMarket]);
+
     // 종목 비교: 일봉 이상은 종류를 섞어, 분봉은 같은 종류끼리만 비교한다.
     const comparison = useMemo(
         () => (rule.comparison ? createComparisonSource(market as ComparisonMarket, chartType, code) : undefined),
@@ -218,8 +278,11 @@ const AssetChart = ({
                     assetCode={storage.assetCode}
                     onLoadOlder={hasHistory ? loadOlder : undefined}
                     comparison={comparison}
-                    priceLines={targetLines}
+                    priceLines={priceLines}
                     onPriceLineMove={handleTargetMove}
+                    tradeMarkers={tradeMarkers}
+                    onTradesChange={tradeMarket ? handleTradesChange : undefined}
+                    tradesNotice={tradesNotice}
                     toolbarStart={wide ? controls : undefined}
                     height={height}
                 />

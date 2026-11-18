@@ -1,5 +1,5 @@
 import {useCallback, useEffect, useMemo, useRef, useState} from "react";
-import {useQuery, useQueryClient} from "@tanstack/react-query";
+import {queryOptions, useQuery, useQueryClient} from "@tanstack/react-query";
 import {requireOk} from "../../lib/apiResponse.ts";
 import {
     fetchChartDrawings, fetchChartSetting, saveChartDrawings, saveChartSetting,
@@ -23,6 +23,20 @@ const DEFAULT_SETTING: ChartSetting = {
 const LEGACY_TOOLBAR_KEY = 'drawingToolbar';    // 예전 브라우저 저장분에서 그리기 도구 모음을 숨겼다는 표시
 
 const reportSaveError = (error: unknown) => console.error(error);
+
+// 차트 설정 조회. 회원당 하나라 모든 차트가 같은 조회를 함께 쓴다
+const settingQueryOptions = queryOptions<ChartSetting>({
+    queryKey: SETTINGS_KEY,
+    queryFn: async ({signal}) => requireOk(
+        await fetchChartSetting({signal, skipGlobalError: true}),
+        DEFAULT_SETTING,
+    ),
+    refetchOnWindowFocus: false,
+    staleTime: Infinity,
+});
+
+/** "내 매매 표시"를 켜 두었는지. 차트 밖(조회를 맡는 화면)에서 설정 창의 스위치를 따라가려고 쓴다 */
+export const useChartTradesSetting = (): boolean => useQuery(settingQueryOptions).data?.trades ?? false;
 
 /**
  * 저장을 모아서 보낸다. schedule 로 맡긴 저장은 마지막으로 맡긴 뒤 delayMs 가 지나면 한 번만 실행되고,
@@ -112,15 +126,7 @@ export const useChartStorage = (assetType: AssetType | undefined, assetCode: str
     }, [assetType, assetCode, serverDrawings, drawingsKey, queryClient]);
 
     // ---------- 차트 설정 ----------
-    const settingQuery = useQuery<ChartSetting>({
-        queryKey: SETTINGS_KEY,
-        queryFn: async ({signal}) => requireOk(
-            await fetchChartSetting({signal, skipGlobalError: true}),
-            DEFAULT_SETTING,
-        ),
-        refetchOnWindowFocus: false,
-        staleTime: Infinity,
-    });
+    const settingQuery = useQuery(settingQueryOptions);
     const settingReady = settingQuery.isSuccess;
     // 지표별로 기본 상태에서 바꾼 것. 바꾸지 않은 지표는 없다
     const indicators = settingQuery.data?.indicators ?? DEFAULT_SETTING.indicators;
@@ -132,6 +138,7 @@ export const useChartStorage = (assetType: AssetType | undefined, assetCode: str
     const magnet = settingQuery.data?.magnet ?? DEFAULT_SETTING.magnet;
     const magnetIndicators = settingQuery.data?.magnetIndicators ?? false;
     const grid = settingQuery.data?.grid ?? true;
+    const trades = settingQuery.data?.trades ?? false;
     // 영역 크기. 바꾼 적이 없으면 null 이고 차트가 기본 크기를 쓴다
     const volumeRatio = settingQuery.data?.volumeRatio ?? null;
     const mainHeight = settingQuery.data?.mainHeight ?? null;
@@ -157,7 +164,7 @@ export const useChartStorage = (assetType: AssetType | undefined, assetCode: str
         if (!settingReady) return;
         const next: ChartSetting = {
             indicators, chartType, logScale, percentScale, drawingToolbar, flatByPrevClose, magnet,
-            magnetIndicators, grid, volumeRatio, mainHeight, paneOrder, ...change,
+            magnetIndicators, grid, trades, volumeRatio, mainHeight, paneOrder, ...change,
         };
         queryClient.setQueryData(SETTINGS_KEY, next);
         scheduleSettingSave(() => {
@@ -203,6 +210,7 @@ export const useChartStorage = (assetType: AssetType | undefined, assetCode: str
     const setMagnet = (mode: string) => saveSetting({magnet: mode});
     const setMagnetIndicators = (enabled: boolean) => saveSetting({magnetIndicators: enabled});
     const setGrid = (visible: boolean) => saveSetting({grid: visible});
+    const setTrades = (visible: boolean) => saveSetting({trades: visible});
     // 영역 크기. null 을 주면 저장한 값을 지워 기본 크기로 돌린다
     const setVolumeRatio = (ratio: number | null) => saveSetting({volumeRatio: ratio});
     const setMainHeight = (height: number | null) => saveSetting({mainHeight: height});
@@ -242,6 +250,7 @@ export const useChartStorage = (assetType: AssetType | undefined, assetCode: str
         magnet, setMagnet,
         magnetIndicators, setMagnetIndicators,
         grid, setGrid,
+        trades, setTrades,
         volumeRatio, setVolumeRatio,
         mainHeight, setMainHeight,
         setIndicatorHeight,

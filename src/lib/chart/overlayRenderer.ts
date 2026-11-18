@@ -12,6 +12,42 @@ import {LegendItem} from "./indicatorPanes.ts";
 // 위 장: 십자선과 값 표시. 마우스가 움직일 때마다 다시 그린다.
 
 const CROSSHAIR_DASH = [4, 3];
+const TOOLTIP_PADDING = 6;      // 내 매매 상자의 안쪽 여백
+const TOOLTIP_OFFSET = 12;      // 마우스와 내 매매 상자 사이
+
+/**
+ * 내 매매 상자: 십자선이 매매가 있는 캔들에 오면 마우스 옆에 그 내역을 적는다.
+ * 오른쪽에 자리가 없으면 마우스 왼쪽에, 아래에 자리가 없으면 위로 올려 그림 영역 안에 둔다.
+ */
+export const drawTradeTooltip = (
+    painter: Painter, layout: Layout, style: ChartStyle, pointer: Point, lines: { text: string, color: string }[],
+) => {
+    if (lines.length === 0) return;
+    const ctx = painter.ctx;
+    const padding = painter.px(TOOLTIP_PADDING);
+    const offset = painter.px(TOOLTIP_OFFSET);
+    const lineHeight = painter.px(LEGEND_HEIGHT);
+    const width = Math.max(...lines.map(({text}) => ctx.measureText(text).width)) + padding * 2;
+    const height = lineHeight * lines.length + padding * 2;
+    const plotRight = painter.px(layout.plotWidth);
+    const plotBottom = painter.px(layout.plotBottom);
+    const pointerX = painter.px(pointer.x);
+    const pointerY = painter.px(pointer.y);
+    const left = pointerX + offset + width <= plotRight ? pointerX + offset : Math.max(0, pointerX - offset - width);
+    const top = clamp(pointerY + offset, 0, Math.max(0, plotBottom - height));
+    const line = painter.lineWidth();
+
+    ctx.fillStyle = style.backgroundColor;
+    ctx.fillRect(left, top, width, height);
+    ctx.strokeStyle = style.textColor;
+    ctx.lineWidth = line;
+    ctx.strokeRect(left + line / 2, top + line / 2, width - line, height - line);
+    ctx.textAlign = 'left';
+    lines.forEach(({text, color}, order) => {
+        ctx.fillStyle = color;
+        ctx.fillText(text, left + padding, top + padding + lineHeight * order + lineHeight / 2);
+    });
+};
 const CHANGE_RATE_DECIMALS = 2;     // 값 표시의 등락률 소수 자릿수
 
 /**

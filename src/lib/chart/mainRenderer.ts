@@ -1,5 +1,4 @@
-import {Candle, ChartStyle, ChartType, PriceLine, SeriesStroke, TimeUnit} from "./types.ts";
-import {Series} from "./indicators.ts";
+import {Candle, ChartStyle, ChartType, PriceLine, SeriesStroke, TimeUnit} from "./types.ts";import {Series} from "./indicators.ts";
 import {
     createLinearScale, createLogScale, decimalsOf, formatPercent, formatPrice, formatVolume, logTicks, niceTicks,
 } from "./scale.ts";
@@ -24,6 +23,20 @@ const PRICE_LINE_DASH = [6, 4];
 const PRICE_LINE_TITLE_OFFSET = 8;  // 선과 그 위 이름 사이
 const ACTIVE_PRICE_LINE_WIDTH = 2;  // 마우스를 올렸거나 끌고 있는 가격선의 굵기 (보통 선의 배수)
 const PRICE_LINE_TITLE_GAP = 18;    // 가격선 사이가 이보다 좁으면 이름이 위 선과 겹치므로 적지 않는다
+// 내 매매 화살표: 막대 끝에 화살촉이 달린 선 화살표 (트레이딩뷰의 체결 표시와 같은 모양)
+// 차트의 다른 선(캔들 꼬리, 지표 선)과 어울리게 가늘고 작게 둔다. 굵고 크면 차트 위에 따로 얹은 것처럼 뜬다
+const TRADE_MARK_HALF_WIDTH = 4;    // 화살촉의 반 너비
+const TRADE_MARK_HEAD_HEIGHT = 4.5; // 화살촉의 높이
+const TRADE_MARK_LENGTH = 13;       // 화살표 전체 길이 (화살촉 끝에서 막대 끝까지)
+const TRADE_MARK_GAP = 4;           // 캔들과 화살촉 끝 사이
+const TRADE_MARK_LINE_WIDTH = 1.5;  // 화살표 선 굵기
+const TRADE_MARK_HALO = 1;          // 화살표를 둘러싼 바탕색 테두리의 두께
+
+/** 내 매매 표시 하나: 캔들 순번과 방향 */
+export interface TradeMark {
+    index: number,
+    side: 'buy' | 'sell',
+}
 
 /** 세로로 차지하는 범위 (기기 픽셀) */
 interface Span {
@@ -64,6 +77,7 @@ export interface MainInput {
     volumeOverlays: OverlayIndicator[], // 거래량 영역에 겹칠 지표
     priceLines: PriceLine[],
     activePriceLine: string | null, // 마우스를 올렸거나 끌고 있는 가격선의 id. 그 선을 강조해 그린다
+    tradeMarks: TradeMark[],        // 내 매매 표시
     // 비교 종목: 주 종목의 캔들 순번에 맞춘 종가와 선 색 순번. 있으면 percentScale 도 켜서 넘길 것
     comparisons: { closes: Series, color: number }[],
     flatByPrevClose: boolean,
@@ -413,6 +427,64 @@ const drawExtremes = (frame: Frame) => {
 };
 
 /**
+ * 내 매매 표시: 매수는 캔들 아래에 위를 보는 화살표(상승색), 매도는 캔들 위에 아래를 보는 화살표(하락색).
+ * 캔들과 색이 같아 꽉 채운 세모는 캔들 조각처럼 보이므로, 막대 달린 선 화살표에 바탕색 테두리를 둘러 그린다.
+ * 차트를 가리지 않게 이름표는 붙이지 않는다. 내역은 십자선이 그 캔들에 오면 위 장이 적는다.
+ * 선·영역 차트는 꼬리가 없으므로 종가 높이에 붙인다. 가격 영역을 벗어나면 가장자리에 붙여 그린다.
+ */
+const drawTradeMarks = (frame: Frame, tradeMarks: TradeMark[]) => {
+    const {painter, style, chartType, shapes, range, priceTop, priceBottom, priceY} = frame;
+    const ctx = painter.ctx;
+    const half = painter.px(TRADE_MARK_HALF_WIDTH);
+    const head = painter.px(TRADE_MARK_HEAD_HEIGHT);
+    const length = painter.px(TRADE_MARK_LENGTH);
+    const gap = painter.px(TRADE_MARK_GAP);
+    const width = painter.px(TRADE_MARK_LINE_WIDTH);
+    const halo = painter.px(TRADE_MARK_HALO);
+    // 화살표가 놓일 수 있는 위아래 끝. 선 굵기와 테두리가 가장자리에서 잘리지 않게 그만큼 안쪽으로 잡는다
+    const edge = width / 2 + halo;
+    const top = painter.px(priceTop) + edge;
+    const bottom = painter.px(priceBottom) - edge;
+    const closeOnly = isCloseOnly(chartType);
+    const last = range.from + range.count;
+    ctx.save();
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    tradeMarks.forEach(({index, side}) => {
+        const candle = shapes[index];
+        if (!candle || index < range.from || index >= last) return;
+        const buy = side === 'buy';
+        const toward = buy ? 1 : -1;    // 캔들에서 멀어지는 방향 (매수는 아래로, 매도는 위로)
+        const x = painter.centerX(index, range);
+        const price = closeOnly ? candle.close : buy ? candle.low : candle.high;
+        // tip: 캔들을 가리키는 화살촉 끝, tail: 막대의 반대쪽 끝.
+        // 보이는 구간의 최저·최고 캔들은 가장자리까지 자리가 좁다. 그때 화살표를 캔들 쪽으로 밀면 꼬리를 덮으므로,
+        // 화살촉은 제자리에 두고(화살촉 높이만큼만 영역 안으로 당긴다) 막대를 남은 자리만큼 줄인다.
+        const tip = clamp(
+            painter.px(priceY(price)) + toward * gap,
+            top + (buy ? 0 : head),
+            bottom - (buy ? head : 0),
+        );
+        const tail = tip + toward * Math.min(length, buy ? bottom - tip : tip - top);
+        const shoulder = tip + toward * head;   // 화살촉의 양 날개 끝이 놓이는 높이
+        ctx.beginPath();
+        ctx.moveTo(x, tail);
+        ctx.lineTo(x, tip);
+        ctx.moveTo(x - half, shoulder);
+        ctx.lineTo(x, tip);
+        ctx.lineTo(x + half, shoulder);
+        // 바탕색으로 굵게 한 번 그어 테두리를 만들고 그 위에 색 선을 긋는다. 캔들·지표 선 위에서도 화살표가 묻히지 않는다.
+        ctx.strokeStyle = style.backgroundColor;
+        ctx.lineWidth = width + halo * 2;
+        ctx.stroke();
+        ctx.strokeStyle = buy ? style.upColor : style.downColor;
+        ctx.lineWidth = width;
+        ctx.stroke();
+    });
+    ctx.restore();
+};
+
+/**
  * 비교 종목의 라벨: 보이는 구간의 마지막 값 높이에, 오른쪽 축에 선 색으로 등락률을 적는다.
  * 가격축을 끌어 범위를 좁혀 그 값이 범위를 벗어나면 적지 않는다.
  */
@@ -654,6 +726,8 @@ export const renderMain = (painter: Painter, input: MainInput): Layout | null =>
     drawBorders(frame);
     drawCandles(frame, averages, averageColors, averageStrokes, priceOverlays, volumeOverlays);
     drawExtremes(frame);
+    // 오른쪽 끝에 반쯤 걸친 캔들의 세모가 가격축 위로 넘어가지 않게, 캔들처럼 가격 영역 안에서 자른다.
+    painter.clipped(frame.priceTop, frame.priceBottom, frame.plotWidth, () => drawTradeMarks(frame, input.tradeMarks));
     drawComparisonTags(frame);
     drawPriceLines(frame, priceLines, input.activePriceLine, drawCurrentPrice(frame));
 

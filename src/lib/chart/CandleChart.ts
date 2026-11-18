@@ -1,6 +1,6 @@
 import {
     Anchor, Candle, ChartStyle, ChartType, Comparison, ContextMenuRequest, Drawing, DrawingStyle, DrawingTool, IndicatorConfig, MagnetMode,
-    CandleInterval, PaneResize, PaneSizes, PriceLine, SeriesStroke, TextRequest, TimeUnit,
+    CandleInterval, PaneResize, PaneSizes, PriceLine, SeriesStroke, TextRequest, TimeUnit, TradeMarker,
 } from "./types.ts";
 import {bucketEnd} from "./realtime.ts";
 import {heikinAshi, movingAverage, Series} from "./indicators.ts";
@@ -15,7 +15,9 @@ import {clampView, defaultView, futureMargin, logicalAt, visibleRange, zoomedVie
 import {candleColor, lineColor, Painter, textColorOf} from "./painter.ts";
 import {createIndicator, LegendItem, OverlayIndicator, PaneIndicator} from "./indicatorPanes.ts";
 import {PANE_GAP, renderMain} from "./mainRenderer.ts";
-import {drawCandleLegend, drawCrosshair, drawIndicatorLegends, drawOverlayLegends} from "./overlayRenderer.ts";
+import {
+    drawCandleLegend, drawCrosshair, drawIndicatorLegends, drawOverlayLegends, drawTradeTooltip,
+} from "./overlayRenderer.ts";
 import {DrawingLayer} from "./drawingLayer.ts";
 
 export {INDICATOR_HEIGHT_LIMIT, INDICATOR_PANE_HEIGHT, MAIN_HEIGHT_LIMIT, VOLUME_RATIO_LIMIT} from "./constants.ts";
@@ -135,6 +137,9 @@ export class CandleChartEngine {
     // 가격선(목표가)을 끄는 중. price 는 지금 끌어다 놓은 가격이고, 손을 뗄 때까지 그 선을 이 가격에 그린다
     private hoveredPriceLine: string | null = null;     // 마우스가 올라가 있는, 끌 수 있는 가격선
     private priceLineDrag: { pointerId: number, id: string, startY: number, price: number, moved: boolean } | null = null;
+    private tradeMarkers: TradeMarker[] = [];
+    // tradeMarkers 를 캔들 순번으로 찾게 만든 것. 캔들이나 표시가 바뀌면 다시 만든다
+    private tradeMarkersByIndex = new Map<number, TradeMarker[]>();
     private comparisons: Comparison[] = [];
     private comparisonAlign: ComparisonAlign = 'time';
     private comparisonCloses: Series[] = [];    // comparisons 와 같은 순서. 주 종목의 캔들 순번에 맞춘 종가
@@ -244,6 +249,7 @@ export class CandleChartEngine {
         }
         this.candles = candles;
         this.timeUnit = timeUnit;
+        this.indexTradeMarkers();
         this.measurePrices();
         this.computeSeries();
         this.scheduleDraw();
@@ -396,6 +402,24 @@ export class CandleChartEngine {
     setPriceLines(priceLines: PriceLine[]) {
         this.priceLines = priceLines;
         this.scheduleDraw();
+    }
+
+    /** 내 매매 표시. 캔들의 time 이 같은 표시만 그린다. 비우면 지운다. */
+    setTradeMarkers(tradeMarkers: TradeMarker[]) {
+        this.tradeMarkers = tradeMarkers;
+        this.indexTradeMarkers();
+        this.scheduleDraw();
+    }
+
+    private indexTradeMarkers() {
+        this.tradeMarkersByIndex = new Map();
+        if (this.tradeMarkers.length === 0) return;
+        const indexByTime = new Map(this.candles.map((candle, index) => [candle.time, index]));
+        this.tradeMarkers.forEach(marker => {
+            const index = indexByTime.get(marker.time);
+            if (index === undefined) return;
+            this.tradeMarkersByIndex.set(index, [...this.tradeMarkersByIndex.get(index) ?? [], marker]);
+        });
     }
 
     /**
@@ -1212,6 +1236,7 @@ export class CandleChartEngine {
                 ? this.priceLines.map(priceLine => priceLine.id === drag.id ? {...priceLine, price: drag.price} : priceLine)
                 : this.priceLines,
             activePriceLine: drag?.id ?? this.hoveredPriceLine,
+            tradeMarks: [...this.tradeMarkersByIndex].flatMap(([index, markers]) => markers.map(({side}) => ({index, side}))),
             comparisons: this.comparisons.map(({color}, order) => ({closes: this.comparisonCloses[order] ?? [], color})),
             flatByPrevClose: this.flatByPrevClose,
             grid: this.grid,
@@ -1233,8 +1258,8 @@ export class CandleChartEngine {
         this.drawingLayer.render(painter, layout, style);
 
         // 마우스가 가리키는 캔들이 없으면 가장 최근 캔들의 값을 보여 준다.
-        const index = drawCrosshair(painter, layout, style, this.pointer, this.candles, this.timeUnit)
-            ?? this.candles.length - 1;
+        const pointed = drawCrosshair(painter, layout, style, this.pointer, this.candles, this.timeUnit);
+        const index = pointed ?? this.candles.length - 1;
         const candle = this.candles[index];
         if (candle) {
             drawCandleLegend(
@@ -1254,5 +1279,14 @@ export class CandleChartEngine {
             painter, layout, style, this.averagePeriods, this.averages, this.averageColors, index, comparisonItems,
         );
         drawIndicatorLegends(painter, layout, style, index);
+
+        // 십자선이 매매가 있는 캔들에 오면 그 내역을 마우스 옆에 적는다. 매수는 상승색, 매도는 하락색.
+        const markers = pointed === null ? undefined : this.tradeMarkersByIndex.get(pointed);
+        if (markers && this.pointer) {
+            drawTradeTooltip(painter, layout, style, this.pointer, markers.flatMap(({side, lines}) => {
+                const color = textColorOf(style, side === 'buy' ? style.upColor : style.downColor);
+                return lines.map(text => ({text, color}));
+            }));
+        }
     }
 }
