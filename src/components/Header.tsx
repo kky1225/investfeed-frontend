@@ -1,8 +1,10 @@
 import {useRef, useState} from 'react';
 import Stack from '@mui/material/Stack';
+import Divider from '@mui/material/Divider';
 import NotificationsRoundedIcon from '@mui/icons-material/NotificationsRounded';
 import NavbarBreadcrumbs from './NavbarBreadcrumbs';
 import MenuButton from './MenuButton';
+import SecondaryAuthButton from './SecondaryAuthButton';
 import ColorModeIconDropdown from './ColorModeSelect.tsx';
 import Autocomplete from '@mui/material/Autocomplete';
 import TextField from '@mui/material/TextField';
@@ -21,6 +23,9 @@ import {useNotification} from '../context/NotificationContext';
 import NotificationPopover from './NotificationPopover';
 import SmartToyOutlinedIcon from '@mui/icons-material/SmartToyOutlined';
 import {useAssistant} from '../context/AssistantContext';
+
+// 오른쪽 버튼 줄. 버튼은 다른 화면과 같은 공통 모양(테두리 상자)이고, 묶음 사이에만 선을 둔다.
+const HEADER_ACTIONS_SX = {gap: 1, alignItems: 'center'};
 
 interface SearchItem {
     code: string;
@@ -181,7 +186,10 @@ export default function Header() {
                     />
                 )}
             />
-            <Stack direction="row" sx={{gap: 1}}>
+            {/* 오른쪽 버튼들: 2차 인증 | 비서·알림 | 화면 폭·밝기 */}
+            <Stack direction="row" sx={HEADER_ACTIONS_SX}>
+                {/* 2차 인증과 그 뒤의 구분선은 SecondaryAuthButton 이 함께 그린다 (상태를 모르는 동안에는 둘 다 없다) */}
+                <SecondaryAuthButton/>
                 <MenuButton
                     badgeContent={assistantUnread}
                     aria-label="AI 비서"
@@ -199,6 +207,7 @@ export default function Header() {
                 >
                     <NotificationsRoundedIcon/>
                 </MenuButton>
+                <Divider orientation="vertical" flexItem sx={{my: 1}}/>
                 <PageWidthSelect/>
                 <ColorModeIconDropdown/>
             </Stack>

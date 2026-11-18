@@ -1,6 +1,7 @@
 import { createContext, useContext, useState, ReactNode } from 'react';
 import type { AuthUser } from '../type/AuthType';
 import { queryClient } from '../lib/queryClient';
+import { resetSecondaryAuth } from '../lib/secondaryAuth';
 
 interface AuthContextType {
     user: AuthUser | null;
@@ -46,6 +47,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         sessionStorage.removeItem('user');
         sessionStorage.removeItem('passwordChangeRequired');
         queryClient.clear();
+        resetSecondaryAuth();
     };
 
     const clearPasswordChangeRequired = () => {

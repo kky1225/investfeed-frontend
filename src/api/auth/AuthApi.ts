@@ -71,7 +71,23 @@ export const changeSecondaryPassword = async (req: SecondaryPasswordChangeReq): 
     return res.data;
 };
 
-export const fetchSecondaryPasswordLockStatus = async (): Promise<ApiResponse<{ remainingSeconds: number }>> => {
-    const res = await api.get<ApiResponse<{ remainingSeconds: number }>>('/auth/secondary-password/lock-status');
+/**
+ * 2차 비밀번호 상태.
+ * remainingSeconds: 여러 번 틀려 잠긴 상태가 풀리기까지 남은 초. authRemainingSeconds: 2차 인증이 유지되는 남은 초(인증 전이면 0)
+ */
+export interface SecondaryPasswordLockStatus {
+    remainingSeconds: number;
+    authRemainingSeconds?: number;
+    passwordSet?: boolean;      // 2차 비밀번호를 만들어 두었는지
+}
+
+export const fetchSecondaryPasswordLockStatus = async (config?: AxiosRequestConfig): Promise<ApiResponse<SecondaryPasswordLockStatus>> => {
+    const res = await api.get<ApiResponse<SecondaryPasswordLockStatus>>('/auth/secondary-password/lock-status', config);
+    return res.data;
+};
+
+/** 2차 인증을 지금 끝낸다 (상단 자물쇠의 "지금 잠그기") */
+export const endSecondaryAuth = async (): Promise<ApiResponse<null>> => {
+    const res = await api.delete<ApiResponse<null>>('/auth/secondary-password/session');
     return res.data;
 };

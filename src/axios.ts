@@ -24,6 +24,11 @@ api.interceptors.response.use(
         if (response.config.url?.startsWith('/auth/logout')) {
             isSessionExpired = true;
         }
+        // 2차 비밀번호 요청(인증·설정·변경·종료)이 성공하면 서버의 2차 인증 상태가 바뀐다.
+        // 어느 창에서 보냈든 화면이 아는 상태(상단 자물쇠)를 서버에 다시 물어 맞추게 한다 (lib/secondaryAuth.ts)
+        if (response.config.url?.startsWith('/auth/secondary-password/') && response.config.method !== 'get') {
+            window.dispatchEvent(new Event('secondary-auth-changed'));
+        }
         return response;
     },
     async (error) => {
@@ -82,6 +87,8 @@ api.interceptors.response.use(
                 return Promise.reject(error);
             }
             if (code === 'AUTH_4040' || code === 'AUTH_4041' || code === 'AUTH_4044') {
+                // 서버가 2차 인증이 없다고 답했다. 화면이 알고 있던 인증 상태(상단 자물쇠)를 잠김으로 맞춘다 (lib/secondaryAuth.ts)
+                window.dispatchEvent(new Event('secondary-auth-locked'));
                 // 자동 재조회(비서 타임라인 등)는 다이얼로그 없이 호출부가 공개 데이터로 되돌리게 한다
                 if (originalRequest.secondaryAuthSilent === true) {
                     return Promise.reject(error);

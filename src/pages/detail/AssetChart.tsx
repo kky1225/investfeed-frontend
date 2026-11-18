@@ -26,6 +26,9 @@ import {createComparisonSource} from "./chartComparison.ts";
 import {averagePriceLineOf, tradeMarkersOf} from "./chartTrades.ts";
 import {useChartTradesSetting} from "../../components/chart/useChartStorage.ts";
 import {fetchStockTrades} from "../../api/holding/HoldingApi.ts";
+import {
+    requestSecondaryAuth, useSecondaryAuthLockedContent, useSecondaryAuthUnlocked,
+} from "../../lib/secondaryAuth.ts";
 import type {StockTradeMarket, StockTradeRes} from "../../type/HoldingType.ts";
 
 // 내 매매를 조회할 수 있는 자산과 그 시장. 여기 없는 자산(코인·지수·원자재)은 설정 창에 스위치가 없다
@@ -205,39 +208,38 @@ const AssetChart = ({
         [priceTargets, storage.assetType, storage.assetCode, targetMove],
     );
 
-    // 내 매매(매수·매도 지점, 평단가 선). 설정 창에서 켜 두었고 2차 인증을 한 동안에만 표시한다.
-    // 평소 조회는 인증 창을 띄우지 않고(인증 전이면 조용히 실패해 아무것도 그리지 않는다), 스위치를 켜는 순간에만 인증을 묻는다.
+    // 내 매매(매수·매도 지점, 평단가 선). 설정 창에서 켜 두었고 2차 인증을 한 동안에만 조회하고 표시한다.
+    // 인증 상태는 상단의 자물쇠와 같은 값을 본다(lib/secondaryAuth.ts): 인증하면 바로 조회하고, 시간이 다 되면 그 순간 지운다.
     const tradeMarket = TRADE_MARKETS[market];
     const tradesOn = useChartTradesSetting() && tradeMarket !== undefined;
-    const tradesKey = useMemo(() => ['chartTrades', tradeMarket, code], [tradeMarket, code]);
-    const fetchTrades = useCallback(async (silent: boolean, signal?: AbortSignal): Promise<StockTradeRes> => {
-        const res = requireOk(
-            await fetchStockTrades(code, tradeMarket ?? 'KR', {signal, skipGlobalError: true, secondaryAuthSilent: silent}),
-            NO_TRADES,
-        );
-        // 응답에 빠지거나 null 인 항목이 있어도(서버가 예전 모양으로 답하는 동안 등) 화면이 깨지지 않게 빈 목록으로 채운다.
-        return {trades: res.trades ?? [], holdings: res.holdings ?? [], failedBrokers: res.failedBrokers ?? []};
-    }, [code, tradeMarket]);
+    const unlocked = useSecondaryAuthUnlocked();
+    // 켜 두었는데 인증 전이라 가려진 동안에는 상단 자물쇠가 점을 찍어 알린다. 차트에는 따로 표시하지 않는다.
+    useSecondaryAuthLockedContent('내 매매 표시', tradesOn && !unlocked);
     const tradesQuery = useQuery({
-        queryKey: tradesKey,
-        queryFn: ({signal}) => fetchTrades(true, signal),
-        enabled: tradesOn,
+        queryKey: ['chartTrades', tradeMarket, code],
+        queryFn: async ({signal}): Promise<StockTradeRes> => {
+            // 화면이 아는 인증 상태가 서버와 어긋났더라도(다른 기기에서 다시 인증 등) 인증 창을 띄우지 않고 조용히 실패하게 한다.
+            const res = requireOk(
+                await fetchStockTrades(code, tradeMarket ?? 'KR', {signal, skipGlobalError: true, secondaryAuthSilent: true}),
+                NO_TRADES,
+            );
+            // 응답에 빠지거나 null 인 항목이 있어도(서버가 예전 모양으로 답하는 동안 등) 화면이 깨지지 않게 빈 목록으로 채운다.
+            return {trades: res.trades ?? [], holdings: res.holdings ?? [], failedBrokers: res.failedBrokers ?? []};
+        },
+        enabled: tradesOn && unlocked,
         retry: false,
         staleTime: 0,
         // 받아 둔 내역을 남겨 두지 않는다. 남겨 두면 다른 종목을 보고 돌아왔을 때 2차 인증이 풀려 있어도 잠깐 다시 그려진다.
         gcTime: 0,
-        // 창으로 돌아올 때 다시 확인해, 그 사이 2차 인증이 풀렸으면 표시를 지운다.
-        refetchOnWindowFocus: true,
     });
+    // 스위치를 켰는데 인증 전이면 그 자리에서 2차 비밀번호를 묻는다. 인증하면 위 조회가 바로 시작된다.
     const handleTradesChange = (visible: boolean) => {
-        if (!visible) return;
-        queryClient.fetchQuery({queryKey: tradesKey, queryFn: () => fetchTrades(false), staleTime: 0, gcTime: 0})
-            // 인증을 마쳤으니, 인증 전이라 조용히 실패해 있던 다른 차트(멀티 화면의 다른 패널)도 다시 조회하게 한다.
-            .then(() => queryClient.invalidateQueries({queryKey: ['chartTrades']}))
-            .catch(error => console.error(error));
+        if (visible && !unlocked) requestSecondaryAuth();
     };
-    // 이 화면을 연 뒤에 받은 내역만 보여 준다. 다시 조회했다가 실패하면(인증이 풀림) 앞서 받은 내역도 보여 주지 않는다.
-    const myTrades = tradesOn && tradesQuery.isSuccess && tradesQuery.isFetchedAfterMount ? tradesQuery.data : NO_TRADES;
+    // 이 화면을 연 뒤에 받은 내역만, 인증된 동안에만 보여 준다.
+    const myTrades = tradesOn && unlocked && tradesQuery.isSuccess && tradesQuery.isFetchedAfterMount
+        ? tradesQuery.data
+        : NO_TRADES;
     const tradesNotice = myTrades.failedBrokers.length > 0
         ? `${myTrades.failedBrokers.join(', ')} 조회에 실패해 그 증권사의 매매가 빠져 있습니다.`
         : undefined;

@@ -15,6 +15,7 @@ import Login from "./pages/auth/Login.tsx";
 import SecondaryAuthDialog from "./components/SecondaryAuthDialog.tsx";
 import AppTheme from "./components/AppTheme.tsx";
 import {processSecondaryAuthQueue} from "./axios.ts";
+import {SECONDARY_AUTH_MANUAL_SOURCE} from "./lib/secondaryAuth.ts";
 import Dashboard from "./pages/dashboard/Dashboard.tsx";
 import MainLayout from "./layout/MainLayout.tsx";
 import Watchlist from "./pages/watchlist/Watchlist.tsx";
@@ -229,10 +230,11 @@ function App() {
                     processSecondaryAuthQueue(null);
                 }}
                 onClose={() => {
-                    const fromAssistant = secondaryAuth.source === 'assistant';
+                    // 비서 화면과, 화면이 직접 연 창(상단 자물쇠, 차트의 내 매매 표시)은 취소해도 그 자리에 머문다.
+                    const stay = secondaryAuth.source === 'assistant' || secondaryAuth.source === SECONDARY_AUTH_MANUAL_SOURCE;
                     setSecondaryAuth({open: false, mode: 'verify'});
                     processSecondaryAuthQueue(new Error('cancelled'));
-                    if (fromAssistant) return;
+                    if (stay) return;
                     if (window.history.length > 1) {
                         navigate(-1);
                     } else {
