@@ -111,6 +111,8 @@ export interface MemberRes {
     permanentLock: boolean;
     totpEnabled: boolean;
     secondaryPasswordEnabled: boolean;
+    failedSecondaryAttempts?: number;       // 2차 비밀번호를 연달아 틀린 횟수
+    secondaryPasswordSuspended?: boolean;   // 여러 번 틀려 2차 비밀번호가 정지됐는지 (관리자가 초기화해야 풀림)
     apiKeyLocked: boolean;
     createdAt: string;
     permissions: UserPermission[];

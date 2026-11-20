@@ -283,17 +283,27 @@ export default function MemberManagement() {
             }
         },
         {
-            field: 'failedLoginAttempts', headerName: '실패 횟수 (PW/TOTP)', minWidth: 150, align: 'center', headerAlign: 'center',
+            field: 'failedLoginAttempts', headerName: '실패 횟수 (PW/TOTP/2차)', minWidth: 180, align: 'center', headerAlign: 'center',
             sortable: false,
             renderCell: (params) => {
                 const pw = params.row.failedLoginAttempts ?? 0;
                 const totp = params.row.failedTotpAttempts ?? 0;
+                const secondary = params.row.failedSecondaryAttempts ?? 0;
+                // 2차 비밀번호는 연달아 여러 번 틀리면 정지된다. 정지는 메뉴의 "2차 비밀번호 초기화"로 푼다.
+                const secondaryNote = params.row.secondaryPasswordSuspended ? ' (정지됨, 초기화해야 풀립니다)' : '';
                 return (
-                    <Tooltip title={`비밀번호 실패 ${pw}회 · TOTP 실패 ${totp}회`} arrow>
+                    <Tooltip
+                        title={`비밀번호 실패 ${pw}회 · TOTP 실패 ${totp}회 · 2차 비밀번호 실패 ${secondary}회${secondaryNote}`}
+                        arrow
+                    >
                         <Typography variant="body2">
                             <Box component="span" sx={{color: pw > 0 ? 'error.main' : 'text.primary'}}>{pw}</Box>
                             <Box component="span" sx={{color: 'text.disabled'}}> / </Box>
                             <Box component="span" sx={{color: totp > 0 ? 'error.main' : 'text.primary'}}>{totp}</Box>
+                            <Box component="span" sx={{color: 'text.disabled'}}> / </Box>
+                            <Box component="span" sx={{color: secondary > 0 ? 'error.main' : 'text.primary'}}>
+                                {secondary}{params.row.secondaryPasswordSuspended ? ' 정지' : ''}
+                            </Box>
                         </Typography>
                     </Tooltip>
                 );

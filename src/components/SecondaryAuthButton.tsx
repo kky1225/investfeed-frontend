@@ -11,7 +11,7 @@ import MenuButton from "./MenuButton";
 import {green, orange} from "./themePrimitives.ts";
 import {
     expireSecondaryAuthIfDue, lockSecondaryAuth, requestSecondaryAuth, useSecondaryAuthExpiresAt, useSecondaryAuthKnown,
-    useSecondaryAuthLockedContents, useSecondaryAuthSync,
+    useSecondaryAuthLockedContents, useSecondaryAuthSync, useSecondaryPasswordSuspendedState,
 } from "../lib/secondaryAuth.ts";
 
 const SECOND_MS = 1000;
@@ -64,6 +64,7 @@ export default function SecondaryAuthButton() {
     const known = useSecondaryAuthKnown();
     const expiresAt = useSecondaryAuthExpiresAt();
     const lockedContents = useSecondaryAuthLockedContents();
+    const suspended = useSecondaryPasswordSuspendedState();
     const remaining = useRemainingSeconds(expiresAt);
     const [anchorEl, setAnchorEl] = useState<HTMLElement | null>(null);
 
@@ -77,9 +78,11 @@ export default function SecondaryAuthButton() {
 
     if (remaining === null) {
         const hidden = [...new Set(lockedContents)];
-        const title = hidden.length > 0
-            ? `이 화면의 ${hidden.join(', ')}가 잠겨 있습니다. 눌러서 2차 인증을 하세요.`
-            : '2차 인증 전입니다. 눌러서 인증하세요.';
+        const title = suspended
+            ? '2차 비밀번호를 여러 번 틀려 정지되었습니다. 관리자에게 문의하세요.'
+            : hidden.length > 0
+                ? `이 화면의 ${hidden.join(', ')}가 잠겨 있습니다. 눌러서 2차 인증을 하세요.`
+                : '2차 인증 전입니다. 눌러서 인증하세요.';
         return (
             <>
                 <Tooltip title={title}>

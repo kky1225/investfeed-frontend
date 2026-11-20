@@ -1,4 +1,4 @@
-import {useState, useEffect, useRef, useCallback} from 'react';
+import {useState} from 'react';
 import {useMutation} from '@tanstack/react-query';
 import Dialog from '@mui/material/Dialog';
 import DialogTitle from '@mui/material/DialogTitle';
@@ -8,7 +8,11 @@ import Box from '@mui/material/Box';
 import Alert from '@mui/material/Alert';
 import LockOutlinedIcon from '@mui/icons-material/LockOutlined';
 import SecurityKeypad from './SecurityKeypad';
-import {setupSecondaryPassword, verifySecondaryPassword, fetchSecondaryPasswordLockStatus} from '../api/auth/AuthApi';
+import {setupSecondaryPassword, verifySecondaryPassword} from '../api/auth/AuthApi';
+import {
+    isSecondaryPasswordSuspended, SECONDARY_PASSWORD_SUSPENDED_MESSAGE, useSecondaryPasswordSuspended,
+    wrongSecondaryPasswordMessage,
+} from './secondaryPasswordAttempts';
 import {requireOk} from '../lib/apiResponse';
 import {useAuth} from '../context/AuthContext';
 
@@ -35,74 +39,23 @@ export default function SecondaryAuthDialog({open, mode, onSuccess, onClose}: Se
     const [step, setStep] = useState<'input' | 'confirm'>('input');
     const [firstInput, setFirstInput] = useState('');
     const [error, setError] = useState('');
-    const [remainingSeconds, setRemainingSeconds] = useState(0);
     const [key, setKey] = useState(0);
-    const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
     const {user, updateUser} = useAuth();
-
-    const locked = remainingSeconds > 0;
-
-    const clearTimer = useCallback(() => {
-        if (timerRef.current) {
-            clearInterval(timerRef.current);
-            timerRef.current = null;
-        }
-    }, []);
-
-    const startCountdown = useCallback((seconds: number) => {
-        clearTimer();
-        setRemainingSeconds(seconds);
-        timerRef.current = setInterval(() => {
-            setRemainingSeconds(prev => {
-                if (prev <= 1) {
-                    clearTimer();
-                    return 0;
-                }
-                return prev - 1;
-            });
-        }, 1000);
-    }, [clearTimer]);
-
-    useEffect(() => {
-        if (open && mode === 'verify') {
-            (async () => {
-                try {
-                    const res = await fetchSecondaryPasswordLockStatus();
-                    const seconds = res.result?.remainingSeconds ?? 0;
-                    if (seconds > 0) startCountdown(seconds);
-                } catch (error) { console.error(error); /* ignore — 잠금 상태 조회 실패해도 다이얼로그는 정상 표시 */ }
-            })();
-        }
-    }, [open, mode, startCountdown]);
-
-    useEffect(() => () => clearTimer(), [clearTimer]);
-
-    const formatTime = (seconds: number) => {
-        const m = Math.floor(seconds / 60);
-        const s = seconds % 60;
-        return `${m}:${String(s).padStart(2, '0')}`;
-    };
+    // 여러 번 틀려 2차 비밀번호가 정지된 상태인지. 창을 열 때 서버에 묻고, 입력하다 정지되면 그때 바뀐다.
+    const [suspended, markSuspended] = useSecondaryPasswordSuspended(open, mode === 'verify');
 
     const resetState = () => {
         setStep('input');
         setFirstInput('');
         setError('');
-        setRemainingSeconds(0);
-        clearTimer();
         setKey(prev => prev + 1);
     };
 
-    const handleLockError = (err: unknown) => {
-        const axiosErr = err as { response?: { data?: { code?: string; message?: string; result?: { remainingSeconds?: number } } } };
-        const errCode = axiosErr.response?.data?.code;
-        if (errCode === 'AUTH_4044') {
-            const seconds = axiosErr.response?.data?.result?.remainingSeconds ?? 0;
-            if (seconds > 0) {
-                startCountdown(seconds);
-            }
-            return true;
-        }
-        return false;
+    /** 서버가 정지됐다고 답했으면 정지 안내로 바꾸고 true */
+    const handleSuspended = (err: unknown) => {
+        if (!isSecondaryPasswordSuspended(err)) return false;
+        markSuspended();
+        return true;
     };
 
     const handleSetupInput = (code: string) => {
@@ -137,7 +90,7 @@ export default function SecondaryAuthDialog({open, mode, onSuccess, onClose}: Se
         onError: (err: unknown) => {
             console.error(err);
             const alreadySet = err instanceof AlreadySetError;
-            if (!handleLockError(alreadySet ? err.cause : err)) {
+            if (!handleSuspended(alreadySet ? err.cause : err)) {
                 setError(alreadySet
                     ? '2차 비밀번호가 이미 설정되어 있습니다. 설정해 둔 2차 비밀번호를 입력해주세요.'
                     : '2차 비밀번호 설정에 실패했습니다.');
@@ -158,8 +111,9 @@ export default function SecondaryAuthDialog({open, mode, onSuccess, onClose}: Se
         },
         onError: (err: unknown) => {
             console.error(err);
-            if (!handleLockError(err)) {
-                setError('2차 비밀번호가 올바르지 않습니다.');
+            if (!handleSuspended(err)) {
+                // 틀렸으면 서버가 남은 횟수까지 적어 준 문구를 그대로 보여 준다. 틀린 것이 아닌 실패(서버 오류 등)는 따로 안내한다.
+                setError(wrongSecondaryPasswordMessage(err) ?? '2차 비밀번호를 확인하지 못했습니다. 잠시 후 다시 시도해주세요.');
             }
             setKey(prev => prev + 1);
         },
@@ -215,16 +169,13 @@ export default function SecondaryAuthDialog({open, mode, onSuccess, onClose}: Se
             <DialogTitle sx={{textAlign: 'center', pb: 0.5}}>{getTitle()}</DialogTitle>
             <DialogContent>
                 <DialogContentText sx={{textAlign: 'center', mb: 2}}>{getDescription()}</DialogContentText>
-                {locked && (
-                    <Alert severity="warning" sx={{mb: 2}}>
-                        2차 비밀번호 입력이 잠금되었습니다. {formatTime(remainingSeconds)} 후에 다시 시도하세요.
-                    </Alert>
-                )}
-                {!locked && error && <Alert severity="error" sx={{mb: 2}}>{error}</Alert>}
+                {suspended && <Alert severity="error" sx={{mb: 2}}>{SECONDARY_PASSWORD_SUSPENDED_MESSAGE}</Alert>}
+                {!suspended && error && <Alert severity="error" sx={{mb: 2}}>{error}</Alert>}
+                {/* 정지된 상태에서도 입력 칸은 막지 않고 안내만 한다(입력하면 서버가 거부한다). */}
                 <SecurityKeypad
                     key={key}
                     onComplete={mode === 'setup' ? (step === 'confirm' ? handleSetupConfirm : handleSetupInput) : handleVerify}
-                    disabled={loading || locked}
+                    disabled={loading}
                 />
             </DialogContent>
         </Dialog>

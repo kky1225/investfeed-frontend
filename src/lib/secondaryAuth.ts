@@ -11,10 +11,13 @@ interface SecondaryAuthState {
     known: boolean,             // 서버에 한 번이라도 물어 상태를 아는지. 모르는 동안에는 자물쇠를 그리지 않는다
     expiresAt: number | null,   // 2차 인증이 풀리는 시각(epoch ms). 인증하지 않았으면 null
     passwordSet: boolean,       // 2차 비밀번호를 만들어 두었는지. 아니면 자물쇠를 눌렀을 때 설정 창을 띄운다
+    suspended: boolean,         // 여러 번 틀려 2차 비밀번호가 정지됐는지. 관리자가 초기화해야 풀린다
     lockedContents: string[],   // 지금 화면에서 2차 인증이 없어 가려진 내용의 이름 (자물쇠에 점을 찍고 이름을 알린다)
 }
 
-const INITIAL_STATE: SecondaryAuthState = {known: false, expiresAt: null, passwordSet: true, lockedContents: []};
+const INITIAL_STATE: SecondaryAuthState = {
+    known: false, expiresAt: null, passwordSet: true, suspended: false, lockedContents: [],
+};
 const SYNC_GAP_MS = 2000;   // 창으로 돌아올 때 focus 와 visibilitychange 가 함께 와도 한 번만 묻는다
 
 let state = INITIAL_STATE;
@@ -63,12 +66,12 @@ export const syncSecondaryAuth = async (force = true) => {
     const order = ++syncOrder;
     try {
         const status = requireOk(
-            await fetchSecondaryPasswordLockStatus({skipGlobalError: true}), {remainingSeconds: 0},
+            await fetchSecondaryPasswordLockStatus({skipGlobalError: true}), {},
         );
         if (order !== syncOrder) return;
         const seconds = status.authRemainingSeconds ?? 0;
         setExpiresAt(seconds > 0 ? Date.now() + seconds * 1000 : null);
-        setState({known: true, passwordSet: status.passwordSet ?? true});
+        setState({known: true, passwordSet: status.passwordSet ?? true, suspended: status.suspended ?? false});
     } catch (error) {
         console.error(error);
     }
@@ -94,7 +97,7 @@ export const resetSecondaryAuth = () => {
     syncOrder++;
     lastSyncAt = 0;
     setExpiresAt(null);
-    setState({known: false, passwordSet: true});
+    setState({known: false, passwordSet: true, suspended: false});
 };
 
 /** 화면이 직접 연 2차 비밀번호 창이라는 표시. 이 창은 취소해도 이전 화면으로 돌아가지 않는다 */
@@ -114,6 +117,9 @@ export const requestSecondaryAuth = async () => {
 
 /** 서버에 물어 인증 상태를 아는지. 모르는 동안(화면을 막 연 직후)에는 자물쇠를 그리지 않는다 */
 export const useSecondaryAuthKnown = (): boolean => useSyncExternalStore(subscribe, () => state.known);
+
+/** 여러 번 틀려 2차 비밀번호가 정지된 상태인지 (마지막으로 서버에 물었을 때 기준) */
+export const useSecondaryPasswordSuspendedState = (): boolean => useSyncExternalStore(subscribe, () => state.suspended);
 
 /** 2차 인증이 풀리는 시각(epoch ms). 인증하지 않았으면 null */
 export const useSecondaryAuthExpiresAt = (): number | null => useSyncExternalStore(subscribe, () => state.expiresAt);

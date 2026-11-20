@@ -73,10 +73,12 @@ export const changeSecondaryPassword = async (req: SecondaryPasswordChangeReq): 
 
 /**
  * 2차 비밀번호 상태.
- * remainingSeconds: 여러 번 틀려 잠긴 상태가 풀리기까지 남은 초. authRemainingSeconds: 2차 인증이 유지되는 남은 초(인증 전이면 0)
+ * suspended: 여러 번 틀려 정지됐는지(관리자가 초기화해야 풀림). remainingAttempts: 이만큼 더 틀리면 정지된다.
+ * authRemainingSeconds: 2차 인증이 유지되는 남은 초(인증 전이면 0)
  */
 export interface SecondaryPasswordLockStatus {
-    remainingSeconds: number;
+    suspended?: boolean;
+    remainingAttempts?: number;
     authRemainingSeconds?: number;
     passwordSet?: boolean;      // 2차 비밀번호를 만들어 두었는지
 }

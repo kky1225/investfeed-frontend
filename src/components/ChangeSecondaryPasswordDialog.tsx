@@ -1,4 +1,4 @@
-import {useState, useEffect, useRef, useCallback} from 'react';
+import {useState} from 'react';
 import {useMutation} from '@tanstack/react-query';
 import Dialog from '@mui/material/Dialog';
 import DialogTitle from '@mui/material/DialogTitle';
@@ -8,7 +8,11 @@ import Box from '@mui/material/Box';
 import Alert from '@mui/material/Alert';
 import LockOutlinedIcon from '@mui/icons-material/LockOutlined';
 import SecurityKeypad from './SecurityKeypad';
-import {changeSecondaryPassword, verifySecondaryPassword, fetchSecondaryPasswordLockStatus} from '../api/auth/AuthApi';
+import {changeSecondaryPassword, verifySecondaryPassword} from '../api/auth/AuthApi';
+import {
+    isSecondaryPasswordSuspended, SECONDARY_PASSWORD_SUSPENDED_MESSAGE, useSecondaryPasswordSuspended,
+    wrongSecondaryPasswordMessage,
+} from './secondaryPasswordAttempts';
 import type {SecondaryPasswordChangeReq, SecondaryPasswordVerifyReq} from '../type/AuthType';
 import {requireOk} from '../lib/apiResponse';
 
@@ -16,7 +20,6 @@ type Step = 'current' | 'new' | 'confirm';
 
 const ERROR_MESSAGES: Record<string, string> = {
     AUTH_4041: '2차 비밀번호가 설정되지 않았습니다.',
-    AUTH_4042: '현재 2차 비밀번호가 올바르지 않습니다.',
     AUTH_4043: '현재 2차 비밀번호와 동일한 비밀번호로 변경할 수 없습니다.',
 };
 
@@ -31,71 +34,23 @@ export default function ChangeSecondaryPasswordDialog({open, onSuccess, onClose}
     const [currentPassword, setCurrentPassword] = useState('');
     const [newPassword, setNewPassword] = useState('');
     const [error, setError] = useState('');
-    const [remainingSeconds, setRemainingSeconds] = useState(0);
     const [key, setKey] = useState(0);
-    const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-
-    const locked = remainingSeconds > 0;
-
-    const clearTimer = useCallback(() => {
-        if (timerRef.current) {
-            clearInterval(timerRef.current);
-            timerRef.current = null;
-        }
-    }, []);
-
-    const startCountdown = useCallback((seconds: number) => {
-        clearTimer();
-        setRemainingSeconds(seconds);
-        timerRef.current = setInterval(() => {
-            setRemainingSeconds(prev => {
-                if (prev <= 1) {
-                    clearTimer();
-                    return 0;
-                }
-                return prev - 1;
-            });
-        }, 1000);
-    }, [clearTimer]);
-
-    useEffect(() => {
-        if (open) {
-            (async () => {
-                try {
-                    const res = await fetchSecondaryPasswordLockStatus();
-                    const seconds = res.result?.remainingSeconds ?? 0;
-                    if (seconds > 0) startCountdown(seconds);
-                } catch (error) { console.error(error); /* ignore — 잠금 상태 조회 실패해도 다이얼로그는 정상 표시 */ }
-            })();
-        }
-    }, [open, startCountdown]);
-
-    useEffect(() => () => clearTimer(), [clearTimer]);
-
-    const formatTime = (seconds: number) => {
-        const m = Math.floor(seconds / 60);
-        const s = seconds % 60;
-        return `${m}:${String(s).padStart(2, '0')}`;
-    };
+    // 여러 번 틀려 2차 비밀번호가 정지된 상태인지. 창을 열 때 서버에 묻고, 입력하다 정지되면 그때 바뀐다.
+    const [suspended, markSuspended] = useSecondaryPasswordSuspended(open);
 
     const resetState = () => {
         setStep('current');
         setCurrentPassword('');
         setNewPassword('');
         setError('');
-        setRemainingSeconds(0);
-        clearTimer();
         setKey(prev => prev + 1);
     };
 
+    /** 서버가 정지됐다고 답했으면 정지 안내로 바꾸고 true */
     const handleLockError = (err: unknown): boolean => {
-        const axiosErr = err as { response?: { data?: { code?: string; result?: { remainingSeconds?: number } } } };
-        if (axiosErr.response?.data?.code === 'AUTH_4044') {
-            const seconds = axiosErr.response?.data?.result?.remainingSeconds ?? 0;
-            if (seconds > 0) startCountdown(seconds);
-            return true;
-        }
-        return false;
+        if (!isSecondaryPasswordSuspended(err)) return false;
+        markSuspended();
+        return true;
     };
 
     const verifyCurrentMutation = useMutation({
@@ -113,7 +68,9 @@ export default function ChangeSecondaryPasswordDialog({open, onSuccess, onClose}
             if (!handleLockError(err)) {
                 const axiosErr = err as { response?: { data?: { code?: string } } };
                 const errCode = axiosErr.response?.data?.code ?? '';
-                setError(ERROR_MESSAGES[errCode] ?? '현재 2차 비밀번호가 올바르지 않습니다.');
+                // 틀렸으면 서버가 남은 횟수까지 적어 준 문구를 그대로 보여 준다. 틀린 것이 아닌 실패(서버 오류 등)는 따로 안내한다.
+                setError(wrongSecondaryPasswordMessage(err) ?? ERROR_MESSAGES[errCode]
+                    ?? '2차 비밀번호를 확인하지 못했습니다. 잠시 후 다시 시도해주세요.');
             }
             setKey(prev => prev + 1);
         },
@@ -143,9 +100,9 @@ export default function ChangeSecondaryPasswordDialog({open, onSuccess, onClose}
             console.error(err);
             const axiosErr = err as { response?: { data?: { code?: string } } };
             const errCode = axiosErr.response?.data?.code ?? '';
-            // 변경 요청도 인증과 같은 시도 제한을 받는다. 잠겼으면 첫 단계처럼 남은 시간을 보여 준다.
+            // 변경 요청도 인증과 같은 횟수 제한을 받는다. 정지됐으면 정지 안내로 바꾼다.
             if (!handleLockError(err)) {
-                setError(ERROR_MESSAGES[errCode] ?? '2차 비밀번호 변경에 실패했습니다.');
+                setError(wrongSecondaryPasswordMessage(err) ?? ERROR_MESSAGES[errCode] ?? '2차 비밀번호 변경에 실패했습니다.');
             }
             setStep('current');
             setCurrentPassword('');
@@ -204,16 +161,13 @@ export default function ChangeSecondaryPasswordDialog({open, onSuccess, onClose}
             <DialogTitle sx={{textAlign: 'center', pb: 0.5}}>{getTitle()}</DialogTitle>
             <DialogContent>
                 <DialogContentText sx={{textAlign: 'center', mb: 2}}>{getDescription()}</DialogContentText>
-                {locked && (
-                    <Alert severity="warning" sx={{mb: 2}}>
-                        2차 비밀번호 입력이 잠금되었습니다. {formatTime(remainingSeconds)} 후에 다시 시도하세요.
-                    </Alert>
-                )}
-                {!locked && error && <Alert severity="error" sx={{mb: 2}}>{error}</Alert>}
+                {suspended && <Alert severity="error" sx={{mb: 2}}>{SECONDARY_PASSWORD_SUSPENDED_MESSAGE}</Alert>}
+                {!suspended && error && <Alert severity="error" sx={{mb: 2}}>{error}</Alert>}
+                {/* 정지된 상태에서도 입력 칸은 막지 않고 안내만 한다(입력하면 서버가 거부한다). */}
                 <SecurityKeypad
                     key={key}
                     onComplete={handleComplete()}
-                    disabled={loading || locked}
+                    disabled={loading}
                 />
             </DialogContent>
         </Dialog>
