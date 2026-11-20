@@ -427,13 +427,18 @@ const MARKET_NAME: Record<string, string> = {KR: '국내 증시', US: '미국 �
 
 /**
  * "추수감사절 다음날 (조기폐장)" → "조기폐장 · 추수감사절 다음날", "개천절" → "휴장 · 개천절". 어느 나라가 쉬는지는 앞의 국기로
+ * 국내 장 시각 변경일 "수능일 (10:00 개장·16:30 마감)" → "10:00 개장·16:30 마감 · 수능일" (휴장 아님)
  * 예전 이름 "미국 증시 휴장 (추수감사절)" 은 Redis 에 저장된 지난 카드 표시용으로 유지 (2026-10-09 이름 변경)
  */
+const SESSION_CHANGE_NAME = /^(.+) \(((?:\d{2}:\d{2} (?:개장|마감)|프리마켓 휴장|장 시각 변경)(?:·.+)?)\)$/;
+
 const holidayLabel = (name: string) => {
     const legacy = name.match(/^미국 증시 (휴장|조기폐장) \((.+)\)$/);
     if (legacy) return `${legacy[1]} · ${legacy[2]}`;
     const early = name.match(/^(.+) \(조기폐장\)$/);
-    return early ? `조기폐장 · ${early[1]}` : `휴장 · ${name}`;
+    if (early) return `조기폐장 · ${early[1]}`;
+    const session = name.match(SESSION_CHANGE_NAME);
+    return session ? `${session[2]} · ${session[1]}` : `휴장 · ${name}`;
 };
 
 export function CalendarCard({p, meta, args}: { p: CalendarItemPayload[]; meta: Meta; args?: Record<string, unknown> | null }) {
@@ -442,7 +447,10 @@ export function CalendarCard({p, meta, args}: { p: CalendarItemPayload[]; meta: 
     // 휴장일 조회면 조회한 나라 중 결과가 없는 나라를 "휴장일 없음"으로 밝힌다 (조건은 카드에 저장된 도구 인자. 예전 답변엔 없음)
     const holidayQuery = args?.type === 'HOLIDAY';
     const queried = typeof args?.country === 'string' ? [args.country] : ['KR', 'US'];
-    const noHoliday = holidayQuery ? queried.filter((c) => !p.some((e) => e.country === c && e.type === 'HOLIDAY')) : [];
+    // 국내 장 시각 변경일(수능일 등)은 휴장이 아니라 "휴장일 없음" 판정에서 뺀다
+    const noHoliday = holidayQuery
+        ? queried.filter((c) => !p.some((e) => e.country === c && e.type === 'HOLIDAY' && !(c === 'KR' && SESSION_CHANGE_NAME.test(e.name))))
+        : [];
     return (
         <CardFrame title="일정" {...meta} link="/calendar" linkLabel="캘린더">
             {p.length === 0 && !holidayQuery && <Typography variant="body2" color="text.secondary">해당 기간에 일정이 없습니다</Typography>}

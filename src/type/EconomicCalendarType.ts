@@ -77,3 +77,27 @@ export interface UpdateCalendarEventMutationVars {
     id: number;
     req: ManualCalendarEventReq;
 }
+
+/** 국내 장 시각이 평소(09:00~15:30)와 다른 날 (수능일 등). 백엔드 MarketSessionRes */
+export interface MarketSession {
+    id: number;
+    date: string;      // yyyy-MM-dd
+    name: string;
+    openTime: string;  // HH:mm
+    closeTime: string; // HH:mm
+    preMarket: boolean; // NXT 프리마켓 운영 여부
+}
+
+/** 백엔드 MarketSessionReq */
+export interface MarketSessionReq {
+    date: string;
+    name: string;
+    openTime: string;
+    closeTime: string;
+    preMarket: boolean;
+}
+
+export interface UpdateMarketSessionMutationVars {
+    id: number;
+    req: MarketSessionReq;
+}

@@ -31,8 +31,9 @@ import type {BulkRefreshReq, BulkRefreshStatus, CalendarEvent, ManualCalendarEve
 import {requireOk} from '../../lib/apiResponse';
 import {getServerNow} from '../../lib/serverTime';
 import {useAlert} from '../../context/AlertContext';
+import MarketSessionTab from './MarketSessionTab';
 
-type TabKey = 'manual' | 'bulk';
+type TabKey = 'manual' | 'session' | 'bulk';
 
 export default function CalendarManagement() {
     const now = new Date(getServerNow());
@@ -243,6 +244,7 @@ export default function CalendarManagement() {
 
             <Tabs value={tab} onChange={(_, v) => setTab(v)} sx={{mb: 2, borderBottom: 1, borderColor: 'divider'}}>
                 <Tab label="수동 일정" value="manual"/>
+                <Tab label="장 시각 변경" value="session"/>
                 <Tab label="API 이벤트 재생성" value="bulk"/>
             </Tabs>
 
@@ -287,6 +289,8 @@ export default function CalendarManagement() {
                     </Typography>
                 </Box>
             )}
+
+            {tab === 'session' && <MarketSessionTab year={year} onYearChange={setYear}/>}
 
             {tab === 'bulk' && (
                 <Box>
