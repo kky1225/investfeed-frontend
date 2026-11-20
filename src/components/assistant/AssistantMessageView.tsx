@@ -3,6 +3,8 @@ import Paper from '@mui/material/Paper';
 import Typography from '@mui/material/Typography';
 import Stack from '@mui/material/Stack';
 import Box from '@mui/material/Box';
+import Alert from '@mui/material/Alert';
+import AccessTimeIcon from '@mui/icons-material/AccessTime';
 import WarningAmberIcon from '@mui/icons-material/WarningAmber';
 import ReportProblemIcon from '@mui/icons-material/ReportProblem';
 import CampaignOutlinedIcon from '@mui/icons-material/CampaignOutlined';
@@ -132,6 +134,13 @@ export default function AssistantMessageView({message, onUnlock, onPick, autoOpe
                     {holdingCards.map((c, i) => <HoldingAlertQuote key={i} p={c.payload as HoldingAlertPayload}/>)}
                 </Stack>
             ) : (<>
+            {/* 안내 띠: 장 전 브리핑의 장 시각 변경 안내 (수능일·새해 첫 거래일만, 2026-11-20) */}
+            {body.notice && (
+                <Alert severity="warning" icon={<AccessTimeIcon fontSize="inherit"/>} sx={{mt: 1, py: 0.25}}>
+                    <Typography variant="body2" sx={{fontWeight: 600}}>{body.notice.title}</Typography>
+                    {body.notice.detail && <Typography variant="caption" component="div">{body.notice.detail}</Typography>}
+                </Alert>
+            )}
             {body.summary && <SummaryTiles summary={body.summary}/>}
             {body.sections.length > 0 && (
                 <Box sx={{mt: 0.5}}>

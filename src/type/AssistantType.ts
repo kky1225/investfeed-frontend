@@ -62,6 +62,14 @@ export interface MessageBody {
     cards: string[];
     refs: Record<string, number>;
     turnCards?: TurnCard[];
+    /** 헤드라인 아래 안내 띠 (장 전 브리핑의 장 시각 변경 안내 등). 없으면 표시 안 함 */
+    notice?: Notice | null;
+}
+
+/** 안내 띠 — title 한 줄 + 보조 설명. 백엔드 Notice */
+export interface Notice {
+    title: string;
+    detail?: string | null;
 }
 
 export interface TurnCard {
