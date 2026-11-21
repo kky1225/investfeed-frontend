@@ -44,7 +44,7 @@ export const useChartTradesSetting = (): boolean => useQuery(settingQueryOptions
 /**
  * 저장을 모아서 보낸다. schedule 로 맡긴 저장은 마지막으로 맡긴 뒤 delayMs 가 지나면 한 번만 실행되고,
  * 그 사이에 다시 맡기면 앞의 것은 버린다. flush 는 밀린 저장을 기다리지 않고 바로 실행한다.
- * waiting 은 아직 보내지 않은 저장이 있는지.
+ * waiting 은 아직 저장이 끝나지 않은 것이 있는지(보내지 않았거나, 보내고 응답을 기다리는 중).
  * 보낸 저장이 실패하면 failed 가 true 가 되고, 그 저장은 다음 flush 때 다시 보낸다(스스로 되풀이해 보내지는 않는다.
  * 선이 너무 많은 경우처럼 다시 보내도 실패하는 저장이 있기 때문이다). 그 뒤의 저장이 성공하면 failed 가 풀린다.
  * leave 는 저장하던 대상을 떠날 때(종목이 바뀜, 화면을 나감) 부른다. 밀린 저장을 바로 보내고 실패한 저장은 조용히
@@ -59,13 +59,21 @@ const useDelayedSave = (delayMs: number) => {
     const send = useCallback((run: SaveRun) => {
         const order = ++sendCount.current;
         failedRun.current = null;
+        setWaiting(true);
+        // 응답을 받으면 기다림을 푼다. 그 사이 새 저장을 맡겼으면 그 저장이 끝날 때까지 그대로 둔다.
+        const settle = () => {
+            if (!pending.current) setWaiting(false);
+        };
         run().then(() => {
-            if (order === sendCount.current) setFailed(false);
+            if (order !== sendCount.current) return;
+            setFailed(false);
+            settle();
         }).catch((error: unknown) => {
             console.error(error);
             if (order !== sendCount.current) return;
             failedRun.current = run;
             setFailed(true);
+            settle();
         });
     }, []);
     const flush = useCallback(() => {
@@ -73,7 +81,6 @@ const useDelayedSave = (delayMs: number) => {
         if (current) {
             clearTimeout(current.timer);
             pending.current = null;
-            setWaiting(false);
             send(current.run);
         } else if (failedRun.current) {
             send(failedRun.current);
@@ -99,7 +106,6 @@ const useDelayedSave = (delayMs: number) => {
             run,
             timer: setTimeout(() => {
                 pending.current = null;
-                setWaiting(false);
                 send(run);
             }, delayMs),
         };
