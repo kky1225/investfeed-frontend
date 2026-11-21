@@ -128,6 +128,8 @@ export default function ChangeSecondaryPasswordDialog({open, onSuccess, onClose}
     };
 
     const handleClose = () => {
+        // 확인·변경 중에 닫으면 취소로 처리된 뒤 요청 결과로 성공이 한 번 더 불린다. 끝날 때까지 닫지 않는다.
+        if (loading) return;
         resetState();
         onClose();
     };

@@ -140,6 +140,8 @@ export default function SecondaryAuthDialog({open, mode, onSuccess, onClose}: Se
     };
 
     const handleClose = () => {
+        // 확인 중에 닫으면 취소로 처리된 뒤 확인 결과로 성공이 한 번 더 불린다. 끝날 때까지 닫지 않는다.
+        if (loading) return;
         resetState();
         onClose();
     };
