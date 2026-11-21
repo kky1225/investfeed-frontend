@@ -6,6 +6,8 @@ import DialogContent from '@mui/material/DialogContent';
 import DialogContentText from '@mui/material/DialogContentText';
 import Box from '@mui/material/Box';
 import Alert from '@mui/material/Alert';
+import IconButton from '@mui/material/IconButton';
+import CloseIcon from '@mui/icons-material/Close';
 import LockOutlinedIcon from '@mui/icons-material/LockOutlined';
 import SecurityKeypad from './SecurityKeypad';
 import {changeSecondaryPassword, verifySecondaryPassword} from '../api/auth/AuthApi';
@@ -150,6 +152,9 @@ export default function ChangeSecondaryPasswordDialog({open, onSuccess, onClose}
 
     return (
         <Dialog open={open} onClose={handleClose} maxWidth="xs" fullWidth>
+            <IconButton size="small" onClick={handleClose} title="닫기" sx={{position: 'absolute', top: 8, right: 8}}>
+                <CloseIcon fontSize="small"/>
+            </IconButton>
             <Box sx={{display: 'flex', flexDirection: 'column', alignItems: 'center', pt: 3}}>
                 <Box sx={{
                     width: 48, height: 48, borderRadius: '50%',
