@@ -91,8 +91,14 @@ export const useChartStorage = (assetType: AssetType | undefined, assetCode: str
         refetchOnWindowFocus: false,
         staleTime: Infinity,    // 이 화면에서 바꾼 내용이 곧 최신이라 다시 조회하지 않는다
     });
-    const [localDrawings, setLocalDrawings] = useState<Drawing[]>(NO_DRAWINGS);
     // 서버 조회가 끝나기 전이나 실패했을 때는 이 화면에서만 유지한다(저장하지 않음).
+    // 어느 종목에 그은 것인지 함께 두어, 종목이 바뀌면 앞 종목의 선이 보이지 않게 한다.
+    const [local, setLocal] = useState<{
+        assetType: AssetType | undefined, assetCode: string | undefined, drawings: Drawing[],
+    } | null>(null);
+    const localDrawings = local && local.assetType === assetType && local.assetCode === assetCode
+        ? local.drawings : NO_DRAWINGS;
+    const setLocalDrawings = (next: Drawing[]) => setLocal({assetType, assetCode, drawings: next});
     const drawingsReady = hasAsset && drawingsQuery.isSuccess;
     const drawings = drawingsReady ? drawingsQuery.data ?? NO_DRAWINGS : localDrawings;
 

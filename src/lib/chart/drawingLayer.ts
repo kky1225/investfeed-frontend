@@ -150,6 +150,15 @@ export class DrawingLayer {
     /** 도형 목록을 통째로 바꾼다. (바깥에서 준 목록이라 변경을 알리지 않는다) */
     setDrawings(drawings: Drawing[]) {
         this.drawings = drawings;
+        // 도형을 끌어 옮기는 중에 목록이 바뀌었으면(저장된 선의 조회가 끝남 등) 옮기던 것을 그만둔다.
+        // 옮긴 결과는 손을 뗄 때 알리므로, 끄는 도중에 들어온 목록에는 옮기던 것이 들어 있지 않다.
+        // 누르기만 하고 아직 움직이지 않았으면(글자 입력을 마치며 다른 도형을 누른 경우 등) 새 목록의 그 도형으로 이어 간다.
+        const move = this.move;
+        if (move) {
+            const current = move.changed ? undefined
+                : drawings.find(drawing => drawing.id === move.original.id && !drawing.hidden && !drawing.locked);
+            this.move = current ? {...move, original: current} : null;
+        }
         // 선택한 도형이 지워졌거나 숨겨졌으면 선택을 푼다.
         if (this.selectedId && !drawings.some(drawing => drawing.id === this.selectedId && !drawing.hidden)) {
             this.select(null);

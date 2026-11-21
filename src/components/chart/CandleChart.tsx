@@ -299,7 +299,7 @@ const CandleChart = ({
     }, [fullscreen]);
     // 우클릭 메뉴. 엔진이 누른 자리와 그 자리의 가격·도형을 알려 주면 그 자리에 띄운다.
     // 닫히는 동안에도 항목이 그대로 보이도록, 내용(contextMenu)은 남겨 두고 열림 여부만 따로 바꾼다.
-    // canUndo·canRedo: 메뉴를 띄우는 순간에 되돌리거나 다시 실행할 그리기 변경이 있는지
+    // canUndo·canRedo: 메뉴를 띄우는 순간에 되돌리거나 다시 실행할 그리기 변경이 있는지.
     const [contextMenu, setContextMenu] = useState<ContextMenuRequest & { canUndo: boolean, canRedo: boolean } | null>(null);
     const [menuOpen, setMenuOpen] = useState(false);
     const menuDrawing = drawings.find(drawing => drawing.id === contextMenu?.drawingId);    // 메뉴를 띄운 도형
@@ -308,6 +308,11 @@ const CandleChart = ({
         setContextMenu({...request, canUndo: undo.length > 0, canRedo: redo.length > 0});
         setMenuOpen(true);
     };
+    // 메뉴를 띄운 뒤 선 목록이 밖에서 바뀌면(조회가 끝남, 다른 차트가 바꿈) 이력이 비워지므로 두 항목도 감춘다.
+    useEffect(() => {
+        if (drawings === ownDrawings.current) return;
+        setContextMenu(menu => menu && (menu.canUndo || menu.canRedo) ? {...menu, canUndo: false, canRedo: false} : menu);
+    }, [drawings]);
     // 메뉴가 닫힌 뒤 차트에 포커스를 돌려줄지. 메뉴에서 설정 창을 열 때는 그 창이 포커스를 가져가므로 돌려주지 않는다.
     const refocusAfterMenu = useRef(true);
     const closeContextMenu = (refocus = true) => {
