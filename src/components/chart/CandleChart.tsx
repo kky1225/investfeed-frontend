@@ -120,7 +120,16 @@ const TOOL_HINTS: Record<DrawingTool, string> = {
 };
 const TEXT_INPUT_WIDTH = 200;   // 글자 입력 칸의 너비 (px)
 
-const MAX_UNDO = 50;    // 되돌릴 수 있는 그리기 변경의 수
+// 단축키를 받을 차트. 한 화면에 차트가 여럿이면(멀티뷰) 마우스가 올라가 있는 차트가 받고, 어느 차트 위에도 없으면
+// 떠 있는 차트 중 가장 최근에 누른 차트(누른 적이 없으면 가장 나중에 뜬 차트)가 받는다.
+// recent 는 떠 있는 차트를 뜨거나 누른 순서대로 둔 것으로, 마지막이 가장 최근이다.
+const shortcutTarget: { hovered: symbol | null, recent: symbol[] } = {hovered: null, recent: []};
+const markRecent = (chart: symbol) => {
+    shortcutTarget.recent = [...shortcutTarget.recent.filter(other => other !== chart), chart];
+};
+const receivesShortcut = (chart: symbol) => (shortcutTarget.hovered ?? shortcutTarget.recent.at(-1)) === chart;
+
+const MAX_UNDO = 50;   // 되돌릴 수 있는 그리기 변경의 수
 
 interface DrawingHistory {
     undo: Drawing[][],  // 되돌릴 수 있는 이전 상태들. 맨 뒤가 가장 최근
@@ -638,7 +647,16 @@ const CandleChart = ({
     }, [mode, systemMode]);
 
     // 단축키: Alt+T·H·V·R·F 도형, Esc 취소, Ctrl(⌘)+Z 실행 취소, Ctrl(⌘)+Shift+Z 다시 실행.
-    // 글자를 입력하는 중에는 동작하지 않는다.
+    // 글자를 입력하는 중에는 동작하지 않는다. 차트가 여럿이면 단축키를 받을 차트 하나에서만 동작한다
+    // (Esc 는 어느 차트든 동작한다).
+    const [chartId] = useState(() => Symbol('chart'));
+    useEffect(() => {
+        markRecent(chartId);
+        return () => {
+            shortcutTarget.recent = shortcutTarget.recent.filter(other => other !== chartId);
+            if (shortcutTarget.hovered === chartId) shortcutTarget.hovered = null;
+        };
+    }, [chartId]);
     useEffect(() => {
         const handleKeyDown = (event: KeyboardEvent) => {
             const target = event.target instanceof HTMLElement ? event.target : null;
@@ -648,6 +666,7 @@ const CandleChart = ({
                 setTool(null);
                 return;
             }
+            if (!receivesShortcut(chartId)) return;
             if ((event.ctrlKey || event.metaKey) && !event.altKey && event.code === 'KeyZ') {
                 event.preventDefault();
                 stepHistoryRef.current(event.shiftKey ? 'redo' : 'undo');
@@ -662,10 +681,17 @@ const CandleChart = ({
         };
         window.addEventListener('keydown', handleKeyDown);
         return () => window.removeEventListener('keydown', handleKeyDown);
-    }, []);
+    }, [chartId]);
 
     return (
         <Box
+            onPointerEnter={() => {
+                shortcutTarget.hovered = chartId;
+            }}
+            onPointerLeave={() => {
+                if (shortcutTarget.hovered === chartId) shortcutTarget.hovered = null;
+            }}
+            onPointerDown={() => markRecent(chartId)}
             sx={fullscreen ? {
                 // 창 가득 덮는다. 설정 창·메뉴(modal)보다는 아래에 둔다.
                 position: 'fixed',
