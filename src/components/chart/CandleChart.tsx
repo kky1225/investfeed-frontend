@@ -120,14 +120,14 @@ const TOOL_HINTS: Record<DrawingTool, string> = {
 };
 const TEXT_INPUT_WIDTH = 200;   // 글자 입력 칸의 너비 (px)
 
-// 단축키를 받을 차트. 한 화면에 차트가 여럿이면(멀티뷰) 마우스가 올라가 있는 차트가 받고, 어느 차트 위에도 없으면
-// 떠 있는 차트 중 가장 최근에 누른 차트(누른 적이 없으면 가장 나중에 뜬 차트)가 받는다.
-// recent 는 떠 있는 차트를 뜨거나 누른 순서대로 둔 것으로, 마지막이 가장 최근이다.
-const shortcutTarget: { hovered: symbol | null, recent: symbol[] } = {hovered: null, recent: []};
+// 단축키를 받을 차트. 한 화면에 차트가 여럿이면(멀티뷰) 떠 있는 차트 중 가장 최근에 누른 차트(누른 적이 없으면
+// 가장 나중에 뜬 차트)만 받는다. 선 지우기(Delete)가 누른 차트에서 동작하는 것과 같은 기준이다.
+// recentCharts 는 떠 있는 차트를 뜨거나 누른 순서대로 둔 것으로, 마지막이 가장 최근이다.
+let recentCharts: symbol[] = [];
 const markRecent = (chart: symbol) => {
-    shortcutTarget.recent = [...shortcutTarget.recent.filter(other => other !== chart), chart];
+    recentCharts = [...recentCharts.filter(other => other !== chart), chart];
 };
-const receivesShortcut = (chart: symbol) => (shortcutTarget.hovered ?? shortcutTarget.recent.at(-1)) === chart;
+const receivesShortcut = (chart: symbol) => recentCharts.at(-1) === chart;
 
 const MAX_UNDO = 50;   // 되돌릴 수 있는 그리기 변경의 수
 
@@ -653,8 +653,7 @@ const CandleChart = ({
     useEffect(() => {
         markRecent(chartId);
         return () => {
-            shortcutTarget.recent = shortcutTarget.recent.filter(other => other !== chartId);
-            if (shortcutTarget.hovered === chartId) shortcutTarget.hovered = null;
+            recentCharts = recentCharts.filter(other => other !== chartId);
         };
     }, [chartId]);
     useEffect(() => {
@@ -685,13 +684,8 @@ const CandleChart = ({
 
     return (
         <Box
-            onPointerEnter={() => {
-                shortcutTarget.hovered = chartId;
-            }}
-            onPointerLeave={() => {
-                if (shortcutTarget.hovered === chartId) shortcutTarget.hovered = null;
-            }}
             onPointerDown={() => markRecent(chartId)}
+            onFocus={() => markRecent(chartId)}     // 키보드(Tab)로 들어온 경우
             sx={fullscreen ? {
                 // 창 가득 덮는다. 설정 창·메뉴(modal)보다는 아래에 둔다.
                 position: 'fixed',
