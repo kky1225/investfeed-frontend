@@ -139,7 +139,7 @@ const CandleChart = ({
 
     // 그린 선과 차트 설정(꺼 둔 지표)은 계정에 저장한다.
     const {
-        drawings, updateDrawings,
+        drawings, updateDrawings, drawingsReady,
         indicators: indicatorSettings, setIndicatorOn, setIndicatorValues, removeIndicator,
         chartType: savedChartType, setChartType,
         logScale, setLogScale,
@@ -180,11 +180,13 @@ const CandleChart = ({
 
     // 그리기 변경(추가·옮기기·지우기·꾸미기)은 모두 changeDrawings 를 거쳐, 되돌릴 수 있게 이전 상태를 남긴다.
     // 이 화면을 여는 동안만 기억하고, 종목이 바뀌면 비운다.
+    // 저장된 선의 조회가 끝나 목록이 서버 것으로 바뀔 때도 비운다. 조회 전에 그은 선은 화면에만 있던 것이라,
+    // 그때의 이력(빈 목록)으로 되돌리면 서버에 있던 선이 모두 지워진 채 저장된다.
     const history = useRef<DrawingHistory>({undo: [], redo: []});
     const drawingsRef = useRef(drawings);
     useEffect(() => {
         history.current = {undo: [], redo: []};
-    }, [assetType, assetCode]);
+    }, [assetType, assetCode, drawingsReady]);
 
     const changeDrawings = (next: Drawing[]) => {
         const {undo} = history.current;

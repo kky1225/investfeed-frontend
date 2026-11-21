@@ -240,7 +240,7 @@ export const useChartStorage = (assetType: AssetType | undefined, assetCode: str
     }, [serverSetting, queryClient]);
 
     return {
-        drawings, updateDrawings,
+        drawings, updateDrawings, drawingsReady,
         indicators, setIndicatorOn, setIndicatorValues, removeIndicator,
         chartType, setChartType,
         logScale, setLogScale,
