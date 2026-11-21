@@ -187,13 +187,19 @@ const CandleChart = ({
     useEffect(() => {
         history.current = {undo: [], redo: []};
     }, [assetType, assetCode, drawingsReady]);
+    // 같은 종목을 다른 차트(멀티뷰 패널과 자세히 보기 창)에서 함께 열면 선 목록을 같이 쓴다. 다른 차트가 목록을
+    // 바꾸면 이 차트의 이력은 그 전 목록이라, 되돌리면 다른 차트에서 그은 선이 지워진다. 그때도 이력을 비운다.
+    const ownDrawings = useRef<Drawing[] | null>(null);     // 이 차트가 마지막으로 바꿔 넣은 목록
+    useEffect(() => {
+        if (drawings !== ownDrawings.current) history.current = {undo: [], redo: []};
+    }, [drawings]);
 
     const changeDrawings = (next: Drawing[]) => {
         const {undo} = history.current;
         undo.push(drawingsRef.current);
         if (undo.length > MAX_UNDO) undo.shift();
         history.current.redo = [];
-        updateDrawings(next);
+        ownDrawings.current = updateDrawings(next);
     };
 
     /** 한 단계 되돌리거나(undo) 되돌린 것을 다시 실행한다(redo). */
@@ -201,7 +207,7 @@ const CandleChart = ({
         const previous = history.current[direction].pop();
         if (!previous) return;
         history.current[direction === 'undo' ? 'redo' : 'undo'].push(drawingsRef.current);
-        updateDrawings(previous);
+        ownDrawings.current = updateDrawings(previous);
     };
 
     /**

@@ -102,15 +102,23 @@ export const useChartStorage = (assetType: AssetType | undefined, assetCode: str
     } = useDelayedSave(SAVE_DELAY_MS);
     useEffect(() => flushDrawingSave, [flushDrawingSave, drawingsKey]);
 
-    const updateDrawings = (next: Drawing[]) => {
+    /**
+     * 선 목록을 바꾸고, 화면이 쓰게 되는 목록을 돌려준다.
+     * (조회 캐시는 받은 배열을 그대로 두지 않고 이전 것과 견줘 새 배열로 바꿔 넣으므로, 받은 배열과 다를 수 있다)
+     */
+    const updateDrawings = (next: Drawing[]): Drawing[] => {
         if (!assetType || !assetCode || !drawingsReady) {
             setLocalDrawings(next);
-            return;
+            return next;
         }
-        queryClient.setQueryData(drawingsKey, next);
+        const stored = queryClient.setQueryData<Drawing[]>(drawingsKey, next) ?? next;
         scheduleDrawingSave(() => {
-            saveChartDrawings(assetType, assetCode, next).catch(reportSaveError);
+            // 보내는 시점에 화면이 쓰고 있는 목록을 보낸다. 같은 종목을 다른 차트(멀티뷰 패널과 자세히 보기 창)에서
+            // 함께 열면 목록을 같이 쓰므로, 맡길 때의 목록을 보내면 그 사이 다른 차트에서 그은 선이 지워진다.
+            saveChartDrawings(assetType, assetCode, queryClient.getQueryData<Drawing[]>(drawingsKey) ?? next)
+                .catch(reportSaveError);
         });
+        return stored;
     };
 
     // 예전에 브라우저에 저장해 둔 선을 계정으로 한 번 옮긴다. 서버에 이미 선이 있으면 서버 것을 쓴다.
