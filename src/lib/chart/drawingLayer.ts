@@ -87,6 +87,7 @@ interface Box {
 export interface DrawingHost {
     layout: () => Layout | null,    // 마지막으로 그린 배치
     candles: () => Candle[],
+    hasOlder: () => boolean,        // 더 받을 과거 구간이 남아 있는지
     timeUnit: () => TimeUnit,       // 수직선의 날짜 라벨 표기 단위
     // index 번째 캔들 자리에서 가격 영역에 그려진 선들의 값(이동평균선, 볼린저밴드 등). 자석이 지표 선에 붙을 때 쓴다
     lineValues: (index: number) => number[],
@@ -97,6 +98,7 @@ export interface DrawingHost {
     selectionChanged: (id: string | null) => void,
     textRequested: (request: TextRequest) => void,      // 글자를 입력받아 달라고 요청
     limitReached: () => void,       // 도형이 이미 MAX_DRAWINGS 개라 더 넣지 못함
+    beforeRangeBlocked: () => void, // 받아 둔 캔들보다 앞선 점이 있는 도형이라 복제하지 못함
 }
 
 /** 글자 도형의 크기 (CSS px) */
@@ -157,14 +159,28 @@ export class DrawingLayer {
         const move = this.move;
         if (move) {
             const current = move.changed ? undefined
-                : drawings.find(drawing => drawing.id === move.original.id && !drawing.hidden && !drawing.locked);
+                : drawings.find(drawing => (
+                    drawing.id === move.original.id && !drawing.hidden && !drawing.locked
+                    && this.canMove(drawing, move.part)
+                ));
             this.move = current ? {...move, original: current} : null;
         }
         // 선택한 도형이 지워졌거나 숨겨졌으면 선택을 푼다.
-        if (this.selectedId && !drawings.some(drawing => drawing.id === this.selectedId && !drawing.hidden)) {
-            this.select(null);
-        }
+        this.dropUnseenSelection();
         this.host.redraw();
+    }
+
+    /** 캔들이 바뀌었을 때(주기 변경, 과거 구간이 붙음) 부른다. 그릴 자리가 없어진 도형은 선택을 푼다. */
+    candlesChanged() {
+        this.dropUnseenSelection();
+    }
+
+    /** 선택한 도형이 지워졌거나 숨겨졌거나 그릴 자리가 없으면 선택을 푼다. 보이지 않는 도형이 지워지거나 바뀌지 않게 한다. */
+    private dropUnseenSelection() {
+        const selectedId = this.selectedId;
+        if (!selectedId) return;
+        const selected = this.drawings.find(drawing => drawing.id === selectedId);
+        if (!selected || selected.hidden || this.isBeforeRange(selected)) this.select(null);
     }
 
     /** 그리기 도구를 고른다. null 이면 선택·이동 상태로 돌아간다. */
@@ -269,6 +285,11 @@ export class DrawingLayer {
         const layout = this.host.layout();
         const original = this.drawings.find(drawing => drawing.id === id);
         if (!layout || !original || this.isFull()) return;
+        // 받아 둔 캔들보다 앞선 점은 제자리를 알 수 없어, 비켜 놓을 자리를 정하지 못한다.
+        if (!this.canMove(original, 'body')) {
+            this.host.beforeRangeBlocked();
+            return;
+        }
         const pane = layout.panes[0];
         const toY = paneToY(pane);
         const toPrice = paneToValue(pane);
@@ -328,7 +349,8 @@ export class DrawingLayer {
         }
         this.select(hit.drawing.id);
         // 잠근 도형은 선택만 하고 옮기지 않는다. 끌면 차트가 이동한다.
-        if (hit.drawing.locked) return false;
+        // 받아 둔 캔들보다 앞선 점이 걸린 옮기기도 마찬가지다(그 점의 시각이 첫 캔들의 시각으로 바뀌어 버린다).
+        if (hit.drawing.locked || !this.canMove(hit.drawing, hit.part)) return false;
         this.move = {part: hit.part, start: point, original: hit.drawing, changed: false};
         return true;
     }
@@ -392,7 +414,7 @@ export class DrawingLayer {
      */
     render(painter: Painter, layout: Layout, style: ChartStyle) {
         const draft = this.draft;
-        const shown = this.drawings.filter(drawing => !drawing.hidden);
+        const shown = this.drawings.filter(drawing => !drawing.hidden && !this.isBeforeRange(drawing));
         const drawings: Drawing[] = draft ? [...shown, this.created(this.draftShape(draft), DRAFT_ID)] : shown;
         if (drawings.length === 0) return;
 
@@ -505,9 +527,9 @@ export class DrawingLayer {
                 }
             }
 
-            // 잠근 도형은 점을 고칠 수 없으므로 손잡이를 그리지 않는다.
+            // 잠근 도형은 점을 고칠 수 없으므로 손잡이를 그리지 않는다. 받아 둔 캔들보다 앞선 점도 마찬가지다.
             if (active && !drawing.locked) {
-                geometry.handles.forEach(([, point]) => {
+                geometry.handles.filter(([part]) => this.canMove(drawing, part)).forEach(([, point]) => {
                     ctx.fillRect(
                         Math.round(point.x * painter.dpr - handle / 2), Math.round(point.y * painter.dpr - handle / 2),
                         handle, handle,
@@ -624,6 +646,46 @@ export class DrawingLayer {
     }
 
     // ---------- 자리 계산 ----------
+
+    // 받아 둔 캔들보다 앞선 시각의 점은 제자리를 알 수 없다(과거 구간을 더 받아 와야 안다. 분봉처럼 받아 둔 기간이
+    // 짧은 주기로 바꿨을 때 흔하다). 순번으로는 첫 캔들 자리가 되므로, 그대로 그리거나 옮기면 엉뚱한 자리가 된다.
+    // 그래서 점이 모두 앞서면 그리지 않고, 일부만 앞서면 그리되 그 점이 움직이는 옮기기와 복제를 막는다.
+    // 더 받을 과거가 없으면(끝까지 받았거나 이어 받을 수 없는 차트) 기다려도 제자리가 생기지 않으므로,
+    // 앞선 점으로 보지 않고 첫 캔들 자리에 놓는다.
+
+    /** 도형에서 캔들 시각에 놓인 점들과, 그 점을 끄는 부분. 수평선에는 없다 */
+    private timedSpots(drawing: Drawing): [Part, { time: number }][] {
+        switch (drawing.type) {
+            case 'horizontal':
+                return [];
+            case 'vertical':
+                return [['body', drawing]];
+            case 'text':
+                return [['body', drawing.from]];
+            case 'channel':
+                return [['from', drawing.from], ['to', drawing.to], ['third', drawing.third]];
+            default:
+                return [['from', drawing.from], ['to', drawing.to]];
+        }
+    }
+
+    /** 받아 둔 캔들보다 앞선 시각이고, 그 구간을 더 받아 올 수 있는지 */
+    private isEarly(spot: { time: number }): boolean {
+        const first = this.host.candles()[0];
+        return first !== undefined && spot.time < first.time && this.host.hasOlder();
+    }
+
+    /** 도형의 점이 모두 받아 둔 캔들보다 앞서서, 그릴 자리가 없는지 */
+    private isBeforeRange(drawing: Drawing): boolean {
+        const spots = this.timedSpots(drawing);
+        return spots.length > 0 && spots.every(([, spot]) => this.isEarly(spot));
+    }
+
+    /** 도형의 part 를 끌어 옮겨도 되는지. 전체(body)를 옮기면 모든 점이, 점 하나를 잡으면 그 점만 움직인다 */
+    private canMove(drawing: Drawing, part: Part): boolean {
+        const early = this.timedSpots(drawing).filter(([, spot]) => this.isEarly(spot));
+        return part === 'body' ? early.length === 0 : !early.some(([earlyPart]) => earlyPart === part);
+    }
 
     /** 점이 놓인 순번. 미래 구간의 점은 마지막 캔들 뒤의 순번이 된다. */
     private indexOf(spot: { time: number, offset?: number | null }): number {
@@ -816,7 +878,7 @@ export class DrawingLayer {
 
         for (let order = this.drawings.length - 1; order >= 0; order--) {
             const drawing = this.drawings[order];
-            if (drawing.hidden || (belowPrice && drawing.type !== 'vertical')) continue;
+            if (drawing.hidden || this.isBeforeRange(drawing) || (belowPrice && drawing.type !== 'vertical')) continue;
             const geometry = this.geometryOf(drawing, layout);
             const handle = geometry.handles.find(([, spot]) => distance(point, spot) <= HIT_TOLERANCE + 2);
             if (handle) return {drawing, part: handle[0]};

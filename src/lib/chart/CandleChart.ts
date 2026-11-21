@@ -140,6 +140,7 @@ export class CandleChartEngine {
     private tradeMarkers: TradeMarker[] = [];
     // tradeMarkers 를 캔들 순번으로 찾게 만든 것. 캔들이나 표시가 바뀌면 다시 만든다
     private tradeMarkersByIndex = new Map<number, TradeMarker[]>();
+    private hasOlder = false;       // 더 받을 과거 구간이 남아 있는지
     private comparisons: Comparison[] = [];
     private comparisonAlign: ComparisonAlign = 'time';
     private comparisonCloses: Series[] = [];    // comparisons 와 같은 순서. 주 종목의 캔들 순번에 맞춘 종가
@@ -157,6 +158,8 @@ export class CandleChartEngine {
     onTextRequest: ((request: TextRequest) => void) | null = null;
     /** 도형이 이미 가득 차서(MAX_DRAWINGS) 새로 그리거나 복제하지 못했을 때 알린다. */
     onDrawingLimit: (() => void) | null = null;
+    /** 받아 둔 캔들보다 앞선 점이 있는 도형이라 복제하지 못했을 때 알린다. (과거 구간을 더 받아 오면 된다) */
+    onDrawingBeforeRange: (() => void) | null = null;
     /**
      * 영역 사이의 경계를 끌어 크기를 바꾸면 알린다. 끄는 동안 계속 부르고, 손을 떼면 done 이 true 다.
      * 차트 전체 높이가 달라지므로 받는 쪽은 엔진을 담은 요소의 높이를 맞추고, 값을 setPaneSizes 로 다시 넘긴다.
@@ -180,6 +183,7 @@ export class CandleChartEngine {
     private readonly drawingLayer = new DrawingLayer({
         layout: () => this.layout,
         candles: () => this.candles,
+        hasOlder: () => this.hasOlder,
         timeUnit: () => this.timeUnit,
         lineValues: index => [...this.averages, ...this.priceOverlays.flatMap(overlay => overlay.series)]
             .map(series => series[index])
@@ -191,6 +195,7 @@ export class CandleChartEngine {
         selectionChanged: id => this.onSelectionChange?.(id),
         textRequested: request => this.onTextRequest?.(request),
         limitReached: () => this.onDrawingLimit?.(),
+        beforeRangeBlocked: () => this.onDrawingBeforeRange?.(),
     });
 
     constructor(container: HTMLElement) {
@@ -255,7 +260,16 @@ export class CandleChartEngine {
         this.indexTradeMarkers();
         this.measurePrices();
         this.computeSeries();
+        this.drawingLayer.candlesChanged();
         this.scheduleDraw();
+    }
+
+    /** 더 받을 과거 구간이 남아 있는지 알린다. 받아 둔 캔들보다 앞선 자리의 도형을 어떻게 다룰지가 이 값에 달려 있다. */
+    setHasOlder(hasOlder: boolean) {
+        if (this.hasOlder === hasOlder) return;
+        this.hasOlder = hasOlder;
+        this.drawingLayer.candlesChanged();
+        this.scheduleOverlay();
     }
 
     setStyle(style: ChartStyle) {

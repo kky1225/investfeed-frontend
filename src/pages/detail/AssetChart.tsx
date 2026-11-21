@@ -142,7 +142,7 @@ const AssetChart = ({
         (cursor: string | null) => fetchCandlePage(market, code, chartType, cursor, exchange),
         [market, code, chartType, exchange],
     );
-    const {history, loadOlder} = useCandleHistory(seriesKey, fetchOlder);
+    const {history, loadOlder, done: historyDone} = useCandleHistory(seriesKey, fetchOlder);
 
     // 실시간 현재가를 마지막 캔들에 반영하고, 과거 구간을 앞에 붙인다.
     const fullCandles = useMemo(() => {
@@ -279,6 +279,7 @@ const AssetChart = ({
                     assetType={storage.assetType}
                     assetCode={storage.assetCode}
                     onLoadOlder={hasHistory ? loadOlder : undefined}
+                    hasOlder={hasHistory && !historyDone}
                     comparison={comparison}
                     priceLines={priceLines}
                     onPriceLineMove={handleTargetMove}

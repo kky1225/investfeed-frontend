@@ -57,6 +57,9 @@ export interface CandleChartProps {
     // 화면 왼쪽 끝이 받아 둔 캔들의 처음에 가까워지면 부른다. 가까운 동안 여러 번 부르므로
     // 받는 쪽에서 요청 중이거나 더 받을 것이 없으면 무시해야 한다 (useCandleHistory 의 loadOlder)
     onLoadOlder?: () => void,
+    // 더 받을 과거 구간이 남아 있는지. 남아 있으면 받아 둔 캔들보다 앞선 자리에 그린 선은 그 구간을 받을 때까지
+    // 보이지 않고, 없으면 첫 캔들 자리에 놓는다.
+    hasOlder?: boolean,
     // 종목 비교에 쓸 검색·캔들 조회. 주면 설정 창에 종목 비교 칸이 생긴다. 주기가 바뀔 때만 바뀌는 값을 넘길 것
     comparison?: ChartComparisonSource,
     toolbarStart?: ReactNode,   // 위쪽 줄 맨 앞에 놓을 화면별 버튼 (주기, 차트 종류 등)
@@ -138,7 +141,7 @@ interface DrawingHistory {
 }
 
 const CandleChart = ({
-    candles, timeUnit, interval, seriesKey, assetType, assetCode, toolbarStart, onLoadOlder, comparison, onPriceLineMove,
+    candles, timeUnit, interval, seriesKey, assetType, assetCode, toolbarStart, onLoadOlder, hasOlder = false, comparison, onPriceLineMove,
     movingAverages = DEFAULT_MOVING_AVERAGES, indicators = DEFAULT_INDICATORS, priceLines = NO_PRICE_LINES,
     tradeMarkers = NO_TRADE_MARKERS, onTradesChange, tradesNotice,
     height = 400,
@@ -530,6 +533,10 @@ const CandleChart = ({
         engine.onDrawingLimit = () => showAlert(
             `선은 종목당 ${MAX_DRAWINGS}개까지 그릴 수 있습니다. 쓰지 않는 선을 지운 뒤 다시 그려주세요.`, 'warning',
         );
+        engine.onDrawingBeforeRange = () => showAlert(
+            '선의 일부가 불러온 차트보다 과거에 있어 복제할 수 없습니다. 차트를 과거로 옮겨 그 구간을 불러온 뒤 다시 해주세요.',
+            'info',
+        );
         engine.onPaneResize = (change, done) => resizePaneRef.current(change, done);
         engine.onContextMenu = openContextMenu;
         engine.onPriceLineMove = (id, price) => priceLineMoveRef.current?.(id, price);
@@ -628,6 +635,10 @@ const CandleChart = ({
     useEffect(() => {
         engineRef.current?.setData(candles, timeUnit);
     }, [candles, timeUnit]);
+
+    useEffect(() => {
+        engineRef.current?.setHasOlder(hasOlder);
+    }, [hasOlder]);
 
     useEffect(() => {
         engineRef.current?.setCandleInterval(interval ?? null);

@@ -62,5 +62,7 @@ export const useCandleHistory = (seriesKey: string, fetchPage: (cursor: string |
             });
     }, [seriesKey]);
 
-    return {history: state.key === seriesKey ? state.candles : [], loadOlder};
+    const current = state.key === seriesKey;
+    // done: 더 받을 과거가 없는지 (끝까지 받았음)
+    return {history: current ? state.candles : [], loadOlder, done: current && state.done};
 };
