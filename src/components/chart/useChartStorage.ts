@@ -1,5 +1,6 @@
 import {useCallback, useEffect, useMemo, useRef, useState} from "react";
 import {queryOptions, useQuery, useQueryClient} from "@tanstack/react-query";
+import type {AxiosRequestConfig} from "axios";
 import {requireOk} from "../../lib/apiResponse.ts";
 import {
     fetchChartDrawings, fetchChartSetting, saveChartDrawings, saveChartSetting,
@@ -24,8 +25,25 @@ const LEGACY_TOOLBAR_KEY = 'drawingToolbar';    // 예전 브라우저 저장분
 
 const reportSaveError = (error: unknown) => console.error(error);
 
-/** 저장 한 번. 서버가 받아들이지 않으면 실패(reject)여야 한다. quiet 면 실패해도 오류 창을 띄우지 않는다 */
-type SaveRun = (quiet?: boolean) => Promise<unknown>;
+/**
+ * 저장을 보내는 방식. quiet 는 실패해도 오류 창을 띄우지 않는다.
+ * closing 은 탭이 가려지는 순간에 보내는 것으로, 페이지가 닫히거나 새로고침되어도 요청이 끊기지 않게 한다.
+ */
+type SaveMode = 'quiet' | 'closing';
+/** 저장 한 번. 서버가 받아들이지 않으면 실패(reject)여야 한다 */
+type SaveRun = (mode?: SaveMode) => Promise<unknown>;
+
+// 페이지가 닫혀도 이어지는 요청(keepalive)은 브라우저가 본문 크기를 64KB 로 제한한다. 넘으면 보통 요청으로 보낸다
+// (그 저장은 탭을 바꿀 때는 나가지만, 새로고침하거나 닫을 때는 끊길 수 있다).
+const KEEPALIVE_BODY_LIMIT = 60_000;
+
+/** 저장 요청에 붙일 설정. body 는 보낼 내용(크기를 재는 데만 쓴다) */
+const saveConfig = (mode: SaveMode | undefined, body: unknown): AxiosRequestConfig => {
+    if (mode === 'quiet') return {skipGlobalError: true};
+    if (mode !== 'closing' || new Blob([JSON.stringify(body)]).size > KEEPALIVE_BODY_LIMIT) return {};
+    // keepalive 는 fetch 로만 보낼 수 있다. fetch 를 쓸 수 없는 환경이면 보통 요청(xhr)으로 보낸다
+    return {adapter: ['fetch', 'xhr'], fetchOptions: {keepalive: true}};
+};
 
 // 차트 설정 조회. 회원당 하나라 모든 차트가 같은 조회를 함께 쓴다
 const settingQueryOptions = queryOptions<ChartSetting>({
@@ -49,6 +67,7 @@ export const useChartTradesSetting = (): boolean => useQuery(settingQueryOptions
  * 선이 너무 많은 경우처럼 다시 보내도 실패하는 저장이 있기 때문이다). 그 뒤의 저장이 성공하면 failed 가 풀린다.
  * leave 는 저장하던 대상을 떠날 때(종목이 바뀜, 화면을 나감) 부른다. 밀린 저장을 바로 보내고 실패한 저장은 조용히
  * 한 번 더 보낸 뒤, 그 결과는 더 따라가지 않는다(다음 대상의 저장 표시에 섞이지 않게).
+ * flushClosing 은 탭이 가려질 때 부른다. 밀린 저장만, 페이지가 닫혀도 끊기지 않는 요청으로 바로 보낸다.
  */
 const useDelayedSave = (delayMs: number) => {
     const pending = useRef<{ timer: ReturnType<typeof setTimeout>, run: SaveRun } | null>(null);
@@ -56,7 +75,7 @@ const useDelayedSave = (delayMs: number) => {
     const sendCount = useRef(0);    // 가장 나중에 보낸 저장의 결과만 반영하려고 센다
     const [waiting, setWaiting] = useState(false);
     const [failed, setFailed] = useState(false);
-    const send = useCallback((run: SaveRun) => {
+    const send = useCallback((run: SaveRun, mode?: SaveMode) => {
         const order = ++sendCount.current;
         failedRun.current = null;
         setWaiting(true);
@@ -64,7 +83,7 @@ const useDelayedSave = (delayMs: number) => {
         const settle = () => {
             if (!pending.current) setWaiting(false);
         };
-        run().then(() => {
+        run(mode).then(() => {
             if (order !== sendCount.current) return;
             setFailed(false);
             settle();
@@ -86,6 +105,13 @@ const useDelayedSave = (delayMs: number) => {
             send(failedRun.current);
         }
     }, [send]);
+    const flushClosing = useCallback(() => {
+        const current = pending.current;
+        if (!current) return;
+        clearTimeout(current.timer);
+        pending.current = null;
+        send(current.run, 'closing');
+    }, [send]);
     const leave = useCallback(() => {
         const current = pending.current;
         const retry = failedRun.current;
@@ -97,7 +123,7 @@ const useDelayedSave = (delayMs: number) => {
         setFailed(false);
         // 밀린 저장은 보내는 시점의 내용을 보내므로 실패한 저장의 내용도 담고 있다
         if (current) current.run().catch(reportSaveError);
-        else if (retry) retry(true).catch(reportSaveError);
+        else if (retry) retry('quiet').catch(reportSaveError);
     }, []);
     const schedule = useCallback((run: SaveRun) => {
         if (pending.current) clearTimeout(pending.current.timer);
@@ -110,7 +136,7 @@ const useDelayedSave = (delayMs: number) => {
             }, delayMs),
         };
     }, [delayMs, send]);
-    return {schedule, flush, leave, waiting, failed};
+    return {schedule, flush, flushClosing, leave, waiting, failed};
 };
 
 /**
@@ -148,7 +174,8 @@ export const useChartStorage = (assetType: AssetType | undefined, assetCode: str
 
     // 밀린 저장. 종목이 바뀌거나 화면을 떠날 때는 기다리지 않고 바로 보낸다.
     const {
-        schedule: scheduleDrawingSave, flush: flushDrawingSave, leave: leaveDrawingSave,
+        schedule: scheduleDrawingSave, flush: flushDrawingSave, flushClosing: flushClosingDrawingSave,
+        leave: leaveDrawingSave,
         waiting: drawingSaveWaiting, failed: drawingSaveFailed,
     } = useDelayedSave(SAVE_DELAY_MS);
     useEffect(() => leaveDrawingSave, [leaveDrawingSave, drawingsKey]);
@@ -163,11 +190,11 @@ export const useChartStorage = (assetType: AssetType | undefined, assetCode: str
             return next;
         }
         const stored = queryClient.setQueryData<Drawing[]>(drawingsKey, next) ?? next;
-        scheduleDrawingSave(quiet => {
+        scheduleDrawingSave(mode => {
             // 보내는 시점에 화면이 쓰고 있는 목록을 보낸다. 같은 종목을 다른 차트(멀티뷰 패널과 자세히 보기 창)에서
             // 함께 열면 목록을 같이 쓰므로, 맡길 때의 목록을 보내면 그 사이 다른 차트에서 그은 선이 지워진다.
             const latest = queryClient.getQueryData<Drawing[]>(drawingsKey) ?? next;
-            return saveChartDrawings(assetType, assetCode, latest, {skipGlobalError: quiet})
+            return saveChartDrawings(assetType, assetCode, latest, saveConfig(mode, latest))
                 .then(res => requireOk(res, '그린 선 저장'));
         });
         return stored;
@@ -207,10 +234,29 @@ export const useChartStorage = (assetType: AssetType | undefined, assetCode: str
 
     // 밀린 설정 저장. 화면을 떠날 때는 기다리지 않고 바로 보낸다.
     const {
-        schedule: scheduleSettingSave, flush: flushSettingSave, leave: leaveSettingSave,
+        schedule: scheduleSettingSave, flush: flushSettingSave, flushClosing: flushClosingSettingSave,
+        leave: leaveSettingSave,
         waiting: settingSaveWaiting, failed: settingSaveFailed,
     } = useDelayedSave(SAVE_DELAY_MS);
     useEffect(() => leaveSettingSave, [leaveSettingSave]);
+
+    // 탭이 가려지면(다른 탭으로 감, 새로고침, 탭·창 닫기) 밀린 저장을 기다리지 않고 보낸다.
+    // 새로고침이나 닫기에서는 화면을 떠날 때의 정리가 실행되지 않아, 5초를 기다리던 저장이 그대로 사라지기 때문이다.
+    useEffect(() => {
+        const sendPending = () => {
+            flushClosingDrawingSave();
+            flushClosingSettingSave();
+        };
+        const handleVisibility = () => {
+            if (document.visibilityState === 'hidden') sendPending();
+        };
+        document.addEventListener('visibilitychange', handleVisibility);
+        window.addEventListener('pagehide', sendPending);   // visibilitychange 없이 닫히는 브라우저용
+        return () => {
+            document.removeEventListener('visibilitychange', handleVisibility);
+            window.removeEventListener('pagehide', sendPending);
+        };
+    }, [flushClosingDrawingSave, flushClosingSettingSave]);
 
     // 아직 저장되지 않은 것이 있는지(보내지 않았거나 보냈다가 실패함)와, 기다리지 않고 지금 보내기
     // (저장 버튼, 설정 창을 닫을 때). 실패한 저장도 이때 다시 보낸다.
@@ -230,10 +276,10 @@ export const useChartStorage = (assetType: AssetType | undefined, assetCode: str
             magnetIndicators, grid, trades, volumeRatio, mainHeight, paneOrder, ...change,
         };
         queryClient.setQueryData(SETTINGS_KEY, next);
-        scheduleSettingSave(quiet => {
+        scheduleSettingSave(mode => {
             // 보내는 시점에 화면이 쓰고 있는 설정을 보낸다
             const latest = queryClient.getQueryData<ChartSetting>(SETTINGS_KEY) ?? next;
-            return saveChartSetting(latest, {skipGlobalError: quiet})
+            return saveChartSetting(latest, saveConfig(mode, latest))
                 .then(res => requireOk(res, '차트 설정 저장'));
         });
     };
