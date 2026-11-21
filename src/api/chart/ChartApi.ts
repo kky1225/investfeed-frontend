@@ -10,8 +10,10 @@ export const fetchChartSetting = async (config?: AxiosRequestConfig): Promise<Ap
     return res.data;
 };
 
-export const saveChartSetting = async (req: ChartSetting): Promise<ApiResponse<ChartSetting>> => {
-    const res = await api.put<ApiResponse<ChartSetting>>("/chart/settings", req);
+export const saveChartSetting = async (
+    req: ChartSetting, config?: AxiosRequestConfig,
+): Promise<ApiResponse<ChartSetting>> => {
+    const res = await api.put<ApiResponse<ChartSetting>>("/chart/settings", req, config);
     return res.data;
 };
 
@@ -26,10 +28,10 @@ export const fetchChartDrawings = async (
 
 /** 이 종목의 선 전체를 바꾼다. 빈 목록이면 모두 삭제 */
 export const saveChartDrawings = async (
-    assetType: AssetType, assetCode: string, drawings: Drawing[],
+    assetType: AssetType, assetCode: string, drawings: Drawing[], config?: AxiosRequestConfig,
 ): Promise<ApiResponse<ChartDrawingRes>> => {
     const res = await api.put<ApiResponse<ChartDrawingRes>>(
-        `/chart/drawings/${assetType}/${encodeURIComponent(assetCode)}`, {drawings},
+        `/chart/drawings/${assetType}/${encodeURIComponent(assetCode)}`, {drawings}, config,
     );
     return res.data;
 };

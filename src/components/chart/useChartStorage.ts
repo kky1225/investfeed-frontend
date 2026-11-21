@@ -24,6 +24,9 @@ const LEGACY_TOOLBAR_KEY = 'drawingToolbar';    // 예전 브라우저 저장분
 
 const reportSaveError = (error: unknown) => console.error(error);
 
+/** 저장 한 번. 서버가 받아들이지 않으면 실패(reject)여야 한다. quiet 면 실패해도 오류 창을 띄우지 않는다 */
+type SaveRun = (quiet?: boolean) => Promise<unknown>;
+
 // 차트 설정 조회. 회원당 하나라 모든 차트가 같은 조회를 함께 쓴다
 const settingQueryOptions = queryOptions<ChartSetting>({
     queryKey: SETTINGS_KEY,
@@ -42,19 +45,54 @@ export const useChartTradesSetting = (): boolean => useQuery(settingQueryOptions
  * 저장을 모아서 보낸다. schedule 로 맡긴 저장은 마지막으로 맡긴 뒤 delayMs 가 지나면 한 번만 실행되고,
  * 그 사이에 다시 맡기면 앞의 것은 버린다. flush 는 밀린 저장을 기다리지 않고 바로 실행한다.
  * waiting 은 아직 보내지 않은 저장이 있는지.
+ * 보낸 저장이 실패하면 failed 가 true 가 되고, 그 저장은 다음 flush 때 다시 보낸다(스스로 되풀이해 보내지는 않는다.
+ * 선이 너무 많은 경우처럼 다시 보내도 실패하는 저장이 있기 때문이다). 그 뒤의 저장이 성공하면 failed 가 풀린다.
+ * leave 는 저장하던 대상을 떠날 때(종목이 바뀜, 화면을 나감) 부른다. 밀린 저장을 바로 보내고 실패한 저장은 조용히
+ * 한 번 더 보낸 뒤, 그 결과는 더 따라가지 않는다(다음 대상의 저장 표시에 섞이지 않게).
  */
 const useDelayedSave = (delayMs: number) => {
-    const pending = useRef<{ timer: ReturnType<typeof setTimeout>, run: () => void } | null>(null);
+    const pending = useRef<{ timer: ReturnType<typeof setTimeout>, run: SaveRun } | null>(null);
+    const failedRun = useRef<SaveRun | null>(null);     // 보냈다가 실패해 다시 보내야 하는 저장
+    const sendCount = useRef(0);    // 가장 나중에 보낸 저장의 결과만 반영하려고 센다
     const [waiting, setWaiting] = useState(false);
+    const [failed, setFailed] = useState(false);
+    const send = useCallback((run: SaveRun) => {
+        const order = ++sendCount.current;
+        failedRun.current = null;
+        run().then(() => {
+            if (order === sendCount.current) setFailed(false);
+        }).catch((error: unknown) => {
+            console.error(error);
+            if (order !== sendCount.current) return;
+            failedRun.current = run;
+            setFailed(true);
+        });
+    }, []);
     const flush = useCallback(() => {
         const current = pending.current;
-        if (!current) return;
-        clearTimeout(current.timer);
+        if (current) {
+            clearTimeout(current.timer);
+            pending.current = null;
+            setWaiting(false);
+            send(current.run);
+        } else if (failedRun.current) {
+            send(failedRun.current);
+        }
+    }, [send]);
+    const leave = useCallback(() => {
+        const current = pending.current;
+        const retry = failedRun.current;
+        if (current) clearTimeout(current.timer);
         pending.current = null;
+        failedRun.current = null;
+        sendCount.current++;    // 보내 둔 저장의 결과도 더는 반영하지 않는다
         setWaiting(false);
-        current.run();
+        setFailed(false);
+        // 밀린 저장은 보내는 시점의 내용을 보내므로 실패한 저장의 내용도 담고 있다
+        if (current) current.run().catch(reportSaveError);
+        else if (retry) retry(true).catch(reportSaveError);
     }, []);
-    const schedule = useCallback((run: () => void) => {
+    const schedule = useCallback((run: SaveRun) => {
         if (pending.current) clearTimeout(pending.current.timer);
         setWaiting(true);
         pending.current = {
@@ -62,11 +100,11 @@ const useDelayedSave = (delayMs: number) => {
             timer: setTimeout(() => {
                 pending.current = null;
                 setWaiting(false);
-                run();
+                send(run);
             }, delayMs),
         };
-    }, [delayMs]);
-    return {schedule, flush, waiting};
+    }, [delayMs, send]);
+    return {schedule, flush, leave, waiting, failed};
 };
 
 /**
@@ -104,9 +142,10 @@ export const useChartStorage = (assetType: AssetType | undefined, assetCode: str
 
     // 밀린 저장. 종목이 바뀌거나 화면을 떠날 때는 기다리지 않고 바로 보낸다.
     const {
-        schedule: scheduleDrawingSave, flush: flushDrawingSave, waiting: drawingSaveWaiting,
+        schedule: scheduleDrawingSave, flush: flushDrawingSave, leave: leaveDrawingSave,
+        waiting: drawingSaveWaiting, failed: drawingSaveFailed,
     } = useDelayedSave(SAVE_DELAY_MS);
-    useEffect(() => flushDrawingSave, [flushDrawingSave, drawingsKey]);
+    useEffect(() => leaveDrawingSave, [leaveDrawingSave, drawingsKey]);
 
     /**
      * 선 목록을 바꾸고, 화면이 쓰게 되는 목록을 돌려준다.
@@ -118,11 +157,12 @@ export const useChartStorage = (assetType: AssetType | undefined, assetCode: str
             return next;
         }
         const stored = queryClient.setQueryData<Drawing[]>(drawingsKey, next) ?? next;
-        scheduleDrawingSave(() => {
+        scheduleDrawingSave(quiet => {
             // 보내는 시점에 화면이 쓰고 있는 목록을 보낸다. 같은 종목을 다른 차트(멀티뷰 패널과 자세히 보기 창)에서
             // 함께 열면 목록을 같이 쓰므로, 맡길 때의 목록을 보내면 그 사이 다른 차트에서 그은 선이 지워진다.
-            saveChartDrawings(assetType, assetCode, queryClient.getQueryData<Drawing[]>(drawingsKey) ?? next)
-                .catch(reportSaveError);
+            const latest = queryClient.getQueryData<Drawing[]>(drawingsKey) ?? next;
+            return saveChartDrawings(assetType, assetCode, latest, {skipGlobalError: quiet})
+                .then(res => requireOk(res, '그린 선 저장'));
         });
         return stored;
     };
@@ -161,12 +201,15 @@ export const useChartStorage = (assetType: AssetType | undefined, assetCode: str
 
     // 밀린 설정 저장. 화면을 떠날 때는 기다리지 않고 바로 보낸다.
     const {
-        schedule: scheduleSettingSave, flush: flushSettingSave, waiting: settingSaveWaiting,
+        schedule: scheduleSettingSave, flush: flushSettingSave, leave: leaveSettingSave,
+        waiting: settingSaveWaiting, failed: settingSaveFailed,
     } = useDelayedSave(SAVE_DELAY_MS);
-    useEffect(() => flushSettingSave, [flushSettingSave]);
+    useEffect(() => leaveSettingSave, [leaveSettingSave]);
 
-    // 아직 보내지 않은 저장이 있는지와, 기다리지 않고 지금 보내기 (저장 버튼, 설정 창을 닫을 때)
-    const unsaved = drawingSaveWaiting || settingSaveWaiting;
+    // 아직 저장되지 않은 것이 있는지(보내지 않았거나 보냈다가 실패함)와, 기다리지 않고 지금 보내기
+    // (저장 버튼, 설정 창을 닫을 때). 실패한 저장도 이때 다시 보낸다.
+    const saveFailed = drawingSaveFailed || settingSaveFailed;
+    const unsaved = drawingSaveWaiting || settingSaveWaiting || saveFailed;
     const saveNow = useCallback(() => {
         flushDrawingSave();
         flushSettingSave();
@@ -181,9 +224,11 @@ export const useChartStorage = (assetType: AssetType | undefined, assetCode: str
             magnetIndicators, grid, trades, volumeRatio, mainHeight, paneOrder, ...change,
         };
         queryClient.setQueryData(SETTINGS_KEY, next);
-        scheduleSettingSave(() => {
+        scheduleSettingSave(quiet => {
             // 보내는 시점에 화면이 쓰고 있는 설정을 보낸다
-            saveChartSetting(queryClient.getQueryData<ChartSetting>(SETTINGS_KEY) ?? next).catch(reportSaveError);
+            const latest = queryClient.getQueryData<ChartSetting>(SETTINGS_KEY) ?? next;
+            return saveChartSetting(latest, {skipGlobalError: quiet})
+                .then(res => requireOk(res, '차트 설정 저장'));
         });
     };
 
@@ -269,6 +314,6 @@ export const useChartStorage = (assetType: AssetType | undefined, assetCode: str
         mainHeight, setMainHeight,
         setIndicatorHeight,
         paneOrder, setPaneOrder,
-        unsaved, saveNow,
+        unsaved, saveFailed, saveNow,
     };
 };
