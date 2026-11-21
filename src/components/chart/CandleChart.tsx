@@ -28,11 +28,12 @@ import {
 import {
     Candle, CandleInterval, CHART_TYPES, ChartType, ContextMenuRequest, Drawing, DrawingState, DrawingStyle,
     FIBONACCI_DEFAULT_LEVELS, DrawingTool, IndicatorConfig, IndicatorType,
-    MAGNET_MODES, MagnetMode, MAX_DRAWING_TEXT_LENGTH, PaneResize, PriceLine, SeriesStroke, TextRequest, TimeUnit,
+    MAGNET_MODES, MagnetMode, MAX_DRAWING_TEXT_LENGTH, MAX_DRAWINGS, PaneResize, PriceLine, SeriesStroke, TextRequest, TimeUnit,
     TradeMarker,
 } from "../../lib/chart/types.ts";
 import ChartTypeSelect from "./ChartTypeSelect.tsx";
 import type {AssetType} from "../../type/NotificationType.ts";
+import {useAlert} from "../../context/AlertContext.tsx";
 
 export interface CandleChartProps {
     candles: Candle[],      // 오래된 순
@@ -145,6 +146,7 @@ const CandleChart = ({
     const containerRef = useRef<HTMLDivElement>(null);
     const engineRef = useRef<CandleChartEngine | null>(null);
     const {mode, systemMode} = useColorScheme();
+    const showAlert = useAlert();
 
     // 그린 선과 차트 설정(꺼 둔 지표)은 계정에 저장한다.
     const {
@@ -163,7 +165,7 @@ const CandleChart = ({
         mainHeight: savedMainHeight, setMainHeight,
         setIndicatorHeight,
         paneOrder: savedPaneOrder, setPaneOrder,
-        unsaved, saveNow,
+        unsaved, saveFailed, saveNow,
     } = useChartStorage(assetType, assetCode);
     // 비교 종목. 저장하지 않고 화면을 여는 동안만 들고 있으며, 종목이 바뀌면 비운다.
     const {
@@ -525,6 +527,9 @@ const CandleChart = ({
             textRequestRef.current = request;
             setTextRequest(request);
         };
+        engine.onDrawingLimit = () => showAlert(
+            `선은 종목당 ${MAX_DRAWINGS}개까지 그릴 수 있습니다. 쓰지 않는 선을 지운 뒤 다시 그려주세요.`, 'warning',
+        );
         engine.onPaneResize = (change, done) => resizePaneRef.current(change, done);
         engine.onContextMenu = openContextMenu;
         engine.onPriceLineMove = (id, price) => priceLineMoveRef.current?.(id, price);
@@ -542,7 +547,7 @@ const CandleChart = ({
             engine.destroy();
             engineRef.current = null;
         };
-    }, []);
+    }, [showAlert]);    // showAlert 는 바뀌지 않는다
 
     useEffect(() => {
         engineRef.current?.resetView();
@@ -742,10 +747,13 @@ const CandleChart = ({
                     </Tooltip>
                 )}
                 {/* 바꾼 내용은 잠시 뒤 저절로 저장된다. 그 전에 저장하고 싶을 때 누른다. 저장할 것이 없으면 흐리게 보인다. */}
-                <Tooltip title={unsaved ? '지금 저장 (잠시 뒤 자동 저장)' : '모두 저장됨'}>
+                {/* 저장에 실패하면 다시 보낼 때까지 실패로 보이고, 누르면 다시 보낸다. */}
+                <Tooltip
+                    title={saveFailed ? '저장 실패 (눌러서 다시 저장)' : unsaved ? '지금 저장 (잠시 뒤 자동 저장)' : '모두 저장됨'}
+                >
                     <ChartToolbarButton aria-label="차트 저장" onClick={saveNow}>
                         {/* 버튼 색은 위쪽 줄 공통 모양이 정하므로 아이콘에 직접 입힌다 */}
-                        <SaveIcon sx={{color: unsaved ? 'primary.main' : 'text.disabled'}}/>
+                        <SaveIcon sx={{color: saveFailed ? 'error.main' : unsaved ? 'primary.main' : 'text.disabled'}}/>
                     </ChartToolbarButton>
                 </Tooltip>
                 {/* 같은 자리에서 들어가기와 나가기가 바뀐다. 터치 화면에는 Esc 와 우클릭이 없어 버튼이 필요하다. */}

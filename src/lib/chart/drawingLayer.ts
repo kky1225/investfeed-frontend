@@ -1,6 +1,6 @@
 import {
-    Anchor, Candle, ChartStyle, Drawing, DrawingStyle, DrawingTool, FIBONACCI_DEFAULT_LEVELS, MagnetMode, TextRequest,
-    TimeUnit,
+    Anchor, Candle, ChartStyle, Drawing, DrawingStyle, DrawingTool, FIBONACCI_DEFAULT_LEVELS, MagnetMode, MAX_DRAWINGS,
+    TextRequest, TimeUnit,
 } from "./types.ts";
 import {AXIS_LABEL_OFFSET, AXIS_TAG_HEIGHT, AXIS_TAG_PADDING, DRAG_THRESHOLD} from "./constants.ts";
 import {formatTime} from "./scale.ts";
@@ -96,6 +96,7 @@ export interface DrawingHost {
     toolReleased: () => void,       // 하나를 다 그렸거나 취소해서 도구가 풀림
     selectionChanged: (id: string | null) => void,
     textRequested: (request: TextRequest) => void,      // 글자를 입력받아 달라고 요청
+    limitReached: () => void,       // 도형이 이미 MAX_DRAWINGS 개라 더 넣지 못함
 }
 
 /** 글자 도형의 크기 (CSS px) */
@@ -203,6 +204,7 @@ export class DrawingLayer {
 
     /** 입력받은 글자를 anchor 자리에 도형으로 넣는다. */
     addText(anchor: Anchor, text: string) {
+        if (this.isFull()) return;
         this.changeDrawings([...this.drawings, {...this.newStyle, type: 'text', from: anchor, text, id: createId()}]);
     }
 
@@ -266,7 +268,7 @@ export class DrawingLayer {
     duplicate(id: string) {
         const layout = this.host.layout();
         const original = this.drawings.find(drawing => drawing.id === id);
-        if (!layout || !original) return;
+        if (!layout || !original || this.isFull()) return;
         const pane = layout.panes[0];
         const toY = paneToY(pane);
         const toPrice = paneToValue(pane);
@@ -294,6 +296,8 @@ export class DrawingLayer {
             const anchor = this.anchorAt(point, false, this.magnetFor(invertMagnet));
             if (!anchor) return false;
             const draft = this.draft;
+            // 더 넣을 수 없으면 그리기를 시작하지 않는다. (누른 것은 받은 것으로 해서 차트가 끌려가지 않게 한다)
+            if (!draft && this.isFull()) return true;
             if (tool === 'horizontal') {
                 // 수평선·수직선은 누른 자리에 바로 긋는다.
                 this.add({type: 'horizontal', price: anchor.price});
@@ -590,8 +594,17 @@ export class DrawingLayer {
 
     /** 다 그린 도형을 목록에 넣고 도구를 푼다. */
     private add(shape: DrawingShape) {
+        if (this.isFull()) return;
         this.changeDrawings([...this.drawings, this.created(shape, createId())]);
         this.releaseTool();
+    }
+
+    /** 도형을 더 넣을 수 없는지. 넣을 수 없으면 고른 도구를 풀고 그 사실을 알린다. */
+    private isFull(): boolean {
+        if (this.drawings.length < MAX_DRAWINGS) return false;
+        if (this.tool || this.draft) this.releaseTool();
+        this.host.limitReached();
+        return true;
     }
 
     /** 도형 하나를 다 그렸거나 취소했을 때 도구를 푼다. */

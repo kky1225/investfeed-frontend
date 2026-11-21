@@ -155,6 +155,8 @@ export class CandleChartEngine {
      * 받는 쪽은 입력 칸을 띄우고, 새 글자면 addText 로 넘기고 고치는 것이면 도형 목록을 바꿔 setDrawings 로 넘긴다.
      */
     onTextRequest: ((request: TextRequest) => void) | null = null;
+    /** 도형이 이미 가득 차서(MAX_DRAWINGS) 새로 그리거나 복제하지 못했을 때 알린다. */
+    onDrawingLimit: (() => void) | null = null;
     /**
      * 영역 사이의 경계를 끌어 크기를 바꾸면 알린다. 끄는 동안 계속 부르고, 손을 떼면 done 이 true 다.
      * 차트 전체 높이가 달라지므로 받는 쪽은 엔진을 담은 요소의 높이를 맞추고, 값을 setPaneSizes 로 다시 넘긴다.
@@ -188,6 +190,7 @@ export class CandleChartEngine {
         toolReleased: () => this.onToolChange?.(null),
         selectionChanged: id => this.onSelectionChange?.(id),
         textRequested: request => this.onTextRequest?.(request),
+        limitReached: () => this.onDrawingLimit?.(),
     });
 
     constructor(container: HTMLElement) {

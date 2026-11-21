@@ -73,6 +73,9 @@ export const FIBONACCI_LEVEL_CHOICES = [...FIBONACCI_DEFAULT_LEVELS, 1.272, 1.61
 export const FIBONACCI_LEVEL_LIMIT = {min: 0, max: 10};
 export const MAX_FIBONACCI_LEVELS = 20;
 
+/** 한 종목에 그릴 수 있는 도형의 수 (백엔드 검증과 같은 값) */
+export const MAX_DRAWINGS = 200;
+
 /** 글자 도형의 최대 길이. 줄 바꿈을 포함한다 */
 export const MAX_DRAWING_TEXT_LENGTH = 300;
 
