@@ -1,5 +1,7 @@
 import {useCallback, useEffect, useMemo, useRef, useState} from "react";
-import {queryOptions, useQuery, useQueryClient} from "@tanstack/react-query";
+import {
+    hashKey, type QueryClient, type QueryKey, queryOptions, useQuery, useQueryClient,
+} from "@tanstack/react-query";
 import {AxiosError, type AxiosRequestConfig, isAxiosError} from "axios";
 import {requireOk} from "../../lib/apiResponse.ts";
 import {
@@ -63,13 +65,53 @@ const sendSave = <T, >(mode: SaveMode | undefined, body: unknown, request: (conf
     });
 };
 
+// ---------- 다른 탭·기기에서 바꾼 내용 받아 오기 ----------
+// 저장은 통째로 바꿔 넣으므로, 다른 탭이나 기기에서 바꾼 것을 모르는 채 저장하면 그쪽에서 바꾼 내용이 지워진다.
+// 그래서 이 창으로 돌아올 때 서버의 내용을 다시 받아 화면에 맞춘다. 단, 화면에 아직 저장되지 않은 변경이 있으면
+// 받아 오지 않는다(받아 오면 그 변경이 사라진다). 두 곳에서 동시에 고치고 있었다면 나중에 저장한 쪽이 남는다.
+
+// 조회 키별로, 서버와 같다고 확인된 화면 값(조회해 온 값이거나 저장에 성공한 값). 화면 값이 이것과 같은 객체일 때만
+// 저장되지 않은 변경이 없다고 본다. 같은 조회를 함께 쓰는 차트가 여럿이어도(멀티뷰) 하나로 판단하려고 훅 밖에 둔다.
+const acknowledged = new Map<string, unknown>();
+const acknowledge = (key: QueryKey, value: unknown) => {
+    acknowledged.set(hashKey(key), value);
+};
+/**
+ * 저장에 성공한 값을 서버와 같다고 적어 둔다. 화면 값이 아직 그 값일 때만 적는다. 응답이 늦게 온 예전 저장이
+ * 더 새로운 기록을 덮으면, 화면 값과 달라져 그 뒤로는 받아 오지 않게 된다.
+ */
+const acknowledgeSaved = (queryClient: QueryClient, key: QueryKey, saved: unknown) => {
+    if (queryClient.getQueryData(key) === saved) acknowledge(key, saved);
+};
+const syncing = new Set<string>();      // 받아 오는 중인 조회 키. 같은 조회를 쓰는 차트들이 한꺼번에 받아 오지 않게 한다
+// 창으로 돌아온 뒤 이만큼 기다렸다가 받아 온다. 옆에 띄워 둔 다른 창은 포커스를 잃는 순간 밀린 저장을 보내므로,
+// 그 저장이 서버에 닿을 시간을 준다.
+const SYNC_DELAY_MS = 500;
+
+/** 화면에 저장되지 않은 변경이 없으면 서버의 최신 내용을 받아 화면 값을 바꾼다. 받는 동안 화면 값이 바뀌었으면 버린다. */
+const syncFromServer = <T, >(queryClient: QueryClient, key: QueryKey, fetchLatest: () => Promise<T>) => {
+    const hash = hashKey(key);
+    const before = queryClient.getQueryData<T>(key);
+    if (before === undefined || before !== acknowledged.get(hash)) return;
+    if (syncing.has(hash)) return;
+    syncing.add(hash);
+    fetchLatest().then(latest => {
+        if (queryClient.getQueryData<T>(key) !== before || acknowledged.get(hash) !== before) return;
+        // 내용이 같으면 화면 값은 그대로다(같은 객체가 남는다)
+        acknowledged.set(hash, queryClient.setQueryData<T>(key, latest));
+    }).catch(reportSaveError).finally(() => {
+        syncing.delete(hash);
+    });
+};
+
 // 차트 설정 조회. 회원당 하나라 모든 차트가 같은 조회를 함께 쓴다
 const settingQueryOptions = queryOptions<ChartSetting>({
     queryKey: SETTINGS_KEY,
-    queryFn: async ({signal}) => requireOk(
-        await fetchChartSetting({signal, skipGlobalError: true}),
-        DEFAULT_SETTING,
-    ),
+    queryFn: async ({signal}) => {
+        const setting = requireOk(await fetchChartSetting({signal, skipGlobalError: true}), DEFAULT_SETTING);
+        acknowledge(SETTINGS_KEY, setting);
+        return setting;
+    },
     refetchOnWindowFocus: false,
     staleTime: Infinity,
 });
@@ -186,13 +228,18 @@ export const useChartStorage = (assetType: AssetType | undefined, assetCode: str
     const drawingsKey = useMemo(() => ['chartDrawings', assetType, assetCode], [assetType, assetCode]);
     const drawingsQuery = useQuery<Drawing[]>({
         queryKey: drawingsKey,
-        queryFn: async ({signal}) => requireOk(
-            await fetchChartDrawings(assetType as AssetType, assetCode as string, {signal, skipGlobalError: true}),
-            {drawings: []},
-        ).drawings,
+        queryFn: async ({signal}) => {
+            const loaded = requireOk(
+                await fetchChartDrawings(assetType as AssetType, assetCode as string, {signal, skipGlobalError: true}),
+                {drawings: []},
+            ).drawings;
+            acknowledge(drawingsKey, loaded);
+            return loaded;
+        },
         enabled: hasAsset,
         refetchOnWindowFocus: false,
-        staleTime: Infinity,    // 이 화면에서 바꾼 내용이 곧 최신이라 다시 조회하지 않는다
+        // 이 화면에서 바꾼 내용이 곧 최신이라 다시 조회하지 않는다. 다른 탭·기기에서 바꾼 것은 syncFromServer 로 받는다
+        staleTime: Infinity,
     });
     // 서버 조회가 끝나기 전이나 실패했을 때는 이 화면에서만 유지한다(저장하지 않음).
     // 어느 종목에 그은 것인지 함께 두어, 종목이 바뀌면 앞 종목의 선이 보이지 않게 한다.
@@ -228,7 +275,10 @@ export const useChartStorage = (assetType: AssetType | undefined, assetCode: str
             // 함께 열면 목록을 같이 쓰므로, 맡길 때의 목록을 보내면 그 사이 다른 차트에서 그은 선이 지워진다.
             const latest = queryClient.getQueryData<Drawing[]>(drawingsKey) ?? next;
             return sendSave(mode, latest, config => saveChartDrawings(assetType, assetCode, latest, config))
-                .then(res => requireOk(res, '그린 선 저장'));
+                .then(res => {
+                    requireOk(res, '그린 선 저장');
+                    acknowledgeSaved(queryClient, drawingsKey, latest);
+                });
         });
         return stored;
     };
@@ -241,8 +291,11 @@ export const useChartStorage = (assetType: AssetType | undefined, assetCode: str
         if (legacy.length === 0) return;
         saveDrawings(assetCode, []);
         if (serverDrawings.length > 0) return;
-        queryClient.setQueryData(drawingsKey, legacy);
-        saveChartDrawings(assetType, assetCode, legacy).catch(reportSaveError);
+        const moved = queryClient.setQueryData<Drawing[]>(drawingsKey, legacy);
+        saveChartDrawings(assetType, assetCode, legacy).then(res => {
+            requireOk(res, '그린 선 저장');
+            acknowledgeSaved(queryClient, drawingsKey, moved);
+        }).catch(reportSaveError);
     }, [assetType, assetCode, serverDrawings, drawingsKey, queryClient]);
 
     // ---------- 차트 설정 ----------
@@ -285,11 +338,43 @@ export const useChartStorage = (assetType: AssetType | undefined, assetCode: str
         };
         document.addEventListener('visibilitychange', handleVisibility);
         window.addEventListener('pagehide', sendPending);   // visibilitychange 없이 닫히는 브라우저용
+        // 다른 창으로 넘어갈 때. 창을 나란히 띄워 두면 가려지지 않으므로 따로 받는다(그 창이 최신 내용을 받아 가게)
+        window.addEventListener('blur', sendPending);
         return () => {
             document.removeEventListener('visibilitychange', handleVisibility);
             window.removeEventListener('pagehide', sendPending);
+            window.removeEventListener('blur', sendPending);
         };
     }, [flushClosingDrawingSave, flushClosingSettingSave]);
+
+    // 이 창으로 돌아오면(탭이 다시 보임, 창이 포커스를 받음) 다른 탭·기기에서 바꾼 선과 설정을 받아 온다.
+    useEffect(() => {
+        let timer: ReturnType<typeof setTimeout> | undefined;
+        const sync = () => {
+            if (assetType && assetCode) {
+                syncFromServer(queryClient, drawingsKey, async () => requireOk(
+                    await fetchChartDrawings(assetType, assetCode, {skipGlobalError: true}),
+                    {drawings: []},
+                ).drawings);
+            }
+            syncFromServer(queryClient, SETTINGS_KEY, async () => requireOk(
+                await fetchChartSetting({skipGlobalError: true}),
+                DEFAULT_SETTING,
+            ));
+        };
+        const scheduleSync = () => {
+            if (document.visibilityState !== 'visible') return;
+            clearTimeout(timer);
+            timer = setTimeout(sync, SYNC_DELAY_MS);
+        };
+        document.addEventListener('visibilitychange', scheduleSync);
+        window.addEventListener('focus', scheduleSync);
+        return () => {
+            clearTimeout(timer);
+            document.removeEventListener('visibilitychange', scheduleSync);
+            window.removeEventListener('focus', scheduleSync);
+        };
+    }, [queryClient, assetType, assetCode, drawingsKey]);
 
     // 아직 저장되지 않은 것이 있는지(보내지 않았거나 보냈다가 실패함)와, 기다리지 않고 지금 보내기
     // (저장 버튼, 설정 창을 닫을 때). 실패한 저장도 이때 다시 보낸다.
@@ -313,7 +398,10 @@ export const useChartStorage = (assetType: AssetType | undefined, assetCode: str
             // 보내는 시점에 화면이 쓰고 있는 설정을 보낸다
             const latest = queryClient.getQueryData<ChartSetting>(SETTINGS_KEY) ?? next;
             return sendSave(mode, latest, config => saveChartSetting(latest, config))
-                .then(res => requireOk(res, '차트 설정 저장'));
+                .then(res => {
+                    requireOk(res, '차트 설정 저장');
+                    acknowledgeSaved(queryClient, SETTINGS_KEY, latest);
+                });
         });
     };
 
@@ -379,8 +467,11 @@ export const useChartStorage = (assetType: AssetType | undefined, assetCode: str
             ),
             drawingToolbar: !legacy.includes(LEGACY_TOOLBAR_KEY),
         };
-        queryClient.setQueryData(SETTINGS_KEY, next);
-        saveChartSetting(next).catch(reportSaveError);
+        const moved = queryClient.setQueryData<ChartSetting>(SETTINGS_KEY, next);
+        saveChartSetting(next).then(res => {
+            requireOk(res, '차트 설정 저장');
+            acknowledgeSaved(queryClient, SETTINGS_KEY, moved);
+        }).catch(reportSaveError);
     }, [serverSetting, queryClient]);
 
     return {
