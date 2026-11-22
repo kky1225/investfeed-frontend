@@ -325,6 +325,8 @@ const drawHollowCandle = (frame: Frame, index: number, x: number, bodyLeft: numb
 /**
  * 캔들 + 거래량 + 이동평균선 + 겹쳐 그리는 지표. 드래그로 반쯤 걸친 캔들이 축 영역으로 넘어가지 않게 자른다.
  * 가격 영역 지표(볼린저밴드의 채움 등)는 캔들 뒤에, 선들은 캔들 앞에 놓인다.
+ * 가격 영역과 거래량 영역은 따로 자른다. 가격축을 끌어 세로로 늘리거나 옮기면 캔들이 가격 영역을 벗어나는데,
+ * 함께 자르면 그 캔들이 거래량 막대 위에 겹쳐 그려진다.
  */
 const drawCandles = (
     frame: Frame, averages: Series[], averageColors: number[], averageStrokes: SeriesStroke[],
@@ -332,31 +334,30 @@ const drawCandles = (
 ) => {
     const {
         painter, style, candles, shapes, chartType, visible, range, flatByPrevClose,
-        plotWidth, mainBottom, volumeTop, priceY, volumeY, line,
+        plotWidth, mainBottom, priceTop, priceBottom, volumeTop, priceY, volumeY, line,
     } = frame;
     const ctx = painter.ctx;
     const mainBottomPx = painter.px(mainBottom);
-    painter.clipped(0, mainBottom, plotWidth, () => {
+    const bodyWidth = painter.bodyWidth(range);
+    const halfWidth = Math.floor(bodyWidth / 2);
+    painter.clipped(priceTop, priceBottom, plotWidth, () => {
         priceOverlays.forEach(overlay => overlay.draw({painter, range, style, toY: priceY}));
 
         if (chartType === 'line' || chartType === 'area') drawCloseLine(frame);
         else if (chartType === 'baseline') drawBaseline(frame);
 
-        const bodyWidth = painter.bodyWidth(range);
-        const halfWidth = Math.floor(bodyWidth / 2);
-        visible.forEach((candle, offset) => {
+        visible.forEach((_, offset) => {
             const index = range.from + offset;
             const x = painter.centerX(index, range);
             const bodyLeft = x - halfWidth;
-            // 거래량 막대는 차트 종류와 상관없이 실제 캔들의 색을 따른다.
-            const candleFill = candleColor(candles, index, style, flatByPrevClose);
 
             if (chartType === 'hollow') {
                 drawHollowCandle(frame, index, x, bodyLeft, bodyWidth);
             } else if (chartType === 'candle' || chartType === 'heikinAshi' || chartType === 'bar') {
                 // 하이킨아시는 평균값으로 다시 만든 캔들을 그리고, 색도 그 캔들의 시가·종가로 정한다.
                 const shape = shapes[index];
-                ctx.fillStyle = chartType === 'heikinAshi' ? candleColor(shapes, index, style, false) : candleFill;
+                ctx.fillStyle = candleColor(chartType === 'heikinAshi' ? shapes : candles, index, style,
+                    chartType !== 'heikinAshi' && flatByPrevClose);
 
                 // 꼬리 (봉에서는 세로선)
                 const highY = painter.px(priceY(shape.high));
@@ -375,13 +376,6 @@ const drawCandles = (
                     ctx.fillRect(bodyLeft, Math.min(openY, closeY), bodyWidth, Math.max(1, Math.abs(closeY - openY)));
                 }
             }
-
-            // 거래량
-            if (candle.volume > 0) {
-                ctx.fillStyle = candleFill;
-                const top = clamp(painter.px(volumeY(candle.volume)), painter.px(volumeTop), mainBottomPx - 1);
-                ctx.fillRect(bodyLeft, top, bodyWidth, mainBottomPx - top);
-            }
         });
 
         averages.forEach((values, order) => {
@@ -394,6 +388,14 @@ const drawCandles = (
 
     // 거래량 영역 지표는 값이 눈금 상한을 넘어도 가격 영역으로 올라가지 않게 거래량 영역으로 자른다.
     painter.clipped(volumeTop, mainBottom, plotWidth, () => {
+        // 거래량 막대는 차트 종류와 상관없이 실제 캔들의 색을 따른다.
+        visible.forEach((candle, offset) => {
+            if (candle.volume <= 0) return;
+            const index = range.from + offset;
+            ctx.fillStyle = candleColor(candles, index, style, flatByPrevClose);
+            const top = clamp(painter.px(volumeY(candle.volume)), painter.px(volumeTop), mainBottomPx - 1);
+            ctx.fillRect(painter.centerX(index, range) - halfWidth, top, bodyWidth, mainBottomPx - top);
+        });
         volumeOverlays.forEach(overlay => overlay.draw({painter, range, style, toY: volumeY}));
     });
 };
