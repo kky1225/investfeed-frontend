@@ -1,6 +1,6 @@
 import {useCallback, useEffect, useMemo, useRef, useState} from "react";
 import {queryOptions, useQuery, useQueryClient} from "@tanstack/react-query";
-import type {AxiosRequestConfig} from "axios";
+import {AxiosError, type AxiosRequestConfig, isAxiosError} from "axios";
 import {requireOk} from "../../lib/apiResponse.ts";
 import {
     fetchChartDrawings, fetchChartSetting, saveChartDrawings, saveChartSetting,
@@ -45,6 +45,24 @@ const saveConfig = (mode: SaveMode | undefined, body: unknown): AxiosRequestConf
     return {adapter: ['fetch', 'xhr'], fetchOptions: {keepalive: true}};
 };
 
+/**
+ * 저장 요청을 mode 에 맞는 설정으로 보낸다. request 는 받은 설정으로 요청을 보내는 함수.
+ * keepalive 요청은 진행 중인 것들의 본문을 합쳐 64KB 를 넘으면 브라우저가 보내지 않고 바로 거부한다(여러 차트가
+ * 한꺼번에 저장할 때). 그렇게 응답 없이 실패하면 보통 요청으로 한 번 더 보낸다. 서버가 거부한 것은 다시 보내지 않는다.
+ */
+const sendSave = <T, >(mode: SaveMode | undefined, body: unknown, request: (config: AxiosRequestConfig) => Promise<T>) => {
+    const config = saveConfig(mode, body);
+    if (!config.fetchOptions) return request(config);
+    // 첫 시도의 실패는 다시 보낼 수 있으므로 오류 창을 띄우지 않는다
+    return request({...config, skipGlobalError: true}).catch((error: unknown) => {
+        // 보내지 못한 것(네트워크 오류)만 다시 보낸다. 응답이 늦어 끊긴 것(타임아웃)은 다시 보내지 않는다.
+        // 그 사이 더 새로운 저장이 나갔을 수 있어, 늦게 다시 보내면 예전 내용으로 덮어쓴다.
+        // 다시 보낸 보통 요청은 페이지가 닫히면 끊기므로, 이 경우는 탭을 바꿀 때만 저장된다.
+        if (!isAxiosError(error) || error.code !== AxiosError.ERR_NETWORK) throw error;
+        return request({});
+    });
+};
+
 // 차트 설정 조회. 회원당 하나라 모든 차트가 같은 조회를 함께 쓴다
 const settingQueryOptions = queryOptions<ChartSetting>({
     queryKey: SETTINGS_KEY,
@@ -67,28 +85,38 @@ export const useChartTradesSetting = (): boolean => useQuery(settingQueryOptions
  * 선이 너무 많은 경우처럼 다시 보내도 실패하는 저장이 있기 때문이다). 그 뒤의 저장이 성공하면 failed 가 풀린다.
  * leave 는 저장하던 대상을 떠날 때(종목이 바뀜, 화면을 나감) 부른다. 밀린 저장을 바로 보내고 실패한 저장은 조용히
  * 한 번 더 보낸 뒤, 그 결과는 더 따라가지 않는다(다음 대상의 저장 표시에 섞이지 않게).
- * flushClosing 은 탭이 가려질 때 부른다. 밀린 저장만, 페이지가 닫혀도 끊기지 않는 요청으로 바로 보낸다.
+ * flushClosing 은 탭이 가려질 때 부른다. 밀린 저장을 페이지가 닫혀도 끊기지 않는 요청으로 바로 보낸다.
+ * 밀린 것은 없지만 보통 요청으로 보내고 아직 응답을 받지 못한 저장이 있으면, 그 요청은 페이지가 닫힐 때 끊기므로
+ * 같은 저장을 끊기지 않는 요청으로 한 번 더 보낸다(전체를 바꿔 넣는 저장이라 두 번 가도 결과가 같다).
  */
 const useDelayedSave = (delayMs: number) => {
     const pending = useRef<{ timer: ReturnType<typeof setTimeout>, run: SaveRun } | null>(null);
     const failedRun = useRef<SaveRun | null>(null);     // 보냈다가 실패해 다시 보내야 하는 저장
     const sendCount = useRef(0);    // 가장 나중에 보낸 저장의 결과만 반영하려고 센다
+    // 보내고 아직 응답을 받지 못한 저장
+    const inFlight = useRef<{ order: number, run: SaveRun, mode: SaveMode | undefined } | null>(null);
     const [waiting, setWaiting] = useState(false);
     const [failed, setFailed] = useState(false);
     const send = useCallback((run: SaveRun, mode?: SaveMode) => {
         const order = ++sendCount.current;
         failedRun.current = null;
+        inFlight.current = {order, run, mode};
         setWaiting(true);
+        const landed = () => {
+            if (inFlight.current?.order === order) inFlight.current = null;
+        };
         // 응답을 받으면 기다림을 푼다. 그 사이 새 저장을 맡겼으면 그 저장이 끝날 때까지 그대로 둔다.
         const settle = () => {
             if (!pending.current) setWaiting(false);
         };
         run(mode).then(() => {
+            landed();
             if (order !== sendCount.current) return;
             setFailed(false);
             settle();
         }).catch((error: unknown) => {
             console.error(error);
+            landed();
             if (order !== sendCount.current) return;
             failedRun.current = run;
             setFailed(true);
@@ -107,10 +135,14 @@ const useDelayedSave = (delayMs: number) => {
     }, [send]);
     const flushClosing = useCallback(() => {
         const current = pending.current;
-        if (!current) return;
-        clearTimeout(current.timer);
-        pending.current = null;
-        send(current.run, 'closing');
+        const sent = inFlight.current;
+        if (current) {
+            clearTimeout(current.timer);
+            pending.current = null;
+            send(current.run, 'closing');
+        } else if (sent && sent.mode !== 'closing') {
+            send(sent.run, 'closing');
+        }
     }, [send]);
     const leave = useCallback(() => {
         const current = pending.current;
@@ -118,6 +150,7 @@ const useDelayedSave = (delayMs: number) => {
         if (current) clearTimeout(current.timer);
         pending.current = null;
         failedRun.current = null;
+        inFlight.current = null;
         sendCount.current++;    // 보내 둔 저장의 결과도 더는 반영하지 않는다
         setWaiting(false);
         setFailed(false);
@@ -194,7 +227,7 @@ export const useChartStorage = (assetType: AssetType | undefined, assetCode: str
             // 보내는 시점에 화면이 쓰고 있는 목록을 보낸다. 같은 종목을 다른 차트(멀티뷰 패널과 자세히 보기 창)에서
             // 함께 열면 목록을 같이 쓰므로, 맡길 때의 목록을 보내면 그 사이 다른 차트에서 그은 선이 지워진다.
             const latest = queryClient.getQueryData<Drawing[]>(drawingsKey) ?? next;
-            return saveChartDrawings(assetType, assetCode, latest, saveConfig(mode, latest))
+            return sendSave(mode, latest, config => saveChartDrawings(assetType, assetCode, latest, config))
                 .then(res => requireOk(res, '그린 선 저장'));
         });
         return stored;
@@ -279,7 +312,7 @@ export const useChartStorage = (assetType: AssetType | undefined, assetCode: str
         scheduleSettingSave(mode => {
             // 보내는 시점에 화면이 쓰고 있는 설정을 보낸다
             const latest = queryClient.getQueryData<ChartSetting>(SETTINGS_KEY) ?? next;
-            return saveChartSetting(latest, saveConfig(mode, latest))
+            return sendSave(mode, latest, config => saveChartSetting(latest, config))
                 .then(res => requireOk(res, '차트 설정 저장'));
         });
     };
