@@ -49,7 +49,7 @@ export default function ChartDetailDialog({open, onClose, assetType, code, name,
         [assetType, code, name, stexTp],
     );
 
-    const {data: queryData} = useQuery({
+    const {data: queryData, isPlaceholderData} = useQuery({
         queryKey: ['chartDetailDialog', assetType, code, chartType],
         queryFn: async ({signal}) => {
             if (!asset) return null;
@@ -58,6 +58,10 @@ export default function ChartDetailDialog({open, onClose, assetType, code, name,
             );
         },
         enabled: open && !!asset,
+        // 주기를 바꾸는 동안에는 직전 주기의 결과를 남겨 차트를 내리지 않는다. 다른 종목으로 바꾸면 남기지 않는다.
+        placeholderData: (previous, previousQuery) => (
+            previousQuery?.queryKey[1] === assetType && previousQuery?.queryKey[2] === code ? previous : undefined
+        ),
     });
 
     const summary = useMemo(() => {
@@ -130,6 +134,7 @@ export default function ChartDetailDialog({open, onClose, assetType, code, name,
                             chartType={chartType}
                             onChartTypeChange={setChartType}
                             candles={candles}
+                            loading={isPlaceholderData}
                             height={CHART_HEIGHT}
                         />
                     </Box>

@@ -2,6 +2,7 @@ import {MouseEvent, useCallback, useLayoutEffect, useMemo, useRef, useState} fro
 import {useMutation, useQuery, useQueryClient} from "@tanstack/react-query";
 import PriceTargetMoveDialog, {PriceTargetMove} from "./PriceTargetMoveDialog.tsx";
 import Box from "@mui/material/Box";
+import CircularProgress from "@mui/material/CircularProgress";
 import MenuItem from "@mui/material/MenuItem";
 import Select, {SelectChangeEvent} from "@mui/material/Select";
 import Skeleton from "@mui/material/Skeleton";
@@ -71,7 +72,20 @@ const AssetChart = ({
 }: AssetChartProps) => {
     const rule = MARKET_CHART_RULES[market];
     const storage = chartStorageOf(market, code);
-    const seriesKey = `${market}-${code}-${chartType}`;
+
+    // 주기를 바꿔 새 캔들을 받는 동안에는 차트를 내리지 않는다. 직전 주기의 차트를 그대로 두고 그 위에 로딩 표시만 덮는다.
+    // 차트를 내렸다 다시 만들면 비교 종목·이어 받은 과거 구간·저장 실패 표시가 사라지고, 단축키 대상도 바뀐다.
+    // 다른 자산으로 바뀐 동안에는 두지 않는다(그 자산의 차트가 아니므로).
+    const assetKey = `${market}-${code}`;
+    const [settled, setSettled] = useState<{assetKey: string, chartType: string, candles: Candle[]} | null>(null);
+    if (!loading && (settled?.assetKey !== assetKey || settled.chartType !== chartType || settled.candles !== candles)) {
+        setSettled({assetKey, chartType, candles});
+    }
+    const holding = loading && settled?.assetKey === assetKey ? settled : null;
+    // 차트에 그리는 주기와 캔들. 주기 버튼은 고른 주기(chartType)를 바로 보여 준다.
+    const shownType = holding?.chartType ?? chartType;
+    const shownCandles = holding?.candles ?? candles;
+    const seriesKey = `${market}-${code}-${shownType}`;
 
     // 주기 버튼. 분봉 단위는 마지막에 고른 것을 기억해, 일봉에서 분봉 버튼을 누르면 그 단위로 돌아간다.
     const currentMinutes = minutesOf(chartType);
@@ -137,26 +151,29 @@ const AssetChart = ({
     }, []);
 
     // 과거 구간. 차트 왼쪽 끝에 가까워지면 이전 구간을 이어 받아 앞에 붙인다.
-    const hasHistory = hasCandleHistory(market, chartType, exchange);
+    const hasHistory = hasCandleHistory(market, shownType, exchange);
     const fetchOlder = useCallback(
-        (cursor: string | null) => fetchCandlePage(market, code, chartType, cursor, exchange),
-        [market, code, chartType, exchange],
+        (cursor: string | null) => fetchCandlePage(market, code, shownType, cursor, exchange),
+        [market, code, shownType, exchange],
     );
     const {history, loadOlder, done: historyDone} = useCandleHistory(seriesKey, fetchOlder);
 
     // 실시간 현재가를 마지막 캔들에 반영하고, 과거 구간을 앞에 붙인다.
+    // 직전 주기의 차트를 두는 동안에는 실시간 가격을 반영하지 않는다. 화면은 새로 고른 주기를 기준으로 가격을 주므로
+    // (미국 종목은 분봉에만 장외 가격을 준다 등) 직전 주기 캔들에 넣으면 맞지 않을 수 있다.
+    const shownLive = holding ? null : livePrice;
     const fullCandles = useMemo(() => {
-        const last = candles[candles.length - 1];
-        const usable = last && typeof livePrice === 'number' && Number.isFinite(livePrice) && livePrice > 0
+        const last = shownCandles[shownCandles.length - 1];
+        const usable = last && typeof shownLive === 'number' && Number.isFinite(shownLive) && shownLive > 0
             && (liveStamp === undefined || liveStamp >= last.time);
         const live = usable
             ? [
-                ...candles.slice(0, -1),
-                {...last, close: livePrice, high: Math.max(last.high, livePrice), low: Math.min(last.low, livePrice)},
+                ...shownCandles.slice(0, -1),
+                {...last, close: shownLive, high: Math.max(last.high, shownLive), low: Math.min(last.low, shownLive)},
             ]
-            : candles;
+            : shownCandles;
         return mergeCandles(history, live);
-    }, [candles, history, livePrice, liveStamp]);
+    }, [shownCandles, history, shownLive, liveStamp]);
 
     // 이 자산에 등록한 목표가 알림을 차트에 선으로 표시한다. 목표가 알림 창과 같은 조회를 공유해 등록·삭제가 바로 반영된다.
     const {data: priceTargets} = useQuery<PriceTarget[]>({
@@ -245,8 +262,8 @@ const AssetChart = ({
         : undefined;
     const formatTradePrice = TRADE_PRICE_FORMATS[tradeMarket ?? 'KR'];
     const tradeMarkers = useMemo(
-        () => tradeMarkersOf(fullCandles, myTrades.trades, minutesOf(chartType), formatTradePrice),
-        [fullCandles, myTrades, chartType, formatTradePrice],
+        () => tradeMarkersOf(fullCandles, myTrades.trades, minutesOf(shownType), formatTradePrice),
+        [fullCandles, myTrades, shownType, formatTradePrice],
     );
     const priceLines = useMemo(() => {
         // 평단가는 종목 통화 기준이다: 국내는 원 단위, 미국은 달러 소수 넷째 자리까지.
@@ -256,39 +273,55 @@ const AssetChart = ({
 
     // 종목 비교: 일봉 이상은 종류를 섞어, 분봉은 같은 종류끼리만 비교한다.
     const comparison = useMemo(
-        () => (rule.comparison ? createComparisonSource(market as ComparisonMarket, chartType, code) : undefined),
-        [rule.comparison, market, chartType, code],
+        () => (rule.comparison ? createComparisonSource(market as ComparisonMarket, shownType, code) : undefined),
+        [rule.comparison, market, shownType, code],
     );
+
+    // 그릴 차트가 아직 없으면(처음 열거나 다른 자산으로 바뀐 동안) 자리만 잡아 둔다.
+    const waiting = loading && !holding;
 
     return (
         <Box ref={containerRef}>
-            {wide && loading && (
+            {wide && waiting && (
                 <Stack direction="row" spacing={1} sx={{px: 2, pb: 1, alignItems: 'center', minHeight: 40}}>
                     {controls}
                 </Stack>
             )}
             {/* 차트는 스스로 이동·확대하므로 차지한 너비에 맞춘다. 선·영역 등 차트 종류는 차트 안에서 고른다. */}
-            {loading ? (
+            {waiting ? (
                 <Skeleton variant="rectangular" height={height} sx={{mx: 2, mb: 2, borderRadius: 1}}/>
             ) : (
-                <CandleChart
-                    candles={fullCandles}
-                    timeUnit={timeUnitOf(chartType)}
-                    interval={countdownIntervalOf(market, chartType)}
-                    seriesKey={seriesKey}
-                    assetType={storage.assetType}
-                    assetCode={storage.assetCode}
-                    onLoadOlder={hasHistory ? loadOlder : undefined}
-                    hasOlder={hasHistory && !historyDone}
-                    comparison={comparison}
-                    priceLines={priceLines}
-                    onPriceLineMove={handleTargetMove}
-                    tradeMarkers={tradeMarkers}
-                    onTradesChange={tradeMarket ? handleTradesChange : undefined}
-                    tradesNotice={tradesNotice}
-                    toolbarStart={wide ? controls : undefined}
-                    height={height}
-                />
+                <Box sx={{position: 'relative'}}>
+                    <CandleChart
+                        candles={fullCandles}
+                        timeUnit={timeUnitOf(shownType)}
+                        interval={countdownIntervalOf(market, shownType)}
+                        seriesKey={seriesKey}
+                        assetType={storage.assetType}
+                        assetCode={storage.assetCode}
+                        onLoadOlder={hasHistory ? loadOlder : undefined}
+                        hasOlder={hasHistory && !historyDone}
+                        comparison={comparison}
+                        priceLines={priceLines}
+                        onPriceLineMove={handleTargetMove}
+                        tradeMarkers={tradeMarkers}
+                        onTradesChange={tradeMarket ? handleTradesChange : undefined}
+                        tradesNotice={tradesNotice}
+                        toolbarStart={wide ? controls : undefined}
+                        height={height}
+                    />
+                    {holding && (
+                        // 직전 주기의 차트 위에 덮는 로딩 표시. 차트 조작은 막지 않는다.
+                        <Box
+                            sx={{
+                                position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                pointerEvents: 'none',
+                            }}
+                        >
+                            <CircularProgress size={32}/>
+                        </Box>
+                    )}
+                </Box>
             )}
             <PriceTargetMoveDialog
                 move={targetMove}

@@ -42,7 +42,7 @@ export default function MultiViewPanel({asset, onSearch, onChartExpand, onRemove
     const navigate = useNavigate();
     const [chartType, setChartType] = useState('DAY');
 
-    const {data: queryData, lastUpdated, pollError} = usePollingQuery<MultiViewChartRes>(
+    const {data: queryData, lastUpdated, pollError, isPlaceholderData} = usePollingQuery<MultiViewChartRes>(
         ['multiViewPanel', asset?.type, asset?.code, chartType],
         (config: PollingFetchConfig) => {
             if (!asset) return Promise.reject(new Error('no asset'));
@@ -52,6 +52,10 @@ export default function MultiViewPanel({asset, onSearch, onChartExpand, onRemove
             enabled: !!asset,
             retry: 2,
             retryDelay: (count) => 1000 * (count + 1),
+            // 주기를 바꾸는 동안에는 직전 주기의 결과를 남겨 패널과 차트를 내리지 않는다. 다른 종목으로 바꾸면 남기지 않는다.
+            placeholderData: (previous, previousQuery) => (
+                previousQuery?.queryKey[1] === asset?.type && previousQuery?.queryKey[2] === asset?.code ? previous : undefined
+            ),
         },
     );
 
@@ -127,7 +131,8 @@ export default function MultiViewPanel({asset, onSearch, onChartExpand, onRemove
                         {summary.title}
                     </Typography>
                     <Stack direction="row" alignItems="center" gap={0.5}>
-                        <FreshnessIndicator lastUpdated={lastUpdated} error={pollError}/>
+                        {/* 직전 주기의 결과를 남겨 둔 동안에는 받은 시각을 알 수 없으므로 적지 않는다. */}
+                        <FreshnessIndicator lastUpdated={isPlaceholderData ? null : lastUpdated} error={pollError}/>
                         <IconButton size="small" onClick={onSearch} title="종목 변경"><SwapHorizIcon fontSize="small"/></IconButton>
                         <IconButton size="small" onClick={onChartExpand} title="차트 자세히 보기"><OpenInFullIcon fontSize="small"/></IconButton>
                         <IconButton size="small" onClick={handleNavigate} title="상세 페이지"><OpenInNewIcon fontSize="small"/></IconButton>
@@ -151,6 +156,7 @@ export default function MultiViewPanel({asset, onSearch, onChartExpand, onRemove
                 onChartTypeChange={setChartType}
                 candles={candleList}
                 livePrice={livePriceOf(asset, chartType, streamUpdate)}
+                loading={isPlaceholderData}
             />
         </Card>
     );
