@@ -26,6 +26,7 @@ const COMPARISON_PERCENT_DECIMALS = 2;  // 값 표시에 적는 비교 종목 �
 const LOAD_OLDER_THRESHOLD = 50;   // 화면 왼쪽 끝에서 받아 둔 첫 캔들까지 이만큼 이하로 남으면 과거 구간을 요청한다
 const PINCH_DELTA_LIMIT = 30;   // 휠 한 번의 이동량이 이보다 작으면 트랙패드 두 손가락 벌리기로 본다
 const WHEEL_ZOOM_RATE = 0.0015;
+const PIXEL_RATIO_SLACK = 0.005;    // 화면 배율 감시 쿼리의 여유 (watchPixelRatio). 실제 배율 단계(0.1 이상)보다 훨씬 작게
 const PINCH_WHEEL_ZOOM_RATE = 0.01; // 트랙패드 두 손가락 벌리기 (ctrl + wheel 로 들어옴)
 const WHEEL_LINE_HEIGHT = 16;
 const DECIMAL_SAMPLE_SIZE = 300;    // 가격의 소수 자릿수를 알아낼 때 살펴보는 최근 캔들 수
@@ -86,6 +87,7 @@ export class CandleChartEngine {
     private style: ChartStyle | null = null;
     private width = 0;      // CSS px
     private height = 0;     // CSS px
+    private pixelRatioQuery: MediaQueryList | null = null;  // 지금 화면 배율에만 맞는 미디어 쿼리 (watchPixelRatio)
     private frame = 0;
     private overlayFrame = 0;
     private layout: Layout | null = null;   // 마지막으로 그린 배치
@@ -227,6 +229,7 @@ export class CandleChartEngine {
         container.addEventListener('contextmenu', this.handleContextMenu);
         // 이동·확대 키는 차트를 클릭하지 않아도 마우스가 위에 있으면 받도록 창 전체에서 듣는다.
         window.addEventListener('keydown', this.handleNavigationKey);
+        this.watchPixelRatio();
     }
 
     // ---------- 바깥에서 부르는 것 ----------
@@ -499,10 +502,10 @@ export class CandleChartEngine {
     }
 
     resize(width: number, height: number) {
-        if (width === this.width && height === this.height) return;
+        const dpr = window.devicePixelRatio || 1;
+        if (width === this.width && height === this.height && dpr === this.mainPainter.dpr) return;
         this.width = width;
         this.height = height;
-        const dpr = window.devicePixelRatio || 1;
         this.mainPainter.dpr = dpr;
         this.overlayPainter.dpr = dpr;
         [this.mainCanvas, this.overlayCanvas].forEach(canvas => {
@@ -516,7 +519,31 @@ export class CandleChartEngine {
         this.drawNow();
     }
 
+    /**
+     * 화면 배율(devicePixelRatio)이 바뀌는 것을 지켜본다. 배율이 다른 모니터로 창을 옮기면 차트 크기(CSS px)는 그대로라
+     * 크기 감시가 알려 주지 않으므로, 지금 배율에만 맞는 미디어 쿼리를 걸어 두고 어긋나는 순간 캔버스를 다시 맞춘다.
+     * 쿼리는 그 배율에만 맞으므로 바뀔 때마다 새 배율로 다시 건다.
+     * 소수 배율(확대 110% 등)은 브라우저에 따라 쿼리 안의 해상도와 소수점 아래가 달라 정확히 같다는 쿼리가 처음부터
+     * 맞지 않을 수 있다. 그러면 change 가 오지 않으므로 아주 좁은 범위로 건다.
+     */
+    private watchPixelRatio() {
+        this.pixelRatioQuery?.removeEventListener('change', this.handlePixelRatioChange);
+        const dpr = window.devicePixelRatio || 1;
+        this.pixelRatioQuery = window.matchMedia(
+            `(min-resolution: ${dpr - PIXEL_RATIO_SLACK}dppx) and (max-resolution: ${dpr + PIXEL_RATIO_SLACK}dppx)`,
+        );
+        this.pixelRatioQuery.addEventListener('change', this.handlePixelRatioChange);
+    }
+
+    private readonly handlePixelRatioChange = () => {
+        this.watchPixelRatio();
+        // 아직 크기를 받지 못했으면(처음 그리기 전) 크기를 받을 때 맞춘다.
+        if (this.width > 0 && this.height > 0) this.resize(this.width, this.height);
+    };
+
     destroy() {
+        this.pixelRatioQuery?.removeEventListener('change', this.handlePixelRatioChange);
+        this.pixelRatioQuery = null;
         if (this.frame) cancelAnimationFrame(this.frame);
         if (this.overlayFrame) cancelAnimationFrame(this.overlayFrame);
         this.frame = 0;
