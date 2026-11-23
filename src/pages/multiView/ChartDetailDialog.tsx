@@ -13,7 +13,9 @@ import Stack from "@mui/material/Stack";
 import AssetChart from "../detail/AssetChart.tsx";
 import {renderChangeAmount, signedRate} from "../../components/CustomRender.tsx";
 import type {MultiViewAssetType, SelectedAsset} from "../../type/MultiViewType.ts";
-import {candlesOf, fetchMultiViewChart, type MultiViewChartRes, summaryOf} from "./multiViewChart.ts";
+import {
+    candlesOf, fetchMultiViewChart, type MultiViewChartRes, summaryOf, useChartTypeFallback,
+} from "./multiViewChart.ts";
 
 const labelColors = {
     up: 'error' as const,
@@ -49,8 +51,9 @@ export default function ChartDetailDialog({open, onClose, assetType, code, name,
         [assetType, code, name, stexTp],
     );
 
-    const {data: queryData, isPlaceholderData} = useQuery({
-        queryKey: ['chartDetailDialog', assetType, code, chartType],
+    const queryKey = ['chartDetailDialog', assetType, code, chartType];
+    const chartQuery = useQuery({
+        queryKey,
         queryFn: async ({signal}) => {
             if (!asset) return null;
             return requireOk<MultiViewChartRes | null>(
@@ -63,6 +66,8 @@ export default function ChartDetailDialog({open, onClose, assetType, code, name,
             previousQuery?.queryKey[1] === assetType && previousQuery?.queryKey[2] === code ? previous : undefined
         ),
     });
+    const {data: queryData, isPlaceholderData} = chartQuery;
+    useChartTypeFallback(asset ? `${asset.type}|${asset.code}` : null, chartType, setChartType, chartQuery, queryKey);
 
     const summary = useMemo(() => {
         if (!queryData || !asset) return null;

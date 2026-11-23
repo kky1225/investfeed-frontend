@@ -1,4 +1,7 @@
+import {useEffect, useState} from "react";
+import {useQueryClient, type QueryKey} from "@tanstack/react-query";
 import type {AxiosRequestConfig} from "axios";
+import {useAlert} from "../../context/AlertContext.tsx";
 import type {Candle} from "../../lib/chart/types.ts";
 import type {SelectedAsset, StreamUpdate} from "../../type/MultiViewType.ts";
 import type {StockChartType, StockDetailRes} from "../../type/StockType.ts";
@@ -20,6 +23,49 @@ type UsStockChartRes = Pick<UsStockDetailRes, 'usStockInfo' | 'chartList'>;
 
 /** 멀티 화면의 차트 조회 응답. 어느 것인지는 종목의 종류(asset.type)로 가린다 */
 export type MultiViewChartRes = StockChartRes | UsStockChartRes | CryptoDetailRes | CommodityDetailRes;
+
+/** 주기를 바꾼 조회의 상태. useQuery 의 결과를 그대로 넘긴다 */
+interface ChartQueryState {
+    data: unknown,
+    isPlaceholderData: boolean,
+    isError: boolean,
+    isFetching: boolean,
+}
+
+/**
+ * 주기를 바꾼 뒤 새 주기의 조회가 끝내 실패하면, 마지막으로 차트를 보여 준 주기로 되돌리고 안내 창을 띄운다.
+ * 되돌리지 않으면 패널(창) 전체가 빈 자리로 바뀌어 주기 버튼까지 사라진다.
+ * 실패한 조회는 지워 둔다. 남겨 두면 그 주기를 다시 골랐을 때 실패 상태로 시작해 직전 결과를 남기지 못한다.
+ * assetKey: 지금 자산(다른 자산의 주기로 되돌리지 않게), queryKey: 지금 주기의 조회 키.
+ */
+export const useChartTypeFallback = (
+    assetKey: string | null, chartType: string, setChartType: (chartType: string) => void,
+    query: ChartQueryState, queryKey: QueryKey,
+) => {
+    const queryClient = useQueryClient();
+    const showAlert = useAlert();
+    // 마지막으로 차트를 보여 준 자산과 주기
+    const [shown, setShown] = useState<{assetKey: string, chartType: string} | null>(null);
+    const showing = query.data != null && !query.isPlaceholderData;
+    if (showing && assetKey !== null && (shown?.assetKey !== assetKey || shown.chartType !== chartType)) {
+        setShown({assetKey, chartType});
+    }
+    // 자산이 없어지면(창을 닫으면 자산을 비운다) 잊는다. 다시 연 창의 첫 조회가 실패했을 때 지난번 주기로 되돌리지 않게.
+    if (assetKey === null && shown !== null) {
+        setShown(null);
+    }
+    const failed = query.isError && !query.isFetching && query.data == null;
+    const fallback = failed && shown !== null && shown.assetKey === assetKey && shown.chartType !== chartType
+        ? shown.chartType
+        : null;
+    const failedKey = JSON.stringify(queryKey);
+    useEffect(() => {
+        if (fallback === null) return;
+        queryClient.removeQueries({queryKey: JSON.parse(failedKey) as QueryKey, exact: true});
+        setChartType(fallback);
+        showAlert('주기를 바꾸지 못했습니다. 잠시 후 다시 시도해 주세요.', 'warning');
+    }, [fallback, failedKey, queryClient, setChartType, showAlert]);
+};
 
 export type Trend = 'up' | 'down' | 'neutral';
 

@@ -19,7 +19,7 @@ import {renderChangeAmount, signedRate} from "../../components/CustomRender.tsx"
 import type {MultiViewAssetType, SelectedAsset, StreamUpdate} from "../../type/MultiViewType.ts";
 import {useNavigate} from "react-router-dom";
 import {
-    candlesOf, fetchMultiViewChart, livePriceOf, type MultiViewChartRes, summaryOf, withStream,
+    candlesOf, fetchMultiViewChart, livePriceOf, type MultiViewChartRes, summaryOf, useChartTypeFallback, withStream,
 } from "./multiViewChart.ts";
 
 interface MultiViewPanelProps {
@@ -42,8 +42,9 @@ export default function MultiViewPanel({asset, onSearch, onChartExpand, onRemove
     const navigate = useNavigate();
     const [chartType, setChartType] = useState('DAY');
 
-    const {data: queryData, lastUpdated, pollError, isPlaceholderData} = usePollingQuery<MultiViewChartRes>(
-        ['multiViewPanel', asset?.type, asset?.code, chartType],
+    const queryKey = ['multiViewPanel', asset?.type, asset?.code, chartType];
+    const chartQuery = usePollingQuery<MultiViewChartRes>(
+        queryKey,
         (config: PollingFetchConfig) => {
             if (!asset) return Promise.reject(new Error('no asset'));
             return fetchMultiViewChart(asset, chartType, config);
@@ -58,6 +59,8 @@ export default function MultiViewPanel({asset, onSearch, onChartExpand, onRemove
             ),
         },
     );
+    const {data: queryData, lastUpdated, pollError, isPlaceholderData} = chartQuery;
+    useChartTypeFallback(asset ? `${asset.type}|${asset.code}` : null, chartType, setChartType, chartQuery, queryKey);
 
     // 머리(이름·가격·등락): 조회 결과에 실시간 값을 덮어쓴다.
     const summary = useMemo(() => {
