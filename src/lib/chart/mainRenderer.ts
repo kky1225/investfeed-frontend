@@ -744,7 +744,7 @@ const drawPriceLines = (frame: Frame, tags: PriceLineTag[], centers: number[], a
 /** 아래 장 전체를 그리고, 그린 배치를 돌려준다. 그릴 자리가 없으면 null. 캔버스는 부르는 쪽에서 지운다. */
 export const renderMain = (painter: Painter, input: MainInput): Layout | null => {
     const {
-        candles, chartType, shapes, logScale, percentScale, priceZoom, priceShift, timeUnit, style, width, range,
+        candles, chartType, shapes, percentScale, priceZoom, priceShift, timeUnit, style, width, range,
         mainHeight, volumeRatio, indicatorHeights,
         averages, averageColors, averageStrokes, indicators, priceOverlays, volumeOverlays, priceLines, comparisons, flatByPrevClose,
         grid, axisWidth, valueDecimals, countdown,
@@ -776,6 +776,19 @@ export const renderMain = (painter: Painter, input: MainInput): Layout | null =>
     const comparisonLines = comparisons.map(({closes, color}) => ({
         line: scaleComparison(closes, range, firstClose), color,
     }));
+    // 선·영역 차트는 종가만 그리므로 종가 범위에 맞춘다. 하이킨아시는 다시 만든 캔들과 실제 고가·저가를 모두 담는다.
+    const closeOnly = isCloseOnly(chartType);
+    const visibleShapes = chartType === 'heikinAshi' ? shapes.slice(range.from, end) : [];
+    const candleLows = [
+        ...visible.map(candle => closeOnly ? candle.close : candle.low),
+        ...visibleShapes.map(candle => candle.low),
+    ];
+    // 로그 축에는 0 이하의 가격이 놓일 자리가 없다. 보이는 캔들에 그런 가격이 있으면(값이 0 으로 온 캔들 등)
+    // 범위를 잡을 수 없어 차트가 통째로 사라지거나 그 캔들이 영역 바닥까지 늘어나므로, 그 구간을 보는 동안만 일반 축으로 그린다.
+    // 저가만 보지 않는 것은 시가·고가만 0 으로 오는 캔들도 있을 수 있어서다. 종가만 그리는 차트는 종가만 본다.
+    const pricesOf = (candle: Candle) => closeOnly ? [candle.close] : [candle.open, candle.high, candle.low, candle.close];
+    const logScale = input.logScale
+        && [...visible, ...visibleShapes].every(candle => pricesOf(candle).every(price => price > 0));
     const visibleAverages = [
         ...averages, ...priceOverlays.flatMap(overlay => overlay.series), ...comparisonLines.map(({line}) => line.values),
     ]
@@ -783,19 +796,12 @@ export const renderMain = (painter: Painter, input: MainInput): Layout | null =>
         .filter(isNumber)
         // 로그 축에는 0 이하의 값이 놓일 자리가 없다(볼린저밴드 하단이 음수로 내려간 경우 등).
         .filter(value => !logScale || value > 0);
-    // 선·영역 차트는 종가만 그리므로 종가 범위에 맞춘다. 하이킨아시는 다시 만든 캔들과 실제 고가·저가를 모두 담는다.
-    const closeOnly = isCloseOnly(chartType);
-    const visibleShapes = chartType === 'heikinAshi' ? shapes.slice(range.from, end) : [];
     const highest = Math.max(
         ...visible.map(candle => closeOnly ? candle.close : candle.high),
         ...visibleShapes.map(candle => candle.high),
         ...visibleAverages,
     );
-    const lowest = Math.min(
-        ...visible.map(candle => closeOnly ? candle.close : candle.low),
-        ...visibleShapes.map(candle => candle.low),
-        ...visibleAverages,
-    );
+    const lowest = Math.min(...candleLows, ...visibleAverages);
     // 로그 축이면 로그 값으로 바꿔 놓고 같은 계산을 한다. priceZoom 은 가운데를 기준으로 범위를 늘리거나 줄인다.
     const toAxis = logScale ? Math.log : (value: number) => value;
     const fromAxis = logScale ? Math.exp : (value: number) => value;
