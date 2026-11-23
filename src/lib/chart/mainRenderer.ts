@@ -425,7 +425,8 @@ const drawExtremes = (frame: Frame) => {
         const x = painter.centerX(range.from + offset, range);
         const label = `${name} ${formatPrice(price, valueDecimals)}`;
         const gap = painter.px(EXTREME_LABEL_GAP);
-        const toRight = x + gap + ctx.measureText(`← ${label}`).width <= plotRightPx;
+        // 바탕색 테두리가 글자 밖으로 나가는 만큼도 그림 영역 안에 들어와야 축 경계선과 축 라벨을 지우지 않는다
+        const toRight = x + gap + ctx.measureText(`← ${label}`).width + painter.px(EXTREME_LABEL_HALO) <= plotRightPx;
         const half = painter.px(FONT_SIZE) / 2;
         const y = clamp(painter.px(priceY(price)), painter.px(priceTop) + half, painter.px(priceBottom) - half);
         const text = toRight ? `← ${label}` : `${label} →`;
