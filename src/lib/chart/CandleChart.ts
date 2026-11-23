@@ -126,6 +126,7 @@ export class CandleChartEngine {
     private grid = true;
     private averagePeriods: number[] = [];
     private averages: Series[] = [];        // averagePeriods 와 같은 순서
+    private seriesStale = false;            // 캔들이 바뀌어 shapes·averages·지표를 다시 계산해야 하는지 (ensureSeries)
     private averageColors: number[] = [];   // 이동평균선마다의 색 순번. 비어 있거나 모자라면 순서대로의 색
     private averageStrokes: SeriesStroke[] = [];    // 이동평균선마다의 굵기·점선
     private indicatorConfigs: IndicatorConfig[] = [];
@@ -186,9 +187,12 @@ export class CandleChartEngine {
         candles: () => this.candles,
         hasOlder: () => this.hasOlder,
         timeUnit: () => this.timeUnit,
-        lineValues: index => [...this.averages, ...this.priceOverlays.flatMap(overlay => overlay.series)]
-            .map(series => series[index])
-            .filter(isNumber),
+        lineValues: index => {
+            this.ensureSeries();
+            return [...this.averages, ...this.priceOverlays.flatMap(overlay => overlay.series)]
+                .map(series => series[index])
+                .filter(isNumber);
+        },
         redraw: () => this.scheduleOverlay(),
         refreshCursor: () => this.updateCursor(),
         drawingsChanged: drawings => this.onDrawingsChange?.(drawings),
@@ -261,7 +265,9 @@ export class CandleChartEngine {
         this.timeUnit = timeUnit;
         this.indexTradeMarkers();
         this.measurePrices();
-        this.computeSeries();
+        // 지표는 다시 계산할 것만 표시해 두고, 그리기 직전(또는 값을 읽을 때) 한 번만 계산한다(ensureSeries).
+        // 체결은 한 프레임 안에도 여러 건 오는데, 화면에는 마지막 결과만 보이기 때문이다.
+        this.seriesStale = true;
         this.drawingLayer.candlesChanged();
         this.scheduleDraw();
     }
@@ -547,8 +553,14 @@ export class CandleChartEngine {
         this.overlayCanvas.remove();
     }
 
+    /** 캔들이 바뀐 뒤 아직 계산하지 않은 이동평균·보조지표가 있으면 계산한다. 계산 결과를 읽는 곳은 먼저 이것을 부른다. */
+    private ensureSeries() {
+        if (this.seriesStale) this.computeSeries();
+    }
+
     /** 캔들이나 지표 설정이 바뀌면 이동평균·보조지표 값을 다시 계산한다. */
     private computeSeries() {
+        this.seriesStale = false;
         this.shapes = this.chartType === 'heikinAshi' ? heikinAshi(this.candles) : this.candles;
         this.averages = this.averagePeriods.map(period => movingAverage(this.candles, period));
         this.comparisonCloses = this.comparisons.map(comparison => (
@@ -836,6 +848,7 @@ export class CandleChartEngine {
 
     /** 마지막 캔들 뒤까지 값이 있는 가격 영역 지표가 차지하는 칸 수 (일목균형표의 선행스팬) */
     private futureBars(): number {
+        this.ensureSeries();
         const longest = this.priceOverlays.reduce(
             (most, overlay) => overlay.series.reduce((length, series) => Math.max(length, series.length), most), 0,
         );
@@ -1232,6 +1245,7 @@ export class CandleChartEngine {
         const style = this.style;
         this.countdownText = this.countdown();
         if (!style || this.candles.length === 0) return null;
+        this.ensureSeries();
         this.updateAxisWidth(style);
         const drag = this.priceLineDrag;
 
@@ -1279,6 +1293,8 @@ export class CandleChartEngine {
 
         const {layout, style} = this;
         if (!layout || !style) return;
+        // 값 표시가 이동평균·비교 종목 값을 읽는다.
+        this.ensureSeries();
 
         painter.useFont(style);
         this.drawingLayer.render(painter, layout, style);
