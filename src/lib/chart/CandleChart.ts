@@ -119,6 +119,7 @@ export class CandleChartEngine {
     private paneDrag: { pointerId: number, startY: number, boundary: Boundary, change: PaneResize | null } | null = null;
 
     private valueDecimals = 0;              // 캔들 가격의 소수 자릿수
+    private measuredDecimals = 0;           // 캔들 가격의 소수 자릿수 (상한을 적용하기 전)
     private maxDecimals: number | null = null;  // 캔들 가격을 적는 소수 자릿수의 상한. null 이면 캔들 가격을 그대로 따른다
     private extremePrefix = '';             // 최고·최저 표시의 가격 앞에 붙일 통화 기호
     private widestPrice = '';               // 가장 긴 가격 표기 (가격축 너비를 정하는 데 쓴다)
@@ -655,7 +656,9 @@ export class CandleChartEngine {
         const context = {
             timeUnit: this.timeUnit,
             formatPrice: (value: number) => formatPrice(value, this.valueDecimals),
-            priceDecimals: () => this.valueDecimals,
+            // 등락폭 지표(MACD·ATR)의 자릿수는 적는 자릿수의 상한(maxDecimals)을 적용하기 전 값으로 정한다.
+            // 상한을 따르면 저가 종목의 작은 값이 0 으로 뭉개진다
+            priceDecimals: () => this.measuredDecimals,
         };
         const instances = this.indicatorConfigs.map(config => createIndicator(config, this.candles, context));
         this.paneIndicators = instances.filter(instance => instance.placement === 'pane');
@@ -1229,6 +1232,7 @@ export class CandleChartEngine {
         const measured = recent.reduce((most, candle) => Math.max(
             most, decimalsOf(candle.open), decimalsOf(candle.high), decimalsOf(candle.low), decimalsOf(candle.close),
         ), 0);
+        this.measuredDecimals = measured;
         this.valueDecimals = this.maxDecimals === null ? measured : Math.min(measured, this.maxDecimals);
         const highest = this.candles.reduce((most, candle) => Math.max(most, candle.high), 0);
         this.widestPrice = formatPrice(highest, this.valueDecimals);
