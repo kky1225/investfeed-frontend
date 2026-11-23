@@ -65,6 +65,7 @@ const TOOLBAR_MIN_WIDTH = 680;
 const TOGGLE_MINUTE = 'MINUTE';
 const US_PRICE_DECIMALS = 2;    // 미국 주식 차트 가격의 소수 자릿수 (헤더의 $135.73 과 같게)
 const US_PENNY_DECIMALS = 4;    // 1달러 미만 미국 주식
+const US_PENNY_SAMPLE = 300;    // 1달러 미만인지 볼 최근 캔들 수 (차트가 가격 자릿수를 알아낼 때 보는 수와 같다)
 
 /**
  * 자산 하나의 차트: 주기 버튼 + 캔들 차트.
@@ -286,9 +287,13 @@ const AssetChart = ({
     // 반올림하면 값과 방향이 달라지므로 우클릭 메뉴에 띄우지 않는다.
     const canPriceTarget = market === 'US_STOCK' ? undefined : (price: number) => Number.isInteger(price) && price > 0;
     // 미국 주식은 일부 캔들만 소수 넷째 자리까지 와서 차트 전체가 넷째 자리로 적히므로, 헤더처럼 둘째 자리로 맞춘다.
-    // 1달러 미만 종목은 둘째 자리로는 값이 뭉개지므로 넷째 자리까지 둔다.
-    const maxPriceDecimals = market !== 'US_STOCK' ? undefined
-        : lastClose !== undefined && lastClose < 1 ? US_PENNY_DECIMALS : US_PRICE_DECIMALS;
+    // 최근 캔들 중 1달러 미만이 있으면 둘째 자리로는 값이 뭉개지므로 넷째 자리까지 둔다. 마지막 가격 하나로 정하면
+    // 1달러 근처에서 실시간 가격이 오갈 때 자릿수가 흔들리고, 1달러 미만이던 지난 구간이 뭉개진다.
+    const hasPennyPrice = useMemo(
+        () => market === 'US_STOCK' && fullCandles.slice(-US_PENNY_SAMPLE).some(candle => candle.low < 1),
+        [market, fullCandles],
+    );
+    const maxPriceDecimals = market !== 'US_STOCK' ? undefined : hasPennyPrice ? US_PENNY_DECIMALS : US_PRICE_DECIMALS;
 
     // 그릴 차트가 아직 없으면(처음 열거나 다른 자산으로 바뀐 동안) 자리만 잡아 둔다.
     const waiting = loading && !holding;
