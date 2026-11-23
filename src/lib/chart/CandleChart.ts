@@ -119,6 +119,8 @@ export class CandleChartEngine {
     private paneDrag: { pointerId: number, startY: number, boundary: Boundary, change: PaneResize | null } | null = null;
 
     private valueDecimals = 0;              // 캔들 가격의 소수 자릿수
+    private maxDecimals: number | null = null;  // 캔들 가격을 적는 소수 자릿수의 상한. null 이면 캔들 가격을 그대로 따른다
+    private extremePrefix = '';             // 최고·최저 표시의 가격 앞에 붙일 통화 기호
     private widestPrice = '';               // 가장 긴 가격 표기 (가격축 너비를 정하는 데 쓴다)
     private axisWidth = PRICE_AXIS_WIDTH;   // 오른쪽 가격축 너비 (CSS px)
 
@@ -273,6 +275,24 @@ export class CandleChartEngine {
         // 체결은 한 프레임 안에도 여러 건 오는데, 화면에는 마지막 결과만 보이기 때문이다.
         this.seriesStale = true;
         this.drawingLayer.candlesChanged();
+        this.scheduleDraw();
+    }
+
+    /**
+     * 캔들 가격(현재가·최고·최저·십자선·시고저종 등)을 적는 소수 자릿수의 상한을 정한다. null 이면 캔들 가격의 자릿수를 따른다.
+     * 캔들 값은 그대로 두고 적는 자릿수만 줄인다 (미국 주식처럼 일부 캔들만 자릿수가 긴 경우).
+     */
+    setMaxDecimals(max: number | null) {
+        if (this.maxDecimals === max) return;
+        this.maxDecimals = max;
+        this.measurePrices();
+        this.scheduleDraw();
+    }
+
+    /** 최고·최저 표시의 가격 앞에 붙일 통화 기호를 정한다($ 등). 빈 문자열이면 숫자만 적는다. 축·라벨에는 붙이지 않는다 */
+    setExtremePrefix(prefix: string) {
+        if (this.extremePrefix === prefix) return;
+        this.extremePrefix = prefix;
         this.scheduleDraw();
     }
 
@@ -1206,9 +1226,10 @@ export class CandleChartEngine {
      */
     private measurePrices() {
         const recent = this.candles.slice(-DECIMAL_SAMPLE_SIZE);
-        this.valueDecimals = recent.reduce((most, candle) => Math.max(
+        const measured = recent.reduce((most, candle) => Math.max(
             most, decimalsOf(candle.open), decimalsOf(candle.high), decimalsOf(candle.low), decimalsOf(candle.close),
         ), 0);
+        this.valueDecimals = this.maxDecimals === null ? measured : Math.min(measured, this.maxDecimals);
         const highest = this.candles.reduce((most, candle) => Math.max(most, candle.high), 0);
         this.widestPrice = formatPrice(highest, this.valueDecimals);
     }
@@ -1348,6 +1369,7 @@ export class CandleChartEngine {
             grid: this.grid,
             axisWidth: this.axisWidth,
             valueDecimals: this.valueDecimals,
+            extremePrefix: this.extremePrefix,
             countdown: this.countdownText,
         });
     }
