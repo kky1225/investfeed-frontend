@@ -1,5 +1,6 @@
 import {ReactNode, useEffect, useMemo, useRef, useState} from "react";
 import Box from "@mui/material/Box";
+import CircularProgress from "@mui/material/CircularProgress";
 import Divider from "@mui/material/Divider";
 import InputBase from "@mui/material/InputBase";
 import Menu from "@mui/material/Menu";
@@ -13,7 +14,10 @@ import SaveIcon from "@mui/icons-material/Save";
 import FullscreenIcon from "@mui/icons-material/Fullscreen";
 import FullscreenExitIcon from "@mui/icons-material/FullscreenExit";
 import KeyboardDoubleArrowRightIcon from "@mui/icons-material/KeyboardDoubleArrowRight";
+import CalendarMonthIcon from "@mui/icons-material/CalendarMonth";
+import ChartDateJumpDialog, {DateJumpInitial} from "./ChartDateJumpDialog.tsx";
 import ChartDrawingStylePanel from "./ChartDrawingStylePanel.tsx";
+import {useChartDateJump} from "./useChartDateJump.ts";
 import ChartSettingsDialog, {ChartIndicatorOption} from "./ChartSettingsDialog.tsx";
 import {INDICATORS, IndicatorShape, resolveIndicator} from "../../lib/chart/indicatorPanes.ts";
 import {chartColorVars, LINE_COLOR_VARS} from "./chartColors.ts";
@@ -60,7 +64,8 @@ export interface CandleChartProps {
     tradesNotice?: string,          // 내 매매 스위치 아래에 적을 알림 (일부 증권사의 조회 실패 등)
     // 화면 왼쪽 끝이 받아 둔 캔들의 처음에 가까워지면 부른다. 가까운 동안 여러 번 부르므로
     // 받는 쪽에서 요청 중이거나 더 받을 것이 없으면 무시해야 한다 (useCandleHistory 의 loadOlder)
-    onLoadOlder?: () => void,
+    // 돌려주는 값은 한 페이지를 받았는지다. 날짜로 이동이 과거 구간을 이어 받을 때 다음 요청 시점을 정하는 데 쓴다
+    onLoadOlder?: () => Promise<boolean>,
     // 더 받을 과거 구간이 남아 있는지. 남아 있으면 받아 둔 캔들보다 앞선 자리에 그린 선은 그 구간을 받을 때까지
     // 보이지 않고, 없으면 첫 캔들 자리에 놓는다.
     hasOlder?: boolean,
@@ -180,6 +185,10 @@ const CandleChart = ({
         items: comparisonItems, add: addComparison, remove: removeComparison, comparisons,
     } = useChartComparisons(`${assetType}-${assetCode}`, seriesKey ?? '', comparison, candles[0]?.time ?? null);
     const comparisonAlign = comparison?.align ?? 'time';
+    // "날짜로 이동" 창 (도구 줄의 달력 버튼, Alt+G, 우클릭 메뉴). dateJumpFrom 은 창을 열 때 채울 시각(지금 화면의 캔들)이고,
+    // null 이면 창이 닫혀 있다
+    const [dateJumpFrom, setDateJumpFrom] = useState<{ initial: DateJumpInitial | null } | null>(null);
+    const openDateJump = () => setDateJumpFrom({initial: engineRef.current?.viewTimes() ?? null});
     // 저장된 값이 이 버전이 모르는 것이면 자석을 끈 것으로 본다.
     const magnet: MagnetMode = MAGNET_MODES.find(mode => mode === savedMagnet) ?? 'off';
     // 저장된 값이 이 버전이 모르는 종류면 캔들로 그린다.
@@ -645,6 +654,9 @@ const CandleChart = ({
         engineRef.current?.setHasOlder(hasOlder);
     }, [hasOlder]);
 
+    // 날짜로 이동. 받아 온 과거 구간을 엔진에 넘긴(setData) 뒤에 옮겨야 하므로, effect 가 그보다 나중에 돌도록 여기서 부른다.
+    const {jumpTo, jumping} = useChartDateJump(engineRef, candles, seriesKey, hasOlder, onLoadOlder);
+
     useEffect(() => {
         engineRef.current?.setCandleInterval(interval ?? null);
     }, [interval]);
@@ -672,7 +684,7 @@ const CandleChart = ({
         return () => cancelAnimationFrame(frame);
     }, [mode, systemMode]);
 
-    // 단축키: Alt+T·H·V·R·F 도형, Esc 취소, Ctrl(⌘)+Z 실행 취소, Ctrl(⌘)+Shift+Z 다시 실행.
+    // 단축키: Alt+T·H·V·R·F 도형, Alt+G 날짜로 이동, Esc 취소, Ctrl(⌘)+Z 실행 취소, Ctrl(⌘)+Shift+Z 다시 실행.
     // 글자를 입력하는 중에는 동작하지 않는다. 차트가 여럿이면 단축키를 받을 차트 하나에서만 동작한다
     // (Esc 는 어느 차트든 동작한다).
     const [chartId] = useState(() => Symbol('chart'));
@@ -698,6 +710,12 @@ const CandleChart = ({
                 return;
             }
             if (!event.altKey || event.ctrlKey || event.metaKey) return;
+            if (event.code === 'KeyG') {
+                // 날짜로 이동 창 (openDateJump 와 같다. 이 effect 는 한 번만 등록되므로 바뀌지 않는 것만 쓴다)
+                event.preventDefault();
+                setDateJumpFrom({initial: engineRef.current?.viewTimes() ?? null});
+                return;
+            }
             const next = TOOL_SHORTCUTS[event.code];
             if (!next) return;
             event.preventDefault();
@@ -750,8 +768,13 @@ const CandleChart = ({
                     </>
                 )}
 
-                {/* 오른쪽: 최근으로 이동(과거를 보고 있을 때만), 차트 설정 */}
+                {/* 오른쪽: 날짜로 이동, 최근으로 이동(과거를 보고 있을 때만), 저장, 전체 화면, 차트 설정 */}
                 <Box sx={{flexGrow: 1}}/>
+                <Tooltip title="날짜로 이동 (Alt+G)">
+                    <ChartToolbarButton aria-label="날짜로 이동" onClick={openDateJump}>
+                        <CalendarMonthIcon/>
+                    </ChartToolbarButton>
+                </Tooltip>
                 {!atLatest && (
                     <Tooltip title="최근으로 이동">
                         <ChartToolbarButton
@@ -929,6 +952,17 @@ const CandleChart = ({
                             최근으로 이동
                         </MenuItem>
                     ),
+                    candles.length > 0 && (
+                        // 입력 창이 포커스를 가져가므로 차트로 되돌리지 않는다.
+                        <MenuItem
+                            key="date"
+                            onClick={() => runMenuAction(
+                                openDateJump, false,
+                            )}
+                        >
+                            날짜로 이동…
+                        </MenuItem>
+                    ),
                     contextMenu?.priceScaled && (
                         <MenuItem key="scale" onClick={() => runMenuAction(() => engineRef.current?.resetPriceScale())}>
                             가격축 원래대로
@@ -945,6 +979,20 @@ const CandleChart = ({
                     </MenuItem>,
                 ]}
             </Menu>
+            <ChartDateJumpDialog
+                open={dateJumpFrom !== null}
+                withTime={timeUnit === 'minute'}
+                initial={dateJumpFrom?.initial ?? null}
+                onClose={() => setDateJumpFrom(null)}
+                onSubmitDate={time => {
+                    setDateJumpFrom(null);
+                    jumpTo(time);
+                }}
+                onSubmitRange={(from, to) => {
+                    setDateJumpFrom(null);
+                    jumpTo(from, to);
+                }}
+            />
             <Stack direction="row" sx={fullscreen ? {flex: 1, minHeight: 0} : undefined}>
                 {/* 차트 색은 CSS 변수로 둔다. 캔버스(엔진)와 꾸미기 패널의 색 단추가 같은 값을 쓴다. */}
                 <Box
@@ -977,6 +1025,17 @@ const CandleChart = ({
                         ref={containerRef}
                         sx={{position: 'relative', width: '100%', height: chartHeight}}
                     />
+                    {jumping && (
+                        // 날짜로 이동이 과거 구간을 이어 받는 동안의 로딩 표시. 차트 조작은 막지 않는다.
+                        <Box
+                            sx={{
+                                position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                pointerEvents: 'none',
+                            }}
+                        >
+                            <CircularProgress size={32}/>
+                        </Box>
+                    )}
                     {/* 글자 도형의 입력 칸. 글자가 놓일 자리에 띄우고, 오른쪽 끝에서는 차트 밖으로 나가지 않게 당긴다. */}
                     {textRequest && (
                         <InputBase

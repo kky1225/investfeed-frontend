@@ -11,18 +11,22 @@ import {
 import {decimalsOf, formatCountdown, formatPercent, formatPrice} from "./scale.ts";
 import {alignCloses, ComparisonAlign, comparisonPercent} from "./comparison.ts";
 import {clamp, isNumber, Layout, paneToValue, paneToY, Point, View} from "./layout.ts";
-import {clampView, defaultView, futureMargin, logicalAt, visibleRange, zoomedView} from "./viewport.ts";
+import {clampView, defaultView, fittedView, futureMargin, logicalAt, visibleRange, zoomedView} from "./viewport.ts";
 import {candleColor, lineColor, Painter, textColorOf, watchPixelRatio} from "./painter.ts";
 import {createIndicator, LegendItem, OverlayIndicator, PaneIndicator} from "./indicatorPanes.ts";
 import {PANE_GAP, renderMain} from "./mainRenderer.ts";
 import {
     drawCandleLegend, drawCrosshair, drawIndicatorLegends, drawOverlayLegends, drawTradeTooltip,
 } from "./overlayRenderer.ts";
-import {DrawingLayer} from "./drawingLayer.ts";
+import {DrawingLayer, timeToIndex} from "./drawingLayer.ts";
 
 export {INDICATOR_HEIGHT_LIMIT, INDICATOR_PANE_HEIGHT, MAIN_HEIGHT_LIMIT, VOLUME_RATIO_LIMIT} from "./constants.ts";
 
 const COMPARISON_PERCENT_DECIMALS = 2;  // 값 표시에 적는 비교 종목 등락률의 소수 자릿수
+// 기간 이동에서 캔들이 여러 날을 담는지(주·월·연봉) 볼 때: 앞뒤로 이만큼의 간격을 보고, 중간값이 이보다 길면 여러 날로 본다.
+// 일봉은 연휴에도 중간값이 1일 남짓이고 주봉은 7일이다
+const SPAN_SAMPLE = 5;
+const MULTI_DAY_GAP_MS = 3 * 24 * 60 * 60 * 1000;
 const LOAD_OLDER_THRESHOLD = 50;   // 화면 왼쪽 끝에서 받아 둔 첫 캔들까지 이만큼 이하로 남으면 과거 구간을 요청한다
 const PINCH_DELTA_LIMIT = 30;   // 휠 한 번의 이동량이 이보다 작으면 트랙패드 두 손가락 벌리기로 본다
 const WHEEL_ZOOM_RATE = 0.0015;
@@ -496,6 +500,68 @@ export class CandleChartEngine {
     /** 정해진 가격에 수평선을 긋는다. 새로 그리는 도형의 꾸미기를 따른다. */
     addHorizontalLine(price: number) {
         this.drawingLayer.addHorizontal(price);
+    }
+
+    /** 화면 왼쪽 끝·가운데·오른쪽 끝에 놓인 캔들의 시각. 캔들이 없으면 null */
+    viewTimes(): { first: number, center: number, last: number } | null {
+        if (this.candles.length === 0) return null;
+        const plotWidth = this.plotWidth();
+        const view = this.resolveView();
+        const timeAt = (x: number) => this.candles[clamp(Math.floor(logicalAt(view, plotWidth, x)), 0, this.candles.length - 1)].time;
+        return {first: timeAt(0), center: timeAt(plotWidth / 2), last: timeAt(plotWidth - 1)};
+    }
+
+    /**
+     * 시각 from(기간 첫날·첫 분의 시작)부터 to(마지막 날·분의 끝)까지의 캔들이 화면 너비에 꽉 차게 확대·축소해 옮긴다.
+     * - 끝은 to 를 담은 캔들(scrollToTime 과 같은 규칙)이다.
+     * - 시작은 분봉·일봉이면 from 이후의 첫 캔들이다(휴장일·장 시작 전을 고르면 그다음 캔들). 주·월·연봉처럼 캔들 하나가
+     *   여러 날이면 from 을 담은 캔들이다(주 중간 날짜를 골라도 그 주가 들어간다).
+     * fits: 구간이 화면에 다 들어가는지(너무 길면 축소 한계에서 가운데를 맞춘다). empty: 기간 안에 캔들이 없어
+     * 가장 가까운 앞 캔들을 보여 주었는지(휴장일만 고른 경우, 기간 전체가 마지막 캔들보다 뒤인 경우).
+     */
+    fitTimeRange(from: number, to: number): { fits: boolean, empty: boolean } {
+        const candles = this.candles;
+        if (candles.length === 0) return {fits: true, empty: true};
+        const end = timeToIndex(candles, to);
+        const containing = timeToIndex(candles, from);
+        const start = this.spansDays(containing) || candles[containing].time >= from ? containing : containing + 1;
+        const empty = start > end;
+        const {view, fits} = fittedView(Math.min(start, end), end + 1, this.plotWidth());
+        this.setView(view);
+        return {fits, empty};
+    }
+
+    /** 순번 index 근처 캔들이 하루보다 긴 기간을 담는지 (주·월·연봉). 앞뒤 캔들 간격의 중간값으로 판단한다 */
+    private spansDays(index: number): boolean {
+        const from = Math.max(1, index - SPAN_SAMPLE);
+        const to = Math.min(this.candles.length - 1, index + SPAN_SAMPLE);
+        const gaps = [];
+        for (let next = from; next <= to; next++) gaps.push(this.candles[next].time - this.candles[next - 1].time);
+        if (gaps.length === 0) return false;
+        gaps.sort((a, b) => a - b);
+        return gaps[Math.floor(gaps.length / 2)] > MULTI_DAY_GAP_MS;
+    }
+
+    /**
+     * 시각 time 을 담은 캔들이 화면 가운데에 오도록 옮기고, 그 캔들의 종가에 십자선을 올려 둔다. 확대 정도는 그대로다.
+     * 그 시각에 캔들이 없으면(휴장일 등) 그 직전 캔들로, 받아 둔 첫 캔들보다 앞서면 첫 캔들로 간다.
+     * 십자선은 마우스가 차트 위에서 움직이면 마우스를 따라간다.
+     */
+    scrollToTime(time: number) {
+        if (this.candles.length === 0) return;
+        const index = timeToIndex(this.candles, time);
+        const view = this.resolveView();
+        this.setView({...view, rightEdge: index + 0.5 + this.plotWidth() / view.spacing / 2});
+        // 끝 쪽 캔들은 가운데까지 오지 못하므로, 옮긴 배치를 그려 본 뒤 그 캔들의 자리에 십자선을 놓는다.
+        this.drawNow();
+        const pane = this.layout?.panes[0];
+        if (!this.layout || !pane) return;
+        const {range} = this.layout;
+        this.pointer = {
+            x: (index + 0.5 - range.leftEdge) * range.spacing,
+            y: clamp(paneToY(pane)(this.candles[index].close), pane.top, pane.bottom),
+        };
+        this.scheduleOverlay();
     }
 
     /** 드래그·확대한 상태를 버리고 기본 보기로 돌아간다. 다른 종목·주기로 바뀔 때 부른다. */

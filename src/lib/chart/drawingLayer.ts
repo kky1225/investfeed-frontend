@@ -113,7 +113,7 @@ const textLinesOf = (text: string): string[] => text.split('\n');
 const createId = (): string => `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
 
 /** 시각이 time 인 캔들의 순번. 꼭 맞는 캔들이 없으면(주기가 바뀐 경우) 그 직전 캔들 */
-const timeToIndex = (candles: Candle[], time: number): number => {
+export const timeToIndex = (candles: Candle[], time: number): number => {
     let low = 0;
     let high = candles.length - 1;
     while (low < high) {

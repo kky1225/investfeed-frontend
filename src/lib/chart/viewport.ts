@@ -47,6 +47,17 @@ export const visibleRange = (view: View, total: number, plotWidth: number): Visi
 export const logicalAt = (view: View, plotWidth: number, x: number): number =>
     view.rightEdge - (plotWidth - x) / view.spacing;
 
+/**
+ * 순번 from 부터 to 앞까지(소수 가능)가 화면 너비에 꽉 차는 보기. 확대 한계에 걸리면 그 한계의 너비로 구간의 가운데를 맞춘다.
+ * fits 는 구간이 화면에 다 들어가는지다 (너무 길어 축소 한계에 걸리면 false).
+ */
+export const fittedView = (from: number, to: number, plotWidth: number): { view: View, fits: boolean } => {
+    const count = Math.max(1, to - from);
+    const spacing = clamp(plotWidth / count, MIN_BAR_SPACING, MAX_BAR_SPACING);
+    const bars = plotWidth / spacing;
+    return {view: {spacing, rightEdge: (from + to) / 2 + bars / 2}, fits: count <= bars + 1e-6};
+};
+
 /** 순번 anchor 가 가로 위치 x 에 그대로 있도록 캔들 너비를 spacing 으로 바꾼 보기 */
 export const zoomedView = (view: View, plotWidth: number, x: number, anchor: number, spacing: number): View => {
     const next = clamp(spacing, MIN_BAR_SPACING, MAX_BAR_SPACING);

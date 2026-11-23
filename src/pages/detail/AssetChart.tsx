@@ -60,7 +60,8 @@ export interface AssetChartProps {
 
 const DEFAULT_HEIGHT = 480;
 // 주기 버튼을 차트 위쪽 줄에 함께 놓을 수 있는 최소 너비. 이보다 좁으면 차트 아래에 놓는다(위쪽 줄의 설정 버튼이 잘리지 않게)
-const TOOLBAR_MIN_WIDTH = 640;
+// 위쪽 줄에 날짜로 이동 버튼(32px)과 간격(8px)이 늘어난 만큼 더한 값
+const TOOLBAR_MIN_WIDTH = 680;
 const TOGGLE_MINUTE = 'MINUTE';
 
 /**
