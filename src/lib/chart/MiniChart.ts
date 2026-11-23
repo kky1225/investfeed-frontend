@@ -1,7 +1,7 @@
 import {Candle, ChartStyle, TimeUnit} from "./types.ts";
 import {AXIS_LABEL_OFFSET, PADDING_TOP} from "./constants.ts";
 import {clamp, Point} from "./layout.ts";
-import {Painter} from "./painter.ts";
+import {Painter, watchPixelRatio} from "./painter.ts";
 import {createLinearScale, decimalsOf, formatPrice, formatTime, niceTicks} from "./scale.ts";
 
 /** 작은 차트가 가격을 그리는 방식 */
@@ -42,6 +42,7 @@ export class MiniChartEngine {
     private height = 0;     // CSS px
     private frame = 0;
     private pointer: Point | null = null;
+    private readonly stopWatchingPixelRatio: () => void;    // 화면 배율 감시를 끝낸다 (watchPixelRatio)
 
     constructor(container: HTMLElement) {
         this.container = container;
@@ -53,6 +54,7 @@ export class MiniChartEngine {
         this.painter = new Painter(ctx);
         container.addEventListener('pointermove', this.handlePointerMove);
         container.addEventListener('pointerleave', this.handlePointerLeave);
+        this.stopWatchingPixelRatio = watchPixelRatio(this.handlePixelRatioChange);
     }
 
     setData(candles: Candle[], timeUnit: TimeUnit) {
@@ -84,10 +86,10 @@ export class MiniChartEngine {
     }
 
     resize(width: number, height: number) {
-        if (width === this.width && height === this.height) return;
+        const dpr = window.devicePixelRatio || 1;
+        if (width === this.width && height === this.height && dpr === this.painter.dpr) return;
         this.width = width;
         this.height = height;
-        const dpr = window.devicePixelRatio || 1;
         this.painter.dpr = dpr;
         this.canvas.width = Math.round(width * dpr);
         this.canvas.height = Math.round(height * dpr);
@@ -97,7 +99,13 @@ export class MiniChartEngine {
         this.draw();
     }
 
+    /** 화면 배율이 바뀌면 캔버스를 그 배율에 맞춘다. 아직 크기를 받지 못했으면(처음 그리기 전) 크기를 받을 때 맞춘다. */
+    private readonly handlePixelRatioChange = () => {
+        if (this.width > 0 && this.height > 0) this.resize(this.width, this.height);
+    };
+
     destroy() {
+        this.stopWatchingPixelRatio();
         if (this.frame) cancelAnimationFrame(this.frame);
         this.frame = 0;
         this.container.removeEventListener('pointermove', this.handlePointerMove);

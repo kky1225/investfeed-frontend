@@ -3,6 +3,36 @@ import {Series} from "./indicators.ts";
 import {BODY_RATIO, FONT_SIZE, SERIES_DASH, SERIES_LINE_WIDTH} from "./constants.ts";
 import {isNumber, VisibleRange} from "./layout.ts";
 
+const PIXEL_RATIO_SLACK = 0.005;    // 화면 배율 감시 쿼리의 여유. 실제 배율 단계(0.1 이상)보다 훨씬 작게
+
+/**
+ * 화면 배율(devicePixelRatio)이 바뀌면 onChange 를 부른다. 그만 볼 때 부를 함수를 돌려준다.
+ * 배율이 다른 모니터로 창을 옮기면 차트 크기(CSS px)는 그대로라 크기 감시가 알려 주지 않으므로,
+ * 지금 배율 앞뒤의 아주 좁은 범위에만 맞는 미디어 쿼리를 걸어 두고 벗어나는 순간 알린다. 바뀔 때마다 새 배율로 다시 건다.
+ * 정확히 같은 배율을 묻지 않는 것은, 소수 배율(확대 110% 등)에서 브라우저에 따라 쿼리 안의 해상도와 소수점 아래가 달라
+ * 처음부터 맞지 않으면 알림이 한 번도 오지 않기 때문이다.
+ */
+export const watchPixelRatio = (onChange: () => void): () => void => {
+    let query: MediaQueryList | null = null;
+    const handleChange = () => {
+        watch();
+        onChange();
+    };
+    const watch = () => {
+        query?.removeEventListener('change', handleChange);
+        const dpr = window.devicePixelRatio || 1;
+        query = window.matchMedia(
+            `(min-resolution: ${dpr - PIXEL_RATIO_SLACK}dppx) and (max-resolution: ${dpr + PIXEL_RATIO_SLACK}dppx)`,
+        );
+        query.addEventListener('change', handleChange);
+    };
+    watch();
+    return () => {
+        query?.removeEventListener('change', handleChange);
+        query = null;
+    };
+};
+
 /**
  * 캔버스 한 장에 그릴 때 쓰는 공통 도구.
  * 좌표는 CSS px 로 계산한 뒤 px() 로 기기 픽셀에 맞춰 선이 흐려지지 않게 한다.
