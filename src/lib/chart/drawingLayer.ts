@@ -4,7 +4,9 @@ import {
 } from "./types.ts";
 import {AXIS_LABEL_OFFSET, AXIS_TAG_HEIGHT, AXIS_TAG_PADDING, DRAG_THRESHOLD} from "./constants.ts";
 import {formatTime} from "./scale.ts";
-import {clamp, distanceToSegment, Layout, Pane, paneToValue, paneToY, Point, tagCenterWithin} from "./layout.ts";
+import {
+    clamp, distanceToSegment, Layout, Pane, paneToValue, paneToY, placeTagAmong, Point, Span, tagCenterWithin,
+} from "./layout.ts";
 import {lineColor, Painter} from "./painter.ts";
 
 // 사용자가 그리는 도형: 그리기, 선택, 옮기기, 지우기, 화면에 그리기
@@ -550,26 +552,33 @@ export class DrawingLayer {
         drawWithin(pane.bottom, drawings.filter(drawing => drawing.type !== 'vertical'));
         drawWithin(layout.plotBottom, verticals);
 
-        // 수평선은 오른쪽 축에 가격 라벨을 붙인다.
+        // 수평선은 오른쪽 축에 가격 라벨을 붙인다. 위에서부터 차례로, 아래 장의 라벨과 앞서 놓은 수평선 라벨을 비켜 놓는다.
         const labelHeight = painter.px(AXIS_TAG_HEIGHT);
         const axisWidthPx = painter.px(layout.axisWidth);
+        const paneTopPx = painter.px(pane.top);
+        const paneBottomPx = painter.px(pane.bottom);
+        const taken: Span[] = [...layout.axisTags];
         ctx.textAlign = 'left';
         ctx.lineWidth = line;
-        drawings.forEach(drawing => {
-            if (drawing.type !== 'horizontal' || drawing.price < pane.min || drawing.price > pane.max) return;
-            const color = colorOf(drawing);
-            // 선은 제자리에 두고 라벨만 그 영역 안으로 당긴다.
-            const y = tagCenterWithin(
-                painter.px(toY(drawing.price)), painter.px(pane.top), painter.px(pane.bottom), labelHeight,
-            );
-            const labelTop = Math.round(y - labelHeight / 2);
-            ctx.fillStyle = style.backgroundColor;
-            ctx.fillRect(plotRightPx, labelTop, axisWidthPx, labelHeight);
-            ctx.strokeStyle = color;
-            ctx.strokeRect(plotRightPx + line / 2, labelTop + line / 2, axisWidthPx - line, labelHeight - line);
-            ctx.fillStyle = color;
-            ctx.fillText((pane.axisFormat ?? pane.format)(drawing.price), plotRightPx + painter.px(AXIS_LABEL_OFFSET), y);
-        });
+        drawings
+            .flatMap(drawing => drawing.type === 'horizontal' && drawing.price >= pane.min && drawing.price <= pane.max
+                ? [{drawing, price: drawing.price, lineY: painter.px(toY(drawing.price))}] : [])
+            .sort((a, b) => a.lineY - b.lineY)
+            .forEach(({drawing, price, lineY}) => {
+                const color = colorOf(drawing);
+                // 선은 제자리에 두고 라벨만 그 영역 안, 비어 있는 자리로 옮긴다.
+                const y = placeTagAmong(
+                    tagCenterWithin(lineY, paneTopPx, paneBottomPx, labelHeight), labelHeight, taken, paneTopPx, paneBottomPx,
+                );
+                const labelTop = Math.round(y - labelHeight / 2);
+                taken.push({top: labelTop, bottom: labelTop + labelHeight});
+                ctx.fillStyle = style.backgroundColor;
+                ctx.fillRect(plotRightPx, labelTop, axisWidthPx, labelHeight);
+                ctx.strokeStyle = color;
+                ctx.strokeRect(plotRightPx + line / 2, labelTop + line / 2, axisWidthPx - line, labelHeight - line);
+                ctx.fillStyle = color;
+                ctx.fillText((pane.axisFormat ?? pane.format)(price), plotRightPx + painter.px(AXIS_LABEL_OFFSET), y);
+            });
 
         // 수직선은 아래 날짜축에 그 캔들의 날짜 라벨을 붙인다. 캔들이 없는 자리(미래 구간)와 화면 밖의 선에는 붙이지 않는다.
         const candles = this.host.candles();

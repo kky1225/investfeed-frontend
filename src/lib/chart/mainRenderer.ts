@@ -7,7 +7,7 @@ import {ComparisonLine, scaleComparison} from "./comparison.ts";
 import {
     AXIS_LABEL_OFFSET, AXIS_TAG_HEIGHT, FONT_SIZE, LEGEND_LEFT, PRICE_PANE_TOP, TIME_AXIS_HEIGHT,
 } from "./constants.ts";
-import {clamp, isNumber, Layout, tagCenterWithin, VisibleRange} from "./layout.ts";
+import {clamp, isNumber, Layout, Span, tagCenterWithin, VisibleRange} from "./layout.ts";
 import {candleColor, lineColor, Painter, textColorOf} from "./painter.ts";
 import {drawIndicatorPane, OverlayIndicator, PaneIndicator} from "./indicatorPanes.ts";
 
@@ -36,12 +36,6 @@ const TRADE_MARK_HALO = 1;          // 화살표를 둘러싼 바탕색 테두�
 export interface TradeMark {
     index: number,
     side: 'buy' | 'sell',
-}
-
-/** 세로로 차지하는 범위 (기기 픽셀) */
-interface Span {
-    top: number,
-    bottom: number,
 }
 
 /** 현재가 라벨이 차지한 자리. line: 현재가 선의 높이(라벨은 가격 영역 안으로 당겨져 선과 어긋날 수 있다). */
@@ -508,27 +502,30 @@ const tagCenter = ({painter, priceTop, priceBottom}: Frame, y: number, extra = 0
     return tagCenterWithin(y, painter.px(priceTop), painter.px(priceBottom), painter.px(AXIS_TAG_HEIGHT), extra);
 };
 
+interface ComparisonTag {
+    value: number,
+    color: number,
+    y: number,     // 마지막 값의 높이 (기기 픽셀)
+}
+
+/** 라벨을 붙일 비교 종목: 보이는 구간의 마지막 값이 가격축 범위 안에 있는 것. 가격축을 끌어 범위를 좁히면 빠진다. */
+const visibleComparisons = ({painter, priceMin, priceMax, priceY, comparisons}: Frame): ComparisonTag[] =>
+    comparisons.flatMap(({line: comparison, color}) => {
+        const value = comparison.last;
+        return value === null || value < priceMin || value > priceMax ? [] : [{value, color, y: painter.px(priceY(value))}];
+    });
+
 /**
  * 비교 종목의 라벨: 보이는 구간의 마지막 값 높이에, 오른쪽 축에 선 색으로 등락률을 적는다.
- * 가격축을 끌어 범위를 좁혀 그 값이 범위를 벗어나면 적지 않는다.
- * 등락률이 비슷하면 라벨은 서로와 현재가 라벨(avoid)을 비켜 위아래로 쌓인다.
+ * centers: 라벨의 가운데 높이(tags 와 같은 순서). 가격선 라벨과 한데 쌓아 정한다.
  */
-const drawComparisonTags = (frame: Frame, avoid: TagSpan | null) => {
-    const {painter, style, priceMin, priceMax, priceTop, priceBottom, priceY, plotRightPx, axisLabelX} = frame;
+const drawComparisonTags = (frame: Frame, tags: ComparisonTag[], centers: number[]) => {
+    const {painter, style, plotRightPx, axisLabelX} = frame;
     const ctx = painter.ctx;
     const labelHeight = painter.px(AXIS_TAG_HEIGHT);
-    const visible = frame.comparisons
-        .flatMap(({line: comparison, color}) => {
-            const value = comparison.last;
-            return value === null || value < priceMin || value > priceMax ? [] : [{value, color, y: painter.px(priceY(value))}];
-        })
-        .sort((a, b) => a.y - b.y);
-    const labelCenters = spreadLabels(
-        visible.map(({y}) => y), labelHeight, avoid, {top: painter.px(priceTop), bottom: painter.px(priceBottom)},
-    );
     ctx.textAlign = 'left';
-    visible.forEach(({value, color}, order) => {
-        const y = labelCenters[order];
+    tags.forEach(({value, color}, order) => {
+        const y = centers[order];
         ctx.fillStyle = lineColor(style, color);
         ctx.fillRect(plotRightPx, Math.round(y - labelHeight / 2), frame.axisWidthPx, labelHeight);
         ctx.fillStyle = style.backgroundColor;
@@ -621,30 +618,94 @@ const spreadLabels = (centers: number[], height: number, avoid: TagSpan | null, 
 };
 
 /**
- * 가격선(목표가 등): 점선 + 선 위 이름 + 오른쪽 축에 테두리 라벨. 현재가 라벨(채움)과 구분된다.
- * 선이 촘촘하면 축 라벨은 서로와 현재가 라벨(avoid)을 비켜 위아래로 쌓이고(선은 제자리), 이름은 겹치는 선들 중 맨 위 선에만 적는다.
+ * 오른쪽 축 라벨들의 가운데 높이를 정한다. ys: 선의 높이(순서는 상관없다). 돌려주는 값은 ys 와 같은 순서다.
+ * 서로, 그리고 현재가 라벨(avoid)을 비켜 쌓는다.
  */
-const drawPriceLines = (frame: Frame, priceLines: PriceLine[], activeId: string | null, avoid: TagSpan | null) => {
-    const {painter, style, priceMin, priceMax, priceTop, priceBottom, priceY, line, plotRightPx, axisLabelX} = frame;
+const spreadTags = ({painter, priceTop, priceBottom}: Frame, ys: number[], avoid: TagSpan | null): number[] => {
+    const order = ys.map((_, index) => index).sort((a, b) => ys[a] - ys[b]);
+    const placed = spreadLabels(
+        order.map(index => ys[index]), painter.px(AXIS_TAG_HEIGHT), avoid,
+        {top: painter.px(priceTop), bottom: painter.px(priceBottom)},
+    );
+    const centers = new Array<number>(ys.length);
+    order.forEach((index, rank) => {
+        centers[index] = placed[rank];
+    });
+    return centers;
+};
+
+interface PriceLineTag {
+    priceLine: PriceLine,
+    y: number,     // 선의 높이 (기기 픽셀)
+}
+
+/** 가격축 범위 안의 가격선. 위에서 아래 순이다. */
+const visiblePriceLines = ({painter, priceMin, priceMax, priceY}: Frame, priceLines: PriceLine[]): PriceLineTag[] => priceLines
+    .filter(priceLine => priceLine.price >= priceMin && priceLine.price <= priceMax)
+    .map(priceLine => ({priceLine, y: painter.px(priceY(priceLine.price))}))
+    .sort((a, b) => a.y - b.y);
+
+/**
+ * 가격선 이름을 적을 선과 그 높이를 정한다. 돌려주는 값은 tags 의 순번 → 이름을 적을 높이.
+ * 선을 위에서부터 묶음(바로 위 선과 PRICE_LINE_TITLE_GAP 보다 가까운 선들)으로 나누고, 묶음마다 이름을 하나만 적는다.
+ * 보통은 묶음 맨 위 선의 위에 적는다. 맨 위 선이 가격 영역 꼭대기에 붙어 위에 자리가 없으면,
+ * 묶음 맨 아래 선의 이름을 그 선 아래에 적어 묶음의 다른 선이 이름 위를 지나가지 않게 한다.
+ */
+const placeTitles = (frame: Frame, tags: PriceLineTag[]): Map<number, number> => {
+    const {painter, priceTop, priceBottom, line} = frame;
+    const gap = painter.px(PRICE_LINE_TITLE_GAP);
+    const titleOffset = painter.px(PRICE_LINE_TITLE_OFFSET);
+    const fontHalf = painter.px(FONT_SIZE) / 2;
+    // 이름(글자 가운데)이 놓일 수 있는 가장 높은·낮은 자리
+    const titleTop = painter.px(priceTop) + fontHalf;
+    const titleBottom = painter.px(priceBottom) - fontHalf;
+    const titles = new Map<number, number>();
+    let previousY = -Infinity;  // 바로 위에서 이름이 차지한 자리를 고려한 기준 높이
+    let order = 0;
+    while (order < tags.length) {
+        // 묶음의 끝: 바로 앞 선과의 간격이 gap 이상이 되기 전까지
+        let end = order;
+        while (end + 1 < tags.length && tags[end + 1].y - tags[end].y < gap) end++;
+        const first = tags[order].y;
+        if (first - previousY < gap) {
+            // 위 묶음의 이름과 가까우면 이 묶음에는 이름을 적지 않는다.
+            previousY = tags[end].y;
+        } else if (first - titleOffset >= titleTop) {
+            titles.set(order, first - titleOffset);
+            previousY = tags[end].y;
+        } else {
+            const last = tags[end].y;
+            const below = last + titleOffset + line;
+            if (below > titleBottom) {
+                // 묶음이 가격 영역 바닥까지 이어져 아래에도 자리가 없으면 이름을 적지 않는다.
+                previousY = last;
+            } else {
+                titles.set(end, below);
+                // 다음 묶음의 이름(첫 선 위)이 이 이름의 아래 끝보다 아래에 놓일 때만 적히도록 기준을 내린다.
+                previousY = below + fontHalf + titleOffset + fontHalf - gap;
+            }
+        }
+        order = end + 1;
+    }
+    return titles;
+};
+
+/**
+ * 가격선(목표가 등): 점선 + 선 위 이름 + 오른쪽 축에 테두리 라벨. 현재가 라벨(채움)과 구분된다.
+ * centers: 축 라벨의 가운데 높이(tags 와 같은 순서). 비교 종목 라벨과 한데 쌓아 정한다(선은 제자리).
+ * 이름은 겹치는 선들 가운데 하나에만 적는다(placeTitles).
+ */
+const drawPriceLines = (frame: Frame, tags: PriceLineTag[], centers: number[], activeId: string | null) => {
+    const {painter, style, line, plotRightPx, axisLabelX} = frame;
     const ctx = painter.ctx;
     const labelHeight = painter.px(AXIS_TAG_HEIGHT);
-    const visible = priceLines
-        .filter(priceLine => priceLine.price >= priceMin && priceLine.price <= priceMax)
-        .map(priceLine => ({priceLine, y: painter.px(priceY(priceLine.price))}))
-        .sort((a, b) => a.y - b.y);
-    const labelCenters = spreadLabels(
-        visible.map(({y}) => y), labelHeight, avoid, {top: painter.px(priceTop), bottom: painter.px(priceBottom)},
-    );
-    const titleOffset = painter.px(PRICE_LINE_TITLE_OFFSET);
-    // 이름이 놓일 수 있는 가장 높은 자리. 선이 이보다 위에 있으면 이름을 선 아래에 적는다.
-    const titleTop = painter.px(priceTop) + painter.px(FONT_SIZE) / 2;
-    let previousY = -Infinity;  // 바로 위 선의 높이 (그 선의 이름을 아래에 적었으면 이름이 내려간 만큼 아래)
+    const titles = placeTitles(frame, tags);
 
-    visible.forEach(({priceLine, y}, order) => {
+    tags.forEach(({priceLine, y}, order) => {
         const color = priceLine.tone === 'up' ? style.upColor
             : priceLine.tone === 'down' ? style.downColor
             : style.textColor;
-        const labelTop = Math.round(labelCenters[order] - labelHeight / 2);
+        const labelTop = Math.round(centers[order] - labelHeight / 2);
         // 마우스를 올렸거나 끌고 있는 선은 굵게 긋고 라벨을 채워, 촘촘한 선들 가운데 어느 것이 잡히는지 보이게 한다.
         const active = priceLine.id !== undefined && priceLine.id === activeId;
         const labelColor = textColorOf(style, color);
@@ -672,14 +733,11 @@ const drawPriceLines = (frame: Frame, priceLines: PriceLine[], activeId: string 
             frame.axisText(priceLine.price, Math.max(frame.valueDecimals, decimalsOf(priceLine.price))),
             axisLabelX, labelTop + labelHeight / 2,
         );
-        // 바로 위 선과 가까우면 이름을 적지 않는다. 촘촘하게 이어진 선들은 맨 위 선에만 이름이 남는다.
-        const titled = y - previousY >= painter.px(PRICE_LINE_TITLE_GAP);
-        const below = titled && y - titleOffset < titleTop;
-        if (titled) {
+        const titleY = titles.get(order);
+        if (titleY !== undefined) {
             ctx.fillStyle = labelColor;
-            ctx.fillText(priceLine.title, painter.px(LEGEND_LEFT), below ? y + titleOffset + line : y - titleOffset);
+            ctx.fillText(priceLine.title, painter.px(LEGEND_LEFT), titleY);
         }
-        previousY = below ? y + titleOffset * 2 : y;
     });
 };
 
@@ -792,8 +850,21 @@ export const renderMain = (painter: Painter, input: MainInput): Layout | null =>
     // 오른쪽 끝에 반쯤 걸친 캔들의 세모가 가격축 위로 넘어가지 않게, 캔들처럼 가격 영역 안에서 자른다.
     painter.clipped(frame.priceTop, frame.priceBottom, frame.plotWidth, () => drawTradeMarks(frame, input.tradeMarks));
     const currentPriceTag = drawCurrentPrice(frame);
-    drawComparisonTags(frame, currentPriceTag);
-    drawPriceLines(frame, priceLines, input.activePriceLine, currentPriceTag);
+    // 비교 종목과 가격선의 축 라벨은 한데 모아, 서로와 현재가 라벨을 비켜 쌓는다.
+    const comparisonTags = visibleComparisons(frame);
+    const priceLineTags = visiblePriceLines(frame, priceLines);
+    const tagCenters = spreadTags(frame, [...comparisonTags, ...priceLineTags].map(({y}) => y), currentPriceTag);
+    drawComparisonTags(frame, comparisonTags, tagCenters.slice(0, comparisonTags.length));
+    drawPriceLines(frame, priceLineTags, tagCenters.slice(comparisonTags.length), input.activePriceLine);
+    // 위 장의 수평선 라벨이 비킬 수 있게, 아래 장이 축에 붙인 라벨 자리를 넘긴다.
+    const tagHeight = painter.px(AXIS_TAG_HEIGHT);
+    const axisTags: Span[] = [
+        ...(currentPriceTag ? [{top: currentPriceTag.top, bottom: currentPriceTag.bottom}] : []),
+        ...tagCenters.map(center => {
+            const top = Math.round(center - tagHeight / 2);
+            return {top, bottom: top + tagHeight};
+        }),
+    ];
 
     const indicatorPanes = indicators.map((instance, order) => drawIndicatorPane(
         painter, instance, indicatorTops[order], indicatorTops[order + 1], plotWidth, range, style,
@@ -819,5 +890,6 @@ export const renderMain = (painter: Painter, input: MainInput): Layout | null =>
         priceOverlays,
         volumeOverlays,
         comparisonBases: comparisonLines.map(({line}) => line.base),
+        axisTags,
     };
 };

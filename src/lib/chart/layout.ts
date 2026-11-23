@@ -56,6 +56,14 @@ export interface Layout {
     volumeOverlays: OverlayIndicator[],     // 거래량 영역에 겹쳐 그린 지표
     // 비교 종목마다 0% 로 삼은 종가. 보이는 구간에 값이 없으면 null. 값 표시가 등락률을 계산할 때 쓴다
     comparisonBases: (number | null)[],
+    // 아래 장이 오른쪽 가격축에 붙인 라벨(현재가·가격선·비교 종목)의 자리 (기기 픽셀). 수평선 라벨이 이 자리를 비킨다
+    axisTags: Span[],
+}
+
+/** 세로로 차지하는 범위 (기기 픽셀) */
+export interface Span {
+    top: number,
+    bottom: number,
 }
 
 export interface Point {
@@ -72,6 +80,20 @@ export const clamp = (value: number, min: number, max: number) => Math.min(max, 
 export const tagCenterWithin = (y: number, top: number, bottom: number, height: number, extra = 0) => {
     const first = top + height / 2;
     return clamp(y, first, Math.max(first, bottom - height / 2 - extra));
+};
+
+/**
+ * 라벨 하나를 이미 놓인 라벨들(taken)과 겹치지 않는 가장 가까운 자리에 놓을 가운데 높이를 구한다.
+ * 원래 자리(center)가 비어 있으면 그대로 두고, 아니면 걸리는 라벨의 바로 위·아래 가운데 원래 자리에 가까운 빈 곳으로 옮긴다.
+ * 영역(top~bottom) 안에 빈 곳이 없으면 원래 자리에 겹쳐 놓는다. 모두 같은 단위(기기 픽셀)로 넘긴다.
+ */
+export const placeTagAmong = (center: number, height: number, taken: Span[], top: number, bottom: number) => {
+    const half = height / 2;
+    const free = (y: number) => y - half >= top && y + half <= bottom
+        && taken.every(span => y + half <= span.top || y - half >= span.bottom);
+    return [center, ...taken.flatMap(span => [span.top - half, span.bottom + half])]
+        .sort((a, b) => Math.abs(a - center) - Math.abs(b - center))
+        .find(free) ?? center;
 };
 
 export const isNumber = (value: number | null | undefined): value is number => value !== null && value !== undefined;
