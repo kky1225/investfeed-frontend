@@ -4,7 +4,7 @@ import {
 } from "./types.ts";
 import {AXIS_LABEL_OFFSET, AXIS_TAG_HEIGHT, AXIS_TAG_PADDING, DRAG_THRESHOLD} from "./constants.ts";
 import {formatTime} from "./scale.ts";
-import {clamp, distanceToSegment, Layout, Pane, paneToValue, paneToY, Point} from "./layout.ts";
+import {clamp, distanceToSegment, Layout, Pane, paneToValue, paneToY, Point, tagCenterWithin} from "./layout.ts";
 import {lineColor, Painter} from "./painter.ts";
 
 // 사용자가 그리는 도형: 그리기, 선택, 옮기기, 지우기, 화면에 그리기
@@ -558,7 +558,10 @@ export class DrawingLayer {
         drawings.forEach(drawing => {
             if (drawing.type !== 'horizontal' || drawing.price < pane.min || drawing.price > pane.max) return;
             const color = colorOf(drawing);
-            const y = painter.px(toY(drawing.price));
+            // 선은 제자리에 두고 라벨만 그 영역 안으로 당긴다.
+            const y = tagCenterWithin(
+                painter.px(toY(drawing.price)), painter.px(pane.top), painter.px(pane.bottom), labelHeight,
+            );
             const labelTop = Math.round(y - labelHeight / 2);
             ctx.fillStyle = style.backgroundColor;
             ctx.fillRect(plotRightPx, labelTop, axisWidthPx, labelHeight);

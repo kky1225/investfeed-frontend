@@ -65,6 +65,15 @@ export interface Point {
 
 export const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
 
+/**
+ * 축 라벨의 가운데 높이를 그 영역(top~bottom) 안으로 당긴다. 값이 영역 가장자리에 있어도 라벨이 옆 영역을 덮지 않는다.
+ * height: 라벨 높이, extra: 라벨 아래로 덧붙는 높이. 모두 같은 단위(기기 픽셀)로 넘긴다.
+ */
+export const tagCenterWithin = (y: number, top: number, bottom: number, height: number, extra = 0) => {
+    const first = top + height / 2;
+    return clamp(y, first, Math.max(first, bottom - height / 2 - extra));
+};
+
 export const isNumber = (value: number | null | undefined): value is number => value !== null && value !== undefined;
 
 /** 점 p 에서 선분 a-b 까지의 거리 */
