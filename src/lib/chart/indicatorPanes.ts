@@ -83,6 +83,7 @@ export interface IndicatorParam {
 export interface IndicatorContext {
     timeUnit: TimeUnit,                         // 차트의 주기. 분봉에서만 뜻이 있는 지표(VWAP)가 본다
     formatPrice: (value: number) => string,     // 캔들 가격과 같은 자릿수의 표기. 가격 단위의 지표(ATR)가 쓴다
+    priceDecimals: () => number,                // 캔들 가격의 소수 자릿수. 캔들이 바뀌면 달라지므로 쓸 때 읽는다
 }
 
 /** 사용자가 모양(색·굵기·점선)을 바꿀 수 있는 선 하나. 색은 style.lineColors 안에서의 순번 */
@@ -130,6 +131,21 @@ const colorOf = (style: ChartStyle, look: LineLook): string => lineColor(style, 
 
 export const formatIndicator = (value: number | null | undefined): string =>
     isNumber(value) ? value.toLocaleString('ko-KR', {maximumFractionDigits: 2}) : '-';
+
+// 가격을 이보다 잘게 적는 종목(1원 미만 코인 등)은 가격 차이 단위의 지표 값을 더 잘게 적는다
+const SMALL_PRICE_DECIMALS = 2;
+const DELTA_EXTRA_DECIMALS = 2;
+
+/**
+ * 가격 차이 단위의 지표 값(MACD·ATR) 표기. 가격이 아주 작은 종목은 이 값이 가격의 마지막 자리보다도 작아
+ * 0 으로만 보이므로, 가격보다 두 자리 더 적는다. 그 밖의 종목은 fallback 그대로 적는다.
+ */
+const deltaFormat = (priceDecimals: () => number, fallback: (value: number) => string) => (value: number) => {
+    const decimals = priceDecimals();
+    return decimals > SMALL_PRICE_DECIMALS
+        ? value.toLocaleString('ko-KR', {maximumFractionDigits: decimals + DELTA_EXTRA_DECIMALS})
+        : fallback(value);
+};
 
 const formatWith = (format: (value: number) => string, value: number | null | undefined): string =>
     isNumber(value) ? format(value) : '-';
@@ -311,15 +327,16 @@ const atrDefinition: IndicatorDefinition = {
     defaultOn: false,
     params: [period('기간', 14)],
     colors: [swatch('선', 1)],
-    create: (candles, [length], [atrLook], {formatPrice}) => {
+    create: (candles, [length], [atrLook], {formatPrice, priceDecimals}) => {
         const values = averageTrueRange(candles, length);
+        const format = deltaFormat(priceDecimals, formatPrice);
         return {
             placement: 'pane',
-            format: formatPrice,
-            draw: context => drawLinePane(context, values, atrLook, formatPrice),
+            format,
+            draw: context => drawLinePane(context, values, atrLook, format),
             legend: (index, style) => [
                 [`ATR ${length}`, style.textColor],
-                [formatWith(formatPrice, values[index]), colorOf(style, atrLook)],
+                [formatWith(format, values[index]), colorOf(style, atrLook)],
             ],
         };
     },
@@ -351,10 +368,12 @@ const macdDefinition: IndicatorDefinition = {
     params: [period('단기', 12), period('장기', 26), period('시그널', 9)],
     // 오실레이터 막대는 상승색·하락색으로 뜻을 나타내므로 바꿀 수 없다.
     colors: [swatch('MACD', 4), swatch('시그널', 1)],
-    create: (candles, [fast, slow, signalLength], [macdLook, signalLook]) => {
+    create: (candles, [fast, slow, signalLength], [macdLook, signalLook], {priceDecimals}) => {
         const {macd: macdLine, signal, histogram} = macd(candles, fast, slow, signalLength);
+        const format = deltaFormat(priceDecimals, formatIndicator);
         return {
             placement: 'pane',
+            format,
             draw: ({painter, range, style, plotWidth, top, bottom, scaleTop, scaleBottom, guide}) => {
                 // 보이는 구간에서 0 을 가운데에 두고 위아래 같은 폭으로 잡는다.
                 const ctx = painter.ctx;
@@ -397,10 +416,10 @@ const macdDefinition: IndicatorDefinition = {
                 const bar = histogram[index];
                 return [
                     [`MACD ${fast}·${slow}·${signalLength}`, style.textColor],
-                    [`MACD ${formatIndicator(macdLine[index])}`, colorOf(style, macdLook)],
-                    [`시그널 ${formatIndicator(signal[index])}`, colorOf(style, signalLook)],
+                    [`MACD ${formatWith(format, macdLine[index])}`, colorOf(style, macdLook)],
+                    [`시그널 ${formatWith(format, signal[index])}`, colorOf(style, signalLook)],
                     [
-                        `오실레이터 ${formatIndicator(bar)}`,
+                        `오실레이터 ${formatWith(format, bar)}`,
                         !isNumber(bar) ? style.textColor : textColorOf(style, bar >= 0 ? style.upColor : style.downColor),
                     ],
                 ];

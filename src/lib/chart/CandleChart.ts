@@ -549,6 +549,7 @@ export class CandleChartEngine {
         const context = {
             timeUnit: this.timeUnit,
             formatPrice: (value: number) => formatPrice(value, this.valueDecimals),
+            priceDecimals: () => this.valueDecimals,
         };
         const instances = this.indicatorConfigs.map(config => createIndicator(config, this.candles, context));
         this.paneIndicators = instances.filter(instance => instance.placement === 'pane');
