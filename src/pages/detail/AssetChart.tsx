@@ -54,6 +54,8 @@ export interface AssetChartProps {
     liveStamp?: number,     // 그 가격의 시각(epoch ms). 마지막 캔들보다 앞선 값이면 반영하지 않는다
     loading?: boolean,
     height?: number,        // 가격+거래량 영역의 기본 높이
+    // 우클릭 메뉴의 "이 가격에 목표가 알림". 목표가 알림 창을 가진 화면만 넘긴다(넘기지 않으면 메뉴에 없다)
+    onPriceTarget?: (price: number) => void,
 }
 
 const DEFAULT_HEIGHT = 480;
@@ -68,7 +70,7 @@ const TOGGLE_MINUTE = 'MINUTE';
  */
 const AssetChart = ({
     market, code, exchange, chartType, onChartTypeChange, candles, livePrice, liveStamp, loading = false,
-    height = DEFAULT_HEIGHT,
+    height = DEFAULT_HEIGHT, onPriceTarget,
 }: AssetChartProps) => {
     const rule = MARKET_CHART_RULES[market];
     const storage = chartStorageOf(market, code);
@@ -277,6 +279,10 @@ const AssetChart = ({
         [rule.comparison, market, shownType, code],
     );
 
+    // 목표가 알림 창은 원화 목표가를 원 단위 정수로만 받는다(달러는 소수 4자리). 1원 미만 단위가 있는 가격(저가 코인 등)은
+    // 반올림하면 값과 방향이 달라지므로 우클릭 메뉴에 띄우지 않는다.
+    const canPriceTarget = market === 'US_STOCK' ? undefined : (price: number) => Number.isInteger(price) && price > 0;
+
     // 그릴 차트가 아직 없으면(처음 열거나 다른 자산으로 바뀐 동안) 자리만 잡아 둔다.
     const waiting = loading && !holding;
 
@@ -304,6 +310,8 @@ const AssetChart = ({
                         comparison={comparison}
                         priceLines={priceLines}
                         onPriceLineMove={handleTargetMove}
+                        onPriceTarget={onPriceTarget}
+                        canPriceTarget={canPriceTarget}
                         tradeMarkers={tradeMarkers}
                         onTradesChange={tradeMarket ? handleTradesChange : undefined}
                         tradesNotice={tradesNotice}

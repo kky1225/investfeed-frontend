@@ -135,7 +135,8 @@ const CryptoDetail = () => {
         chartType: CryptoChartType.DAY
     });
 
-    const [priceTargetOpen, setPriceTargetOpen] = useState(false);
+    // 목표가 알림 창. price: 차트 우클릭으로 연 경우 미리 채울 가격, 머리의 종 버튼으로 열면 null
+    const [priceTarget, setPriceTarget] = useState<{price: number | null} | null>(null);
 
     const {data: result, isLoading, lastUpdated, pollError} = usePollingQuery<CryptoDetailRes>(
         ['cryptoDetail', market, req.chartType],
@@ -392,7 +393,7 @@ const CryptoDetail = () => {
                                     {loading ? <Skeleton width={120}/> : chartData.title}
                                 </Typography>
                                 <Tooltip title="목표가 알림">
-                                    <IconButton size="small" onClick={() => setPriceTargetOpen(true)} sx={{mb: "3px"}}>
+                                    <IconButton size="small" onClick={() => setPriceTarget({price: null})} sx={{mb: "3px"}}>
                                         <NotificationsActiveIcon fontSize="small" />
                                     </IconButton>
                                 </Tooltip>
@@ -425,6 +426,7 @@ const CryptoDetail = () => {
                             livePrice={livePrice?.tradePrice}
                             liveStamp={livePrice?.stamp}
                             loading={loading}
+                            onPriceTarget={price => setPriceTarget({price})}
                         />
                     </Card>
                 </Grid>
@@ -562,8 +564,9 @@ const CryptoDetail = () => {
                 </Grid>
             </Grid>
             <PriceTargetDialog
-                open={priceTargetOpen}
-                onClose={() => setPriceTargetOpen(false)}
+                open={priceTarget !== null}
+                onClose={() => setPriceTarget(null)}
+                initialPrice={priceTarget?.price}
                 assetType="CRYPTO"
                 assetCode={id ?? ""}
                 assetName={chartData.title}

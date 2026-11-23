@@ -33,14 +33,29 @@ interface PriceTargetDialogProps {
     assetCode: string;
     assetName: string;
     currentPrice: string;
+    // 창을 열 때 목표가 칸에 미리 채울 가격 (차트 우클릭 "이 가격에 목표가 알림"). 없으면 빈 칸
+    initialPrice?: number | null;
 }
 
-export default function PriceTargetDialog({open, onClose, assetType, assetCode, assetName, currentPrice}: PriceTargetDialogProps) {
+export default function PriceTargetDialog({
+    open, onClose, assetType, assetCode, assetName, currentPrice, initialPrice,
+}: PriceTargetDialogProps) {
     const queryClient = useQueryClient();
     const [targetPrice, setTargetPrice] = useState("");
     const [targetPriceError, setTargetPriceError] = useState("");
     // 미국 주식(_US)은 달러·소수 4자리까지 (2026-10-27)
     const usd = assetCode.endsWith('_US');
+
+    // 창이 열리는 순간 미리 채울 가격을 칸에 넣는다. 입력 칸과 같은 규칙(원은 정수, 달러는 소수 4자리)으로 맞추고, 0 이하가 되면 비운다.
+    const [wasOpen, setWasOpen] = useState(open);
+    if (open !== wasOpen) {
+        setWasOpen(open);
+        if (open) {
+            const rounded = initialPrice == null ? 0 : usd ? Number(initialPrice.toFixed(4)) : Math.round(initialPrice);
+            setTargetPrice(rounded > 0 ? String(rounded) : "");
+            setTargetPriceError("");
+        }
+    }
 
     const {data: allTargetsData} = useQuery<PriceTarget[]>({
         queryKey: ['priceTargets'],

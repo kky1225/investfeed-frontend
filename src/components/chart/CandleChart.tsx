@@ -50,6 +50,10 @@ export interface CandleChartProps {
     priceLines?: PriceLine[],   // 특정 가격에 긋는 가로선 (목표가 등)
     // id 가 있는 가격선을 끌어 다른 가격에 놓으면 부른다. 받아들이려면 바뀐 priceLines 를 넘겨야 한다(넘기지 않으면 선은 제자리로 돌아간다)
     onPriceLineMove?: (id: string, price: number) => void,
+    // 우클릭 메뉴의 "이 가격에 목표가 알림"을 누르면 그 가격으로 부른다. 넘기지 않으면(목표가 알림이 없는 화면) 메뉴에 없다
+    onPriceTarget?: (price: number) => void,
+    // 그 가격으로 목표가 알림을 만들 수 있는지. false 면 메뉴에 띄우지 않는다(원 단위 목표가에 소수 가격 등). 비우면 늘 띄운다
+    canPriceTarget?: (price: number) => boolean,
     tradeMarkers?: TradeMarker[],   // 내 매매 표시. 캔들의 time 에 맞춰 넘길 것
     // 설정 창의 "내 매매 표시" 스위치를 바꾸면 부른다. 주면 설정 창에 그 스위치가 생긴다(내 매매를 조회할 수 있는 화면만 준다)
     onTradesChange?: (visible: boolean) => void,
@@ -142,6 +146,7 @@ interface DrawingHistory {
 
 const CandleChart = ({
     candles, timeUnit, interval, seriesKey, assetType, assetCode, toolbarStart, onLoadOlder, hasOlder = false, comparison, onPriceLineMove,
+    onPriceTarget, canPriceTarget,
     movingAverages = DEFAULT_MOVING_AVERAGES, indicators = DEFAULT_INDICATORS, priceLines = NO_PRICE_LINES,
     tradeMarkers = NO_TRADE_MARKERS, onTradesChange, tradesNotice,
     height = 400,
@@ -901,6 +906,12 @@ const CandleChart = ({
                             onClick={() => runMenuAction(() => engineRef.current?.addHorizontalLine(contextMenu.price!))}
                         >
                             {contextMenu.priceText}에 수평선 긋기
+                        </MenuItem>
+                    ),
+                    contextMenu?.price != null && onPriceTarget && (canPriceTarget?.(contextMenu.price) ?? true) && (
+                        // 등록 창이 뜨므로 차트로 포커스를 되돌리지 않는다.
+                        <MenuItem key="target" onClick={() => runMenuAction(() => onPriceTarget(contextMenu.price!), false)}>
+                            {contextMenu.priceText}에 목표가 알림
                         </MenuItem>
                     ),
                     contextMenu?.price != null && (

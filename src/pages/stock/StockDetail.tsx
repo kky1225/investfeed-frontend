@@ -302,7 +302,8 @@ const StockDetail = () => {
     const [programDateData, setProgramDateData] = useState<string[]>([]);
     const [programChartLoading, setProgramChartLoading] = useState(false);
     const [programChartLoaded, setProgramChartLoaded] = useState(false);
-    const [priceTargetOpen, setPriceTargetOpen] = useState(false);
+    // 목표가 알림 창. price: 차트 우클릭으로 연 경우 미리 채울 가격, 머리의 종 버튼으로 열면 null
+    const [priceTarget, setPriceTarget] = useState<{price: number | null} | null>(null);
 
     // 폴링 (`stockInfo.tm`) 와 WS (values["20"]) 양쪽이 같은 종목의 실시간 가격을 독립적으로 갱신.
     // stamp (epoch ms) 비교로 last-write-wins — 더 오래된 값이 더 새로운 값을 덮지 않게.
@@ -919,7 +920,7 @@ const StockDetail = () => {
                                         stkCd={stockChartData.id} stkNm={stockChartData.title} groupIds={result?.watchlistGroupIds}
                                     />
                                     <Tooltip title="목표가 알림">
-                                        <IconButton size="small" onClick={() => setPriceTargetOpen(true)} sx={{mb: "3px"}}>
+                                        <IconButton size="small" onClick={() => setPriceTarget({price: null})} sx={{mb: "3px"}}>
                                             <NotificationsActiveIcon fontSize="small" />
                                         </IconButton>
                                     </Tooltip>
@@ -973,6 +974,7 @@ const StockDetail = () => {
                             onChartTypeChange={chartType => setReq({...req, chartType: chartType as StockChartType})}
                             candles={chartCandles}
                             loading={loading}
+                            onPriceTarget={price => setPriceTarget({price})}
                         />
                     </Card>
                 </Grid>
@@ -1419,8 +1421,9 @@ const StockDetail = () => {
             </Grid>
 
             <PriceTargetDialog
-                open={priceTargetOpen}
-                onClose={() => setPriceTargetOpen(false)}
+                open={priceTarget !== null}
+                onClose={() => setPriceTarget(null)}
+                initialPrice={priceTarget?.price}
                 assetType="STOCK"
                 assetCode={id ?? ""}
                 assetName={stockChartData.title}
