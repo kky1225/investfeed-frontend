@@ -43,6 +43,7 @@ interface TagSpan extends Span {
     line: number,
 }
 const EXTREME_LABEL_GAP = 4;        // 최고·최저가 표시와 캔들 사이 (가로)
+const EXTREME_LABEL_HALO = 2;       // 최고·최저가 글자를 둘러싼 바탕색 테두리의 두께
 // 거래량 눈금: 보이는 구간의 상위 2% 를 뺀 값의 2배까지만 잡는다. 튀는 막대 하나가 나머지를 납작하게 누르지 않게 한다
 const VOLUME_PERCENTILE = 0.98;
 const VOLUME_OUTLIER_RATIO = 2;
@@ -408,12 +409,17 @@ const drawCandles = (
  * 보이는 구간의 최고가·최저가를 그 캔들 옆에 적는다. 오른쪽에 자리가 없으면 왼쪽에 적는다.
  * 글자를 그 가격 높이에 맞춰, 화살표가 꼬리 끝(최고가·최저가 지점)을 바로 가리키게 한다.
  * 가격축을 끌어 범위를 좁혀 그 가격이 범위를 벗어나면 적지 않는다.
+ * 캔들·지표 선·현재가 선 위에서도 묻히지 않게 글자에 바탕색 테두리를 두르고, 그 선들보다 나중에 그린다.
  */
 const drawExtremes = (frame: Frame) => {
     const {
         painter, style, chartType, visible, range, priceMin, priceMax, priceTop, priceBottom, priceY, plotRightPx, valueDecimals,
     } = frame;
     const ctx = painter.ctx;
+    ctx.save();
+    ctx.strokeStyle = style.backgroundColor;
+    ctx.lineWidth = painter.px(EXTREME_LABEL_HALO) * 2;
+    ctx.lineJoin = 'round';
     const mark = (offset: number, price: number, name: string, color: string) => {
         if (price < priceMin || price > priceMax) return;
         const x = painter.centerX(range.from + offset, range);
@@ -422,9 +428,13 @@ const drawExtremes = (frame: Frame) => {
         const toRight = x + gap + ctx.measureText(`← ${label}`).width <= plotRightPx;
         const half = painter.px(FONT_SIZE) / 2;
         const y = clamp(painter.px(priceY(price)), painter.px(priceTop) + half, painter.px(priceBottom) - half);
-        ctx.fillStyle = textColorOf(style, color);
+        const text = toRight ? `← ${label}` : `${label} →`;
+        // 오른쪽 끝에 반쯤 걸친 캔들은 x 가 그림 영역 밖일 수 있다. 글자와 테두리가 가격축 라벨을 덮지 않게 영역 안으로 당긴다
+        const textX = toRight ? x + gap : Math.min(x - gap, plotRightPx - painter.px(EXTREME_LABEL_HALO));
         ctx.textAlign = toRight ? 'left' : 'right';
-        ctx.fillText(toRight ? `← ${label}` : `${label} →`, toRight ? x + gap : x - gap, y);
+        ctx.strokeText(text, textX, y);
+        ctx.fillStyle = textColorOf(style, color);
+        ctx.fillText(text, textX, y);
     };
     // 선·영역·기준선 차트는 꼬리가 없으므로 종가 기준으로 찾는다. 하이킨아시는 실제 고가·저가를 적는다.
     const closeOnly = isCloseOnly(chartType);
@@ -434,6 +444,7 @@ const drawExtremes = (frame: Frame) => {
     const lowOffset = visible.reduce((best, candle, offset) => lowOf(candle) < lowOf(visible[best]) ? offset : best, 0);
     mark(highOffset, highOf(visible[highOffset]), '최고', style.upColor);
     mark(lowOffset, lowOf(visible[lowOffset]), '최저', style.downColor);
+    ctx.restore();
 };
 
 /**
@@ -852,7 +863,6 @@ export const renderMain = (painter: Painter, input: MainInput): Layout | null =>
     drawTimeAxis(frame);
     drawBorders(frame);
     drawCandles(frame, averages, averageColors, averageStrokes, priceOverlays, volumeOverlays);
-    drawExtremes(frame);
     // 오른쪽 끝에 반쯤 걸친 캔들의 세모가 가격축 위로 넘어가지 않게, 캔들처럼 가격 영역 안에서 자른다.
     painter.clipped(frame.priceTop, frame.priceBottom, frame.plotWidth, () => drawTradeMarks(frame, input.tradeMarks));
     const currentPriceTag = drawCurrentPrice(frame);
@@ -862,6 +872,8 @@ export const renderMain = (painter: Painter, input: MainInput): Layout | null =>
     const tagCenters = spreadTags(frame, [...comparisonTags, ...priceLineTags].map(({y}) => y), currentPriceTag);
     drawComparisonTags(frame, comparisonTags, tagCenters.slice(0, comparisonTags.length));
     drawPriceLines(frame, priceLineTags, tagCenters.slice(comparisonTags.length), input.activePriceLine);
+    // 현재가 선·가격선이 글자를 가로지르지 않게 맨 위에 그린다.
+    drawExtremes(frame);
     // 위 장의 수평선 라벨이 비킬 수 있게, 아래 장이 축에 붙인 라벨 자리를 넘긴다.
     const tagHeight = painter.px(AXIS_TAG_HEIGHT);
     const axisTags: Span[] = [
