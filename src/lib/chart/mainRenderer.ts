@@ -84,6 +84,7 @@ export interface MainInput {
     grid: boolean,              // 격자선(가격 눈금의 가로선, 날짜 눈금의 세로선)을 그을지. 눈금 글자와 경계선은 늘 그린다
     axisWidth: number,      // 오른쪽 가격축 너비 (CSS px)
     valueDecimals: number,      // 캔들 가격의 소수 자릿수
+    extremePrefix: string,      // 최고·최저 표시의 가격 앞에 붙일 통화 기호 ($ 등). 비우면 숫자만 적는다
     countdown: string | null,   // 현재가 라벨 아래에 적을, 마지막 캔들이 마감하기까지 남은 시간. 없으면 적지 않는다
 }
 
@@ -117,6 +118,7 @@ interface Frame {
     axisLabelX: number,
     axisWidthPx: number,
     valueDecimals: number,
+    extremePrefix: string,          // 최고·최저 표시의 가격 앞에 붙일 통화 기호
     percentBase: number | null,     // 퍼센트 축의 기준 가격(0%). 퍼센트 축이 아니면 null
     /** 가격축에 적을 글자: 퍼센트 축이면 기준 대비 등락률, 아니면 decimals 자리의 가격 */
     axisText: (price: number, decimals: number) => string,
@@ -414,6 +416,7 @@ const drawCandles = (
 const drawExtremes = (frame: Frame) => {
     const {
         painter, style, chartType, visible, range, priceMin, priceMax, priceTop, priceBottom, priceY, plotRightPx, valueDecimals,
+        extremePrefix,
     } = frame;
     const ctx = painter.ctx;
     ctx.save();
@@ -423,7 +426,7 @@ const drawExtremes = (frame: Frame) => {
     const mark = (offset: number, price: number, name: string, color: string) => {
         if (price < priceMin || price > priceMax) return;
         const x = painter.centerX(range.from + offset, range);
-        const label = `${name} ${formatPrice(price, valueDecimals)}`;
+        const label = `${name} ${extremePrefix}${formatPrice(price, valueDecimals)}`;
         const gap = painter.px(EXTREME_LABEL_GAP);
         // 바탕색 테두리가 글자 밖으로 나가는 만큼도 그림 영역 안에 들어와야 축 경계선과 축 라벨을 지우지 않는다
         const toRight = x + gap + ctx.measureText(`← ${label}`).width + painter.px(EXTREME_LABEL_HALO) <= plotRightPx;
@@ -759,7 +762,7 @@ export const renderMain = (painter: Painter, input: MainInput): Layout | null =>
         candles, chartType, shapes, percentScale, priceZoom, priceShift, timeUnit, style, width, range,
         mainHeight, volumeRatio, indicatorHeights,
         averages, averageColors, averageStrokes, indicators, priceOverlays, volumeOverlays, priceLines, comparisons, flatByPrevClose,
-        grid, axisWidth, valueDecimals, countdown,
+        grid, axisWidth, valueDecimals, extremePrefix, countdown,
     } = input;
 
     // 위에서부터: 가격 / 거래량 / 보조지표들 / 날짜축. 위에서 아래로 쌓으므로 아래 영역의 높이가 바뀌어도 위 영역은 그대로다.
@@ -850,6 +853,7 @@ export const renderMain = (painter: Painter, input: MainInput): Layout | null =>
         axisLabelX: plotRightPx + painter.px(AXIS_LABEL_OFFSET),
         axisWidthPx: painter.px(axisWidth),
         valueDecimals,
+        extremePrefix,
         percentBase,
         axisText,
         baseline: firstClose,

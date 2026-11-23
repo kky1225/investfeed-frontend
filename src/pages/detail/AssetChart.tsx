@@ -63,6 +63,8 @@ const DEFAULT_HEIGHT = 480;
 // 위쪽 줄에 날짜로 이동 버튼(32px)과 간격(8px)이 늘어난 만큼 더한 값
 const TOOLBAR_MIN_WIDTH = 680;
 const TOGGLE_MINUTE = 'MINUTE';
+const US_PRICE_DECIMALS = 2;    // 미국 주식 차트 가격의 소수 자릿수 (헤더의 $135.73 과 같게)
+const US_PENNY_DECIMALS = 4;    // 1달러 미만 미국 주식
 
 /**
  * 자산 하나의 차트: 주기 버튼 + 캔들 차트.
@@ -283,6 +285,10 @@ const AssetChart = ({
     // 목표가 알림 창은 원화 목표가를 원 단위 정수로만 받는다(달러는 소수 4자리). 1원 미만 단위가 있는 가격(저가 코인 등)은
     // 반올림하면 값과 방향이 달라지므로 우클릭 메뉴에 띄우지 않는다.
     const canPriceTarget = market === 'US_STOCK' ? undefined : (price: number) => Number.isInteger(price) && price > 0;
+    // 미국 주식은 일부 캔들만 소수 넷째 자리까지 와서 차트 전체가 넷째 자리로 적히므로, 헤더처럼 둘째 자리로 맞춘다.
+    // 1달러 미만 종목은 둘째 자리로는 값이 뭉개지므로 넷째 자리까지 둔다.
+    const maxPriceDecimals = market !== 'US_STOCK' ? undefined
+        : lastClose !== undefined && lastClose < 1 ? US_PENNY_DECIMALS : US_PRICE_DECIMALS;
 
     // 그릴 차트가 아직 없으면(처음 열거나 다른 자산으로 바뀐 동안) 자리만 잡아 둔다.
     const waiting = loading && !holding;
@@ -313,6 +319,9 @@ const AssetChart = ({
                         onPriceLineMove={handleTargetMove}
                         onPriceTarget={onPriceTarget}
                         canPriceTarget={canPriceTarget}
+                        maxPriceDecimals={maxPriceDecimals}
+                        // 차트 안에 떠 있는 최고·최저 글자는 원화로 오해하기 쉬워 달러 기호를 붙인다
+                        extremePrefix={market === 'US_STOCK' ? '$' : undefined}
                         tradeMarkers={tradeMarkers}
                         onTradesChange={tradeMarket ? handleTradesChange : undefined}
                         tradesNotice={tradesNotice}
