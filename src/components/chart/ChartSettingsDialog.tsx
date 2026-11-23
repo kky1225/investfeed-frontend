@@ -29,6 +29,7 @@ export interface ChartIndicatorParam {
     min: number,
     max: number,
     step: number,   // 1 이면 정수만 받는다
+    hint?: string,  // 칸 아래에 적을 짧은 안내
 }
 
 /** 모양(색·굵기·점선)을 바꿀 수 있는 선 하나 */
@@ -131,6 +132,7 @@ const ParamField = ({param, onCommit}: ParamFieldProps) => {
             size="small"
             type="number"
             label={param.label}
+            helperText={param.hint}
             value={text}
             onChange={event => setText(event.target.value)}
             onBlur={commit}

@@ -1,7 +1,7 @@
 import {Candle, ChartStyle, IndicatorConfig, IndicatorType, LineLook, SERIES_WIDTHS, TimeUnit} from "./types.ts";
 import {
     averageTrueRange, bollinger, exponentialMovingAverage, ichimoku, macd, onBalanceVolume, relativeStrength, Series,
-    stochastic, volumeAverage, volumeWeightedAverage,
+    simpleAverage, stochastic, volumeAverage, volumeWeightedAverage,
 } from "./indicators.ts";
 import {createLinearScale, formatVolume, niceTicks} from "./scale.ts";
 import {AXIS_LABEL_OFFSET, LEGEND_HEIGHT} from "./constants.ts";
@@ -77,6 +77,7 @@ export interface IndicatorParam {
     min: number,
     max: number,
     step: number,   // 1 이면 정수만 받는다
+    hint?: string,  // 칸 아래에 적을 짧은 안내 (특별한 값의 뜻 등). 칸이 좁아 이름에 다 넣지 못하는 것
 }
 
 /** 지표를 계산할 때 캔들 말고 더 받는 것 */
@@ -346,17 +347,28 @@ const rsiDefinition: IndicatorDefinition = {
     label: 'RSI',
     placement: 'pane',
     defaultOn: true,
-    params: [period('기간', 14)],
-    colors: [swatch('선', 2)],
-    create: (candles, [length], [rsiLook]) => {
+    // 시그널: RSI 값의 단순 이동평균(토스·트레이딩뷰 기본과 같은 14). 0 이면 긋지 않는다.
+    // 예전에 저장한 RSI 설정에는 시그널 값이 없어 기본값으로 켜진다
+    params: [period('기간', 14), {...period('시그널', 14), min: 0, hint: '0이면 끔'}],
+    colors: [swatch('선', 2), swatch('시그널', 1)],
+    create: (candles, [length, signalLength], [rsiLook, signalLook]) => {
         const values = relativeStrength(candles, length);
+        const signal = signalLength > 0 ? simpleAverage(values, signalLength) : null;
         return {
             placement: 'pane',
-            draw: context => drawPercentPane(context, RSI_LEVELS, [[values, rsiLook]]),
-            legend: (index, style) => [
-                [`RSI ${length}`, style.textColor],
-                [formatIndicator(values[index]), colorOf(style, rsiLook)],
-            ],
+            draw: context => drawPercentPane(
+                context, RSI_LEVELS, signal ? [[values, rsiLook], [signal, signalLook]] : [[values, rsiLook]],
+            ),
+            legend: (index, style) => signal
+                ? [
+                    [`RSI ${length}·${signalLength}`, style.textColor],
+                    [`RSI ${formatIndicator(values[index])}`, colorOf(style, rsiLook)],
+                    [`시그널 ${formatIndicator(signal[index])}`, colorOf(style, signalLook)],
+                ]
+                : [
+                    [`RSI ${length}`, style.textColor],
+                    [formatIndicator(values[index]), colorOf(style, rsiLook)],
+                ],
         };
     },
 };
