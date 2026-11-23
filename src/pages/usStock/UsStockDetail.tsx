@@ -374,7 +374,10 @@ const UsStockDetail = () => {
                                 </Typography>
                                 <Stack direction="row" alignItems="center" gap={0.5}>
                                     {!loading && info?.stkCd && (
-                                        <WatchlistAddButton stkCd={info.stkCd} stkNm={info.stkNm ?? info.stkCd} stexTp={stexTp}/>
+                                        <WatchlistAddButton
+                                            stkCd={info.stkCd} stkNm={info.stkNm ?? info.stkCd} stexTp={stexTp}
+                                            groupIds={result?.watchlistGroupIds}
+                                        />
                                     )}
                                     <Tooltip title="목표가 알림">
                                         <IconButton size="small" onClick={() => setPriceTargetOpen(true)} sx={{mb: "3px"}}>

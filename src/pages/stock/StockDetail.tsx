@@ -915,7 +915,9 @@ const StockDetail = () => {
                                             </Tooltip>
                                         </Typography>
                                     }
-                                    <WatchlistAddButton stkCd={stockChartData.id} stkNm={stockChartData.title}/>
+                                    <WatchlistAddButton
+                                        stkCd={stockChartData.id} stkNm={stockChartData.title} groupIds={result?.watchlistGroupIds}
+                                    />
                                     <Tooltip title="목표가 알림">
                                         <IconButton size="small" onClick={() => setPriceTargetOpen(true)} sx={{mb: "3px"}}>
                                             <NotificationsActiveIcon fontSize="small" />

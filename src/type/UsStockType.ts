@@ -77,6 +77,8 @@ export interface UsStockDetailRes {
     dailyPriceList: UsStockDailyPrice[];
     /** 데이·프리·애프터마켓 등락률 기준 (토스 연동 회원만, 정규장·휴장이면 null) */
     sessionBase?: UsSessionBase | null;
+    /** 이 종목이 들어 있는 내 관심 그룹 */
+    watchlistGroupIds?: number[];
 }
 
 export interface UsSessionBase {

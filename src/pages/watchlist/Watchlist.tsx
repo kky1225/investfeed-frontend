@@ -194,6 +194,12 @@ const Watchlist = () => {
     const navigate = useNavigate();
     const {groupId} = useParams<{ groupId: string }>();
     const queryClient = useQueryClient();
+    // 종목 상세의 관심종목 하트는 상세 응답의 watchlistGroupIds 를 본다. 관심종목을 바꾸면 받아 둔 상세 응답을 낡았다고만 표시해,
+    // 다음에 상세에 들어갈 때 새로 받게 한다(지금 열려 있는 상세를 바로 다시 부르지는 않는다).
+    const markStockDetailsStale = () => {
+        queryClient.invalidateQueries({queryKey: ['stockDetail'], refetchType: 'none'});
+        queryClient.invalidateQueries({queryKey: ['usStockDetail'], refetchType: 'none'});
+    };
 
     const {data: groupsData, isLoading: groupsLoading} = useQuery<WatchlistGroup[]>({
         queryKey: ['watchlistGroups'],
@@ -394,6 +400,7 @@ const Watchlist = () => {
                 setSelectedGroup(remaining.length > 0 ? remaining[0] : null);
             }
             queryClient.invalidateQueries({queryKey: ['watchlistGroups']});
+            markStockDetailsStale();
             setGroupOrderDirty(false);
             setDeleteGroupTarget(null);
         },
@@ -494,6 +501,7 @@ const Watchlist = () => {
             requireOk(await addWatchlistItem(vars.groupId, vars.req), '관심 종목 추가'),
         onSuccess: (_data, vars) => {
             queryClient.invalidateQueries({queryKey: ['watchlistItems', vars.groupId]});
+            markStockDetailsStale();
             setAddItemOpen(false);
             setSearchKeyword("");
             setSearchResults([]);
@@ -513,6 +521,7 @@ const Watchlist = () => {
         },
         onSuccess: (vars) => {
             queryClient.invalidateQueries({queryKey: ['watchlistItems', vars.groupId]});
+            markStockDetailsStale();
         },
         onError: (err) => console.error(err),
     });

@@ -182,4 +182,5 @@ export interface StockDetailRes {
     dailyPriceList: StockDailyPrice[],
     dividendList: StockDividendItem[],
     viList?: StockVi[],
+    watchlistGroupIds?: number[],   // 이 종목이 들어 있는 내 관심 그룹
 }
