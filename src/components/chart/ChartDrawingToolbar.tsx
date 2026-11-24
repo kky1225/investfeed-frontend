@@ -1,4 +1,4 @@
-import {ReactNode, useState} from "react";
+import {useState} from "react";
 import Divider from "@mui/material/Divider";
 import ListItemIcon from "@mui/material/ListItemIcon";
 import ListItemText from "@mui/material/ListItemText";
@@ -10,16 +10,9 @@ import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
 import ArrowDropDownIcon from "@mui/icons-material/ArrowDropDown";
 import CheckIcon from "@mui/icons-material/Check";
-import CropSquareIcon from "@mui/icons-material/CropSquare";
-import ReorderIcon from "@mui/icons-material/Reorder";
-import StraightenIcon from "@mui/icons-material/Straighten";
-import TitleIcon from "@mui/icons-material/Title";
-import DragHandleIcon from "@mui/icons-material/DragHandle";
-import HorizontalRuleIcon from "@mui/icons-material/HorizontalRule";
 import NearMeOutlinedIcon from "@mui/icons-material/NearMeOutlined";
-import NorthEastIcon from "@mui/icons-material/NorthEast";
-import ShowChartIcon from "@mui/icons-material/ShowChart";
 import {ChartToolbarButton} from "./ChartToolbarControls.tsx";
+import {DRAWING_ICONS, DRAWING_LABELS} from "./drawingToolLabels.tsx";
 import {DRAWING_TOOLS, DrawingTool, MAGNET_MODES, MagnetMode} from "../../lib/chart/types.ts";
 
 interface ChartDrawingToolbarProps {
@@ -38,17 +31,8 @@ const MAGNET_LABELS: Record<MagnetMode, string> = {
     strong: '강하게 (항상 붙음)',
 };
 
-const LABELS: Record<DrawingTool, string> = {
-    trend: '추세선',
-    ray: '반직선',
-    horizontal: '수평선',
-    vertical: '수직선',
-    rectangle: '사각형',
-    channel: '평행 채널',
-    fibonacci: '피보나치 되돌림',
-    measure: '가격 범위 측정',
-    text: '글자',
-};
+const LABELS = DRAWING_LABELS;
+const ICONS = DRAWING_ICONS;
 
 // 단축키가 있는 도형만 (Alt 와 함께 누른다)
 const SHORTCUTS: Partial<Record<DrawingTool, string>> = {
@@ -57,18 +41,6 @@ const SHORTCUTS: Partial<Record<DrawingTool, string>> = {
     vertical: 'Alt+V',
     rectangle: 'Alt+R',
     fibonacci: 'Alt+F',
-};
-
-const ICONS: Record<DrawingTool, ReactNode> = {
-    trend: <ShowChartIcon/>,
-    ray: <NorthEastIcon/>,
-    horizontal: <HorizontalRuleIcon/>,
-    vertical: <HorizontalRuleIcon sx={{transform: 'rotate(90deg)'}}/>,
-    rectangle: <CropSquareIcon/>,
-    channel: <DragHandleIcon sx={{transform: 'rotate(-30deg)'}}/>,
-    fibonacci: <ReorderIcon/>,
-    measure: <StraightenIcon/>,
-    text: <TitleIcon/>,
 };
 
 const withShortcut = (tool: DrawingTool) => SHORTCUTS[tool] ? `${LABELS[tool]} (${SHORTCUTS[tool]})` : LABELS[tool];

@@ -124,6 +124,28 @@ export const timeToIndex = (candles: Candle[], time: number): number => {
     return low;
 };
 
+/** 도형에서 캔들 시각에 놓인 점들과, 그 점을 끄는 부분. 수평선에는 없다 */
+const timedSpotsOf = (drawing: Drawing): [Part, { time: number }][] => {
+    switch (drawing.type) {
+        case 'horizontal':
+            return [];
+        case 'vertical':
+            return [['body', drawing]];
+        case 'text':
+            return [['body', drawing.from]];
+        case 'channel':
+            return [['from', drawing.from], ['to', drawing.to], ['third', drawing.third]];
+        default:
+            return [['from', drawing.from], ['to', drawing.to]];
+    }
+};
+
+/** 도형의 가장 앞선 점의 시각. 시각에 놓인 점이 없는 도형(수평선)이면 null (그린 선 목록에서 옮겨 갈 때 쓴다) */
+export const earliestDrawingTime = (drawing: Drawing): number | null => {
+    const times = timedSpotsOf(drawing).map(([, spot]) => spot.time);
+    return times.length > 0 ? Math.min(...times) : null;
+};
+
 const distance = (a: Point, b: Point) => Math.hypot(a.x - b.x, a.y - b.y);
 
 export class DrawingLayer {
@@ -277,6 +299,24 @@ export class DrawingLayer {
         const id = this.hitTest(point)?.drawing.id ?? null;
         if (id) this.select(id);
         return id;
+    }
+
+    /**
+     * 도형이 차지하는 가로 구간(순번). 미래 구간의 점은 마지막 캔들 뒤의 순번이다.
+     * 시각에 놓인 점이 없는 도형(수평선)이나 없는 도형이면 null
+     */
+    indexSpan(id: string): { from: number, to: number } | null {
+        const drawing = this.drawings.find(item => item.id === id);
+        const indexes = drawing ? this.timedSpots(drawing).map(([, spot]) => this.indexOf(spot)) : [];
+        return indexes.length > 0 ? {from: Math.min(...indexes), to: Math.max(...indexes)} : null;
+    }
+
+    /** 도형을 선택한다(그린 선 목록용). 숨겼거나 그릴 자리가 없어 선택하지 못했으면 false */
+    selectById(id: string): boolean {
+        const drawing = this.drawings.find(item => item.id === id);
+        if (!drawing || drawing.hidden || this.isBeforeRange(drawing)) return false;
+        this.select(id);
+        return true;
     }
 
     /**
@@ -667,18 +707,7 @@ export class DrawingLayer {
 
     /** 도형에서 캔들 시각에 놓인 점들과, 그 점을 끄는 부분. 수평선에는 없다 */
     private timedSpots(drawing: Drawing): [Part, { time: number }][] {
-        switch (drawing.type) {
-            case 'horizontal':
-                return [];
-            case 'vertical':
-                return [['body', drawing]];
-            case 'text':
-                return [['body', drawing.from]];
-            case 'channel':
-                return [['from', drawing.from], ['to', drawing.to], ['third', drawing.third]];
-            default:
-                return [['from', drawing.from], ['to', drawing.to]];
-        }
+        return timedSpotsOf(drawing);
     }
 
     /** 받아 둔 캔들보다 앞선 시각이고, 그 구간을 더 받아 올 수 있는지 */

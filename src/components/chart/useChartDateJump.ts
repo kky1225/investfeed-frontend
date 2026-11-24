@@ -13,6 +13,7 @@ interface Jump {
     key: string | undefined,    // 시작할 때의 seriesKey. 종목·주기가 바뀌면 그만둔다
     target: number,             // 옮겨 갈 시각 (epoch ms). 기간이면 시작 시각이고, 이 시각까지 과거 구간을 받아 둔다
     end: number | null,         // 기간으로 옮기면 그 끝 시각. 날짜 하나로 옮기면 null
+    drawingId: string | null,   // 그린 선으로 옮기면 그 선. target 은 선의 가장 앞선 점의 시각이다
     pages: number,              // 지금까지 이어 받은 횟수
     waiting: boolean,           // 과거 구간을 받는 중
 }
@@ -38,14 +39,18 @@ export const useChartDateJump = (
         if (!active || active.waiting) return;
         const first = candles[0];
         const range = active.end !== null;
-        // 받아 둔 첫 캔들까지만 갈 수 있을 때: 날짜면 첫 캔들로, 기간이면 첫 캔들부터 맞춘다
+        const drawingId = active.drawingId;
+        // 받아 둔 첫 캔들까지만 갈 수 있을 때: 날짜면 첫 캔들로, 기간이면 첫 캔들부터 맞춘다.
+        // 그린 선은 더 받을 과거가 없으면 앞선 점을 첫 캔들 자리에 그리므로 그대로 보여 주고, 받다가 그만둔 경우만 알린다
         const fromFirst = range ? '첫 캔들부터 맞췄습니다' : '첫 캔들로 옮겼습니다';
         const finish = (message?: string) => {
             setJump(null);
             const engine = engineRef.current;
             if (!engine) return;
             const notes = [message];
-            if (active.end === null) {
+            if (drawingId !== null) {
+                if (!engine.focusDrawing(drawingId)) engine.scrollToTime(active.target);
+            } else if (active.end === null) {
                 engine.scrollToTime(active.target);
             } else {
                 const {fits, empty} = engine.fitTimeRange(active.target, active.end);
@@ -61,11 +66,14 @@ export const useChartDateJump = (
         } else if (first.time <= active.target) {
             finish();
         } else if (!loadOlder) {
-            finish(`이 차트는 지난 구간을 더 불러올 수 없어 ${fromFirst}.`);
+            finish(drawingId !== null ? undefined : `이 차트는 지난 구간을 더 불러올 수 없어 ${fromFirst}.`);
         } else if (!hasOlder) {
-            finish(`${formatTime(first.time, 'day')}부터 차트가 있어 ${fromFirst}.`);
+            finish(drawingId !== null ? undefined : `${formatTime(first.time, 'day')}부터 차트가 있어 ${fromFirst}.`);
         } else if (active.pages >= MAX_JUMP_PAGES) {
-            finish(`이 주기로는 ${formatTime(first.time, 'day')}까지만 불러올 수 있어 ${fromFirst}. 더 긴 주기로 바꿔 보세요.`);
+            const limit = `이 주기로는 ${formatTime(first.time, 'day')}까지만 불러올 수 있어`;
+            finish(drawingId !== null
+                ? `${limit} 선이 있는 곳까지 가지 못했습니다. 더 긴 주기로 바꿔 보세요.`
+                : `${limit} ${fromFirst}. 더 긴 주기로 바꿔 보세요.`);
         } else {
             setJump({...active, waiting: true});
             loadOlder().then(received => {
@@ -90,8 +98,20 @@ export const useChartDateJump = (
     /** 시각 target 을 담은 캔들로 옮긴다. end 를 주면 target 부터 end 까지의 기간을 화면에 맞춘다 */
     const jumpTo = (target: number, end: number | null = null) => {
         nextId.current += 1;
-        setJump({id: nextId.current, key: seriesKey, target, end, pages: 0, waiting: false});
+        setJump({id: nextId.current, key: seriesKey, target, end, drawingId: null, pages: 0, waiting: false});
     };
 
-    return {jumpTo, jumping: active !== null};
+    /**
+     * 그린 선 하나로 옮겨 선택한다. target 은 선의 가장 앞선 점의 시각이고, 시각에 놓인 점이 없는 선(수평선)이면 null 을 준다.
+     * 숨긴 선을 보이게 바꾸면서 부르면, 바뀐 목록이 엔진에 들어간 뒤에 옮긴다(이 effect 가 setDrawings 보다 나중에 돈다)
+     */
+    const jumpToDrawing = (drawingId: string, target: number | null) => {
+        nextId.current += 1;
+        setJump({
+            id: nextId.current, key: seriesKey, target: target ?? Number.POSITIVE_INFINITY, end: null, drawingId,
+            pages: 0, waiting: false,
+        });
+    };
+
+    return {jumpTo, jumpToDrawing, jumping: active !== null};
 };

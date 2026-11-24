@@ -585,6 +585,27 @@ export class CandleChartEngine {
         this.scheduleOverlay();
     }
 
+    /** 가격을 차트의 가격 라벨과 같은 자릿수로 적는다 (그린 선 목록의 수평선 가격용) */
+    formatPriceText(price: number): string {
+        return formatPrice(price, this.valueDecimals);
+    }
+
+    /**
+     * 그린 도형 하나를 보이는 곳으로 옮기고 선택한다(그린 선 목록용). 확대 정도는 그대로다.
+     * 도형이 이미 화면 안에 다 들어 있으면 옮기지 않고, 아니면 도형의 가운데를 화면 가운데에 둔다.
+     * 수평선은 가로로 옮길 필요가 없어 선택만 한다. 선택하지 못했으면(숨김, 그릴 자리 없음) false
+     */
+    focusDrawing(id: string): boolean {
+        const span = this.drawingLayer.indexSpan(id);
+        if (span && this.candles.length > 0) {
+            const view = this.resolveView();
+            const bars = this.plotWidth() / view.spacing;
+            const inside = span.from >= view.rightEdge - bars && span.to + 1 <= view.rightEdge;
+            if (!inside) this.setView({...view, rightEdge: (span.from + span.to + 1) / 2 + bars / 2});
+        }
+        return this.drawingLayer.selectById(id);
+    }
+
     /** 드래그·확대한 상태를 버리고 기본 보기로 돌아간다. 다른 종목·주기로 바뀔 때 부른다. */
     resetView() {
         this.view = null;

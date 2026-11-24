@@ -60,8 +60,8 @@ export interface AssetChartProps {
 
 const DEFAULT_HEIGHT = 480;
 // 주기 버튼을 차트 위쪽 줄에 함께 놓을 수 있는 최소 너비. 이보다 좁으면 차트 아래에 놓는다(위쪽 줄의 설정 버튼이 잘리지 않게)
-// 위쪽 줄에 날짜로 이동 버튼(32px)과 간격(8px)이 늘어난 만큼 더한 값
-const TOOLBAR_MIN_WIDTH = 680;
+// 위쪽 줄에 날짜로 이동·그린 선 목록 버튼(각 32px)과 간격(각 8px)이 늘어난 만큼 더한 값
+const TOOLBAR_MIN_WIDTH = 720;
 const TOGGLE_MINUTE = 'MINUTE';
 const US_PRICE_DECIMALS = 2;    // 미국 주식 차트 가격의 소수 자릿수 (헤더의 $135.73 과 같게)
 const US_PENNY_DECIMALS = 4;    // 1달러 미만 미국 주식

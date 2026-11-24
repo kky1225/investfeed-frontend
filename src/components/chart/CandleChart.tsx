@@ -15,7 +15,10 @@ import FullscreenIcon from "@mui/icons-material/Fullscreen";
 import FullscreenExitIcon from "@mui/icons-material/FullscreenExit";
 import KeyboardDoubleArrowRightIcon from "@mui/icons-material/KeyboardDoubleArrowRight";
 import CalendarMonthIcon from "@mui/icons-material/CalendarMonth";
+import LayersOutlinedIcon from "@mui/icons-material/LayersOutlined";
 import ChartDateJumpDialog, {DateJumpInitial} from "./ChartDateJumpDialog.tsx";
+import ChartDrawingListDialog from "./ChartDrawingListDialog.tsx";
+import {earliestDrawingTime} from "../../lib/chart/drawingLayer.ts";
 import ChartDrawingStylePanel from "./ChartDrawingStylePanel.tsx";
 import {useChartDateJump} from "./useChartDateJump.ts";
 import ChartSettingsDialog, {ChartIndicatorOption} from "./ChartSettingsDialog.tsx";
@@ -258,7 +261,11 @@ const CandleChart = ({
     const changeDrawing = (id: string, change: DrawingState) => {
         changeDrawings(drawings.map(drawing => drawing.id === id ? {...drawing, ...change} : drawing));
     };
-    const hiddenCount = drawings.filter(drawing => drawing.hidden).length;
+
+    // 그린 선 목록 창 (도구 줄의 버튼). 줄 이름을 눌러 선으로 옮겼으면 창이 다 닫힌 뒤 차트에 포커스를 준다
+    // (Delete 키로 바로 지울 수 있게. 창은 닫히며 포커스를 버튼에 돌려주므로 그 뒤에 준다)
+    const [drawingListOpen, setDrawingListOpen] = useState(false);
+    const focusChartAfterList = useRef(false);
 
     /** 선택한 도형의 꾸미기를 바꾼다. 다음에 그리는 도형도 같은 꾸미기를 따른다. */
     const changeSelectedStyle = (change: DrawingStyle) => {
@@ -667,7 +674,16 @@ const CandleChart = ({
     }, [hasOlder]);
 
     // 날짜로 이동. 받아 온 과거 구간을 엔진에 넘긴(setData) 뒤에 옮겨야 하므로, effect 가 그보다 나중에 돌도록 여기서 부른다.
-    const {jumpTo, jumping} = useChartDateJump(engineRef, candles, seriesKey, hasOlder, onLoadOlder);
+    const {jumpTo, jumpToDrawing, jumping} = useChartDateJump(engineRef, candles, seriesKey, hasOlder, onLoadOlder);
+
+    /** 그린 선 목록에서 고른 선으로 옮겨 선택한다. 숨긴 선이면 다시 보이게 한다. 받아 둔 캔들보다 과거면 그 구간을 받아 온다 */
+    const goToDrawing = (drawing: Drawing) => {
+        setDrawingListOpen(false);
+        focusChartAfterList.current = true;
+        selectTool(null);
+        if (drawing.hidden) changeDrawing(drawing.id, {hidden: null});
+        jumpToDrawing(drawing.id, earliestDrawingTime(drawing));
+    };
 
     useEffect(() => {
         engineRef.current?.setCandleInterval(interval ?? null);
@@ -782,6 +798,11 @@ const CandleChart = ({
 
                 {/* 오른쪽: 날짜로 이동, 최근으로 이동(과거를 보고 있을 때만), 저장, 전체 화면, 차트 설정 */}
                 <Box sx={{flexGrow: 1}}/>
+                <Tooltip title="그린 선 목록">
+                    <ChartToolbarButton aria-label="그린 선 목록" onClick={() => setDrawingListOpen(true)}>
+                        <LayersOutlinedIcon/>
+                    </ChartToolbarButton>
+                </Tooltip>
                 <Tooltip title="날짜로 이동 (Alt+G)">
                     <ChartToolbarButton aria-label="날짜로 이동" onClick={openDateJump}>
                         <CalendarMonthIcon/>
@@ -856,10 +877,6 @@ const CandleChart = ({
                     },
                 }}
                 onSaveImage={saveImage}
-                drawingCount={drawings.length}
-                onClearDrawings={() => changeDrawings([])}
-                hiddenDrawingCount={hiddenCount}
-                onShowDrawings={() => changeDrawings(drawings.map(drawing => drawing.hidden ? {...drawing, hidden: null} : drawing))}
                 comparison={comparison && {
                     items: comparisonItems,
                     max: MAX_COMPARISONS,
@@ -991,6 +1008,23 @@ const CandleChart = ({
                     </MenuItem>,
                 ]}
             </Menu>
+            <ChartDrawingListDialog
+                open={drawingListOpen}
+                onClose={() => setDrawingListOpen(false)}
+                onExited={() => {
+                    if (!focusChartAfterList.current) return;
+                    focusChartAfterList.current = false;
+                    containerRef.current?.focus({preventScroll: true});
+                }}
+                drawings={drawings}
+                timeUnit={timeUnit}
+                formatPrice={price => engineRef.current?.formatPriceText(price) ?? String(price)}
+                onChange={changeDrawing}
+                onDelete={id => changeDrawings(drawings.filter(drawing => drawing.id !== id))}
+                onDeleteAll={() => changeDrawings([])}
+                onShowAll={() => changeDrawings(drawings.map(drawing => drawing.hidden ? {...drawing, hidden: null} : drawing))}
+                onSelect={goToDrawing}
+            />
             <ChartDateJumpDialog
                 open={dateJumpFrom !== null}
                 withTime={timeUnit === 'minute'}

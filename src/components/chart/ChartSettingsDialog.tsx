@@ -94,10 +94,6 @@ interface ChartSettingsDialogProps {
     // notice: 스위치 아래에 적을 알림 (일부 증권사의 조회 실패 등)
     trades?: { visible: boolean, onChange: (visible: boolean) => void, notice?: string },
     onSaveImage: () => void,                   // 지금 보이는 차트를 이미지 파일로 내려받는다
-    drawingCount: number,                       // 그려 둔 선의 수
-    onClearDrawings: () => void,
-    hiddenDrawingCount: number,                 // 그중 숨겨 둔 선의 수
-    onShowDrawings: () => void,                 // 숨겨 둔 선을 모두 다시 보이게 한다
     comparison?: ChartComparisonFieldProps,     // 종목 비교. 비교를 쓸 수 있는 화면에서만 준다
     fullscreen: boolean,                        // 차트를 화면 가득 띄워 둔 상태인지
     onFullscreenChange: (fullscreen: boolean) => void,
@@ -254,7 +250,7 @@ const ChartSettingsDialog = ({
     onIndicatorChange, onIndicatorReset, paneItems, onPaneMove,
     drawingToolbar, onDrawingToolbarChange,
     logScale, onLogScaleChange, percentScale, onPercentScaleChange,
-    flatByPrevClose, onFlatByPrevCloseChange, grid, onGridChange, trades, onSaveImage, drawingCount, onClearDrawings, hiddenDrawingCount, onShowDrawings,
+    flatByPrevClose, onFlatByPrevCloseChange, grid, onGridChange, trades, onSaveImage,
     comparison, fullscreen, onFullscreenChange,
 }: ChartSettingsDialogProps) => (
     // 창은 화면 다른 곳에 따로 그려지므로, 색 단추가 차트의 색을 쓸 수 있게 색 변수를 걸어 준다.
@@ -476,21 +472,7 @@ const ChartSettingsDialog = ({
                     }
                 />
             </FormGroup>
-            {drawingCount > 0 ? (
-                <Stack direction="row" spacing={1} sx={{mt: 1, flexWrap: 'wrap', rowGap: 1}}>
-                    <Button variant="outlined" color="error" size="small" onClick={onClearDrawings}>
-                        그린 선 모두 삭제 ({drawingCount}개)
-                    </Button>
-                    {/* 숨긴 선은 차트에서 고를 수 없으므로 여기서 한꺼번에 다시 보이게 한다. */}
-                    {hiddenDrawingCount > 0 && (
-                        <Button variant="outlined" size="small" onClick={onShowDrawings}>
-                            숨긴 선 모두 보이기 ({hiddenDrawingCount}개)
-                        </Button>
-                    )}
-                </Stack>
-            ) : (
-                <Typography variant="body2" sx={{color: 'text.secondary', mt: 1}}>그린 선이 없습니다.</Typography>
-            )}
+            {/* 그린 선의 숨기기·삭제는 도구 줄의 "그린 선 목록" 창에서 한다. */}
         </DialogContent>
         <DialogActions>
             {/* 전체 화면은 차트를 봐야 하므로 누르면 창도 닫는다. */}
