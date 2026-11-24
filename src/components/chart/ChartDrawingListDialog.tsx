@@ -9,6 +9,7 @@ import IconButton from "@mui/material/IconButton";
 import Stack from "@mui/material/Stack";
 import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
+import {alpha} from "@mui/material/styles";
 import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
 import LockOpenOutlinedIcon from "@mui/icons-material/LockOpenOutlined";
 import LockOutlinedIcon from "@mui/icons-material/LockOutlined";
@@ -33,6 +34,21 @@ interface ChartDrawingListDialogProps {
 }
 
 const TEXT_PREVIEW_LENGTH = 20;     // 글자 도형의 내용을 앞에서 몇 자까지 보일지
+
+/**
+ * 줄 안의 잠금·숨기기·삭제 버튼. 테마가 아이콘 버튼마다 테두리·배경을 그려 줄이 답답해 보여서 이 창에서만 걷어낸다.
+ * 테마 규칙(다크 모드 hover·라이트 모드 active)이 클래스 두 개 무게까지 있어 '&&'로 무게를 맞춘다(같으면 뒤에 오는 sx가 이긴다)
+ */
+const ROW_BUTTON_SX = {
+    '&&': {border: 0, backgroundColor: 'transparent'},
+    '&&:hover': {backgroundColor: 'action.selected'},
+} as const;
+
+/** 삭제 버튼(줄·모두 삭제)은 평소엔 회색, 마우스를 올리거나 키보드로 고르면 빨갛게 한다 */
+const DELETE_COLOR_SX = {
+    '&&': {color: 'text.secondary'},
+    '&&:hover, &&.Mui-focusVisible': {color: 'error.main'},
+} as const;
 
 /**
  * 점 하나의 시각 표기. 선은 주기와 상관없이 같은 목록이라 분봉에서도 연도를 붙인다(분봉은 시각까지).
@@ -63,6 +79,7 @@ const summaryOf = (drawing: Drawing, timeUnit: TimeUnit, formatPrice: (price: nu
 /**
  * 그린 선 목록 창. 줄마다 선의 종류·요약과 잠금·숨기기·삭제 버튼이 있다.
  * 줄 이름을 누르면 창을 닫고 그 선으로 옮겨 선택한다(숨긴 선이면 다시 보이게 한다).
+ * 잠긴 줄은 주황 바탕과 주황 자물쇠로 눈에 띄게 한다(빨강은 상승·삭제 색이라 쓰지 않는다)
  */
 const ChartDrawingListDialog = ({
     open, onClose, onExited, drawings, timeUnit, formatPrice, onChange, onDelete, onDeleteAll, onShowAll, onSelect,
@@ -78,13 +95,20 @@ const ChartDrawingListDialog = ({
             fullWidth
             slotProps={{transition: {onExited}}}
         >
-            <DialogTitle>그린 선 목록{drawings.length > 0 && ` (${drawings.length}개)`}</DialogTitle>
+            <DialogTitle>
+                그린 선 목록
+                {drawings.length > 0 && (
+                    <Box component="span" sx={{ml: 1, color: 'text.secondary', fontWeight: 'fontWeightRegular'}}>
+                        {drawings.length}개
+                    </Box>
+                )}
+            </DialogTitle>
             <DialogContent>
                 {rows.length === 0 ? (
                     <Typography variant="body2" sx={{color: 'text.secondary'}}>그린 선이 없습니다.</Typography>
                 ) : (
-                    <Box sx={{border: 1, borderColor: 'divider', borderRadius: 1}}>
-                        {rows.map((drawing, order) => {
+                    <Stack spacing={0.5}>
+                        {rows.map(drawing => {
                             const label = DRAWING_LABELS[drawing.type];
                             const summary = summaryOf(drawing, timeUnit, formatPrice);
                             const hidden = drawing.hidden ?? false;
@@ -95,34 +119,63 @@ const ChartDrawingListDialog = ({
                                     direction="row"
                                     sx={{
                                         alignItems: 'center',
+                                        gap: 0.25,
                                         pr: 0.5,
-                                        borderTop: order === 0 ? 0 : 1,
-                                        borderColor: 'divider',
+                                        borderRadius: 1,
+                                        bgcolor: locked
+                                            ? theme => alpha(theme.palette.warning.main, 0.12)
+                                            : 'transparent',
+                                        '&:hover': {
+                                            bgcolor: locked
+                                                ? theme => alpha(theme.palette.warning.main, 0.2)
+                                                : 'action.hover',
+                                        },
                                     }}
                                 >
-                                    <Tooltip title={hidden ? '다시 보이게 하고 이 선으로 이동' : '이 선으로 이동'}>
+                                    {/* describeChild: 버튼 이름은 안의 글자(종류·요약)로 읽고, 툴팁 문구는 설명으로 붙인다 */}
+                                    <Tooltip describeChild title={hidden ? '다시 보이게 하고 이 선으로 이동' : '이 선으로 이동'}>
                                         <ButtonBase
                                             onClick={() => onSelect(drawing)}
                                             sx={{
                                                 flex: 1,
                                                 minWidth: 0,
                                                 justifyContent: 'flex-start',
-                                                gap: 1,
-                                                px: 1.5,
-                                                py: 1,
+                                                gap: 1.25,
+                                                pl: 1,
+                                                pr: 1,
+                                                py: 0.75,
+                                                borderRadius: 1,
                                                 textAlign: 'left',
                                                 color: hidden ? 'text.disabled' : 'text.primary',
-                                                '& svg': {fontSize: 18, color: hidden ? 'text.disabled' : 'text.secondary'},
-                                                '&:hover': {backgroundColor: 'action.hover'},
                                             }}
                                         >
-                                            {DRAWING_ICONS[drawing.type]}
+                                            <Box
+                                                sx={{
+                                                    flexShrink: 0,
+                                                    width: 28,
+                                                    height: 28,
+                                                    display: 'flex',
+                                                    alignItems: 'center',
+                                                    justifyContent: 'center',
+                                                    borderRadius: 0.75,
+                                                    bgcolor: 'action.selected',
+                                                    // 잠금은 자물쇠·줄 바탕으로만 알린다. 여기 색을 바꾸면 선 색처럼 읽힌다
+                                                    color: hidden ? 'text.disabled' : 'text.secondary',
+                                                    '& svg': {fontSize: 18},
+                                                }}
+                                            >
+                                                {DRAWING_ICONS[drawing.type]}
+                                            </Box>
                                             <Typography variant="body2" noWrap>
                                                 {label}
                                                 {summary && (
                                                     <Box
                                                         component="span"
-                                                        sx={{ml: 1, color: hidden ? 'text.disabled' : 'text.secondary'}}
+                                                        sx={{
+                                                            ml: 1,
+                                                            color: hidden ? 'text.disabled' : 'text.secondary',
+                                                            fontVariantNumeric: 'tabular-nums',
+                                                        }}
                                                     >
                                                         {summary}
                                                     </Box>
@@ -133,10 +186,17 @@ const ChartDrawingListDialog = ({
                                     <Tooltip title={locked ? '잠금 해제' : '잠금 (옮기거나 고칠 수 없게)'}>
                                         <IconButton
                                             size="small"
-                                            aria-label={`${label} ${locked ? '잠금 해제' : '잠금'}`}
+                                            aria-label={`${label} 잠금`}
                                             aria-pressed={locked}
                                             onClick={() => onChange(drawing.id, {locked: locked ? null : true})}
-                                            sx={{color: locked ? 'primary.main' : 'text.secondary'}}
+                                            sx={{
+                                                ...ROW_BUTTON_SX,
+                                                color: locked ? 'warning.main' : 'text.disabled',
+                                                '&&:hover': {
+                                                    ...ROW_BUTTON_SX['&&:hover'],
+                                                    color: locked ? 'warning.main' : 'text.secondary',
+                                                },
+                                            }}
                                         >
                                             {locked ? <LockOutlinedIcon fontSize="small"/> : <LockOpenOutlinedIcon fontSize="small"/>}
                                         </IconButton>
@@ -144,10 +204,10 @@ const ChartDrawingListDialog = ({
                                     <Tooltip title={hidden ? '보이기' : '숨기기'}>
                                         <IconButton
                                             size="small"
-                                            aria-label={`${label} ${hidden ? '보이기' : '숨기기'}`}
+                                            aria-label={`${label} 숨기기`}
                                             aria-pressed={hidden}
                                             onClick={() => onChange(drawing.id, {hidden: hidden ? null : true})}
-                                            sx={{color: 'text.secondary'}}
+                                            sx={{...ROW_BUTTON_SX, color: hidden ? 'text.disabled' : 'success.main'}}
                                         >
                                             {hidden
                                                 ? <VisibilityOffOutlinedIcon fontSize="small"/>
@@ -159,7 +219,12 @@ const ChartDrawingListDialog = ({
                                             size="small"
                                             aria-label={`${label} 삭제`}
                                             onClick={() => onDelete(drawing.id)}
-                                            sx={{color: 'text.secondary'}}
+                                            sx={{
+                                                ...ROW_BUTTON_SX,
+                                                '&&': {...ROW_BUTTON_SX['&&'], ...DELETE_COLOR_SX['&&']},
+                                                '&&:hover': {...ROW_BUTTON_SX['&&:hover'], color: 'error.main'},
+                                                '&&.Mui-focusVisible': {color: 'error.main'},
+                                            }}
                                         >
                                             <DeleteOutlineIcon fontSize="small"/>
                                         </IconButton>
@@ -167,22 +232,36 @@ const ChartDrawingListDialog = ({
                                 </Stack>
                             );
                         })}
-                    </Box>
-                )}
-                {rows.length > 0 && (
-                    <Stack direction="row" spacing={1} sx={{mt: 1.5, flexWrap: 'wrap', rowGap: 1}}>
-                        <Button variant="outlined" color="error" size="small" onClick={onDeleteAll}>
-                            모두 삭제
-                        </Button>
-                        {hiddenCount > 0 && (
-                            <Button variant="outlined" size="small" onClick={onShowAll}>
-                                숨긴 선 모두 보이기 ({hiddenCount}개)
-                            </Button>
-                        )}
                     </Stack>
                 )}
             </DialogContent>
-            <DialogActions>
+            <DialogActions
+                sx={{
+                    justifyContent: 'space-between',
+                    gap: 1,
+                    mx: 3,
+                    px: 0,
+                    borderTop: rows.length > 0 ? 1 : 0,
+                    borderColor: 'divider',
+                }}
+            >
+                <Stack direction="row" spacing={0.5} sx={{flexWrap: 'wrap', rowGap: 0.5}}>
+                    {rows.length > 0 && (
+                        <Button
+                            size="small"
+                            startIcon={<DeleteOutlineIcon/>}
+                            sx={DELETE_COLOR_SX}
+                            onClick={onDeleteAll}
+                        >
+                            모두 삭제
+                        </Button>
+                    )}
+                    {hiddenCount > 0 && (
+                        <Button size="small" startIcon={<VisibilityOutlinedIcon/>} onClick={onShowAll}>
+                            숨긴 선 모두 보이기 ({hiddenCount}개)
+                        </Button>
+                    )}
+                </Stack>
                 <Button onClick={onClose}>닫기</Button>
             </DialogActions>
         </Dialog>
