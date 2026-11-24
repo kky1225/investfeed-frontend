@@ -585,9 +585,14 @@ export class CandleChartEngine {
         this.scheduleOverlay();
     }
 
-    /** 가격을 차트의 가격 라벨과 같은 자릿수로 적는다 (그린 선 목록의 수평선 가격용) */
+    /** 가격을 차트의 가격 라벨과 같은 자릿수로 적는다 (그린 선 목록·꾸미기 패널의 수평선 가격용) */
     formatPriceText(price: number): string {
         return formatPrice(price, this.valueDecimals);
+    }
+
+    /** 가격을 차트의 가격 라벨과 같은 자릿수로 반올림한다 (수평선 가격 입력용) */
+    roundPrice(price: number): number {
+        return Number(price.toFixed(this.valueDecimals));
     }
 
     /**

@@ -1,4 +1,4 @@
-import {useState} from "react";
+import {useRef, useState} from "react";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
 import ButtonBase from "@mui/material/ButtonBase";
@@ -33,7 +33,59 @@ interface ChartDrawingStylePanelProps {
     // 피보나치 되돌림일 때만 준다. 켜 둔 비율이고, 주면 비율을 켜고 끄는 버튼이 나온다
     levels?: number[],
     onLevelsChange?: (levels: number[]) => void,
+    // 수평선일 때만 준다. 주면 맨 앞에 가격 입력 칸이 나온다. text 는 차트 라벨과 같은 자릿수로 적은 지금 가격이고,
+    // onCommit 은 입력한 가격(0보다 큰 수)을 받아 선을 옮긴다(잠긴 선이면 받는 쪽이 거절하고 알린다)
+    price?: { value: number, text: string, onCommit: (price: number) => void },
 }
+
+const PRICE_PATTERN = /^\d+(\.\d+)?$/;   // 가격 입력으로 받는 글자 (쉼표를 뺀 뒤). 1e3·0x10 같은 표기는 받지 않는다
+
+interface PriceFieldProps {
+    value: number,
+    text: string,
+    onCommit: (price: number) => void,
+}
+
+/**
+ * 수평선의 가격 입력 칸. Enter 나 칸 밖을 누르면 반영하고, Esc 는 반영하지 않고 원래 값으로 되돌린다.
+ * 숫자가 아니거나 0 이하이거나 지금 가격과 같으면 반영하지 않는다. 어느 쪽이든 칸은 지금 선의 가격으로 돌아간다
+ * (옮겨지면 바깥에서 새 가격으로 칸을 다시 만든다).
+ */
+const PriceField = ({value, text, onCommit}: PriceFieldProps) => {
+    const [input, setInput] = useState(text);
+    const cancelled = useRef(false);    // Esc 로 벗어나는 중인지. 그때의 blur 는 반영하지 않는다
+    const commit = () => {
+        const skip = cancelled.current;
+        cancelled.current = false;
+        setInput(text);
+        // 칸의 글자를 고치지 않았으면 반영하지 않는다(칸에는 반올림한 값이 보이므로, 저장된 값과 비교하면 들어갔다 나오기만 해도 옮겨진다)
+        const plain = input.replace(/,/g, '').trim();
+        if (skip || input === text || !PRICE_PATTERN.test(plain)) return;
+        const price = Number(plain);
+        if (price > 0 && price !== value) onCommit(price);
+    };
+    return (
+        <Tooltip title="가격 (입력 후 Enter)">
+            <InputBase
+                value={input}
+                onChange={event => setInput(event.target.value)}
+                onFocus={event => event.target.select()}
+                onBlur={commit}
+                onKeyDown={event => {
+                    if (event.nativeEvent.isComposing) return;     // 한글 조합 중의 Enter 는 확정이 아니다
+                    if (event.key === 'Enter' || event.key === 'Escape') {
+                        // 자세히 보기 창 안에서도 Esc 가 창을 닫지 않고 입력만 되돌리게 한다
+                        event.stopPropagation();
+                        cancelled.current = event.key === 'Escape';
+                        (event.target as HTMLInputElement).blur();
+                    }
+                }}
+                inputProps={{'aria-label': '수평선 가격', inputMode: 'decimal'}}
+                sx={{width: 104, px: 1, typography: 'body2', border: 1, borderColor: 'divider', borderRadius: 1}}
+            />
+        </Tooltip>
+    );
+};
 
 export const DEFAULT_DRAWING_COLOR = 4;     // 꾸미기를 정하지 않은 도형의 색 순번 (엔진의 기본값과 같다)
 const LINE_WIDTHS = [1, 2, 3];
@@ -44,11 +96,12 @@ const selectedSx = {color: 'primary.main', backgroundColor: 'action.selected'};
 
 /**
  * 도형을 선택하면 차트 위쪽 가운데에 뜨는 패널: 색 · 굵기 · 점선 · 잠금 · 삭제. (글자 도형은 색 · 크기 · 글자 수정 · 잠금 · 삭제)
+ * 수평선은 맨 앞에 가격 입력 칸이 더 나온다.
  * 피보나치 되돌림은 점선 뒤에 비율을 켜고 끄는 버튼이 더 나온다.
  * 색은 테마에서 온 선 색 목록 안에서만 고른다.
  */
 const ChartDrawingStylePanel = ({
-    style, colorCount, onChange, onDelete, locked, onLockChange, onEditText, levels, onLevelsChange,
+    style, colorCount, onChange, onDelete, locked, onLockChange, onEditText, levels, onLevelsChange, price,
 }: ChartDrawingStylePanelProps) => {
     const [levelsAnchor, setLevelsAnchor] = useState<HTMLElement | null>(null);
     /** 비율 하나를 켜거나 끈다. 마지막 남은 하나는 끌 수 없다(선이 하나도 없는 도형이 되므로). */
@@ -80,6 +133,13 @@ const ChartDrawingStylePanel = ({
             sx={{position: 'absolute', top: 8, left: '50%', transform: 'translateX(-50%)', zIndex: 2, px: 1, py: 0.5}}
         >
             <Stack direction="row" spacing={0.5} sx={{alignItems: 'center'}}>
+                {price && (
+                    <>
+                        {/* 선이 바깥에서 옮겨지면(끌기, 되돌리기) 새 가격으로 칸을 다시 만든다 */}
+                        <PriceField key={price.text} value={price.value} text={price.text} onCommit={price.onCommit}/>
+                        <Divider orientation="vertical" flexItem sx={{my: 0.5}}/>
+                    </>
+                )}
                 {Array.from({length: colorCount}, (_unused, order) => (
                     <Tooltip key={order} title={`색 ${order + 1}`}>
                         <ButtonBase

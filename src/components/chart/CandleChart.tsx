@@ -1065,6 +1065,27 @@ const CandleChart = ({
                             onEditText={selectedDrawing.type === 'text'
                                 ? () => engineRef.current?.editText(selectedDrawing.id)
                                 : undefined}
+                            price={selectedDrawing.type === 'horizontal' ? {
+                                value: selectedDrawing.price,
+                                text: engineRef.current?.formatPriceText(selectedDrawing.price) ?? String(selectedDrawing.price),
+                                onCommit: price => {
+                                    // 입력 칸이 사라지며 늦게 들어온 경우에도 맞게, 지금 목록에서 그 선을 다시 찾는다.
+                                    // 그사이 지워졌으면(다른 차트에서 지움 등) 반영하지 않는다.
+                                    const current = drawingsRef.current.find(drawing => drawing.id === selectedDrawing.id);
+                                    if (!current || current.type !== 'horizontal') return;
+                                    // 잠금은 "옮길 수 없음"이라 입력으로도 옮기지 않는다.
+                                    if (current.locked) {
+                                        showAlert('잠긴 선이라 가격을 바꿀 수 없습니다. 잠금을 풀고 다시 입력해 주세요.', 'info');
+                                        return;
+                                    }
+                                    const rounded = engineRef.current?.roundPrice(price) ?? price;
+                                    if (rounded <= 0 || rounded === current.price) return;
+                                    changeDrawings(drawingsRef.current.map(drawing => (
+                                        drawing.id === current.id && drawing.type === 'horizontal'
+                                            ? {...drawing, price: rounded} : drawing
+                                    )));
+                                },
+                            } : undefined}
                         />
                     )}
                     <Box
