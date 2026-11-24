@@ -99,6 +99,69 @@ const tableOf = (candles: Candle[], unit: TimeUnit): RankTable => {
 };
 
 /**
+ * 분봉의 거래일이 몇 시에 바뀌는지. 캔들 시각은 그 시장의 벽시계 시각을 브라우저 시간대로 읽은 값이라
+ * (국내는 한국 시각, 미국은 미국 동부 시각, 코인은 한국 시각) 브라우저 날짜로 가른다. 날짜 눈금과 같은 전제다.
+ * midnight: 자정(국내 종목·지수·금, 미국 종목)
+ * nineAm: 오전 9시. 업비트는 하루가 한국 시각 오전 9시(UTC 0시)에 시작한다
+ */
+export type SessionDay = 'midnight' | 'nineAm';
+
+const SESSION_SHIFT_MS: Record<SessionDay, number> = {midnight: 0, nineAm: 9 * 3_600_000};
+
+interface SessionTable {
+    day: SessionDay,
+    ordinals: Uint32Array,  // 캔들마다 몇 번째 거래일인지(받아 둔 첫 캔들의 거래일이 0)
+    count: number,          // 거래일 수
+}
+
+// 캔들 배열마다 한 번만 계산해 둔다. 화면을 움직이는 동안에는 같은 배열이라 다시 계산하지 않는다.
+const sessionTables = new WeakMap<Candle[], SessionTable>();
+
+const sessionTableOf = (candles: Candle[], day: SessionDay): SessionTable => {
+    const cached = sessionTables.get(candles);
+    if (cached && cached.day === day) return cached;
+    const shift = SESSION_SHIFT_MS[day];
+    const dayOf = (time: number) => {
+        const date = new Date(time - shift);
+        return date.getFullYear() * 10_000 + date.getMonth() * 100 + date.getDate();
+    };
+    const ordinals = new Uint32Array(candles.length);
+    let ordinal = 0;
+    let previous = candles.length > 0 ? dayOf(candles[0].time) : 0;
+    for (let index = 1; index < candles.length; index++) {
+        const current = dayOf(candles[index].time);
+        if (current !== previous) ordinal++;
+        ordinals[index] = ordinal;
+        previous = current;
+    }
+    const table = {day, ordinals, count: candles.length > 0 ? ordinal + 1 : 0};
+    sessionTables.set(candles, table);
+    return table;
+};
+
+/**
+ * 보이는 구간에서 거래일이 새로 시작하는 캔들의 순번. 분봉의 날짜 경계선을 긋는 자리다.
+ * 거래일의 평균 간격이 minGap(CSS px)보다 좁으면(많이 축소했을 때) 몇 거래일에 하나만 남긴다.
+ * 남길 것은 거래일 순번으로 골라서, 화면을 끌어도 남는 선이 바뀌지 않는다.
+ */
+export const sessionBreaks = (candles: Candle[], range: VisibleRange, day: SessionDay, minGap: number): number[] => {
+    const {ordinals, count} = sessionTableOf(candles, day);
+    if (count < 2) return [];
+    const averageCandles = candles.length / count;
+    const minCandles = minGap / range.spacing;
+    const skip = averageCandles < minCandles ? Math.ceil(minCandles / averageCandles) : 1;
+    const breaks: number[] = [];
+    const end = range.from + range.count;
+    // 왼쪽 끝에 반쯤 걸친 캔들의 경계는 그림 밖이라 뺀다.
+    for (let index = Math.max(1, Math.ceil(range.leftEdge)); index < end; index++) {
+        const ordinal = ordinals[index];
+        if (ordinal === ordinals[index - 1] || ordinal % skip !== 0) continue;
+        breaks.push(index);
+    }
+    return breaks;
+};
+
+/**
  * 보이는 구간의 날짜 눈금. minGap 은 눈금 사이의 최소 간격(CSS px).
  * 어느 크기의 경계까지 쓸지는 받아 둔 캔들 전체의 평균 간격으로 정해서, 화면을 움직여도 눈금이 바뀌지 않는다.
  * 가장 작은 경계도 듬성듬성하면(확대했을 때) 그 사이를 일정 간격의 눈금으로 채운다.

@@ -314,6 +314,7 @@ const AssetChart = ({
                         candles={fullCandles}
                         timeUnit={timeUnitOf(shownType)}
                         interval={countdownIntervalOf(market, shownType)}
+                        sessionDay={rule.sessionDay}
                         seriesKey={seriesKey}
                         assetType={storage.assetType}
                         assetCode={storage.assetCode}

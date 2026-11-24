@@ -15,6 +15,7 @@ import {clampView, defaultView, fittedView, futureMargin, logicalAt, visibleRang
 import {candleColor, lineColor, Painter, textColorOf, watchPixelRatio} from "./painter.ts";
 import {createIndicator, LegendItem, OverlayIndicator, PaneIndicator} from "./indicatorPanes.ts";
 import {PANE_GAP, renderMain} from "./mainRenderer.ts";
+import {SessionDay} from "./timeAxis.ts";
 import {
     drawCandleLegend, drawCrosshair, drawIndicatorLegends, drawOverlayLegends, drawTradeTooltip,
 } from "./overlayRenderer.ts";
@@ -131,6 +132,7 @@ export class CandleChartEngine {
 
     private flatByPrevClose = false;
     private grid = true;
+    private sessionDay: SessionDay = 'midnight';
     private averagePeriods: number[] = [];
     private averages: Series[] = [];        // averagePeriods 와 같은 순서
     private seriesStale = false;            // 캔들이 바뀌어 shapes·averages·지표를 다시 계산해야 하는지 (ensureSeries)
@@ -341,6 +343,13 @@ export class CandleChartEngine {
     /** 격자선(가로·세로)을 그을지. 눈금 글자, 축 경계선, 지표의 기준선은 그대로 그린다. */
     setGrid(visible: boolean) {
         this.grid = visible;
+        this.scheduleDraw();
+    }
+
+    /** 분봉의 날짜 경계선을 몇 시에 그을지. 코인(업비트)은 오전 9시, 그 밖에는 날짜 눈금과 같은 자정 */
+    setSessionDay(day: SessionDay) {
+        if (this.sessionDay === day) return;
+        this.sessionDay = day;
         this.scheduleDraw();
     }
 
@@ -1397,6 +1406,7 @@ export class CandleChartEngine {
             comparisons: this.comparisons.map(({color}, order) => ({closes: this.comparisonCloses[order] ?? [], color})),
             flatByPrevClose: this.flatByPrevClose,
             grid: this.grid,
+            sessionDay: this.sessionDay,
             axisWidth: this.axisWidth,
             valueDecimals: this.valueDecimals,
             extremePrefix: this.extremePrefix,

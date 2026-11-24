@@ -38,6 +38,7 @@ import {
     MAGNET_MODES, MagnetMode, MAX_DRAWING_TEXT_LENGTH, MAX_DRAWINGS, PaneResize, PriceLine, SeriesStroke, TextRequest, TimeUnit,
     TradeMarker,
 } from "../../lib/chart/types.ts";
+import type {SessionDay} from "../../lib/chart/timeAxis.ts";
 import ChartTypeSelect from "./ChartTypeSelect.tsx";
 import type {AssetType} from "../../type/NotificationType.ts";
 import {useAlert} from "../../context/AlertContext.tsx";
@@ -48,6 +49,8 @@ export interface CandleChartProps {
     // 캔들 한 개가 담는 기간. 분봉이면 현재가 라벨 아래에 캔들 마감까지 남은 시간을 적는다. 주지 않으면 적지 않는다.
     // 그릴 때마다 새로 만든 객체가 아니라 주기별로 정해 둔 값을 넘길 것
     interval?: CandleInterval,
+    // 분봉의 날짜 경계선을 몇 시에 그을지. 코인(업비트, 오전 9시에 하루 시작)은 'nineAm'. 기본은 날짜 눈금과 같은 'midnight'
+    sessionDay?: SessionDay,
     // 캔들 가격을 적는 소수 자릿수의 상한. 주지 않으면 캔들 가격의 자릿수를 그대로 따른다
     maxPriceDecimals?: number,
     // 최고·최저 표시의 가격 앞에 붙일 통화 기호 ($ 등). 주지 않으면 숫자만 적는다. 축과 다른 라벨에는 붙이지 않는다
@@ -157,7 +160,7 @@ interface DrawingHistory {
 }
 
 const CandleChart = ({
-    candles, timeUnit, interval, maxPriceDecimals, extremePrefix = '', seriesKey, assetType, assetCode, toolbarStart, onLoadOlder, hasOlder = false, comparison, onPriceLineMove,
+    candles, timeUnit, interval, sessionDay = 'midnight', maxPriceDecimals, extremePrefix = '', seriesKey, assetType, assetCode, toolbarStart, onLoadOlder, hasOlder = false, comparison, onPriceLineMove,
     onPriceTarget, canPriceTarget,
     movingAverages = DEFAULT_MOVING_AVERAGES, indicators = DEFAULT_INDICATORS, priceLines = NO_PRICE_LINES,
     tradeMarkers = NO_TRADE_MARKERS, onTradesChange, tradesNotice,
@@ -604,6 +607,10 @@ const CandleChart = ({
     useEffect(() => {
         engineRef.current?.setGrid(grid);
     }, [grid]);
+
+    useEffect(() => {
+        engineRef.current?.setSessionDay(sessionDay);
+    }, [sessionDay]);
 
     useEffect(() => {
         engineRef.current?.setChartType(chartType);

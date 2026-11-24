@@ -2,7 +2,7 @@ import {Candle, ChartStyle, ChartType, PriceLine, SeriesStroke, TimeUnit} from "
 import {
     createLinearScale, createLogScale, decimalsOf, formatPercent, formatPrice, formatVolume, logTicks, niceTicks,
 } from "./scale.ts";
-import {timeTicks} from "./timeAxis.ts";
+import {SessionDay, sessionBreaks, timeTicks} from "./timeAxis.ts";
 import {ComparisonLine, scaleComparison} from "./comparison.ts";
 import {
     AXIS_LABEL_OFFSET, AXIS_TAG_HEIGHT, FONT_SIZE, LEGEND_LEFT, PRICE_PANE_TOP, TIME_AXIS_HEIGHT,
@@ -52,6 +52,9 @@ const CLOSE_LINE_COLOR = 4;         // 선·영역 차트의 선 색 (style.line
 const AREA_FILL_ALPHA = 0.12;
 const PERCENT_DECIMALS = 2;         // 퍼센트 축에서 현재가·십자선·수평선 라벨의 소수 자릿수
 const BASELINE_DASH = [2, 2];       // 기준선 차트의 기준 가격에 긋는 점선
+const SESSION_BREAK_DASH = [4, 4];  // 분봉의 날짜 경계선
+const SESSION_BREAK_ALPHA = 0.7;    // 날짜 경계선은 축 글자색을 조금 옅게 써서 격자와 분명히 구분되게 한다
+const SESSION_BREAK_MIN_GAP = 8;    // 날짜 경계선 사이가 이보다 좁으면(많이 축소했을 때) 솎는다
 
 export interface MainInput {
     candles: Candle[],          // 한 개 이상
@@ -82,6 +85,7 @@ export interface MainInput {
     comparisons: { closes: Series, color: number }[],
     flatByPrevClose: boolean,
     grid: boolean,              // 격자선(가격 눈금의 가로선, 날짜 눈금의 세로선)을 그을지. 눈금 글자와 경계선은 늘 그린다
+    sessionDay: SessionDay,     // 분봉의 날짜 경계선을 어느 날짜로 가를지
     axisWidth: number,      // 오른쪽 가격축 너비 (CSS px)
     valueDecimals: number,      // 캔들 가격의 소수 자릿수
     extremePrefix: string,      // 최고·최저 표시의 가격 앞에 붙일 통화 기호 ($ 등). 비우면 숫자만 적는다
@@ -101,6 +105,7 @@ interface Frame {
     timeUnit: TimeUnit,
     flatByPrevClose: boolean,
     grid: boolean,
+    sessionDay: SessionDay,
     plotWidth: number,
     plotBottom: number,     // 날짜축 위
     mainBottom: number,     // 거래량 영역 아래 (보조지표 위)
@@ -207,6 +212,30 @@ const drawTimeAxis = ({painter, style, candles, range, timeUnit, grid, plotBotto
         ctx.fillStyle = style.textColor;
         ctx.fillText(label, x, painter.px(plotBottom + TIME_AXIS_HEIGHT / 2));
     });
+};
+
+/**
+ * 분봉의 날짜 경계선: 거래일이 새로 시작하는 캔들의 왼쪽 끝에 세로 점선을 긋는다.
+ * 격자 설정과 상관없이 늘 긋고, 가격 영역 위부터 보조지표 아래까지 잇는다
+ */
+const drawSessionBreaks = ({painter, style, candles, range, timeUnit, sessionDay, line, plotRightPx, plotBottomPx}: Frame) => {
+    if (timeUnit !== 'minute') return;
+    const ctx = painter.ctx;
+    ctx.save();
+    ctx.strokeStyle = style.textColor;
+    ctx.globalAlpha = SESSION_BREAK_ALPHA;
+    ctx.lineWidth = line;
+    ctx.setLineDash(SESSION_BREAK_DASH.map(length => painter.px(length)));
+    ctx.beginPath();
+    sessionBreaks(candles, range, sessionDay, SESSION_BREAK_MIN_GAP).forEach(index => {
+        // 선이 흐려지지 않게 기기 픽셀 한가운데에 긋는다
+        const x = painter.px((index - range.leftEdge) * range.spacing) + line / 2;
+        if (x < 0 || x > plotRightPx) return;
+        ctx.moveTo(x, 0);
+        ctx.lineTo(x, plotBottomPx);
+    });
+    ctx.stroke();
+    ctx.restore();
 };
 
 /** 축 경계선과 가격·거래량 사이의 선 */
@@ -762,7 +791,7 @@ export const renderMain = (painter: Painter, input: MainInput): Layout | null =>
         candles, chartType, shapes, percentScale, priceZoom, priceShift, timeUnit, style, width, range,
         mainHeight, volumeRatio, indicatorHeights,
         averages, averageColors, averageStrokes, indicators, priceOverlays, volumeOverlays, priceLines, comparisons, flatByPrevClose,
-        grid, axisWidth, valueDecimals, extremePrefix, countdown,
+        grid, sessionDay, axisWidth, valueDecimals, extremePrefix, countdown,
     } = input;
 
     // 위에서부터: 가격 / 거래량 / 보조지표들 / 날짜축. 위에서 아래로 쌓으므로 아래 영역의 높이가 바뀌어도 위 영역은 그대로다.
@@ -842,7 +871,7 @@ export const renderMain = (painter: Painter, input: MainInput): Layout | null =>
 
     const plotRightPx = painter.px(plotWidth);
     const frame: Frame = {
-        painter, style, candles, shapes, chartType, logScale, visible, range, timeUnit, flatByPrevClose, grid,
+        painter, style, candles, shapes, chartType, logScale, visible, range, timeUnit, flatByPrevClose, grid, sessionDay,
         plotWidth, plotBottom, mainBottom, priceTop, priceBottom, volumeTop,
         priceMin, priceMax, volumeMax,
         priceY: (logScale ? createLogScale : createLinearScale)(priceMin, priceMax, priceTop, priceBottom),
@@ -866,6 +895,7 @@ export const renderMain = (painter: Painter, input: MainInput): Layout | null =>
     const priceDecimals = Math.max(drawPriceAxis(frame), valueDecimals);
     drawVolumeAxis(frame);
     drawTimeAxis(frame);
+    drawSessionBreaks(frame);
     drawBorders(frame);
     drawCandles(frame, averages, averageColors, averageStrokes, priceOverlays, volumeOverlays);
     // 오른쪽 끝에 반쯤 걸친 캔들의 세모가 가격축 위로 넘어가지 않게, 캔들처럼 가격 영역 안에서 자른다.

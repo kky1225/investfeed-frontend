@@ -1,4 +1,5 @@
 import type {CandleInterval, TimeUnit} from "../../lib/chart/types.ts";
+import type {SessionDay} from "../../lib/chart/timeAxis.ts";
 import type {AssetType} from "../../type/NotificationType.ts";
 
 // 자산 종류별 차트 규칙. 상세 화면과 멀티 화면이 모두 AssetChart 를 거쳐 이 규칙을 쓴다.
@@ -17,28 +18,31 @@ interface MarketChartRule {
     assetType: AssetType,
     codeSuffix: string,
     comparison: boolean,    // 종목 비교를 쓰는지
+    // 분봉의 날짜 경계선을 몇 시에 그을지. 업비트는 하루가 한국 시각 오전 9시에 시작해 nineAm,
+    // 그 밖에는 자정(미국 종목은 분봉 시각이 미국 동부 시각 그대로라 동부 자정이 된다)
+    sessionDay: SessionDay,
 }
 
 export const MARKET_CHART_RULES: Record<ChartMarket, MarketChartRule> = {
     STOCK: {
         minutes: [1, 3, 5, 10, 15, 30, 60], defaultMinute: 1, year: true, countdown: true,
-        assetType: 'STOCK', codeSuffix: '', comparison: true,
+        assetType: 'STOCK', codeSuffix: '', comparison: true, sessionDay: 'midnight',
     },
     US_STOCK: {
         minutes: [1, 3, 5, 10, 30], defaultMinute: 3, year: true, countdown: false,
-        assetType: 'STOCK', codeSuffix: '_US', comparison: true,
+        assetType: 'STOCK', codeSuffix: '_US', comparison: true, sessionDay: 'midnight',
     },
     CRYPTO: {
         minutes: [1, 3, 5, 10, 30], defaultMinute: 3, year: true, countdown: true,
-        assetType: 'CRYPTO', codeSuffix: '', comparison: true,
+        assetType: 'CRYPTO', codeSuffix: '', comparison: true, sessionDay: 'nineAm',
     },
     INDEX: {
         minutes: [1, 3, 5, 30], defaultMinute: 1, year: true, countdown: true,
-        assetType: 'STOCK', codeSuffix: '_INDEX', comparison: true,
+        assetType: 'STOCK', codeSuffix: '_INDEX', comparison: true, sessionDay: 'midnight',
     },
     COMMODITY: {
         minutes: [1, 3, 5, 30], defaultMinute: 1, year: false, countdown: true,
-        assetType: 'STOCK', codeSuffix: '_COMMODITY', comparison: false,
+        assetType: 'STOCK', codeSuffix: '_COMMODITY', comparison: false, sessionDay: 'midnight',
     },
 };
 
