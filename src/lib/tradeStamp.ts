@@ -35,6 +35,9 @@ export function parseTradeStamp(raw: string | undefined | null): number {
     const hour = cleaned.length >= 10 ? Number(cleaned.substring(8, 10)) : 0;
     const minute = cleaned.length >= 12 ? Number(cleaned.substring(10, 12)) : 0;
     const second = cleaned.length >= 14 ? Number(cleaned.substring(12, 14)) : 0;
+    // 시각이 아닌 표시값(키움 장마감 "888888"·"999999" 등)은 시각을 모르는 것으로 본다.
+    // 그대로 Date 에 넣으면 며칠 뒤 시각이 되어, 이후의 실제 시세가 모두 더 오래된 값으로 밀려난다
+    if (hour > 23 || minute > 59 || second > 59) return 0;
 
     const t = new Date(year, month, day, hour, minute, second).getTime();
     return Number.isFinite(t) ? t : 0;

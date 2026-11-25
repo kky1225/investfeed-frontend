@@ -24,8 +24,8 @@ export interface IndexListItem {
     trdeQty: string,
     trdePrica: string,
     openPric: string,
-    tm: string,
-    chartMinuteList: Array<ChartMinute>
+    tm: string | null,
+    chartMinuteList: Array<ChartMinute> | null
 }
 
 export interface ChartMinute {
@@ -66,7 +66,7 @@ export interface IndexInfo {
     lowPric: string,
     _250hgst: string,
     _250lwst: string,
-    tmN: string,
+    tmN: string | null,
     indNetprps: string,
     frgnrNetprps: string,
     orgnNetprps: string,

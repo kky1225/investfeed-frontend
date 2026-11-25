@@ -18,6 +18,7 @@ import {useMiniChartMode} from "../../components/chart/useMiniChartMode.ts";
 import {INDEX_PRICE_SCALE, kiwoomMinuteCandles} from "../detail/chartCandles.ts";
 import FreshnessIndicator from "../../components/FreshnessIndicator.tsx";
 import {usePollingQuery} from "../../lib/pollingQuery.ts";
+import {indexAsOfLabel} from "../../lib/indexAsOf.ts";
 
 interface LiveIndexUpdate {
     value: string;
@@ -51,25 +52,10 @@ const IndexList = () => {
     }, [result]);
 
     // 화면 우측 상단에 한 번만 표시하는 기준 시각. 예: "2026.11.13 09:42", 장 마감 후 "2026.11.13 장마감"
+    // 날짜는 첫 지수의 분봉에서 읽는다. 분봉이 없으면 받아 온 시각을 대신 표시한다
     const asOfLabel = useMemo<string | undefined>(() => {
-        const list: IndexListItem[] = result?.indexList ?? [];
-        if (list.length === 0) return undefined;
-
-        // 날짜를 읽을 분봉이 없으면 받아 온 시각을 대신 표시한다
-        const cntrTm = list[0].chartMinuteList[0]?.cntrTm;
-        if (!cntrTm) return undefined;
-        const year = cntrTm.substring(0, 4);
-        const month = cntrTm.substring(4, 6);
-        const day = cntrTm.substring(6, 8);
-        const tm = list[0].tm ?? '';
-        const minute = tm.substring(0, 2);
-        const second = tm.substring(2, 4);
-
-        if ((minute === '88' && second === '88') || (minute === '99' && second === '99')) {
-            return `${year}.${month}.${day} 장마감`;
-        }
-        if (minute === '' || second === '') return `${year}.${month}.${day}`;
-        return `${year}.${month}.${day} ${minute}:${second}`;
+        const first = result?.indexList?.[0];
+        return indexAsOfLabel(first?.chartMinuteList?.[0]?.cntrTm?.substring(0, 8), first?.tm);
     }, [result]);
 
     // 폴링 결과 + 실시간 overlay 합산하여 차트 데이터 도출
@@ -87,7 +73,7 @@ const IndexList = () => {
                 openPric: parseFloat(indexItem.openPric.replace(/^[+-]/, '')),
                 trend: live?.trend ?? trendColor(indexItem.predPreSig),
                 // 당일 분봉. 지수 가격은 100배로 온다
-                candles: kiwoomMinuteCandles(indexItem.chartMinuteList, INDEX_PRICE_SCALE),
+                candles: kiwoomMinuteCandles(indexItem.chartMinuteList ?? [], INDEX_PRICE_SCALE),
                 chartMode,
             };
         });

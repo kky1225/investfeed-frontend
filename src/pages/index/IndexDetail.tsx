@@ -41,6 +41,8 @@ import { MakeOptional } from '@mui/x-internals/types';
 import ProgramLineChart from "../../components/ProgramLineChart.tsx";
 import {usePollingQuery} from "../../lib/pollingQuery.ts";
 import {parseKiwoomStamp} from "../../lib/tradeStamp.ts";
+import {indexAsOfLabel} from "../../lib/indexAsOf.ts";
+import {getServerNow} from "../../lib/serverTime.ts";
 
 
 interface IndexRangeProps {
@@ -282,19 +284,8 @@ const IndexDetail = () => {
             const {indexInfo, chartList} = result;
 
             // 차트는 캔들 차트가 따로 그린다. 여기서는 머리의 가격·등락·시각만 만든다.
-            const year = chartList[0].dt.substring(0, 4);
-            const month = chartList[0].dt.substring(4, 6);
-            const day = chartList[0].dt.substring(6, 8);
-            // 앞자리 0 이 빠져 와도("93000") 시·분을 바르게 읽도록 6자리로 채운다 (parseKiwoomStamp 와 같은 처리)
-            const tmN = indexInfo.tmN.padStart(6, '0');
-            const hour = tmN.substring(0, 2);
-            const mm = tmN.substring(2, 4);
-
-            // 지수는 정규장(09:00~15:30)에만 움직인다. 시와 분을 함께 비교해야 16:05 같은 시각도 장마감이 된다
-            const timeOfDay = Number(hour) * 100 + Number(mm);
-            const today = (timeOfDay >= 1530 || timeOfDay < 900)
-                ? `${year}.${month}.${day} 장마감`
-                : `${year}.${month}.${day} ${hour}:${mm}`;
+            // 기준 시각 문구는 주요 지수·대시보드와 같은 규칙. 만들 수 없으면 '-' (받아 온 시각을 대신 표시)
+            const today = indexAsOfLabel(chartList[0]?.dt?.substring(0, 8), indexInfo.tmN) ?? '-';
 
             return {
                 id: indexInfo.indsCd,
@@ -471,7 +462,9 @@ const IndexDetail = () => {
             fluRt: i.fluRt,
             predPre: i.predPre || '0',
             trend: trendColor(i.predPreSig),
-            stamp: parseKiwoomStamp(i.tmN),
+            // 장마감 표시값("888888")이면 시각을 알 수 없어 받은 시각을 쓴다. 0 으로 두면 장중 마지막 체결보다 늦지 않다고 보고
+            // 마감 후 폴링 값(종가)을 버린다. 다음 날 체결은 날짜가 더 늦어 다시 이긴다
+            stamp: parseKiwoomStamp(i.tmN) || getServerNow(),
         });
     }, [result]);
 

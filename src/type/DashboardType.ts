@@ -4,7 +4,7 @@ export interface DashboardIndexListItem {
     curPrc: string,
     predPreSig: string,
     fluRt: string,
-    tm: string,
+    tm: string | null,
     ind: string,
     orgn: string,
     frgnr: string,

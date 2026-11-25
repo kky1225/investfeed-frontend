@@ -15,6 +15,7 @@ import {JSX, useEffect, useMemo, useRef, useState} from "react";
 import {GridColDef, GridRowsProp} from '@mui/x-data-grid';
 import CustomDataTable from "../../components/CustomDataTable.tsx";
 import FreshnessIndicator from "../../components/FreshnessIndicator.tsx";
+import {indexAsOfLabel} from "../../lib/indexAsOf.ts";
 import InvestorBarChart from "../../components/InvestorBarChart.tsx";
 import ProgramBarChart from "../../components/ProgramBarChart.tsx";
 import CheckIcon from '@mui/icons-material/Check';
@@ -77,21 +78,10 @@ export default function Dashboard() {
     }, [result]);
 
     // 주요 지수 제목 우측에 한 번만 표시하는 기준 시각. 예: "2026.11.13 09:42", 장 마감 후 "2026.11.13 장마감"
-    const indexAsOfLabel = useMemo<string | undefined>(() => {
+    // tm 은 날짜(yyyyMMdd) 뒤에 키움 시각(HHmmss)을 붙인 값. 지수 상세·주요 지수와 같은 규칙으로 읽는다
+    const asOfLabel = useMemo<string | undefined>(() => {
         const tm = (result?.indexList as DashboardIndexListItem[] | undefined)?.[0]?.tm;
-        if (!tm) return undefined;
-
-        const year = tm.substring(0, 4);
-        const month = tm.substring(4, 6);
-        const day = tm.substring(6, 8);
-        const minute = tm.substring(8, 10);
-        const second = tm.substring(10, 12);
-
-        if ((minute === '88' && second === '88') || (minute === '99' && second === '99')) {
-            return `${year}.${month}.${day} 장마감`;
-        }
-        if (minute === '' || second === '') return `${year}.${month}.${day}`;
-        return `${year}.${month}.${day} ${minute}:${second}`;
+        return indexAsOfLabel(tm?.substring(0, 8), tm?.substring(8));
     }, [result]);
 
     // 폴링 결과 + 실시간 overlay 합산
@@ -419,7 +409,7 @@ export default function Dashboard() {
                     주요 지수
                 </Typography>
                 {/* 날짜·시각은 여기 한 곳에만 표시한다 */}
-                {!loading && <FreshnessIndicator lastUpdated={lastUpdated} error={pollError} label={indexAsOfLabel}/>}
+                {!loading && <FreshnessIndicator lastUpdated={lastUpdated} error={pollError} label={asOfLabel}/>}
             </Box>
             <Grid
                 container
