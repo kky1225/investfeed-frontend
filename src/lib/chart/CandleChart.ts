@@ -17,8 +17,10 @@ import {createIndicator, LegendItem, OverlayIndicator, PaneIndicator} from "./in
 import {PANE_GAP, renderMain} from "./mainRenderer.ts";
 import {SessionDay} from "./timeAxis.ts";
 import {
-    drawCandleLegend, drawCrosshair, drawIndicatorLegends, drawOverlayLegends, drawTradeTooltip,
+    drawCandleLegend, drawCrosshair, drawIndicatorLegends, drawLinkedCrosshair, drawOverlayLegends, drawTradeTooltip,
 } from "./overlayRenderer.ts";
+import {CrosshairPoint} from "./crosshairLink.ts";
+import {ViewEdge, ViewSpan} from "./viewLink.ts";
 import {DrawingLayer, timeToIndex} from "./drawingLayer.ts";
 
 export {INDICATOR_HEIGHT_LIMIT, INDICATOR_PANE_HEIGHT, MAIN_HEIGHT_LIMIT, VOLUME_RATIO_LIMIT} from "./constants.ts";
@@ -29,6 +31,7 @@ const COMPARISON_PERCENT_DECIMALS = 2;  // 값 표시에 적는 비교 종목 �
 const SPAN_SAMPLE = 5;
 const MULTI_DAY_GAP_MS = 3 * 24 * 60 * 60 * 1000;
 const LOAD_OLDER_THRESHOLD = 50;   // 화면 왼쪽 끝에서 받아 둔 첫 캔들까지 이만큼 이하로 남으면 과거 구간을 요청한다
+const MAX_LINKED_BLANK = 0.9;      // 기간 연동으로 받은 구간에서 마지막 캔들 뒤를 비우는 비율의 상한 (1 에 가까우면 계산이 튄다)
 const PINCH_DELTA_LIMIT = 30;   // 휠 한 번의 이동량이 이보다 작으면 트랙패드 두 손가락 벌리기로 본다
 const WHEEL_ZOOM_RATE = 0.0015;
 const PINCH_WHEEL_ZOOM_RATE = 0.01; // 트랙패드 두 손가락 벌리기 (ctrl + wheel 로 들어옴)
@@ -104,6 +107,11 @@ export class CandleChartEngine {
     private hovered = false;                // 마우스가 차트 위에 있는지. 키보드 조작을 받을지 정한다
     // 우클릭 메뉴가 떠 있는 동안 십자선을 우클릭한 자리에 붙들어 둔다. 메뉴가 마우스를 가로채도 지우지 않는다
     private crosshairHeld = false;
+    // 다른 차트에서 옮겨 온 십자선(멀티 화면의 연동). 이 차트의 십자선이 없을 때만 그린다
+    private linkedCrosshair: CrosshairPoint | null = null;
+    private sharedCrosshair: CrosshairPoint | null = null;  // 마지막으로 알린 이 차트의 십자선 (onCrosshairMove)
+    private capturing = false;      // 그림 한 장으로 만드는 중(toImage). 십자선을 그리지도 알리지도 않는다
+    private destroyed = false;      // destroy 를 불렀는지. 그 뒤로는 그리기를 예약하지 않는다
 
     private chartType: ChartType = 'candle';
     private shapes: Candle[] = [];          // 모양을 그릴 캔들. 하이킨아시면 다시 만든 것, 그 밖에는 candles 그대로
@@ -190,6 +198,16 @@ export class CandleChartEngine {
      * 받는 쪽에서 이미 요청 중이거나 더 받을 것이 없으면 무시해야 한다.
      */
     onNeedOlder: (() => void) | null = null;
+    /**
+     * 이 차트의 십자선이 가리키는 캔들·가격이 바뀌면 알린다(마우스·손가락으로 옮긴 것만). 사라지면 null.
+     * 다른 차트가 setLinkedCrosshair 로 받아 같은 자리에 십자선을 띄운다.
+     */
+    onCrosshairMove: ((point: CrosshairPoint | null) => void) | null = null;
+    /**
+     * 사용자가 확대·이동해(휠·키·끌기·최근으로 이동·날짜로 이동 등) 보이는 구간이 바뀌면 알린다.
+     * 다른 차트가 setLinkedView 로 받아 같은 기간을 보여 준다. setLinkedView 로 옮긴 것은 알리지 않는다.
+     */
+    onViewMove: ((span: ViewSpan) => void) | null = null;
 
     private readonly drawingLayer = new DrawingLayer({
         layout: () => this.layout,
@@ -360,9 +378,9 @@ export class CandleChartEngine {
     toImage(): HTMLCanvasElement | null {
         const style = this.style;
         if (!style || this.candles.length === 0) return null;
-        const pointer = this.pointer;
-        this.pointer = null;
+        this.capturing = true;
         this.drawNow();
+        this.capturing = false;
         const image = document.createElement('canvas');
         image.width = this.mainCanvas.width;
         image.height = this.mainCanvas.height;
@@ -373,9 +391,58 @@ export class CandleChartEngine {
             ctx.drawImage(this.mainCanvas, 0, 0);
             ctx.drawImage(this.overlayCanvas, 0, 0);
         }
-        this.pointer = pointer;
         this.scheduleDraw();
         return ctx ? image : null;
+    }
+
+    /**
+     * 다른 차트에서 옮겨 온 십자선. point.time 은 이 차트의 캔들 시각이고, price 는 가로선을 그을 가격(없으면 세로선만)이다.
+     * null 이면 지운다. 이 차트에 마우스·손가락의 십자선이 있는 동안에는 그것을 그린다.
+     */
+    setLinkedCrosshair(point: CrosshairPoint | null) {
+        const current = this.linkedCrosshair;
+        if (current === point || (current && point && current.time === point.time && current.price === point.price)) return;
+        this.linkedCrosshair = point;
+        // 손을 뗀 뒤 남은 십자선(터치의 길게 누르기, 날짜로 이동)은 다른 차트를 가리키기 시작하면 지운다.
+        // 남겨 두면 이 차트만 예전 자리를 가리킨다.
+        if (point && !this.isPointing()) this.pointer = null;
+        this.scheduleOverlay();
+    }
+
+    /**
+     * 다른 차트에서 옮겨 온 보는 구간. 화면 왼쪽 끝과 오른쪽 끝이 span 에 오도록 확대·이동한다.
+     * 가장 최근 캔들까지 보여 주던 구간(latest)이면 이 차트도 마지막 캔들까지 보여 주고, 그 뒤를 같은 비율(blank)만큼 비운다.
+     * 확대 한계에 걸리면 구간의 가운데를 맞춘다. 기준 캔들이 이 차트에 없으면 무시한다.
+     */
+    setLinkedView(span: ViewSpan) {
+        const left = this.logicalOf(span.left);
+        // 오른쪽 끝 right 가 "마지막 캔들 끝 + 화면 너비(right - left)의 blank 비율"이 되도록 푼 값
+        const blank = clamp(span.blank, 0, MAX_LINKED_BLANK);
+        const right = span.latest
+            ? left === null ? null : (this.candles.length - blank * left) / (1 - blank)
+            : this.logicalOf(span.right);
+        if (left === null || right === null || right <= left) return;
+        this.view = clampView(fittedView(left, right, this.plotWidth()).view, this.candles.length, this.plotWidth());
+        this.scheduleDraw();
+    }
+
+    /** 구간 끝을 이 차트의 순번(소수)으로 바꾼다. 기준 캔들이 없으면 null */
+    private logicalOf(edge: ViewEdge): number | null {
+        if (this.candles.length === 0) return null;
+        const index = timeToIndex(this.candles, edge.time);
+        return this.candles[index].time === edge.time ? index + edge.offset : null;
+    }
+
+    /** 순번(소수)을 구간 끝으로 바꾼다. 받아 둔 캔들 밖이면 가장 가까운 캔들에서 떨어진 칸 수로 적는다 */
+    private edgeOf(logical: number): ViewEdge {
+        const index = clamp(Math.floor(logical), 0, this.candles.length - 1);
+        return {time: this.candles[index].time, offset: logical - index};
+    }
+
+    /** 사용자가 지금 이 차트를 가리키는 중인지 (마우스가 위에 있거나, 누르고 있거나, 우클릭 메뉴로 십자선을 붙들어 둠) */
+    private isPointing(): boolean {
+        return this.hovered || this.activePointers.size > 0 || this.editPointerId !== null
+            || this.priceLineDrag !== null || this.crosshairHeld;
     }
 
     /**
@@ -652,6 +719,7 @@ export class CandleChartEngine {
     };
 
     destroy() {
+        this.destroyed = true;
         this.stopWatchingPixelRatio();
         if (this.frame) cancelAnimationFrame(this.frame);
         if (this.overlayFrame) cancelAnimationFrame(this.overlayFrame);
@@ -1288,9 +1356,22 @@ export class CandleChartEngine {
             : defaultView(this.candles.length, this.plotWidth(), this.futureBars());
     }
 
+    /** 사용자의 확대·이동을 보기에 반영하고, 연동한 차트들에 알린다. */
     private setView(view: View) {
-        this.view = clampView(view, this.candles.length, this.plotWidth());
+        const plotWidth = this.plotWidth();
+        const next = clampView(view, this.candles.length, plotWidth);
+        this.view = next;
         this.scheduleDraw();
+        if (this.onViewMove && this.candles.length > 0) {
+            const bars = plotWidth / next.spacing;
+            this.onViewMove({
+                left: this.edgeOf(next.rightEdge - bars),
+                right: this.edgeOf(next.rightEdge),
+                // 최근으로 이동 버튼과 같은 기준으로, 마지막 캔들이 반 칸 넘게 보이면 최근까지 보는 것으로 본다
+                latest: next.rightEdge >= this.candles.length - 0.5,
+                blank: Math.max(0, next.rightEdge - this.candles.length) / bars,
+            });
+        }
     }
 
     /** 순번 anchor 가 가로 위치 x 에 그대로 있도록 캔들 너비를 바꾼다. */
@@ -1312,7 +1393,7 @@ export class CandleChartEngine {
 
     /** 같은 프레임 안의 여러 변경을 한 번만 그린다. 전체를 그리면 십자선도 새 배치에 맞춰 다시 그린다. */
     private scheduleDraw() {
-        if (this.frame) return;
+        if (this.frame || this.destroyed) return;
         this.frame = requestAnimationFrame(() => {
             this.frame = 0;
             this.drawAll();
@@ -1344,7 +1425,7 @@ export class CandleChartEngine {
 
     /** 마우스 이동은 위 장만 다시 그린다. */
     private scheduleOverlay() {
-        if (this.overlayFrame || this.frame) return;
+        if (this.overlayFrame || this.frame || this.destroyed) return;
         this.overlayFrame = requestAnimationFrame(() => {
             this.overlayFrame = 0;
             this.drawOverlay();
@@ -1427,9 +1508,12 @@ export class CandleChartEngine {
         painter.useFont(style);
         this.drawingLayer.render(painter, layout, style);
 
-        // 마우스가 가리키는 캔들이 없으면 가장 최근 캔들의 값을 보여 준다.
-        const pointed = drawCrosshair(painter, layout, style, this.pointer, this.candles, this.timeUnit);
-        const index = pointed ?? this.candles.length - 1;
+        // 마우스가 가리키는 캔들이 없으면 다른 차트에서 옮겨 온 십자선의 캔들을, 그것도 없으면 가장 최근 캔들의 값을 보여 준다.
+        const pointer = this.capturing ? null : this.pointer;
+        const pointed = drawCrosshair(painter, layout, style, pointer, this.candles, this.timeUnit);
+        if (!this.capturing) this.shareCrosshair(pointed, layout);
+        const linked = pointed === null && !this.capturing ? this.drawLinked(layout, style) : null;
+        const index = pointed ?? linked ?? this.candles.length - 1;
         const candle = this.candles[index];
         if (candle) {
             drawCandleLegend(
@@ -1452,11 +1536,42 @@ export class CandleChartEngine {
 
         // 십자선이 매매가 있는 캔들에 오면 그 내역을 마우스 옆에 적는다. 매수는 상승색, 매도는 하락색.
         const markers = pointed === null ? undefined : this.tradeMarkersByIndex.get(pointed);
-        if (markers && this.pointer) {
-            drawTradeTooltip(painter, layout, style, this.pointer, markers.flatMap(({side, lines}) => {
+        if (markers && pointer) {
+            drawTradeTooltip(painter, layout, style, pointer, markers.flatMap(({side, lines}) => {
                 const color = textColorOf(style, side === 'buy' ? style.upColor : style.downColor);
                 return lines.map(text => ({text, color}));
             }));
         }
+    }
+
+    /**
+     * 이 차트의 십자선이 가리키는 캔들·가격이 바뀌었으면 알린다. 가격은 가격 영역 안을 가리킬 때만 적는다.
+     * 사라진 것은 늘 알리고, 새 자리는 사용자가 가리키는 중일 때만 알린다. 남은 십자선이 실시간 체결로 가격축이 움직여
+     * 다른 자리를 가리키게 되어도 다른 차트의 연동을 빼앗지 않게 한다.
+     */
+    private shareCrosshair(pointed: number | null, layout: Layout) {
+        if (pointed !== null && !this.isPointing()) return;
+        const candle = pointed === null ? undefined : this.candles[pointed];
+        const pane = layout.panes[0];
+        const pointer = this.pointer;
+        const price = candle && pane && pointer && pointer.y >= pane.top && pointer.y <= pane.bottom
+            ? paneToValue(pane)(pointer.y)
+            : null;
+        const next: CrosshairPoint | null = candle ? {time: candle.time, price} : null;
+        const previous = this.sharedCrosshair;
+        if (previous === next || (previous && next && previous.time === next.time && previous.price === next.price)) return;
+        this.sharedCrosshair = next;
+        this.onCrosshairMove?.(next);
+    }
+
+    /** 다른 차트에서 옮겨 온 십자선을 그리고 그 캔들의 순번을 돌려준다. 그 캔들이 없거나 화면 밖이면 null */
+    private drawLinked(layout: Layout, style: ChartStyle): number | null {
+        const linked = this.linkedCrosshair;
+        if (!linked || this.candles.length === 0) return null;
+        const index = timeToIndex(this.candles, linked.time);
+        if (this.candles[index].time !== linked.time) return null;
+        return drawLinkedCrosshair(
+            this.overlayPainter, layout, style, index, linked.price, this.candles, this.timeUnit,
+        ) ? index : null;
     }
 }

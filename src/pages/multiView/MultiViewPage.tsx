@@ -4,6 +4,8 @@ import {useEffect, useMemo, useRef, useState} from "react";
 import Box from "@mui/material/Box";
 import Typography from "@mui/material/Typography";
 import Grid from "@mui/material/Grid";
+import FormControlLabel from "@mui/material/FormControlLabel";
+import Switch from "@mui/material/Switch";
 import MultiViewPanel from "./MultiViewPanel.tsx";
 import MultiViewSearchDialog from "./MultiViewSearchDialog.tsx";
 import type {SelectedAsset, StreamUpdate} from "../../type/MultiViewType.ts";
@@ -11,9 +13,20 @@ import ChartDetailDialog from "./ChartDetailDialog.tsx";
 import {fetchMultiViewStockStream, fetchMultiViewCryptoStream} from "../../api/multiView/MultiViewApi.ts";
 import {MarketType} from "../../type/timeType.ts";
 import {fetchMarketInfo, getServerNow} from "../../lib/serverTime.ts";
+import {CrosshairSync} from "../../lib/chart/crosshairLink.ts";
+import {ViewSync} from "../../lib/chart/viewLink.ts";
 
 const STORAGE_KEY = 'multiView_panels';
+const RANGE_LINK_KEY = 'multiView_rangeLink';   // 기간 연동 스위치. 기본은 꺼짐
 const MAX_PANELS = 4;
+
+const loadRangeLink = (): boolean => {
+    try {
+        return localStorage.getItem(RANGE_LINK_KEY) === 'true';
+    } catch {
+        return false;
+    }
+};
 
 // localStorage 에서 패널 복원 — 컴포넌트 외부 함수 (lazy initializer 용)
 function loadPanelsFromStorage(): SelectedAsset[] {
@@ -49,6 +62,19 @@ export default function MultiViewPage() {
     const [streamUpdates, setStreamUpdates] = useState<Map<string, StreamUpdate>>(new Map());
     const stockBufferRef = useRef<Map<string, StreamUpdate>>(new Map());
     const cryptoBufferRef = useRef<Map<string, StreamUpdate>>(new Map());
+    // 패널 차트들의 십자선을 함께 움직인다. 한 패널에서 가리킨 시각을 다른 패널도 가리킨다.
+    const [crosshairSync] = useState(() => new CrosshairSync());
+    // 기간 연동: 켜면 한 패널을 확대·이동할 때 다른 패널도 같은 기간을 보여 준다. 주기가 달라도 시각으로 맞춘다.
+    const [viewSync] = useState(() => new ViewSync());
+    const [rangeLink, setRangeLink] = useState(loadRangeLink);
+    const handleRangeLink = (checked: boolean) => {
+        setRangeLink(checked);
+        try {
+            localStorage.setItem(RANGE_LINK_KEY, String(checked));
+        } catch {
+            // 저장하지 못해도 이번 화면에서는 동작한다.
+        }
+    };
 
     useEffect(() => {
         localStorage.setItem(STORAGE_KEY, JSON.stringify(panels));
@@ -229,9 +255,17 @@ export default function MultiViewPage() {
 
     return (
         <Box sx={{width: '100%', maxWidth: {sm: '100%', md: 'var(--page-max-width)'}}}>
-            <Typography component="h2" variant="h6" sx={{mb: 2}}>
-                멀티 화면
-            </Typography>
+            <Box sx={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2}}>
+                <Typography component="h2" variant="h6">
+                    멀티 화면
+                </Typography>
+                <FormControlLabel
+                    control={<Switch size="small" checked={rangeLink} onChange={(_event, checked) => handleRangeLink(checked)}/>}
+                    label="기간 연동"
+                    title="한 차트를 확대·이동하면 다른 차트도 같은 기간을 보여 줍니다"
+                    sx={{mr: 0}}
+                />
+            </Box>
 
             <Grid container spacing={2}>
                 {panels.map((asset, index) => (
@@ -242,6 +276,8 @@ export default function MultiViewPage() {
                             onChartExpand={() => handleChartExpand(index)}
                             onRemove={() => handleRemove(index)}
                             streamUpdate={streamUpdates.get(asset.code) ?? null}
+                            crosshairSync={crosshairSync}
+                            viewSync={rangeLink ? viewSync : undefined}
                         />
                     </Grid>
                 ))}

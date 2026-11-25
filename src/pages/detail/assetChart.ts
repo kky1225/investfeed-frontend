@@ -21,6 +21,9 @@ interface MarketChartRule {
     // 분봉의 날짜 경계선을 몇 시에 그을지. 업비트는 하루가 한국 시각 오전 9시에 시작해 nineAm,
     // 그 밖에는 자정(미국 종목은 분봉 시각이 미국 동부 시각 그대로라 동부 자정이 된다)
     sessionDay: SessionDay,
+    // 캔들 시각이 이 시간대의 벽시계 시각이면 그 시간대. 멀티 화면의 십자선 연동에서 실제 시각으로 바꿔 다른 시장과 맞춘다.
+    // 없으면 캔들 시각이 이미 실제 시각(한국 시각)이다
+    timeZone?: string,
 }
 
 export const MARKET_CHART_RULES: Record<ChartMarket, MarketChartRule> = {
@@ -30,7 +33,7 @@ export const MARKET_CHART_RULES: Record<ChartMarket, MarketChartRule> = {
     },
     US_STOCK: {
         minutes: [1, 3, 5, 10, 30], defaultMinute: 3, year: true, countdown: false,
-        assetType: 'STOCK', codeSuffix: '_US', comparison: true, sessionDay: 'midnight',
+        assetType: 'STOCK', codeSuffix: '_US', comparison: true, sessionDay: 'midnight', timeZone: 'America/New_York',
     },
     CRYPTO: {
         minutes: [1, 3, 5, 10, 30], defaultMinute: 3, year: true, countdown: true,

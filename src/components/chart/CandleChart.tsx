@@ -39,6 +39,8 @@ import {
     TradeMarker,
 } from "../../lib/chart/types.ts";
 import type {SessionDay} from "../../lib/chart/timeAxis.ts";
+import type {ChartCrosshairLink} from "../../lib/chart/crosshairLink.ts";
+import type {ChartViewLink} from "../../lib/chart/viewLink.ts";
 import ChartTypeSelect from "./ChartTypeSelect.tsx";
 import type {AssetType} from "../../type/NotificationType.ts";
 import {useAlert} from "../../context/AlertContext.tsx";
@@ -84,6 +86,10 @@ export interface CandleChartProps {
     toolbarStart?: ReactNode,   // 위쪽 줄 맨 앞에 놓을 화면별 버튼 (주기, 차트 종류 등)
     // 가격+거래량 영역의 기본 높이. 보조지표 영역은 이 아래에 더해진다. 사용자가 경계를 끌어 바꿔 두었으면 그 높이를 쓴다
     height?: number,
+    // 다른 차트와 십자선을 연동하는 통로(멀티 화면). 주지 않으면 연동하지 않는다. 그릴 때마다 새로 만들지 말 것
+    crosshairLink?: ChartCrosshairLink,
+    // 다른 차트와 보는 구간(확대·이동)을 연동하는 통로(멀티 화면의 기간 연동). 주지 않으면 연동하지 않는다. 그릴 때마다 새로 만들지 말 것
+    viewLink?: ChartViewLink,
 }
 
 const DEFAULT_MOVING_AVERAGES = [5, 20, 60, 120];
@@ -164,7 +170,7 @@ const CandleChart = ({
     onPriceTarget, canPriceTarget,
     movingAverages = DEFAULT_MOVING_AVERAGES, indicators = DEFAULT_INDICATORS, priceLines = NO_PRICE_LINES,
     tradeMarkers = NO_TRADE_MARKERS, onTradesChange, tradesNotice,
-    height = 400,
+    height = 400, crosshairLink, viewLink,
 }: CandleChartProps) => {
     const containerRef = useRef<HTMLDivElement>(null);
     const engineRef = useRef<CandleChartEngine | null>(null);
@@ -583,6 +589,32 @@ const CandleChart = ({
             engineRef.current = null;
         };
     }, [showAlert]);    // showAlert 는 바뀌지 않는다
+
+    // 십자선 연동: 이 차트의 십자선을 알리고, 다른 차트의 십자선을 받아 그린다. 차트가 내려가면 알린 십자선도 지운다.
+    useEffect(() => {
+        const engine = engineRef.current;
+        if (!engine || !crosshairLink) return;
+        engine.onCrosshairMove = crosshairLink.publish;
+        const unsubscribe = crosshairLink.subscribe(point => engine.setLinkedCrosshair(point));
+        return () => {
+            unsubscribe();
+            engine.onCrosshairMove = null;
+            engine.setLinkedCrosshair(null);
+            crosshairLink.publish(null);
+        };
+    }, [crosshairLink]);
+
+    // 기간 연동: 사용자가 이 차트를 확대·이동하면 알리고, 다른 차트가 알린 구간을 받아 같은 기간을 보여 준다.
+    useEffect(() => {
+        const engine = engineRef.current;
+        if (!engine || !viewLink) return;
+        engine.onViewMove = viewLink.publish;
+        const unsubscribe = viewLink.subscribe(span => engine.setLinkedView(span));
+        return () => {
+            unsubscribe();
+            engine.onViewMove = null;
+        };
+    }, [viewLink]);
 
     useEffect(() => {
         engineRef.current?.resetView();

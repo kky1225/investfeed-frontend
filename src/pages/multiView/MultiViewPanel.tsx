@@ -15,6 +15,8 @@ import OpenInFullIcon from "@mui/icons-material/OpenInFull";
 import CloseIcon from "@mui/icons-material/Close";
 import OpenInNewIcon from "@mui/icons-material/OpenInNew";
 import AssetChart from "../detail/AssetChart.tsx";
+import type {CrosshairSync} from "../../lib/chart/crosshairLink.ts";
+import type {ViewSync} from "../../lib/chart/viewLink.ts";
 import {renderChangeAmount, signedRate} from "../../components/CustomRender.tsx";
 import type {MultiViewAssetType, SelectedAsset, StreamUpdate} from "../../type/MultiViewType.ts";
 import {useNavigate} from "react-router-dom";
@@ -28,6 +30,8 @@ interface MultiViewPanelProps {
     onChartExpand: () => void;
     onRemove: () => void;
     streamUpdate?: StreamUpdate | null;
+    crosshairSync?: CrosshairSync;    // 패널 차트들의 십자선 연동
+    viewSync?: ViewSync;              // 패널 차트들의 기간 연동. 꺼 두면 주지 않는다
 }
 
 const labelColors = {
@@ -38,7 +42,9 @@ const labelColors = {
 
 const CHART_HEIGHT = 480;  // 차트를 기다리는 동안 보이는 자리의 높이 (차트의 기본 높이와 같다)
 
-export default function MultiViewPanel({asset, onSearch, onChartExpand, onRemove, streamUpdate}: MultiViewPanelProps) {
+export default function MultiViewPanel({
+    asset, onSearch, onChartExpand, onRemove, streamUpdate, crosshairSync, viewSync,
+}: MultiViewPanelProps) {
     const navigate = useNavigate();
     const [chartType, setChartType] = useState('DAY');
 
@@ -160,6 +166,8 @@ export default function MultiViewPanel({asset, onSearch, onChartExpand, onRemove
                 candles={candleList}
                 livePrice={livePriceOf(asset, chartType, streamUpdate)}
                 loading={isPlaceholderData}
+                crosshairSync={crosshairSync}
+                viewSync={viewSync}
             />
         </Card>
     );

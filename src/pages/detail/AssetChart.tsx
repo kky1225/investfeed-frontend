@@ -19,9 +19,13 @@ import {requireOk} from "../../lib/apiResponse.ts";
 import {fetchPriceTargets, updatePriceTarget} from "../../api/notification/NotificationApi.ts";
 import type {PriceTarget} from "../../type/NotificationType.ts";
 import {
-    ChartMarket, chartStorageOf, countdownIntervalOf, isMinuteChart, MARKET_CHART_RULES, minuteChartType, minutesOf,
-    timeUnitOf,
+    candleIntervalOf, ChartMarket, chartStorageOf, countdownIntervalOf, isMinuteChart, MARKET_CHART_RULES, minuteChartType,
+    minutesOf, timeUnitOf,
 } from "./assetChart.ts";
+import {
+    createChartLink, CrosshairSync, LinkTarget, wallClockConversion,
+} from "../../lib/chart/crosshairLink.ts";
+import {createViewLink, ViewSync} from "../../lib/chart/viewLink.ts";
 import {fetchCandlePage, hasCandleHistory} from "./chartHistory.ts";
 import {createComparisonSource} from "./chartComparison.ts";
 import {averagePriceLineOf, tradeMarkersOf} from "./chartTrades.ts";
@@ -56,6 +60,10 @@ export interface AssetChartProps {
     height?: number,        // 가격+거래량 영역의 기본 높이
     // 우클릭 메뉴의 "이 가격에 목표가 알림". 목표가 알림 창을 가진 화면만 넘긴다(넘기지 않으면 메뉴에 없다)
     onPriceTarget?: (price: number) => void,
+    // 십자선을 함께 움직일 차트 묶음(멀티 화면). 주지 않으면 연동하지 않는다
+    crosshairSync?: CrosshairSync,
+    // 보는 구간(확대·이동)을 함께 맞출 차트 묶음(멀티 화면의 기간 연동). 주지 않으면 연동하지 않는다
+    viewSync?: ViewSync,
 }
 
 const DEFAULT_HEIGHT = 480;
@@ -74,7 +82,7 @@ const US_PENNY_SAMPLE = 300;    // 1달러 미만인지 볼 최근 캔들 수 (�
  */
 const AssetChart = ({
     market, code, exchange, chartType, onChartTypeChange, candles, livePrice, liveStamp, loading = false,
-    height = DEFAULT_HEIGHT, onPriceTarget,
+    height = DEFAULT_HEIGHT, onPriceTarget, crosshairSync, viewSync,
 }: AssetChartProps) => {
     const rule = MARKET_CHART_RULES[market];
     const storage = chartStorageOf(market, code);
@@ -295,6 +303,22 @@ const AssetChart = ({
     );
     const maxPriceDecimals = market !== 'US_STOCK' ? undefined : hasPennyPrice ? US_PENNY_DECIMALS : US_PRICE_DECIMALS;
 
+    // 십자선 연동. 통로는 묶음마다 한 번만 만들고, 캔들·주기는 다른 차트의 십자선을 받을 때마다 지금 값을 읽는다.
+    const conversion = useMemo(() => (rule.timeZone ? wallClockConversion(rule.timeZone) : undefined), [rule.timeZone]);
+    const linkTarget = useRef<LinkTarget>({candles: fullCandles, interval: candleIntervalOf(shownType), assetKey, conversion});
+    useLayoutEffect(() => {
+        linkTarget.current = {candles: fullCandles, interval: candleIntervalOf(shownType), assetKey, conversion};
+    });
+    const crosshairLink = useMemo(
+        () => (crosshairSync ? createChartLink(crosshairSync, () => linkTarget.current) : undefined),
+        [crosshairSync],
+    );
+    // 기간 연동도 같은 방식이다: 통로는 묶음마다 한 번만 만들고, 캔들·주기는 받을 때마다 지금 값을 읽는다.
+    const viewLink = useMemo(
+        () => (viewSync ? createViewLink(viewSync, () => linkTarget.current) : undefined),
+        [viewSync],
+    );
+
     // 그릴 차트가 아직 없으면(처음 열거나 다른 자산으로 바뀐 동안) 자리만 잡아 둔다.
     const waiting = loading && !holding;
 
@@ -333,6 +357,8 @@ const AssetChart = ({
                         tradesNotice={tradesNotice}
                         toolbarStart={wide ? controls : undefined}
                         height={height}
+                        crosshairLink={crosshairLink}
+                        viewLink={viewLink}
                     />
                     {holding && (
                         // 직전 주기의 차트 위에 덮는 로딩 표시. 차트 조작은 막지 않는다.

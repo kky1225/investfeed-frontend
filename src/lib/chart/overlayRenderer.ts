@@ -5,7 +5,7 @@ import {
     AXIS_LABEL_OFFSET, AXIS_TAG_HEIGHT, AXIS_TAG_PADDING, LEGEND_GAP, LEGEND_HEIGHT, LEGEND_ITEM_GAP, LEGEND_LEFT,
     PADDING_TOP,
 } from "./constants.ts";
-import {clamp, isNumber, Layout, paneToValue, Point} from "./layout.ts";
+import {clamp, isNumber, Layout, Pane, paneToValue, paneToY, Point} from "./layout.ts";
 import {lineColor, Painter, textColorOf} from "./painter.ts";
 import {LegendItem} from "./indicatorPanes.ts";
 
@@ -58,7 +58,6 @@ export const drawCrosshair = (
     painter: Painter, layout: Layout, style: ChartStyle,
     pointer: Point | null, candles: Candle[], timeUnit: TimeUnit,
 ): number | null => {
-    const ctx = painter.ctx;
     if (!pointer) return null;
 
     const {range, plotBottom} = layout;
@@ -71,11 +70,46 @@ export const drawCrosshair = (
     const candle = candles[index];
     if (!candle) return null;
 
+    // 오른쪽 축 라벨: 마우스가 올라간 영역(가격·거래량·보조지표)의 값
+    const pane = layout.panes.find(candidate => pointer.y >= candidate.top && pointer.y <= candidate.bottom);
+    drawCrosshairLines(painter, layout, style, index, candle, timeUnit, pointer.y, pane ?? null);
+    return index;
+};
+
+/**
+ * 다른 차트에서 옮겨 온 십자선(멀티 화면의 연동). 세로선은 index 캔들에, 가로선은 price 가 있고 가격 영역 안일 때만 긋는다.
+ * index 캔들이 화면 밖이면 그리지 않고 false 를 돌려준다.
+ */
+export const drawLinkedCrosshair = (
+    painter: Painter, layout: Layout, style: ChartStyle,
+    index: number, price: number | null, candles: Candle[], timeUnit: TimeUnit,
+): boolean => {
+    const candle = candles[index];
+    const {range} = layout;
+    // 캔들 가운데가 그림 영역 안일 때만 그린다(가장자리에 반쯤 걸린 캔들은 세로선이 그림 밖이다).
+    const center = (index + 0.5 - range.leftEdge) * range.spacing;
+    if (!candle || center < 0 || center >= layout.plotWidth) return false;
+    const pane = layout.panes[0];
+    const y = price !== null && pane ? paneToY(pane)(price) : null;
+    const inside = pane && y !== null && y >= pane.top && y <= pane.bottom;
+    drawCrosshairLines(painter, layout, style, index, candle, timeUnit, inside ? y : null, inside ? pane : null);
+    return true;
+};
+
+/**
+ * 십자선의 선과 축 라벨. 세로선과 날짜 라벨은 index 캔들에, 가로선은 y 가 있을 때만 긋고,
+ * 오른쪽 축 라벨은 pane 이 있을 때 그 영역의 값으로 적는다.
+ */
+const drawCrosshairLines = (
+    painter: Painter, layout: Layout, style: ChartStyle,
+    index: number, candle: Candle, timeUnit: TimeUnit, pointerY: number | null, pane: Pane | null,
+) => {
+    const ctx = painter.ctx;
     const line = painter.lineWidth();
     const plotRightPx = painter.px(layout.plotWidth);
-    const plotBottomPx = painter.px(plotBottom);
-    const x = painter.centerX(index, range) - Math.floor(line / 2) + line / 2;
-    const y = painter.px(pointer.y) + line / 2;
+    const plotBottomPx = painter.px(layout.plotBottom);
+    const x = painter.centerX(index, layout.range) - Math.floor(line / 2) + line / 2;
+    const y = pointerY === null ? null : painter.px(pointerY) + line / 2;
 
     ctx.strokeStyle = style.textColor;
     ctx.lineWidth = line;
@@ -85,18 +119,18 @@ export const drawCrosshair = (
         ctx.moveTo(x, 0);
         ctx.lineTo(x, plotBottomPx);
     }
-    ctx.moveTo(0, y);
-    ctx.lineTo(plotRightPx, y);
+    if (y !== null) {
+        ctx.moveTo(0, y);
+        ctx.lineTo(plotRightPx, y);
+    }
     ctx.stroke();
     ctx.setLineDash([]);
 
     const labelHeight = painter.px(AXIS_TAG_HEIGHT);
     const labelPadding = painter.px(AXIS_TAG_PADDING);
 
-    // 오른쪽 축 라벨: 마우스가 올라간 영역(가격·거래량·보조지표)의 값
-    const pane = layout.panes.find(candidate => pointer.y >= candidate.top && pointer.y <= candidate.bottom);
-    if (pane) {
-        const value = paneToValue(pane)(pointer.y);
+    if (pane && pointerY !== null && y !== null) {
+        const value = paneToValue(pane)(pointerY);
         ctx.fillStyle = style.textColor;
         ctx.fillRect(plotRightPx, Math.round(y - labelHeight / 2), painter.px(layout.axisWidth), labelHeight);
         ctx.fillStyle = style.backgroundColor;
@@ -114,8 +148,6 @@ export const drawCrosshair = (
     ctx.fillStyle = style.backgroundColor;
     ctx.textAlign = 'center';
     ctx.fillText(timeLabel, timeLeft + timeWidth / 2, timeTop + labelHeight / 2);
-
-    return index;
 };
 
 /**
