@@ -112,6 +112,7 @@ export class CandleChartEngine {
     private sharedCrosshair: CrosshairPoint | null = null;  // 마지막으로 알린 이 차트의 십자선 (onCrosshairMove)
     private capturing = false;      // 그림 한 장으로 만드는 중(toImage). 십자선을 그리지도 알리지도 않는다
     private destroyed = false;      // destroy 를 불렀는지. 그 뒤로는 그리기를 예약하지 않는다
+    private pixelShift = {x: 0, y: 0};  // 화면 픽셀에 맞추려고 캔버스를 왼쪽·위로 당긴 거리 (CSS px, 1픽셀 미만, alignToPixels)
 
     private chartType: ChartType = 'candle';
     private shapes: Candle[] = [];          // 모양을 그릴 캔들. 하이킨아시면 다시 만든 것, 그 밖에는 candles 그대로
@@ -259,6 +260,7 @@ export class CandleChartEngine {
         container.addEventListener('contextmenu', this.handleContextMenu);
         // 이동·확대 키는 차트를 클릭하지 않아도 마우스가 위에 있으면 받도록 창 전체에서 듣는다.
         window.addEventListener('keydown', this.handleNavigationKey);
+        window.addEventListener('scroll', this.handleScroll, {capture: true, passive: true});
         this.stopWatchingPixelRatio = watchPixelRatio(this.handlePixelRatioChange);
     }
 
@@ -697,6 +699,7 @@ export class CandleChartEngine {
 
     resize(width: number, height: number) {
         const dpr = window.devicePixelRatio || 1;
+        this.alignToPixels(dpr);
         if (width === this.width && height === this.height && dpr === this.mainPainter.dpr) return;
         this.width = width;
         this.height = height;
@@ -705,13 +708,42 @@ export class CandleChartEngine {
         [this.mainCanvas, this.overlayCanvas].forEach(canvas => {
             canvas.width = Math.round(width * dpr);
             canvas.height = Math.round(height * dpr);
-            canvas.style.width = `${width}px`;
-            canvas.style.height = `${height}px`;
+            // 표시 크기를 캔버스 픽셀 수에 딱 맞춘다. 너비가 소수(반으로 나눈 패널 등)면 그대로 두었을 때 살짝 늘어나 흐려진다.
+            canvas.style.width = `${canvas.width / dpr}px`;
+            canvas.style.height = `${canvas.height / dpr}px`;
         });
         // 캔버스는 크기를 바꾸면 지워진다. 다음 프레임까지 기다리면 그 사이 빈 화면이 보이므로
         // (경계를 끌어 높이가 계속 바뀌는 동안 깜박인다) 바로 그린다.
         this.drawNow();
     }
+
+    /**
+     * 캔버스를 화면 픽셀 경계에 맞춰 놓는다. 차트가 반 픽셀 같은 자리에서 시작하면(멀티 화면의 오른쪽 패널 등) 브라우저가
+     * 그림 전체를 픽셀 사이에 걸쳐 다시 그려 선과 글자가 흐려진다. 시작 위치의 소수 부분만큼 왼쪽·위로 당긴다(1픽셀 미만).
+     */
+    private alignToPixels(dpr: number) {
+        const rect = this.container.getBoundingClientRect();
+        const fraction = (value: number) => {
+            const scaled = value * dpr;
+            return (scaled - Math.floor(scaled)) / dpr;
+        };
+        const x = fraction(rect.left);
+        const y = fraction(rect.top);
+        if (x === this.pixelShift.x && y === this.pixelShift.y) return;
+        this.pixelShift = {x, y};
+        [this.mainCanvas, this.overlayCanvas].forEach(canvas => {
+            canvas.style.left = `${-x}px`;
+            canvas.style.top = `${-y}px`;
+        });
+    }
+
+    /**
+     * 크기는 그대로인데 위치만 바뀌는 경우(위쪽 패널의 높이가 바뀌어 밀림, 배율이 정수가 아닌 화면에서의 스크롤)에도
+     * 정렬을 다시 맞춘다. 스크롤은 어느 요소에서 일어나든 받는다.
+     */
+    private readonly handleScroll = () => {
+        if (this.width > 0) this.alignToPixels(this.mainPainter.dpr);
+    };
 
     /** 화면 배율이 바뀌면 캔버스를 그 배율에 맞춘다. 아직 크기를 받지 못했으면(처음 그리기 전) 크기를 받을 때 맞춘다. */
     private readonly handlePixelRatioChange = () => {
@@ -739,6 +771,7 @@ export class CandleChartEngine {
         this.container.removeEventListener('touchstart', this.handleTouchStart);
         this.container.removeEventListener('contextmenu', this.handleContextMenu);
         window.removeEventListener('keydown', this.handleNavigationKey);
+        window.removeEventListener('scroll', this.handleScroll, {capture: true});
         this.mainCanvas.remove();
         this.overlayCanvas.remove();
     }
@@ -776,8 +809,9 @@ export class CandleChartEngine {
     // ---------- 입력 ----------
 
     private localPoint(event: MouseEvent): Point {
+        // 그림의 원점은 캔버스를 당긴 만큼(pixelShift) 컨테이너보다 왼쪽·위에 있다.
         const rect = this.container.getBoundingClientRect();
-        return {x: event.clientX - rect.left, y: event.clientY - rect.top};
+        return {x: event.clientX - rect.left + this.pixelShift.x, y: event.clientY - rect.top + this.pixelShift.y};
     }
 
     private readonly handlePointerDown = (event: PointerEvent) => {
@@ -1060,7 +1094,7 @@ export class CandleChartEngine {
         if (event.touches.length !== 1 || !event.cancelable) return;
         const rect = this.container.getBoundingClientRect();
         const touch = event.touches[0];
-        const point = {x: touch.clientX - rect.left, y: touch.clientY - rect.top};
+        const point = {x: touch.clientX - rect.left + this.pixelShift.x, y: touch.clientY - rect.top + this.pixelShift.y};
         if (this.boundaryAt(point, true) || this.priceLineAt(point, true)) event.preventDefault();
     };
 
@@ -1410,6 +1444,7 @@ export class CandleChartEngine {
     }
 
     private drawAll() {
+        if (this.width > 0) this.alignToPixels(this.mainPainter.dpr);
         this.layout = this.drawMain();
         this.drawOverlay();
 
