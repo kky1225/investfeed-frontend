@@ -91,7 +91,10 @@ export interface DrawingHost {
     candles: () => Candle[],
     hasOlder: () => boolean,        // 더 받을 과거 구간이 남아 있는지
     timeUnit: () => TimeUnit,       // 수직선의 날짜 라벨 표기 단위
-    futureTime: (steps: number) => number | null,   // 마지막 캔들에서 steps 칸 뒤(미래 구간)의 시각 어림. 수직선 날짜 라벨용
+    // 미래 구간의 칸과 시각 사이 변환(futureTime.ts). 미래 구간의 점은 어림한 시각으로 저장하고, 그릴 때 다시 칸으로 바꾼다
+    futureTimeAt: (steps: number) => number | null,     // 마지막 캔들에서 steps 칸 뒤의 시각
+    futureStepsAt: (time: number) => number | null,     // 시각 time 이 마지막 캔들에서 몇 칸 뒤인지
+    multiDay: () => boolean,        // 캔들 하나가 하루보다 긴 기간을 담는지 (주·월·연봉). 날짜로 저장된 점의 자리 찾기에 쓴다
     // index 번째 캔들 자리에서 가격 영역에 그려진 선들의 값(이동평균선, 볼린저밴드 등). 자석이 지표 선에 붙을 때 쓴다
     lineValues: (index: number) => number[],
     redraw: () => void,            // 위 장을 다시 그려 달라고 요청
@@ -635,7 +638,7 @@ export class DrawingLayer {
             const x = painter.px(this.xOf(index, layout));
             if (x < 0 || x > plotRightPx) return;
             const time = candle ? candle.time
-                : index >= candles.length ? this.host.futureTime(index - candles.length + 1) : null;
+                : index >= candles.length ? this.host.futureTimeAt(index - candles.length + 1) : null;
             if (time === null) return;
             const color = colorOf(drawing);
             const text = formatTime(time, timeUnit, true);
@@ -733,19 +736,62 @@ export class DrawingLayer {
         return part === 'body' ? early.length === 0 : !early.some(([earlyPart]) => earlyPart === part);
     }
 
-    /** 점이 놓인 순번. 미래 구간의 점은 마지막 캔들 뒤의 순번이 된다. */
+    /**
+     * 점이 놓인 순번. 미래 구간의 점(마지막 캔들보다 늦은 시각)은 지금 주기에서 그 시각을 담은 칸, 즉 마지막 캔들 뒤의 순번이 된다.
+     * 그래서 주기를 바꿔도 같은 날에 놓인다. 예전 방식(기준 캔들 + offset 칸)으로 저장된 점은 그대로 칸 수를 더한다.
+     */
     private indexOf(spot: { time: number, offset?: number | null }): number {
-        return timeToIndex(this.host.candles(), spot.time) + (spot.offset ?? 0);
+        const candles = this.host.candles();
+        if (spot.offset) return timeToIndex(candles, spot.time) + spot.offset;
+        const last = candles.length - 1;
+        if (last >= 0 && spot.time > candles[last].time) {
+            const steps = this.host.futureStepsAt(spot.time);
+            if (steps !== null) return last + steps;
+        }
+        return this.placedIndex(spot.time);
     }
 
-    /** 순번과 가격으로 점을 만든다. 마지막 캔들보다 뒤면 "마지막 캔들 + 몇 칸"으로 적는다. */
+    /**
+     * 받아 둔 캔들 사이의 시각이 놓일 캔들. 기본은 그 시각을 담은 캔들(시작이 그 시각 이하인 마지막 캔들)이지만,
+     * 캔들 시각과 꼭 맞지 않으면(다른 주기에서 그렸거나, 미래 구간에 어림 시각으로 그린 뒤 캔들이 생긴 점) 다음처럼 옮긴다.
+     * 미래 구간의 자리 찾기(futureTime.stepsAt)와 같은 규칙이라, 미래에 그린 점이 캔들이 생긴 뒤에도 같은 자리에 있다.
+     * - 다음 캔들이 같은 기간(분·일봉은 같은 날, 주봉은 같은 주, 월봉은 같은 달, 연봉은 같은 해)이면 다음 캔들.
+     *   일봉의 월요일 0시 선은 분봉에서 월요일 첫 캔들에, 업비트 9시 캔들의 0시 점은 그날 캔들에 놓인다.
+     * - 분·일봉에서 캔들이 없는 날(휴장일로 어림이 빗나간 날 등)의 점은 다음 거래일 캔들
+     */
+    private placedIndex(time: number): number {
+        const candles = this.host.candles();
+        const index = timeToIndex(candles, time);
+        const at = candles[index];
+        const next = candles[index + 1];
+        if (!at || !next || at.time >= time) return index;
+        const unit = this.host.timeUnit();
+        const multiDay = this.host.multiDay();
+        const periodOf = (moment: number): number => {
+            const date = new Date(moment);
+            if (unit === 'year') return date.getFullYear();
+            if (unit === 'month') return date.getFullYear() * 12 + date.getMonth();
+            // 주봉: 그 주 월요일의 날짜
+            const weekday = multiDay ? (date.getDay() + 6) % 7 : 0;
+            return new Date(date.getFullYear(), date.getMonth(), date.getDate() - weekday).getTime();
+        };
+        if (periodOf(next.time) === periodOf(time)) return index + 1;
+        const fine = unit === 'minute' || (unit === 'day' && !multiDay);
+        const dayOf = (moment: number) => new Date(moment).toDateString();
+        return fine && dayOf(at.time) !== dayOf(time) ? index + 1 : index;
+    }
+
+    /**
+     * 순번과 가격으로 점을 만든다. 마지막 캔들보다 뒤면 그 칸의 어림 시각으로 적는다.
+     * 어림할 수 없으면(캔들이 2개 미만) 예전처럼 "마지막 캔들 + 몇 칸"으로 적는다.
+     */
     private anchorOf(index: number, price: number): Anchor {
         const candles = this.host.candles();
         const last = candles.length - 1;
         const bounded = Math.max(0, Math.round(index));
-        return bounded > last
-            ? {time: candles[last].time, price, offset: bounded - last}
-            : {time: candles[bounded].time, price};
+        if (bounded <= last) return {time: candles[bounded].time, price};
+        const time = this.host.futureTimeAt(bounded - last);
+        return time === null ? {time: candles[last].time, price, offset: bounded - last} : {time, price};
     }
 
     /** 순번을 수직선이 놓이는 자리(캔들 시각, 미래 구간이면 몇 칸 뒤인지)로 바꾼다. */
@@ -953,7 +999,8 @@ export class DrawingLayer {
             case 'horizontal':
                 return {...original, price: target.price};
             case 'vertical':
-                return {...original, time: target.time, offset: target.offset};
+                // 옮기면 예전 방식(칸 수)으로 저장된 선도 날짜로 바뀐다.
+                return {...original, time: target.time, offset: target.offset ?? null};
             case 'text':
                 return {...original, from: shift(original.from)};
             case 'channel':

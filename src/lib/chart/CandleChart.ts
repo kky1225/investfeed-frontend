@@ -21,7 +21,7 @@ import {
 } from "./overlayRenderer.ts";
 import {CrosshairPoint} from "./crosshairLink.ts";
 import {ViewEdge, ViewSpan} from "./viewLink.ts";
-import {createFutureClock, FutureClock} from "./futureTime.ts";
+import {createFutureTimeline, FutureTimeline} from "./futureTime.ts";
 import {DrawingLayer, timeToIndex} from "./drawingLayer.ts";
 
 export {INDICATOR_HEIGHT_LIMIT, INDICATOR_PANE_HEIGHT, MAIN_HEIGHT_LIMIT, VOLUME_RATIO_LIMIT} from "./constants.ts";
@@ -113,7 +113,9 @@ export class CandleChartEngine {
     private sharedCrosshair: CrosshairPoint | null = null;  // 마지막으로 알린 이 차트의 십자선 (onCrosshairMove)
     private capturing = false;      // 그림 한 장으로 만드는 중(toImage). 십자선을 그리지도 알리지도 않는다
     private destroyed = false;      // destroy 를 불렀는지. 그 뒤로는 그리기를 예약하지 않는다
-    private futureClock: FutureClock | null = null;  // 미래 구간 칸의 시각 어림. 캔들이 바뀌면 다시 만든다 (십자선 라벨용)
+    // 미래 구간 칸과 시각 사이의 변환(십자선·수직선 라벨, 미래 구간에 그린 점의 자리). 캔들 시각 구성이 바뀌면 다시 만든다
+    private futureTimeline: FutureTimeline | null = null;
+    private futureUnit: TimeUnit | null = null;     // futureTimeline 을 만든 주기
     private pixelShift = {x: 0, y: 0};  // 화면 픽셀에 맞추려고 캔버스를 왼쪽·위로 당긴 거리 (CSS px, 1픽셀 미만, alignToPixels)
 
     private chartType: ChartType = 'candle';
@@ -217,7 +219,9 @@ export class CandleChartEngine {
         candles: () => this.candles,
         hasOlder: () => this.hasOlder,
         timeUnit: () => this.timeUnit,
-        futureTime: steps => this.futureTimeAt(steps),
+        futureTimeAt: steps => this.futureTimeAt(steps),
+        futureStepsAt: time => this.timeline().stepsAt(time),
+        multiDay: () => this.candles.length > 1 && this.spansDays(this.candles.length - 1),
         lineValues: index => {
             this.ensureSeries();
             return [...this.averages, ...this.priceOverlays.flatMap(overlay => overlay.series)]
@@ -300,7 +304,13 @@ export class CandleChartEngine {
         // 지표는 다시 계산할 것만 표시해 두고, 그리기 직전(또는 값을 읽을 때) 한 번만 계산한다(ensureSeries).
         // 체결은 한 프레임 안에도 여러 건 오는데, 화면에는 마지막 결과만 보이기 때문이다.
         this.seriesStale = true;
-        this.futureClock = null;
+        // 미래 칸의 시각은 캔들 시각만으로 정해지므로, 마지막 캔들의 값만 바뀐 체결에는 다시 만들지 않는다.
+        // 같은 시간 단위 안의 주기 변경(1분봉↔5분봉, 일봉↔주봉)은 개수·마지막 시각이 같을 수 있어 첫 캔들과 끝에서 둘째도 본다.
+        const timesChanged = candles.length !== previous.length || timeUnit !== this.futureUnit
+            || candles.at(-1)?.time !== previous.at(-1)?.time || candles.at(-2)?.time !== previous.at(-2)?.time
+            || candles[0]?.time !== previous[0]?.time;
+        if (timesChanged) this.futureTimeline = null;
+        this.futureUnit = timeUnit;
         this.drawingLayer.candlesChanged();
         this.scheduleDraw();
     }
@@ -445,17 +455,20 @@ export class CandleChartEngine {
         return {time: this.candles[index].time, offset: logical - index};
     }
 
-    /**
-     * 마지막 캔들에서 steps 칸 뒤(미래 구간)의 시각 어림. 미래 칸을 가리킬 때만 만들고, 캔들이 바뀌면 버린다
-     * (실시간 체결마다 다시 만들지 않도록).
-     */
+    /** 미래 구간 변환. 쓸 때만 만들고, 캔들 시각 구성이 바뀌면 버린다(setData) */
+    private timeline(): FutureTimeline {
+        this.futureTimeline ??= createFutureTimeline(this.candles, this.timeUnit);
+        return this.futureTimeline;
+    }
+
+    /** 마지막 캔들에서 steps 칸 뒤(미래 구간)의 시각 어림 */
     private futureTimeAt(steps: number): number | null {
-        this.futureClock ??= createFutureClock(this.candles, this.timeUnit);
-        return this.futureClock(steps);
+        return this.timeline().timeAt(steps);
     }
 
     /**
      * 도형 점이 놓인 칸의 시각(그린 선 목록용). 캔들이 있는 칸이면 그 캔들 시각, 미래 구간이면 어림한 시각(수직선 날짜 라벨과 같다).
+     * 미래 구간의 점도 날짜로 저장하므로 대개 저장한 시각 그대로이고, 예전 방식(마지막 캔들 + 몇 칸)으로 저장된 점만 계산한다.
      * 어림할 수 없으면 null
      */
     timeOfSpot(spot: { time: number, offset?: number | null }): number | null {

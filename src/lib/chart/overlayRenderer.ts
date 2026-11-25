@@ -8,7 +8,6 @@ import {
 import {clamp, isNumber, Layout, Pane, paneToValue, paneToY, Point} from "./layout.ts";
 import {lineColor, Painter, textColorOf} from "./painter.ts";
 import {LegendItem} from "./indicatorPanes.ts";
-import {FutureClock} from "./futureTime.ts";
 
 // 위 장: 십자선과 값 표시. 마우스가 움직일 때마다 다시 그린다.
 
@@ -53,12 +52,13 @@ const CHANGE_RATE_DECIMALS = 2;     // 값 표시의 등락률 소수 자릿수
 
 /**
  * 십자선과 축 위의 값·날짜 라벨.
- * 마지막 캔들 뒤의 빈 칸(미래 구간)에서도 그리고, 아래 라벨에는 futureClock 으로 어림한 그 칸의 시각을 적는다.
+ * 마지막 캔들 뒤의 빈 칸(미래 구간)에서도 그리고, 아래 라벨에는 futureTimeAt(마지막 캔들에서 몇 칸 뒤) 으로 어림한
+ * 그 칸의 시각을 적는다.
  * 마우스가 가리키는 캔들의 순번을 돌려주고, 캔들이 아닌 곳(미래 구간 포함)이면 null
  */
 export const drawCrosshair = (
     painter: Painter, layout: Layout, style: ChartStyle,
-    pointer: Point | null, candles: Candle[], timeUnit: TimeUnit, futureClock: FutureClock,
+    pointer: Point | null, candles: Candle[], timeUnit: TimeUnit, futureTimeAt: (steps: number) => number | null,
 ): number | null => {
     if (!pointer) return null;
 
@@ -70,7 +70,7 @@ export const drawCrosshair = (
     // 세로선은 마우스가 올라간 칸의 가운데에 붙인다. 첫 캔들 앞의 빈 자리면 그리지 않는다.
     const index = Math.floor(range.leftEdge + pointer.x / range.spacing);
     const candle = candles[index];
-    const time = candle ? candle.time : index >= candles.length ? futureClock(index - candles.length + 1) : null;
+    const time = candle ? candle.time : index >= candles.length ? futureTimeAt(index - candles.length + 1) : null;
     if (time === null) return null;
 
     // 오른쪽 축 라벨: 마우스가 올라간 영역(가격·거래량·보조지표)의 값
