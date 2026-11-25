@@ -285,10 +285,14 @@ const IndexDetail = () => {
             const year = chartList[0].dt.substring(0, 4);
             const month = chartList[0].dt.substring(4, 6);
             const day = chartList[0].dt.substring(6, 8);
-            const hour = indexInfo.tmN.substring(0, 2);
-            const mm = indexInfo.tmN.substring(2, 4);
+            // 앞자리 0 이 빠져 와도("93000") 시·분을 바르게 읽도록 6자리로 채운다 (parseKiwoomStamp 와 같은 처리)
+            const tmN = indexInfo.tmN.padStart(6, '0');
+            const hour = tmN.substring(0, 2);
+            const mm = tmN.substring(2, 4);
 
-            const today = ((Number(hour) >= 15 && Number(mm) >= 30) || Number(hour) < 9)
+            // 지수는 정규장(09:00~15:30)에만 움직인다. 시와 분을 함께 비교해야 16:05 같은 시각도 장마감이 된다
+            const timeOfDay = Number(hour) * 100 + Number(mm);
+            const today = (timeOfDay >= 1530 || timeOfDay < 900)
                 ? `${year}.${month}.${day} 장마감`
                 : `${year}.${month}.${day} ${hour}:${mm}`;
 
