@@ -17,14 +17,13 @@ export interface IndexLineChartProps {
     fluRt: string,
     predPre: string,
     openPric: number,
-    interval: string,
     trend: 'up' | 'down' | 'neutral',
     candles: Candle[],          // 당일 분봉 (오래된 순)
     chartMode: MiniChartMode,   // 선 / 캔들
 }
 
 const IndexLineChart = (
-    { id, title, value, fluRt, predPre, openPric, interval, trend, candles, chartMode }: IndexLineChartProps,
+    { id, title, value, fluRt, predPre, openPric, trend, candles, chartMode }: IndexLineChartProps,
 ) => {
     const navigate = useNavigate();
 
@@ -74,9 +73,6 @@ const IndexLineChart = (
                             {renderChangeAmount(predPre, '')}
                             <Chip size="small" color={color} label={trendValues[trend]} />
                         </Stack>
-                        <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-                            {interval}
-                        </Typography>
                     </Stack>
                 </CardContent>
                 {/* 당일 흐름. 점선은 시가 */}

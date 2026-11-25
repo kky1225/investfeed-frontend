@@ -12,7 +12,6 @@ export type StatCardProps = {
     id: string;
     title: string;
     value: string;
-    interval: string;
     trend: 'up' | 'down' | 'neutral';
     data: number[],
     dateList: string[],
@@ -33,7 +32,6 @@ function AreaGradient({ color, id }: { color: string; id: string }) {
 export default function StatCard({
     title,
     value,
-    interval,
     trend,
     data,
     dateList,
@@ -91,9 +89,6 @@ export default function StatCard({
                             </Typography>
                             <Chip size="small" color={color} label={trendValues[trend]} />
                         </Stack>
-                        <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-                            {interval}
-                        </Typography>
                     </Stack>
                     <Box sx={{ width: '100%', height: 50 }}>
                         <SparkLineChart

@@ -50,27 +50,31 @@ const IndexList = () => {
         setLiveOverlay(new Map());
     }, [result]);
 
+    // 화면 우측 상단에 한 번만 표시하는 기준 시각. 예: "2026.11.13 09:42", 장 마감 후 "2026.11.13 장마감"
+    const asOfLabel = useMemo<string | undefined>(() => {
+        const list: IndexListItem[] = result?.indexList ?? [];
+        if (list.length === 0) return undefined;
+
+        // 날짜를 읽을 분봉이 없으면 받아 온 시각을 대신 표시한다
+        const cntrTm = list[0].chartMinuteList[0]?.cntrTm;
+        if (!cntrTm) return undefined;
+        const year = cntrTm.substring(0, 4);
+        const month = cntrTm.substring(4, 6);
+        const day = cntrTm.substring(6, 8);
+        const tm = list[0].tm ?? '';
+        const minute = tm.substring(0, 2);
+        const second = tm.substring(2, 4);
+
+        if ((minute === '88' && second === '88') || (minute === '99' && second === '99')) {
+            return `${year}.${month}.${day} 장마감`;
+        }
+        if (minute === '' || second === '') return `${year}.${month}.${day}`;
+        return `${year}.${month}.${day} ${minute}:${second}`;
+    }, [result]);
+
     // 폴링 결과 + 실시간 overlay 합산하여 차트 데이터 도출
     const indexDataList: IndexLineChartProps[] = useMemo(() => {
-        if (!result) return [];
-        const list: IndexListItem[] = result.indexList ?? [];
-        if (list.length === 0) return [];
-
-        const year = list[0].chartMinuteList[0]?.cntrTm?.substring(0, 4) ?? '';
-        const month = list[0].chartMinuteList[0]?.cntrTm?.substring(4, 6) ?? '';
-        const day = list[0].chartMinuteList[0]?.cntrTm?.substring(6, 8) ?? '';
-        const minute = list[0].tm.substring(0, 2);
-        const second = list[0].tm.substring(2, 4);
-
-        let today: string;
-        if ((minute === '88' && second === '88') || (minute === '99' && second === '99')) {
-            today = `${year}.${month}.${day} 장마감`;
-        } else if (minute === '' || second === '') {
-            today = `${year}.${month}.${day}`;
-        } else {
-            today = `${year}.${month}.${day} ${minute}:${second}`;
-        }
-
+        const list: IndexListItem[] = result?.indexList ?? [];
         return list.map((indexItem: IndexListItem) => {
             const live = liveOverlay.get(indexItem.indsCd);
 
@@ -81,7 +85,6 @@ const IndexList = () => {
                 fluRt: live?.fluRt ?? indexItem.fluRt,
                 predPre: live?.predPre ?? (indexItem.predPre || '0'),
                 openPric: parseFloat(indexItem.openPric.replace(/^[+-]/, '')),
-                interval: today,
                 trend: live?.trend ?? trendColor(indexItem.predPreSig),
                 // 당일 분봉. 지수 가격은 100배로 온다
                 candles: kiwoomMinuteCandles(indexItem.chartMinuteList, INDEX_PRICE_SCALE),
@@ -190,7 +193,8 @@ const IndexList = () => {
                 </Typography>
                 <Box sx={{flex: 1}}/>
                 <MiniChartModeToggle mode={chartMode} onChange={setChartMode}/>
-                <FreshnessIndicator lastUpdated={lastUpdated} error={pollError}/>
+                {/* 날짜·시각은 여기 한 곳에만 표시한다 */}
+                <FreshnessIndicator lastUpdated={lastUpdated} error={pollError} label={isLoading ? undefined : asOfLabel}/>
             </Box>
             <Grid
                 container
@@ -211,7 +215,6 @@ const IndexList = () => {
                                             <Skeleton variant="rounded" width={80} height={24}/>
                                         </Stack>
                                     </Stack>
-                                    <Skeleton width={180}/>
                                     <Skeleton variant="rectangular" height={220} sx={{mt: 1.5, borderRadius: 1}}/>
                                 </CardContent>
                             </Card>

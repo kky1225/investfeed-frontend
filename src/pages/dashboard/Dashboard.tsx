@@ -45,7 +45,6 @@ const DEFAULT_INDEX_DATA: StatCardProps = {
     id: '-',
     title: '-',
     value: '-',
-    interval: '-',
     trend: 'neutral',
     data: [],
     dateList: [],
@@ -77,27 +76,30 @@ export default function Dashboard() {
         setLiveOverlay(new Map());
     }, [result]);
 
+    // 주요 지수 제목 우측에 한 번만 표시하는 기준 시각. 예: "2026.11.13 09:42", 장 마감 후 "2026.11.13 장마감"
+    const indexAsOfLabel = useMemo<string | undefined>(() => {
+        const tm = (result?.indexList as DashboardIndexListItem[] | undefined)?.[0]?.tm;
+        if (!tm) return undefined;
+
+        const year = tm.substring(0, 4);
+        const month = tm.substring(4, 6);
+        const day = tm.substring(6, 8);
+        const minute = tm.substring(8, 10);
+        const second = tm.substring(10, 12);
+
+        if ((minute === '88' && second === '88') || (minute === '99' && second === '99')) {
+            return `${year}.${month}.${day} 장마감`;
+        }
+        if (minute === '' || second === '') return `${year}.${month}.${day}`;
+        return `${year}.${month}.${day} ${minute}:${second}`;
+    }, [result]);
+
     // 폴링 결과 + 실시간 overlay 합산
     const indexDataList: StatCardProps[] = useMemo(() => {
         if (!result?.indexList || result.indexList.length === 0) {
             return Array.from({length: 4}, () => ({...DEFAULT_INDEX_DATA}));
         }
         const indexList = result.indexList as DashboardIndexListItem[];
-
-        const year = indexList[0].tm.substring(0, 4);
-        const month = indexList[0].tm.substring(4, 6);
-        const day = indexList[0].tm.substring(6, 8);
-        const minute = indexList[0].tm.substring(8, 10);
-        const second = indexList[0].tm.substring(10, 12);
-
-        let today: string;
-        if ((minute === '88' && second === '88') || (minute === '99' && second === '99')) {
-            today = `${year}.${month}.${day} 장마감`;
-        } else if (minute === '' || second === '') {
-            today = `${year}.${month}.${day}`;
-        } else {
-            today = `${year}.${month}.${day} ${minute}:${second}`;
-        }
 
         return indexList.map((indexItem) => {
             const newDateList = indexItem.chartList.map((chart: ChartDay) => indexDateFormat(chart.dt)).reverse();
@@ -111,7 +113,6 @@ export default function Dashboard() {
                 title: indexItem.indsNm,
                 value: live?.value ?? indexItem.curPrc.replace(/^[+-]/, ''),
                 fluRt: live?.fluRt ?? indexItem.fluRt,
-                interval: today,
                 trend: live?.trend ?? baseTrend,
                 data: newData,
                 dateList: newDateList,
@@ -417,7 +418,8 @@ export default function Dashboard() {
                 <Typography component="h2" variant="h6">
                     주요 지수
                 </Typography>
-                {!loading && <FreshnessIndicator lastUpdated={lastUpdated} error={pollError}/>}
+                {/* 날짜·시각은 여기 한 곳에만 표시한다 */}
+                {!loading && <FreshnessIndicator lastUpdated={lastUpdated} error={pollError} label={indexAsOfLabel}/>}
             </Box>
             <Grid
                 container
@@ -435,7 +437,6 @@ export default function Dashboard() {
                                         <Skeleton width={120} height={40}/>
                                         <Skeleton variant="rounded" width={60} height={24}/>
                                     </Stack>
-                                    <Skeleton width={100}/>
                                     <Skeleton variant="rectangular" height={50} sx={{mt: 1, borderRadius: 1}}/>
                                 </CardContent>
                             </Card>
