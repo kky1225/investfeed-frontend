@@ -8,6 +8,7 @@ import {
 import {clamp, isNumber, Layout, Pane, paneToValue, paneToY, Point} from "./layout.ts";
 import {lineColor, Painter, textColorOf} from "./painter.ts";
 import {LegendItem} from "./indicatorPanes.ts";
+import {FutureClock} from "./futureTime.ts";
 
 // 위 장: 십자선과 값 표시. 마우스가 움직일 때마다 다시 그린다.
 
@@ -52,11 +53,12 @@ const CHANGE_RATE_DECIMALS = 2;     // 값 표시의 등락률 소수 자릿수
 
 /**
  * 십자선과 축 위의 값·날짜 라벨.
- * 마우스가 가리키는 캔들의 순번을 돌려주고, 없으면 null
+ * 마지막 캔들 뒤의 빈 칸(미래 구간)에서도 그리고, 아래 라벨에는 futureClock 으로 어림한 그 칸의 시각을 적는다.
+ * 마우스가 가리키는 캔들의 순번을 돌려주고, 캔들이 아닌 곳(미래 구간 포함)이면 null
  */
 export const drawCrosshair = (
     painter: Painter, layout: Layout, style: ChartStyle,
-    pointer: Point | null, candles: Candle[], timeUnit: TimeUnit,
+    pointer: Point | null, candles: Candle[], timeUnit: TimeUnit, futureClock: FutureClock,
 ): number | null => {
     if (!pointer) return null;
 
@@ -65,15 +67,16 @@ export const drawCrosshair = (
         && pointer.y >= 0 && pointer.y <= plotBottom;
     if (!insidePlot) return null;
 
-    // 세로선은 마우스가 올라간 캔들의 가운데에 붙인다. 캔들이 없는 빈 자리면 그리지 않는다.
+    // 세로선은 마우스가 올라간 칸의 가운데에 붙인다. 첫 캔들 앞의 빈 자리면 그리지 않는다.
     const index = Math.floor(range.leftEdge + pointer.x / range.spacing);
     const candle = candles[index];
-    if (!candle) return null;
+    const time = candle ? candle.time : index >= candles.length ? futureClock(index - candles.length + 1) : null;
+    if (time === null) return null;
 
     // 오른쪽 축 라벨: 마우스가 올라간 영역(가격·거래량·보조지표)의 값
     const pane = layout.panes.find(candidate => pointer.y >= candidate.top && pointer.y <= candidate.bottom);
-    drawCrosshairLines(painter, layout, style, index, candle, timeUnit, pointer.y, pane ?? null);
-    return index;
+    drawCrosshairLines(painter, layout, style, index, time, timeUnit, pointer.y, pane ?? null);
+    return candle ? index : null;
 };
 
 /**
@@ -92,17 +95,17 @@ export const drawLinkedCrosshair = (
     const pane = layout.panes[0];
     const y = price !== null && pane ? paneToY(pane)(price) : null;
     const inside = pane && y !== null && y >= pane.top && y <= pane.bottom;
-    drawCrosshairLines(painter, layout, style, index, candle, timeUnit, inside ? y : null, inside ? pane : null);
+    drawCrosshairLines(painter, layout, style, index, candle.time, timeUnit, inside ? y : null, inside ? pane : null);
     return true;
 };
 
 /**
- * 십자선의 선과 축 라벨. 세로선과 날짜 라벨은 index 캔들에, 가로선은 y 가 있을 때만 긋고,
+ * 십자선의 선과 축 라벨. 세로선은 index 칸에 긋고 아래에 time 을 적는다. 가로선은 y 가 있을 때만 긋고,
  * 오른쪽 축 라벨은 pane 이 있을 때 그 영역의 값으로 적는다.
  */
 const drawCrosshairLines = (
     painter: Painter, layout: Layout, style: ChartStyle,
-    index: number, candle: Candle, timeUnit: TimeUnit, pointerY: number | null, pane: Pane | null,
+    index: number, time: number, timeUnit: TimeUnit, pointerY: number | null, pane: Pane | null,
 ) => {
     const ctx = painter.ctx;
     const line = painter.lineWidth();
@@ -139,7 +142,7 @@ const drawCrosshairLines = (
     }
 
     // 아래 축 라벨: 캔들 날짜. 그림 영역 밖으로 나가지 않게 밀어 넣는다.
-    const timeLabel = formatTime(candle.time, timeUnit, true);
+    const timeLabel = formatTime(time, timeUnit, true);
     const timeWidth = ctx.measureText(timeLabel).width + labelPadding * 2;
     const timeLeft = Math.round(clamp(x - timeWidth / 2, 0, Math.max(0, plotRightPx - timeWidth)));
     const timeTop = plotBottomPx + line;

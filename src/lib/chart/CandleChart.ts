@@ -21,6 +21,7 @@ import {
 } from "./overlayRenderer.ts";
 import {CrosshairPoint} from "./crosshairLink.ts";
 import {ViewEdge, ViewSpan} from "./viewLink.ts";
+import {createFutureClock, FutureClock} from "./futureTime.ts";
 import {DrawingLayer, timeToIndex} from "./drawingLayer.ts";
 
 export {INDICATOR_HEIGHT_LIMIT, INDICATOR_PANE_HEIGHT, MAIN_HEIGHT_LIMIT, VOLUME_RATIO_LIMIT} from "./constants.ts";
@@ -112,6 +113,7 @@ export class CandleChartEngine {
     private sharedCrosshair: CrosshairPoint | null = null;  // 마지막으로 알린 이 차트의 십자선 (onCrosshairMove)
     private capturing = false;      // 그림 한 장으로 만드는 중(toImage). 십자선을 그리지도 알리지도 않는다
     private destroyed = false;      // destroy 를 불렀는지. 그 뒤로는 그리기를 예약하지 않는다
+    private futureClock: FutureClock | null = null;  // 미래 구간 칸의 시각 어림. 캔들이 바뀌면 다시 만든다 (십자선 라벨용)
     private pixelShift = {x: 0, y: 0};  // 화면 픽셀에 맞추려고 캔버스를 왼쪽·위로 당긴 거리 (CSS px, 1픽셀 미만, alignToPixels)
 
     private chartType: ChartType = 'candle';
@@ -297,6 +299,7 @@ export class CandleChartEngine {
         // 지표는 다시 계산할 것만 표시해 두고, 그리기 직전(또는 값을 읽을 때) 한 번만 계산한다(ensureSeries).
         // 체결은 한 프레임 안에도 여러 건 오는데, 화면에는 마지막 결과만 보이기 때문이다.
         this.seriesStale = true;
+        this.futureClock = null;
         this.drawingLayer.candlesChanged();
         this.scheduleDraw();
     }
@@ -439,6 +442,15 @@ export class CandleChartEngine {
     private edgeOf(logical: number): ViewEdge {
         const index = clamp(Math.floor(logical), 0, this.candles.length - 1);
         return {time: this.candles[index].time, offset: logical - index};
+    }
+
+    /**
+     * 마지막 캔들에서 steps 칸 뒤(미래 구간)의 시각 어림. 미래 칸을 가리킬 때만 만들고, 캔들이 바뀌면 버린다
+     * (실시간 체결마다 다시 만들지 않도록).
+     */
+    private futureTimeAt(steps: number): number | null {
+        this.futureClock ??= createFutureClock(this.candles, this.timeUnit);
+        return this.futureClock(steps);
     }
 
     /** 사용자가 지금 이 차트를 가리키는 중인지 (마우스가 위에 있거나, 누르고 있거나, 우클릭 메뉴로 십자선을 붙들어 둠) */
@@ -1545,7 +1557,9 @@ export class CandleChartEngine {
 
         // 마우스가 가리키는 캔들이 없으면 다른 차트에서 옮겨 온 십자선의 캔들을, 그것도 없으면 가장 최근 캔들의 값을 보여 준다.
         const pointer = this.capturing ? null : this.pointer;
-        const pointed = drawCrosshair(painter, layout, style, pointer, this.candles, this.timeUnit);
+        const pointed = drawCrosshair(
+            painter, layout, style, pointer, this.candles, this.timeUnit, steps => this.futureTimeAt(steps),
+        );
         if (!this.capturing) this.shareCrosshair(pointed, layout);
         const linked = pointed === null && !this.capturing ? this.drawLinked(layout, style) : null;
         const index = pointed ?? linked ?? this.candles.length - 1;
