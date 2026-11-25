@@ -8,13 +8,14 @@ import Typography from '@mui/material/Typography';
 import Stack from '@mui/material/Stack';
 import MuiCard from '@mui/material/Card';
 import Alert from '@mui/material/Alert';
+import CircularProgress from '@mui/material/CircularProgress';
 import { styled } from '@mui/material/styles';
 
 import ColorModeSelect from "../../components/ColorModeSelect.tsx";
 import AppTheme from "../../components/AppTheme.tsx";
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { useMutation } from "@tanstack/react-query";
-import { useNavigate } from "react-router-dom";
+import { Navigate, useNavigate } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext.tsx";
 import { login, totpSetup, totpVerify } from "../../api/auth/AuthApi.ts";
 import type { LoginReq, TotpVerifyReq } from "../../type/AuthType.ts";
@@ -80,7 +81,7 @@ export default function Login(props: { disableCustomTheme?: boolean }) {
     const [remainingSeconds, setRemainingSeconds] = useState(0);
     const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-    const { setAuth } = useAuth();
+    const { setAuth, isAuthenticated, isInitialized, defaultPath } = useAuth();
     const navigate = useNavigate();
 
     const clearLockTimer = useCallback(() => {
@@ -218,6 +219,7 @@ export default function Login(props: { disableCustomTheme?: boolean }) {
             setAuth(
                 { loginId, nickname: verify.nickname, email: verify.email, role: verify.role, secondaryPasswordEnabled: verify.secondaryPasswordEnabled, permissions: verify.permissions ?? [] },
                 verify.passwordChangeRequired,
+                verify.defaultPath,
             );
             if (verify.passwordChangeRequired) {
                 navigate('/settings/change-password');
@@ -442,6 +444,19 @@ export default function Login(props: { disableCustomTheme?: boolean }) {
         if (step === 'totp-setup') return 'TOTP 설정';
         return 'TOTP 인증';
     };
+
+    // 로그인 여부를 서버에 묻는 동안은 그리지 않는다. 이미 로그인했으면 다시 로그인하지 않고 첫 화면으로 보낸다
+    // (로그인 중 TOTP 인증을 마친 경우는 아래 onSuccess 가 이동하므로 첫 단계에서만 본다)
+    if (!isInitialized) {
+        return (
+            <Box display="flex" justifyContent="center" alignItems="center" minHeight="100vh">
+                <CircularProgress />
+            </Box>
+        );
+    }
+    if (isAuthenticated && step === 'credentials') {
+        return <Navigate to={defaultPath} replace />;
+    }
 
     return (
         <AppTheme {...props}>

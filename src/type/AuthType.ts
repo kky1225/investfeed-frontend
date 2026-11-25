@@ -116,4 +116,6 @@ export interface MemberRes {
     apiKeyLocked: boolean;
     createdAt: string;
     permissions: UserPermission[];
+    passwordChangeRequired?: boolean;   // 비밀번호 변경 주기가 지났는지
+    defaultPath?: string | null;        // 권한별 첫 화면
 }

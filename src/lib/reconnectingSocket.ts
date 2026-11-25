@@ -2,7 +2,13 @@ import {wsUrl} from './wsUrl.ts';
 
 // 서버 WebSocketHandler 와 값을 맞출 것
 const HEARTBEAT = '{"trnm":"PING"}';
-const LOGGED_OUT_CODE = 4001;
+export const LOGGED_OUT_CODE = 4001;
+export const REPLACED_CODE = 4002;   // 다른 곳에서 새로 로그인해 이전 연결을 닫은 경우
+
+/** 다른 곳에서 로그인해 연결이 닫혔을 때. App.tsx 가 "다른 곳에서 로그인" Dialog 를 띄운다 */
+export const notifyReplaced = () => {
+    window.dispatchEvent(new CustomEvent('show-session-expired', { detail: { code: 'AUTH_4018' } }));
+};
 
 const BASE_RETRY_MS = 3_000;
 const MAX_RETRY_MS = 60_000;
@@ -86,6 +92,11 @@ export function openReconnectingSocket(opts: {
             onDisconnected();
             if (event.code === LOGGED_OUT_CODE) {
                 stopped = true;
+                return;
+            }
+            if (event.code === REPLACED_CODE) {
+                stopped = true;
+                notifyReplaced();
                 return;
             }
             scheduleRetry();

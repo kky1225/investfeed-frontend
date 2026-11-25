@@ -3,6 +3,7 @@ import {useMutation, useQueryClient} from '@tanstack/react-query';
 import {requireOk} from '../lib/apiResponse';
 import {usePollingQuery} from '../lib/pollingQuery';
 import {wsUrl} from '../lib/wsUrl';
+import {LOGGED_OUT_CODE, REPLACED_CODE, notifyReplaced} from '../lib/reconnectingSocket';
 import {useAuth} from './AuthContext';
 import {fetchNotifications, fetchUnreadCount, markAsRead, markAllAsRead} from '../api/notification/NotificationApi';
 import type {Notification} from '../type/NotificationType';
@@ -155,8 +156,15 @@ export function NotificationProvider({children}: { children: ReactNode }) {
                 console.error('[NotificationWS] connection error:', event);
             };
 
-            ws.onclose = () => {
+            ws.onclose = (event) => {
                 wsRef.current = null;
+                // 로그아웃·정지로 서버가 닫았으면 다시 붙지 않는다 (reconnectingSocket 과 같은 코드)
+                if (event.code === LOGGED_OUT_CODE) return;
+                // 다른 곳에서 로그인해 닫혔으면 다시 붙지 않고 "다른 곳에서 로그인" Dialog 를 띄운다
+                if (event.code === REPLACED_CODE) {
+                    notifyReplaced();
+                    return;
+                }
                 // 인증 실패는 연결 직후 끊기므로 onopen 만으로 초기화하면 백오프가 늘지 않는다.
                 // 일정 시간 유지된 연결만 정상으로 보고 재시도 간격을 초기화한다.
                 if (openedAt != null && Date.now() - openedAt >= STABLE_CONNECTION_MS) {

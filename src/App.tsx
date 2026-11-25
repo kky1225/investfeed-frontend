@@ -88,7 +88,8 @@ function App() {
     // 일반 에러 Dialog (500/네트워크 등). 이미 열려있으면 새 에러 무시.
     const [globalError, setGlobalError] = useState<string | null>(null);
     // 401 refresh 실패 시 세션 만료 Dialog. 확인 시 /login 으로 강제 이동.
-    const [sessionExpired, setSessionExpired] = useState(false);
+    // replaced = 다른 곳에서 로그인해 밀려남 (AUTH_4018). 처음 연 이유로 고정한다
+    const [sessionEnd, setSessionEnd] = useState<'expired' | 'replaced' | null>(null);
 
     const handleForbidden = useCallback((e: Event) => {
         const { message } = (e as CustomEvent).detail;
@@ -110,8 +111,9 @@ function App() {
         });
     }, []);
 
-    const handleSessionExpired = useCallback(() => {
-        setSessionExpired(prev => prev || true);
+    const handleSessionExpired = useCallback((e: Event) => {
+        const code = (e as CustomEvent).detail?.code;
+        setSessionEnd(prev => prev ?? (code === 'AUTH_4018' ? 'replaced' : 'expired'));
     }, []);
 
     useEffect(() => {
@@ -136,9 +138,9 @@ function App() {
         }
     };
 
+    // 새로 불러오면 메모리의 로그인 상태도 함께 지워진다.
+    // 연장이 거절된 쿠키는 서버가 그 응답에서 지우므로, 다시 불러오면 로그인 화면이 나온다 (AuthController.reissue)
     const handleSessionExpiredConfirm = () => {
-        sessionStorage.removeItem('user');
-        sessionStorage.removeItem('passwordChangeRequired');
         window.location.replace('/login');
     };
 
@@ -197,7 +199,7 @@ function App() {
                 </DialogActions>
             </Dialog>
             <Dialog
-                open={sessionExpired}
+                open={sessionEnd !== null}
                 disableEscapeKeyDown
                 maxWidth="xs"
                 fullWidth
@@ -211,9 +213,13 @@ function App() {
                     }}>
                         <AccessTimeIcon sx={{ color: 'warning.main', fontSize: 28 }} />
                     </Box>
-                    <Typography variant="h6" sx={{ fontWeight: 600, mb: 1 }}>세션 만료</Typography>
+                    <Typography variant="h6" sx={{ fontWeight: 600, mb: 1 }}>
+                        {sessionEnd === 'replaced' ? '다른 곳에서 로그인' : '세션 만료'}
+                    </Typography>
                     <Typography variant="body2" color="text.secondary" sx={{ lineHeight: 1.6 }}>
-                        세션이 만료되었습니다. 다시 로그인해주세요.
+                        {sessionEnd === 'replaced'
+                            ? '다른 곳에서 로그인되어 로그아웃되었습니다. 여기서 계속 쓰려면 다시 로그인해주세요.'
+                            : '세션이 만료되었습니다. 다시 로그인해주세요.'}
                     </Typography>
                 </DialogContent>
                 <DialogActions sx={{ px: 3, pb: 3, pt: 0 }}>

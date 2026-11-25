@@ -43,42 +43,9 @@ api.interceptors.response.use(
             if (isSessionExpired) {
                 return Promise.reject(error);
             }
-            if (isRefreshing) {
-                return new Promise((resolve, reject) => {
-                    failedQueue.push({ resolve, reject });
-                }).then(() => api(originalRequest));
-            }
-
             originalRequest._retry = true;
-            isRefreshing = true;
-
-            try {
-                const res = await fetchReissue();
-                if (res.result) {
-                    const storedUser = sessionStorage.getItem('user');
-                    if (storedUser) {
-                        const user = JSON.parse(storedUser);
-                        if (res.result.role) user.role = res.result.role;
-                        if (res.result.nickname) user.nickname = res.result.nickname;
-                        if (res.result.email) user.email = res.result.email;
-                        if (res.result.permissions) user.permissions = res.result.permissions;
-                        sessionStorage.setItem('user', JSON.stringify(user));
-                    }
-                }
-                processQueue(null);
-                return api(originalRequest);
-            } catch (refreshError) {
-                console.error(refreshError);
-                // 세션 만료 latch — 후속 401 들이 reissue 재시도하지 않도록 먼저 set.
-                isSessionExpired = true;
-                processQueue(refreshError);
-                // 세션 만료 — 기존 조용한 리다이렉트 대신 App.tsx 의 Dialog 가 확인 버튼을 띄우고
-                // 사용자가 확인하면 sessionStorage clear + /login 이동. 일반 에러 Dialog 와 분리.
-                window.dispatchEvent(new CustomEvent('show-session-expired'));
-                return Promise.reject(refreshError);
-            } finally {
-                isRefreshing = false;
-            }
+            await refreshSession(originalRequest.sessionCheck === true);
+            return api(originalRequest);
         }
 
         if (error.response?.status === 403) {
@@ -133,6 +100,55 @@ api.interceptors.response.use(
         return Promise.reject(error);
     }
 );
+
+/**
+ * 토큰을 연장한다. 이미 연장 중이면 그 결과를 같이 기다린다.
+ * 실패하면 세션 만료 Dialog 를 띄우고 오류를 던진다.
+ * sessionCheck = 화면 시작 때 로그인 여부를 묻는 중. 이때는 다른 곳 로그인(AUTH_4018)만 안내하고 나머지는 조용히 실패하며,
+ * 서버·네트워크 오류는 만료로 확정하지 않는다
+ */
+const refreshSession = async (sessionCheck = false): Promise<void> => {
+    if (isSessionExpired) {
+        throw new Error('session expired');
+    }
+    if (isRefreshing) {
+        await new Promise((resolve, reject) => {
+            failedQueue.push({ resolve, reject });
+        });
+        return;
+    }
+
+    isRefreshing = true;
+    try {
+        const res = await fetchReissue();
+        if (res.result) {
+            // AuthContext 가 권한·닉네임 등을 최신 값으로 맞춘다
+            window.dispatchEvent(new CustomEvent('session-refreshed', { detail: res.result }));
+        }
+        processQueue(null);
+    } catch (refreshError) {
+        console.error(refreshError);
+        const { status, data } = (refreshError as { response?: { status?: number; data?: { code?: string } } })?.response ?? {};
+        // 화면 시작 확인 중 서버·네트워크 오류(응답 없음·5xx)는 로그인 여부를 아직 모르는 것이다.
+        // 만료로 확정하지 않고 넘긴다 (AuthContext 가 잠시 뒤 다시 묻는다)
+        if (sessionCheck && !(status !== undefined && status >= 400 && status < 500)) {
+            processQueue(refreshError);
+            throw refreshError;
+        }
+        // 세션 만료 latch — 후속 401 들이 reissue 재시도하지 않도록 먼저 set.
+        isSessionExpired = true;
+        processQueue(refreshError);
+        // 세션 만료 — App.tsx 의 Dialog 가 확인 버튼을 띄우고, 확인하면 /login 으로 이동. 일반 에러 Dialog 와 분리.
+        // AUTH_4018 = 다른 곳에서 로그인해 이 쪽 세션이 밀려남 (Dialog 문구 구분용)
+        const code = data?.code;
+        if (!sessionCheck || code === 'AUTH_4018') {
+            window.dispatchEvent(new CustomEvent('show-session-expired', { detail: { code } }));
+        }
+        throw refreshError;
+    } finally {
+        isRefreshing = false;
+    }
+};
 
 const processQueue = (error: unknown) => {
     failedQueue.forEach(({ resolve, reject }) => {
