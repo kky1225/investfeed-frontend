@@ -26,6 +26,8 @@ interface ChartDrawingListDialogProps {
     drawings: Drawing[],        // 그린 순서. 목록에는 최근에 그린 것을 위에 보인다
     timeUnit: TimeUnit,         // 지금 차트의 주기. 분봉이면 날짜에 시각을 붙인다
     formatPrice: (price: number) => string,     // 수평선 가격을 차트 라벨과 같은 자릿수로 적는다
+    // 점이 놓인 칸의 시각. 미래 구간의 점이면 차트의 수직선 날짜 라벨과 같은 어림 시각. 어림할 수 없으면 null
+    timeOfSpot: (spot: Spot) => number | null,
     onChange: (id: string, change: DrawingState) => void,  // 잠금·숨김을 바꾼다
     onDelete: (id: string) => void,
     onDeleteAll: () => void,
@@ -50,29 +52,37 @@ const DELETE_COLOR_SX = {
     '&&:hover, &&.Mui-focusVisible': {color: 'error.main'},
 } as const;
 
+/** 도형 점의 칸: 캔들 시각과, 미래 구간이면 그 캔들에서 몇 칸 뒤인지 */
+type Spot = { time: number, offset?: number | null };
+
 /**
  * 점 하나의 시각 표기. 선은 주기와 상관없이 같은 목록이라 분봉에서도 연도를 붙인다(분봉은 시각까지).
- * 미래 구간의 점은 마지막 캔들에서 몇 칸 뒤인지 붙인다
+ * 미래 구간의 점은 차트의 날짜 라벨과 같은 어림 시각으로 적고, 어림할 수 없으면 마지막 캔들에서 몇 칸 뒤인지 붙인다
  */
-const spotText = (spot: { time: number, offset?: number | null }, timeUnit: TimeUnit) => {
-    const date = formatTime(spot.time, 'day');
-    const text = timeUnit === 'minute' ? `${date} ${formatTime(spot.time, 'minute')}` : date;
-    return spot.offset ? `${text} +${spot.offset}칸` : text;
+const spotText = (spot: Spot, timeUnit: TimeUnit, timeOfSpot: (spot: Spot) => number | null) => {
+    const time = timeOfSpot(spot);
+    const shown = time ?? spot.time;
+    const date = formatTime(shown, 'day');
+    const text = timeUnit === 'minute' ? `${date} ${formatTime(shown, 'minute')}` : date;
+    return time === null && spot.offset ? `${text} +${spot.offset}칸` : text;
 };
 
 /** 같은 종류의 선끼리 구분할 수 있게 줄 이름 옆에 붙이는 요약: 수평선은 가격, 글자는 내용, 그 밖은 날짜 */
-const summaryOf = (drawing: Drawing, timeUnit: TimeUnit, formatPrice: (price: number) => string): string => {
+const summaryOf = (
+    drawing: Drawing, timeUnit: TimeUnit, formatPrice: (price: number) => string,
+    timeOfSpot: (spot: Spot) => number | null,
+): string => {
     switch (drawing.type) {
         case 'horizontal':
             return formatPrice(drawing.price);
         case 'vertical':
-            return spotText(drawing, timeUnit);
+            return spotText(drawing, timeUnit, timeOfSpot);
         case 'text': {
             const text = drawing.text.replace(/\s+/g, ' ').trim();
             return text.length > TEXT_PREVIEW_LENGTH ? `${text.slice(0, TEXT_PREVIEW_LENGTH)}…` : text;
         }
         default:
-            return `${spotText(drawing.from, timeUnit)} → ${spotText(drawing.to, timeUnit)}`;
+            return `${spotText(drawing.from, timeUnit, timeOfSpot)} → ${spotText(drawing.to, timeUnit, timeOfSpot)}`;
     }
 };
 
@@ -82,7 +92,8 @@ const summaryOf = (drawing: Drawing, timeUnit: TimeUnit, formatPrice: (price: nu
  * 잠긴 줄은 주황 바탕과 주황 자물쇠로 눈에 띄게 한다(빨강은 상승·삭제 색이라 쓰지 않는다)
  */
 const ChartDrawingListDialog = ({
-    open, onClose, onExited, drawings, timeUnit, formatPrice, onChange, onDelete, onDeleteAll, onShowAll, onSelect,
+    open, onClose, onExited, drawings, timeUnit, formatPrice, timeOfSpot, onChange, onDelete, onDeleteAll, onShowAll,
+    onSelect,
 }: ChartDrawingListDialogProps) => {
     const hiddenCount = drawings.filter(drawing => drawing.hidden).length;
     const rows = [...drawings].reverse();
@@ -110,7 +121,7 @@ const ChartDrawingListDialog = ({
                     <Stack spacing={0.5}>
                         {rows.map(drawing => {
                             const label = DRAWING_LABELS[drawing.type];
-                            const summary = summaryOf(drawing, timeUnit, formatPrice);
+                            const summary = summaryOf(drawing, timeUnit, formatPrice, timeOfSpot);
                             const hidden = drawing.hidden ?? false;
                             const locked = drawing.locked ?? false;
                             return (

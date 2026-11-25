@@ -454,6 +454,20 @@ export class CandleChartEngine {
         return this.futureClock(steps);
     }
 
+    /**
+     * 도형 점이 놓인 칸의 시각(그린 선 목록용). 캔들이 있는 칸이면 그 캔들 시각, 미래 구간이면 어림한 시각(수직선 날짜 라벨과 같다).
+     * 어림할 수 없으면 null
+     */
+    timeOfSpot(spot: { time: number, offset?: number | null }): number | null {
+        if (!spot.offset) return spot.time;
+        // 기준 캔들이 받아 둔 캔들보다 앞이면(다른 주기에서 오래전에 그린 선) 칸을 셀 수 없다.
+        if (this.candles.length === 0 || spot.time < this.candles[0].time) return null;
+        const index = timeToIndex(this.candles, spot.time) + spot.offset;
+        const candle = this.candles[index];
+        if (candle) return candle.time;
+        return index >= this.candles.length ? this.futureTimeAt(index - this.candles.length + 1) : null;
+    }
+
     /** 사용자가 지금 이 차트를 가리키는 중인지 (마우스가 위에 있거나, 누르고 있거나, 우클릭 메뉴로 십자선을 붙들어 둠) */
     private isPointing(): boolean {
         return this.hovered || this.activePointers.size > 0 || this.editPointerId !== null

@@ -1058,6 +1058,7 @@ const CandleChart = ({
                 drawings={drawings}
                 timeUnit={timeUnit}
                 formatPrice={price => engineRef.current?.formatPriceText(price) ?? String(price)}
+                timeOfSpot={spot => engineRef.current ? engineRef.current.timeOfSpot(spot) : null}
                 onChange={changeDrawing}
                 onDelete={id => changeDrawings(drawings.filter(drawing => drawing.id !== id))}
                 onDeleteAll={() => changeDrawings([])}
