@@ -217,6 +217,7 @@ export class CandleChartEngine {
         candles: () => this.candles,
         hasOlder: () => this.hasOlder,
         timeUnit: () => this.timeUnit,
+        futureTime: steps => this.futureTimeAt(steps),
         lineValues: index => {
             this.ensureSeries();
             return [...this.averages, ...this.priceOverlays.flatMap(overlay => overlay.series)]

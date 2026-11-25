@@ -91,6 +91,7 @@ export interface DrawingHost {
     candles: () => Candle[],
     hasOlder: () => boolean,        // 더 받을 과거 구간이 남아 있는지
     timeUnit: () => TimeUnit,       // 수직선의 날짜 라벨 표기 단위
+    futureTime: (steps: number) => number | null,   // 마지막 캔들에서 steps 칸 뒤(미래 구간)의 시각 어림. 수직선 날짜 라벨용
     // index 번째 캔들 자리에서 가격 영역에 그려진 선들의 값(이동평균선, 볼린저밴드 등). 자석이 지표 선에 붙을 때 쓴다
     lineValues: (index: number) => number[],
     redraw: () => void,            // 위 장을 다시 그려 달라고 요청
@@ -620,7 +621,8 @@ export class DrawingLayer {
                 ctx.fillText((pane.axisFormat ?? pane.format)(price), plotRightPx + painter.px(AXIS_LABEL_OFFSET), y);
             });
 
-        // 수직선은 아래 날짜축에 그 캔들의 날짜 라벨을 붙인다. 캔들이 없는 자리(미래 구간)와 화면 밖의 선에는 붙이지 않는다.
+        // 수직선은 아래 날짜축에 그 캔들의 날짜 라벨을 붙인다. 미래 구간이면 어림한 그 칸의 시각(십자선과 같은 규칙)을 붙이고,
+        // 화면 밖의 선에는 붙이지 않는다.
         const candles = this.host.candles();
         const timeUnit = this.host.timeUnit();
         const labelPadding = painter.px(AXIS_TAG_PADDING);
@@ -631,9 +633,12 @@ export class DrawingLayer {
             const index = this.indexOf(drawing);
             const candle = candles[index];
             const x = painter.px(this.xOf(index, layout));
-            if (!candle || x < 0 || x > plotRightPx) return;
+            if (x < 0 || x > plotRightPx) return;
+            const time = candle ? candle.time
+                : index >= candles.length ? this.host.futureTime(index - candles.length + 1) : null;
+            if (time === null) return;
             const color = colorOf(drawing);
-            const text = formatTime(candle.time, timeUnit, true);
+            const text = formatTime(time, timeUnit, true);
             const width = ctx.measureText(text).width + labelPadding * 2;
             // 그림 영역 밖으로 나가지 않게 밀어 넣는다.
             const left = Math.round(clamp(x - width / 2, 0, Math.max(0, plotRightPx - width)));
