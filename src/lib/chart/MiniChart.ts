@@ -42,18 +42,22 @@ export class MiniChartEngine {
     private height = 0;     // CSS px
     private frame = 0;
     private pointer: Point | null = null;
+    private pixelShift = {x: 0, y: 0};  // 화면 픽셀에 맞추려고 캔버스를 왼쪽·위로 당긴 거리 (CSS px, 1픽셀 미만)
     private readonly stopWatchingPixelRatio: () => void;    // 화면 배율 감시를 끝낸다 (watchPixelRatio)
 
     constructor(container: HTMLElement) {
         this.container = container;
         this.canvas = document.createElement('canvas');
         this.canvas.style.display = 'block';
+        // 화면 픽셀에 맞추려고 1픽셀 미만 당길 때(alignToPixels) 둘레 배치는 그대로 두도록 제자리 기준으로 옮긴다.
+        this.canvas.style.position = 'relative';
         container.appendChild(this.canvas);
         const ctx = this.canvas.getContext('2d');
         if (!ctx) throw new Error('Canvas 2D 컨텍스트를 만들 수 없습니다.');
         this.painter = new Painter(ctx);
         container.addEventListener('pointermove', this.handlePointerMove);
         container.addEventListener('pointerleave', this.handlePointerLeave);
+        window.addEventListener('scroll', this.handleScroll, {capture: true, passive: true});
         this.stopWatchingPixelRatio = watchPixelRatio(this.handlePixelRatioChange);
     }
 
@@ -87,17 +91,42 @@ export class MiniChartEngine {
 
     resize(width: number, height: number) {
         const dpr = window.devicePixelRatio || 1;
+        this.alignToPixels(dpr);
         if (width === this.width && height === this.height && dpr === this.painter.dpr) return;
         this.width = width;
         this.height = height;
         this.painter.dpr = dpr;
         this.canvas.width = Math.round(width * dpr);
         this.canvas.height = Math.round(height * dpr);
-        this.canvas.style.width = `${width}px`;
-        this.canvas.style.height = `${height}px`;
+        // 표시 크기를 캔버스 픽셀 수에 딱 맞춘다. 너비가 소수면 그대로 두었을 때 살짝 늘어나 흐려진다.
+        this.canvas.style.width = `${this.canvas.width / dpr}px`;
+        this.canvas.style.height = `${this.canvas.height / dpr}px`;
         // 캔버스는 크기를 바꾸면 지워진다. 빈 화면이 보이지 않게 바로 그린다.
         this.draw();
     }
+
+    /**
+     * 캔버스를 화면 픽셀 경계에 맞춰 놓는다. 차트가 반 픽셀 같은 자리에서 시작하면 선과 글자가 흐려지므로
+     * 시작 위치의 소수 부분만큼 왼쪽·위로 당긴다(1픽셀 미만). 상세 차트(CandleChartEngine.alignToPixels)와 같은 방식이다.
+     */
+    private alignToPixels(dpr: number) {
+        const rect = this.container.getBoundingClientRect();
+        const fraction = (value: number) => {
+            const scaled = value * dpr;
+            return (scaled - Math.floor(scaled)) / dpr;
+        };
+        const x = fraction(rect.left);
+        const y = fraction(rect.top);
+        if (x === this.pixelShift.x && y === this.pixelShift.y) return;
+        this.pixelShift = {x, y};
+        this.canvas.style.left = `${-x}px`;
+        this.canvas.style.top = `${-y}px`;
+    }
+
+    /** 크기는 그대로인데 위치만 바뀌는 경우(배율이 정수가 아닌 화면에서의 스크롤 등)에도 정렬을 다시 맞춘다. */
+    private readonly handleScroll = () => {
+        if (this.width > 0) this.alignToPixels(this.painter.dpr);
+    };
 
     /** 화면 배율이 바뀌면 캔버스를 그 배율에 맞춘다. 아직 크기를 받지 못했으면(처음 그리기 전) 크기를 받을 때 맞춘다. */
     private readonly handlePixelRatioChange = () => {
@@ -110,12 +139,14 @@ export class MiniChartEngine {
         this.frame = 0;
         this.container.removeEventListener('pointermove', this.handlePointerMove);
         this.container.removeEventListener('pointerleave', this.handlePointerLeave);
+        window.removeEventListener('scroll', this.handleScroll, {capture: true});
         this.canvas.remove();
     }
 
     private readonly handlePointerMove = (event: PointerEvent) => {
+        // 그림의 원점은 캔버스를 당긴 만큼(pixelShift) 컨테이너보다 왼쪽·위에 있다.
         const rect = this.container.getBoundingClientRect();
-        this.pointer = {x: event.clientX - rect.left, y: event.clientY - rect.top};
+        this.pointer = {x: event.clientX - rect.left + this.pixelShift.x, y: event.clientY - rect.top + this.pixelShift.y};
         this.scheduleDraw();
     };
 
@@ -144,6 +175,8 @@ export class MiniChartEngine {
     private draw() {
         const {painter, style, candles, width, height} = this;
         const ctx = painter.ctx;
+        // 위쪽 내용의 높이가 바뀌어 크기 변화 없이 밀린 경우도 그릴 때 다시 맞춘다.
+        if (width > 0) this.alignToPixels(painter.dpr);
         ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
         if (!style || width <= 0 || height <= 0 || candles.length === 0) return;
         const mode = this.effectiveMode();
