@@ -1,5 +1,5 @@
 import type {AxiosRequestConfig} from "axios";
-import api from "../../axios.ts";
+import api, {secondaryAuthAction} from "../../axios.ts";
 import type {ApiResponse} from "../../type/AuthType";
 import type {AssistantSettingReq, AssistantSettingRes, AssistantTokenRes, ReadMarkerReq, StoredCard, TelegramLinkCodeRes, TelegramStatusReq, TelegramStatusRes, TimelinePage, TimelineView} from "../../type/AssistantType.ts";
 
@@ -66,17 +66,17 @@ export const fetchTelegramStatus = async (config?: AxiosRequestConfig): Promise<
 };
 
 export const issueTelegramLinkCode = async (): Promise<ApiResponse<TelegramLinkCodeRes>> => {
-    const res = await api.post<ApiResponse<TelegramLinkCodeRes>>("/assistant/telegram/link-code");
+    const res = await api.post<ApiResponse<TelegramLinkCodeRes>>("/assistant/telegram/link-code", null, secondaryAuthAction);
     return res.data;
 };
 
 export const updateTelegramStatus = async (req: TelegramStatusReq): Promise<ApiResponse<TelegramStatusRes>> => {
-    const res = await api.patch<ApiResponse<TelegramStatusRes>>("/assistant/telegram", req);
+    const res = await api.patch<ApiResponse<TelegramStatusRes>>("/assistant/telegram", req, secondaryAuthAction);
     return res.data;
 };
 
 export const unlinkTelegram = async (): Promise<ApiResponse<TelegramStatusRes>> => {
-    const res = await api.delete<ApiResponse<TelegramStatusRes>>("/assistant/telegram");
+    const res = await api.delete<ApiResponse<TelegramStatusRes>>("/assistant/telegram", secondaryAuthAction);
     return res.data;
 };
 

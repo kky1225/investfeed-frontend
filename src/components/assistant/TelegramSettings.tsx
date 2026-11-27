@@ -9,6 +9,7 @@ import Link from '@mui/material/Link';
 import Alert from '@mui/material/Alert';
 import Skeleton from '@mui/material/Skeleton';
 import {requireOk} from '../../lib/apiResponse';
+import {isSecondaryAuthCancelled} from '../../axios';
 import {fetchTelegramStatus, issueTelegramLinkCode, unlinkTelegram, updateTelegramStatus} from '../../api/assistant/AssistantApi';
 import type {TelegramLinkCodeRes, TelegramStatusRes} from '../../type/AssistantType';
 
@@ -29,21 +30,23 @@ export default function TelegramSettings() {
     });
 
     const refresh = () => queryClient.invalidateQueries({queryKey: KEY});
+    // 2차 비밀번호 창을 닫아 그만둔 경우는 실패로 안내하지 않는다
+    const showError = (e: Error) => { if (!isSecondaryAuthCancelled(e)) setError(e.message); };
 
     const codeMutation = useMutation({
         mutationFn: async () => requireOk(await issueTelegramLinkCode(), '연결 코드 발급'),
         onSuccess: (res) => { setLinkCode(res); setError(null); },
-        onError: (e: Error) => setError(e.message),
+        onError: showError,
     });
     const statusMutation = useMutation({
         mutationFn: async (next: 'ACTIVE' | 'PAUSED') => requireOk(await updateTelegramStatus({status: next}), '텔레그램 발송 설정'),
         onSuccess: () => { refresh(); setError(null); },
-        onError: (e: Error) => setError(e.message),
+        onError: showError,
     });
     const unlinkMutation = useMutation({
         mutationFn: async () => requireOk(await unlinkTelegram(), '텔레그램 연결 해제'),
         onSuccess: () => { refresh(); setLinkCode(null); setError(null); },
-        onError: (e: Error) => setError(e.message),
+        onError: showError,
     });
 
     const linked = !!status && status.status !== 'NONE';

@@ -15,6 +15,7 @@ import {fetchCryptoBrokerList, addMyCryptoBroker} from "../../api/cryptoBroker/C
 import type {Broker} from "../../type/BrokerType.ts";
 import {useApiKeyStatus, apiKeyStatusKeys} from "../../context/ApiKeyStatusContext.tsx";
 import {requireOk} from "../../lib/apiResponse.ts";
+import {isSecondaryAuthCancelled} from "../../axios.ts";
 
 interface AddCryptoBrokerDialogProps {
     open: boolean;
@@ -45,6 +46,7 @@ export default function AddCryptoBrokerDialog({open, onClose}: AddCryptoBrokerDi
         },
         onError: (err) => {
             console.error(err);
+            if (isSecondaryAuthCancelled(err)) return;   // 2차 비밀번호 창을 닫아 그만둔 경우
             setError("거래소 추가에 실패했습니다.");
         },
     });

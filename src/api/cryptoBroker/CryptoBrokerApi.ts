@@ -1,5 +1,5 @@
 import type {AxiosRequestConfig} from "axios";
-import api from "../../axios.ts";
+import api, {secondaryAuthAction} from "../../axios.ts";
 import type {ApiResponse} from "../../type/AuthType";
 import {AddMyBrokerReq, Broker, CreateManualHoldingReq, HoldingReorderReq, ManualHolding, MemberBroker, UpdateBalanceReq, UpdateManualHoldingReq} from "../../type/BrokerType.ts";
 
@@ -16,12 +16,12 @@ export const fetchMyCryptoBrokerList = async (config?: AxiosRequestConfig): Prom
 }
 
 export const addMyCryptoBroker = async (req: AddMyBrokerReq): Promise<ApiResponse<MemberBroker>> => {
-    const res = await api.post<ApiResponse<MemberBroker>>(`/crypto/brokers/my`, req);
+    const res = await api.post<ApiResponse<MemberBroker>>(`/crypto/brokers/my`, req, secondaryAuthAction);
     return res.data;
 }
 
 export const removeMyCryptoBroker = async (memberBrokerId: number): Promise<ApiResponse<null>> => {
-    const res = await api.delete<ApiResponse<null>>(`/crypto/brokers/my/${memberBrokerId}`);
+    const res = await api.delete<ApiResponse<null>>(`/crypto/brokers/my/${memberBrokerId}`, secondaryAuthAction);
     return res.data;
 }
 

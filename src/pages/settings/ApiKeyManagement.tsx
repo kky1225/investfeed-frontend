@@ -28,6 +28,7 @@ import {useNavigate} from 'react-router-dom';
 import ColorModeSelect from '../../components/ColorModeSelect';
 import AppTheme from '../../components/AppTheme';
 import {createApiKey, deleteApiKey} from '../../api/auth/AuthApi';
+import {isSecondaryAuthCancelled} from '../../axios';
 import {useMutation, useQueryClient} from '@tanstack/react-query';
 import {requireOk} from '../../lib/apiResponse';
 import {useApiKeyStatus, apiKeyStatusKeys} from '../../context/ApiKeyStatusContext';
@@ -126,6 +127,7 @@ export default function ApiKeyManagement() {
         },
         onError: (error) => {
             console.error(error);
+            if (isSecondaryAuthCancelled(error)) return;   // 2차 비밀번호 창을 닫아 그만둔 경우
             showAlert('API Key 삭제에 실패했습니다.', 'error');
         },
     });

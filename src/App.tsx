@@ -14,7 +14,7 @@ import AccessTimeIcon from "@mui/icons-material/AccessTime";
 import Login from "./pages/auth/Login.tsx";
 import SecondaryAuthDialog from "./components/SecondaryAuthDialog.tsx";
 import AppTheme from "./components/AppTheme.tsx";
-import {processSecondaryAuthQueue} from "./axios.ts";
+import {processSecondaryAuthQueue, SECONDARY_AUTH_ACTION_SOURCE, SecondaryAuthCancelledError} from "./axios.ts";
 import {SECONDARY_AUTH_MANUAL_SOURCE} from "./lib/secondaryAuth.ts";
 import Dashboard from "./pages/dashboard/Dashboard.tsx";
 import MainLayout from "./layout/MainLayout.tsx";
@@ -236,10 +236,11 @@ function App() {
                     processSecondaryAuthQueue(null);
                 }}
                 onClose={() => {
-                    // 비서 화면과, 화면이 직접 연 창(상단 자물쇠, 차트의 내 매매 표시)은 취소해도 그 자리에 머문다.
-                    const stay = secondaryAuth.source === 'assistant' || secondaryAuth.source === SECONDARY_AUTH_MANUAL_SOURCE;
+                    // 비서 화면, 화면이 직접 연 창(상단 자물쇠, 차트의 내 매매 표시), 변경 버튼이 부른 창은 취소해도 그 자리에 머문다.
+                    const stay = secondaryAuth.source === 'assistant' || secondaryAuth.source === SECONDARY_AUTH_MANUAL_SOURCE
+                        || secondaryAuth.source === SECONDARY_AUTH_ACTION_SOURCE;
                     setSecondaryAuth({open: false, mode: 'verify'});
-                    processSecondaryAuthQueue(new Error('cancelled'));
+                    processSecondaryAuthQueue(new SecondaryAuthCancelledError());
                     if (stay) return;
                     if (window.history.length > 1) {
                         navigate(-1);

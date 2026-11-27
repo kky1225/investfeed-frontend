@@ -15,6 +15,20 @@ let isSessionExpired = false;
 let isSecondaryAuthPending = false;
 let secondaryAuthQueue: Array<{ resolve: (value: unknown) => void; reject: (reason?: unknown) => void }> = [];
 
+/** 변경 버튼(API 키 등록, 텔레그램 연결 등)이 부른 2차 비밀번호 창. 취소해도 지금 화면에 머문다 (App.tsx) */
+export const SECONDARY_AUTH_ACTION_SOURCE = 'action';
+export const secondaryAuthAction = { secondaryAuthSource: SECONDARY_AUTH_ACTION_SOURCE };
+
+/** 2차 비밀번호 창을 닫아 요청을 그만둔 경우. 호출부는 실패 안내를 띄우지 않는다 */
+export class SecondaryAuthCancelledError extends Error {
+    constructor() {
+        super('2차 인증을 취소했습니다.');
+        this.name = 'SecondaryAuthCancelledError';
+    }
+}
+// 반환 형식을 boolean 으로 적어 둔다. 추론에 맡기면 타입 가드가 되어, 모양이 같은 Error 가 false 쪽에서 never 로 좁혀진다
+export const isSecondaryAuthCancelled = (error: unknown): boolean => error instanceof SecondaryAuthCancelledError;
+
 api.interceptors.response.use(
     (response) => {
         if (response.config.url?.startsWith('/auth/login') && response.status === 200) {

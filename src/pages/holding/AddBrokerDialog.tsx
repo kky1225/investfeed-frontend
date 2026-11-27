@@ -14,6 +14,7 @@ import LinkIcon from "@mui/icons-material/Link";
 import {fetchBrokerList, addMyBroker} from "../../api/broker/BrokerApi.ts";
 import type {Broker} from "../../type/BrokerType.ts";
 import {requireOk} from "../../lib/apiResponse.ts";
+import {isSecondaryAuthCancelled} from "../../axios.ts";
 import {useApiKeyStatus, apiKeyStatusKeys} from "../../context/ApiKeyStatusContext.tsx";
 
 interface AddBrokerDialogProps {
@@ -48,6 +49,7 @@ export default function AddBrokerDialog({open, onClose}: AddBrokerDialogProps) {
         },
         onError: (err) => {
             console.error(err);
+            if (isSecondaryAuthCancelled(err)) return;   // 2차 비밀번호 창을 닫아 그만둔 경우
             setError("증권사 추가에 실패했습니다.");
         },
     });
