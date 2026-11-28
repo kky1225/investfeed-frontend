@@ -1,5 +1,5 @@
 import type {AxiosRequestConfig} from 'axios';
-import api, {secondaryAuthAction} from '../../axios';
+import api from '../../axios';
 import type { LoginReq, ChangePasswordReq, UpdateProfileReq, ApiKeyReq, ApiKeyRes, TokenRes, PreAuthRes, TotpSetupRes, TotpVerifyReq, SecondaryPasswordSetupReq, SecondaryPasswordVerifyReq, SecondaryPasswordChangeReq, MemberRes, ApiResponse } from '../../type/AuthType';
 
 export const login = async (req: LoginReq): Promise<ApiResponse<PreAuthRes>> => {
@@ -47,12 +47,12 @@ export const fetchApiKeys = async (config?: AxiosRequestConfig): Promise<ApiResp
 };
 
 export const createApiKey = async (req: ApiKeyReq): Promise<ApiResponse<null>> => {
-    const res = await api.post<ApiResponse<null>>('/auth/api-keys', req, secondaryAuthAction);
+    const res = await api.post<ApiResponse<null>>('/auth/api-keys', req);
     return res.data;
 };
 
 export const deleteApiKey = async (id: number): Promise<ApiResponse<null>> => {
-    const res = await api.delete<ApiResponse<null>>(`/auth/api-keys/${id}`, secondaryAuthAction);
+    const res = await api.delete<ApiResponse<null>>(`/auth/api-keys/${id}`);
     return res.data;
 };
 
