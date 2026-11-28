@@ -1,6 +1,7 @@
 import {useEffect, useSyncExternalStore} from "react";
 import {endSecondaryAuth, fetchSecondaryPasswordLockStatus} from "../api/auth/AuthApi.ts";
 import {requireOk} from "./apiResponse.ts";
+import {isSecondaryAuthCancelled, promptSecondaryAuth} from "../axios.ts";
 
 // 2차 인증 상태를 화면 한 곳에서 관리한다. 상단의 자물쇠와 차트의 내 매매 표시가 같은 값을 본다.
 // 인증 쿠키는 화면에서 읽을 수 없으므로 상태와 남은 시간은 서버에 물어 맞춘다: 화면을 열 때, 창으로 돌아올 때,
@@ -100,19 +101,23 @@ export const resetSecondaryAuth = () => {
     setState({known: false, passwordSet: true, suspended: false});
 };
 
-/** 화면이 직접 연 2차 비밀번호 창이라는 표시. 이 창은 취소해도 이전 화면으로 돌아가지 않는다 */
-export const SECONDARY_AUTH_MANUAL_SOURCE = 'manual';
-
 /**
- * 2차 비밀번호 창을 연다(App.tsx 가 띄운다). 보호된 메뉴로 들어가다 뜬 창과 달리, 취소해도 지금 화면에 머문다.
+ * 화면이 직접 2차 비밀번호 창을 연다(상단 자물쇠, 차트의 내 매매 표시, 보호된 화면의 SecondaryAuthRoute).
+ * 통과하면 true, 창을 닫으면 false. 닫은 뒤 화면을 옮길지는 부른 쪽이 정한다.
  * 2차 비밀번호를 아직 만들지 않은 회원에게는 설정 창이 뜬다(서버가 알려 준 값으로 가린다).
  * 창을 열기 전에 서버에 한 번 더 묻는다. 그 사이 관리자가 2차 비밀번호를 초기화했으면 인증 창이 아니라 설정 창이 떠야 한다.
+ * skipIfUnlocked: 서버가 이미 인증됐다고 답하면 창 없이 true (보호된 화면 가드용. 상단 자물쇠의 연장은 창을 띄워야 한다)
  */
-export const requestSecondaryAuth = async () => {
+export const requestSecondaryAuth = async ({skipIfUnlocked = false}: {skipIfUnlocked?: boolean} = {}): Promise<boolean> => {
     await syncSecondaryAuth();
-    window.dispatchEvent(new CustomEvent('show-secondary-auth', {
-        detail: {code: state.passwordSet ? 'AUTH_4040' : 'AUTH_4041', source: SECONDARY_AUTH_MANUAL_SOURCE},
-    }));
+    if (skipIfUnlocked && isSecondaryAuthUnlocked()) return true;
+    try {
+        await promptSecondaryAuth(state.passwordSet ? 'AUTH_4040' : 'AUTH_4041');
+        return true;
+    } catch (error) {
+        if (isSecondaryAuthCancelled(error)) return false;
+        throw error;
+    }
 };
 
 /** 서버에 물어 인증 상태를 아는지. 모르는 동안(화면을 막 연 직후)에는 자물쇠를 그리지 않는다 */
@@ -126,6 +131,9 @@ export const useSecondaryAuthExpiresAt = (): number | null => useSyncExternalSto
 
 /** 지금 2차 인증이 된 상태인지 */
 export const useSecondaryAuthUnlocked = (): boolean => useSecondaryAuthExpiresAt() !== null;
+
+/** 지금 2차 인증이 된 상태인지 (훅 밖에서 바로 읽을 때) */
+export const isSecondaryAuthUnlocked = (): boolean => state.expiresAt !== null;
 
 /** 지금 화면에서 2차 인증이 없어 가려진 내용의 이름들 */
 export const useSecondaryAuthLockedContents = (): string[] => useSyncExternalStore(subscribe, () => state.lockedContents);

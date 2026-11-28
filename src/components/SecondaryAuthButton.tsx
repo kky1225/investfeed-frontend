@@ -86,7 +86,7 @@ export default function SecondaryAuthButton() {
         return (
             <>
                 <Tooltip title={title}>
-                    <MenuButton showBadge={hidden.length > 0} aria-label="2차 인증" onClick={requestSecondaryAuth}>
+                    <MenuButton showBadge={hidden.length > 0} aria-label="2차 인증" onClick={() => void requestSecondaryAuth()}>
                         <LockOutlinedIcon/>
                     </MenuButton>
                 </Tooltip>

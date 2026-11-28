@@ -1,5 +1,5 @@
 import type {AxiosRequestConfig} from "axios";
-import api, {secondaryAuthAction} from "../../axios.ts";
+import api from "../../axios.ts";
 import type {ApiResponse} from "../../type/AuthType";
 import type {AssistantSettingReq, AssistantSettingRes, AssistantTokenRes, ReadMarkerReq, StoredCard, TelegramLinkCodeRes, TelegramStatusReq, TelegramStatusRes, TimelinePage, TimelineView} from "../../type/AssistantType.ts";
 
@@ -21,7 +21,6 @@ export const fetchSecureTimeline = async (query: TimelineQuery = {}, config?: Ax
     const res = await api.get<ApiResponse<TimelinePage>>("/assistant/secure/timeline", {
         ...config,
         params: query,
-        secondaryAuthSource: 'assistant',
     });
     return res.data;
 };
@@ -38,7 +37,7 @@ export const markTimelineRead = async (req: ReadMarkerReq): Promise<ApiResponse<
 
 /** 2차 인증 경로. Python 호출용 비서 토큰 발급 (시장 + 개인 질문). 사용자 JWT 는 Python 에 절대 보내지 않는다 */
 export const issueAssistantToken = async (config?: AxiosRequestConfig): Promise<ApiResponse<AssistantTokenRes>> => {
-    const res = await api.post<ApiResponse<AssistantTokenRes>>("/assistant/secure/token", null, {...config, secondaryAuthSource: 'assistant'});
+    const res = await api.post<ApiResponse<AssistantTokenRes>>("/assistant/secure/token", null, config);
     return res.data;
 };
 
@@ -66,22 +65,22 @@ export const fetchTelegramStatus = async (config?: AxiosRequestConfig): Promise<
 };
 
 export const issueTelegramLinkCode = async (): Promise<ApiResponse<TelegramLinkCodeRes>> => {
-    const res = await api.post<ApiResponse<TelegramLinkCodeRes>>("/assistant/telegram/link-code", null, secondaryAuthAction);
+    const res = await api.post<ApiResponse<TelegramLinkCodeRes>>("/assistant/telegram/link-code");
     return res.data;
 };
 
 export const updateTelegramStatus = async (req: TelegramStatusReq): Promise<ApiResponse<TelegramStatusRes>> => {
-    const res = await api.patch<ApiResponse<TelegramStatusRes>>("/assistant/telegram", req, secondaryAuthAction);
+    const res = await api.patch<ApiResponse<TelegramStatusRes>>("/assistant/telegram", req);
     return res.data;
 };
 
 export const unlinkTelegram = async (): Promise<ApiResponse<TelegramStatusRes>> => {
-    const res = await api.delete<ApiResponse<TelegramStatusRes>>("/assistant/telegram", secondaryAuthAction);
+    const res = await api.delete<ApiResponse<TelegramStatusRes>>("/assistant/telegram");
     return res.data;
 };
 
 export const fetchAssistantCard = async (ref: string, config?: AxiosRequestConfig): Promise<ApiResponse<StoredCard>> => {
-    const res = await api.get<ApiResponse<StoredCard>>(`/assistant/secure/cards/${encodeURIComponent(ref)}`, {...config, secondaryAuthSource: 'assistant'});
+    const res = await api.get<ApiResponse<StoredCard>>(`/assistant/secure/cards/${encodeURIComponent(ref)}`, config);
     return res.data;
 };
 
@@ -106,24 +105,24 @@ export const cancelAssistantPriceAlertDelete = async (cardRef: string): Promise<
 };
 
 export const cancelAssistantGoalUpdate = async (cardRef: string): Promise<ApiResponse<unknown>> => {
-    const res = await api.delete<ApiResponse<unknown>>(`/assistant/secure/actions/goal/${encodeURIComponent(cardRef)}`, {secondaryAuthSource: 'assistant', skipGlobalError: true});
+    const res = await api.delete<ApiResponse<unknown>>(`/assistant/secure/actions/goal/${encodeURIComponent(cardRef)}`, {skipGlobalError: true});
     return res.data;
 };
 
 export const confirmAssistantGoalUpdate = async (cardRef: string): Promise<ApiResponse<unknown>> => {
     // 웹 투자 목표처럼 2차 인증 필요 (2026-10-27)
-    const res = await api.post<ApiResponse<unknown>>("/assistant/secure/actions/goal", {cardRef}, {secondaryAuthSource: 'assistant', skipGlobalError: true});
+    const res = await api.post<ApiResponse<unknown>>("/assistant/secure/actions/goal", {cardRef}, {skipGlobalError: true});
     return res.data;
 };
 
 export const cancelAssistantRebalancingUpdate = async (cardRef: string): Promise<ApiResponse<unknown>> => {
-    const res = await api.delete<ApiResponse<unknown>>(`/assistant/secure/actions/rebalancing/${encodeURIComponent(cardRef)}`, {secondaryAuthSource: 'assistant', skipGlobalError: true});
+    const res = await api.delete<ApiResponse<unknown>>(`/assistant/secure/actions/rebalancing/${encodeURIComponent(cardRef)}`, {skipGlobalError: true});
     return res.data;
 };
 
 export const confirmAssistantRebalancingUpdate = async (cardRef: string): Promise<ApiResponse<unknown>> => {
     // 웹 리밸런싱처럼 2차 인증 필요 (2026-10-31)
-    const res = await api.post<ApiResponse<unknown>>("/assistant/secure/actions/rebalancing", {cardRef}, {secondaryAuthSource: 'assistant', skipGlobalError: true});
+    const res = await api.post<ApiResponse<unknown>>("/assistant/secure/actions/rebalancing", {cardRef}, {skipGlobalError: true});
     return res.data;
 };
 

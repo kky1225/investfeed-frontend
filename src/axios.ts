@@ -15,9 +15,19 @@ let isSessionExpired = false;
 let isSecondaryAuthPending = false;
 let secondaryAuthQueue: Array<{ resolve: (value: unknown) => void; reject: (reason?: unknown) => void }> = [];
 
-/** 변경 버튼(API 키 등록, 텔레그램 연결 등)이 부른 2차 비밀번호 창. 취소해도 지금 화면에 머문다 (App.tsx) */
-export const SECONDARY_AUTH_ACTION_SOURCE = 'action';
-export const secondaryAuthAction = { secondaryAuthSource: SECONDARY_AUTH_ACTION_SOURCE };
+/**
+ * 2차 비밀번호 창을 띄우고(App.tsx 가 띄운다) 결과를 기다린다. 통과하면 resolve, 창을 닫으면 SecondaryAuthCancelledError 로 reject.
+ * 창은 하나만 뜨고, 그사이 들어온 요청·화면도 같은 결과를 받는다.
+ * 창을 닫은 뒤 화면을 옮길지는 여기서 정하지 않는다. 보호된 화면은 SecondaryAuthRoute 가 이전 화면으로 돌려보내고, 버튼·비서는 그 자리에 머문다.
+ * code: 서버가 준 코드. AUTH_4041(2차 비밀번호 없음)이면 설정 창, 나머지는 인증 창
+ */
+export const promptSecondaryAuth = (code: string): Promise<void> =>
+    new Promise<void>((resolve, reject) => {
+        secondaryAuthQueue.push({ resolve: () => resolve(), reject });
+        if (isSecondaryAuthPending) return;
+        isSecondaryAuthPending = true;
+        window.dispatchEvent(new CustomEvent('show-secondary-auth', { detail: { code } }));
+    });
 
 /** 2차 비밀번호 창을 닫아 요청을 그만둔 경우. 호출부는 실패 안내를 띄우지 않는다 */
 export class SecondaryAuthCancelledError extends Error {
@@ -74,18 +84,7 @@ api.interceptors.response.use(
                 if (originalRequest.secondaryAuthSilent === true) {
                     return Promise.reject(error);
                 }
-                if (isSecondaryAuthPending) {
-                    return new Promise((resolve, reject) => {
-                        secondaryAuthQueue.push({ resolve, reject });
-                    }).then(() => api(originalRequest));
-                }
-
-                isSecondaryAuthPending = true;
-                window.dispatchEvent(new CustomEvent('show-secondary-auth', { detail: { code, source: originalRequest.secondaryAuthSource } }));
-
-                return new Promise((resolve, reject) => {
-                    secondaryAuthQueue.push({ resolve, reject });
-                }).then(() => api(originalRequest));
+                return promptSecondaryAuth(code).then(() => api(originalRequest));
             }
             const message = error.response?.data?.message || '접근 권한이 없습니다.';
             window.dispatchEvent(new CustomEvent('show-forbidden', { detail: { message } }));

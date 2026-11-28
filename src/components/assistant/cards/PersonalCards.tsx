@@ -28,6 +28,7 @@ import dayjs from 'dayjs';
 import {ASSISTANT_TIMELINE_KEY} from '../../../context/AssistantContext';
 import type {ApiResponse} from '../../../type/AuthType';
 import {requireOk} from '../../../lib/apiResponse';
+import {isSecondaryAuthCancelled} from '../../../axios';
 import {ASSET_CLASS_LABEL, CardFrame, MiniTable, Stat, amount, fmt, price, rateChip} from './CardParts';
 
 function holdingRows(rows: HoldingRowPayload[]) {
@@ -276,6 +277,7 @@ function ConfirmActions({cardRef, status, asOf, link, confirmLabel, confirm, can
             setLocal(action);
             await queryClient.invalidateQueries({queryKey: ASSISTANT_TIMELINE_KEY});   // 결과 답변·카드 상태 반영
         } catch (e) {
+            if (isSecondaryAuthCancelled(e)) return;   // 2차 비밀번호 창을 닫아 그만둔 경우. 카드는 그대로 둔다
             const msg = (e as {response?: {data?: {message?: string}}}).response?.data?.message ?? (e as Error).message;
             setMessage(msg || '처리하지 못했습니다');
             await queryClient.invalidateQueries({queryKey: ASSISTANT_TIMELINE_KEY});   // 서버가 거절하며 남긴 카드 상태(EXPIRED) 반영

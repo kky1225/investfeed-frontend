@@ -14,8 +14,8 @@ import AccessTimeIcon from "@mui/icons-material/AccessTime";
 import Login from "./pages/auth/Login.tsx";
 import SecondaryAuthDialog from "./components/SecondaryAuthDialog.tsx";
 import AppTheme from "./components/AppTheme.tsx";
-import {processSecondaryAuthQueue, SECONDARY_AUTH_ACTION_SOURCE, SecondaryAuthCancelledError} from "./axios.ts";
-import {SECONDARY_AUTH_MANUAL_SOURCE} from "./lib/secondaryAuth.ts";
+import {processSecondaryAuthQueue, SecondaryAuthCancelledError} from "./axios.ts";
+import SecondaryAuthRoute from "./components/SecondaryAuthRoute.tsx";
 import Dashboard from "./pages/dashboard/Dashboard.tsx";
 import MainLayout from "./layout/MainLayout.tsx";
 import Watchlist from "./pages/watchlist/Watchlist.tsx";
@@ -81,8 +81,7 @@ function App() {
     const [forbidden, setForbidden] = useState<{ open: boolean; message: string }>({
         open: false, message: ''
     });
-    // source: 요청 출처. 'assistant' 면 취소해도 화면 이동하지 않는다 (드로어 유지)
-    const [secondaryAuth, setSecondaryAuth] = useState<{ open: boolean; mode: 'setup' | 'verify'; source?: string }>({
+    const [secondaryAuth, setSecondaryAuth] = useState<{ open: boolean; mode: 'setup' | 'verify' }>({
         open: false, mode: 'verify'
     });
     // 일반 에러 Dialog (500/네트워크 등). 이미 열려있으면 새 에러 무시.
@@ -97,9 +96,9 @@ function App() {
     }, []);
 
     const handleSecondaryAuth = useCallback((e: Event) => {
-        const { code, source } = (e as CustomEvent).detail;
+        const { code } = (e as CustomEvent).detail;
         const mode = code === 'AUTH_4041' ? 'setup' : 'verify';
-        setSecondaryAuth({ open: true, mode, source });
+        setSecondaryAuth({ open: true, mode });
     }, []);
 
     const handleGlobalError = useCallback((e: Event) => {
@@ -236,17 +235,9 @@ function App() {
                     processSecondaryAuthQueue(null);
                 }}
                 onClose={() => {
-                    // 비서 화면, 화면이 직접 연 창(상단 자물쇠, 차트의 내 매매 표시), 변경 버튼이 부른 창은 취소해도 그 자리에 머문다.
-                    const stay = secondaryAuth.source === 'assistant' || secondaryAuth.source === SECONDARY_AUTH_MANUAL_SOURCE
-                        || secondaryAuth.source === SECONDARY_AUTH_ACTION_SOURCE;
+                    // 화면은 옮기지 않는다. 보호된 화면은 SecondaryAuthRoute 가 이전 화면으로 돌려보내고, 버튼·비서는 그 자리에 머문다
                     setSecondaryAuth({open: false, mode: 'verify'});
                     processSecondaryAuthQueue(new SecondaryAuthCancelledError());
-                    if (stay) return;
-                    if (window.history.length > 1) {
-                        navigate(-1);
-                    } else {
-                        navigate('/');
-                    }
                 }}
             />
             <Routes>
@@ -260,7 +251,6 @@ function App() {
                     <Route element={<MainLayout />}>
                         <Route path="/" Component={MarketIndexList} />
                         <Route path="/stock/dashboard" Component={Dashboard} />
-                        <Route path="/dashboard" Component={AssetDashboard} />
                         <Route path="/stock/watchlist" Component={Watchlist} />
                         <Route path="/stock/watchlist/list/:groupId?" Component={Watchlist} />
                         <Route path="/stock/index/list" Component={IndexList} />
@@ -282,8 +272,6 @@ function App() {
                         <Route path="/stock/theme/list" Component={ThemeList} />
                         <Route path="/stock/theme/:themaGrpCd/list" Component={ThemeStockList} />
 
-                        <Route path="/stock/holding/list/:brokerId?" Component={HoldingPage} />
-                        <Route path="/crypto/holding/list/:brokerId?" Component={CryptoHoldingPage} />
                         <Route path="/stock/investor/:orgnTp/list/:trdeTp" Component={InvestorList} />
 
                         <Route path="/stock/recommend/list" Component={RecommendList} />
@@ -294,22 +282,29 @@ function App() {
 
                         <Route path="/crypto/watchlist/list/:groupId?" Component={CryptoWatchlist} />
                         <Route path="/multi-view" Component={MultiViewPage} />
-                        <Route path="/rebalancing" Component={RebalancingPage} />
                         <Route path="/calendar" Component={EconomicCalendarPage} />
-                        <Route path="/goal" Component={GoalPage} />
                         <Route path="/notification/list" Component={NotificationList} />
                         <Route path="/notification/settings" Component={NotificationSettingPage} />
 
-                        <Route path="/admin/roles" Component={RoleManagement} />
-                        <Route path="/admin/permissions/catalog" Component={PermissionCatalogManagement} />
-                        <Route path="/admin/permissions/grants" Component={PermissionGrantManagement} />
-                        <Route path="/admin/members" Component={MemberManagement} />
-                        <Route path="/admin/menus" Component={MenuManagement} />
-                        <Route path="/admin/brokers" Component={BrokerManagement} />
-                        <Route path="/admin/calendar" Component={CalendarManagement} />
-                        <Route path="/admin/monitoring" Component={Monitoring} />
-                        <Route path="/admin/recommend/monitoring" Component={RecommendMonitoring} />
-                        <Route path="/admin/paper-trade" Component={PaperTradeManagement} />
+                        {/* 2차 인증이 있어야 열리는 화면. 서버의 SecurityPaths.SECONDARY_AUTH_PATTERNS 와 맞출 것 */}
+                        <Route element={<SecondaryAuthRoute />}>
+                            <Route path="/dashboard" Component={AssetDashboard} />
+                            <Route path="/stock/holding/list/:brokerId?" Component={HoldingPage} />
+                            <Route path="/crypto/holding/list/:brokerId?" Component={CryptoHoldingPage} />
+                            <Route path="/rebalancing" Component={RebalancingPage} />
+                            <Route path="/goal" Component={GoalPage} />
+
+                            <Route path="/admin/roles" Component={RoleManagement} />
+                            <Route path="/admin/permissions/catalog" Component={PermissionCatalogManagement} />
+                            <Route path="/admin/permissions/grants" Component={PermissionGrantManagement} />
+                            <Route path="/admin/members" Component={MemberManagement} />
+                            <Route path="/admin/menus" Component={MenuManagement} />
+                            <Route path="/admin/brokers" Component={BrokerManagement} />
+                            <Route path="/admin/calendar" Component={CalendarManagement} />
+                            <Route path="/admin/monitoring" Component={Monitoring} />
+                            <Route path="/admin/recommend/monitoring" Component={RecommendMonitoring} />
+                            <Route path="/admin/paper-trade" Component={PaperTradeManagement} />
+                        </Route>
                     </Route>
                 </Route>
             </Routes>
