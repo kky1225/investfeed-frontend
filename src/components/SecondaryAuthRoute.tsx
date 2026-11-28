@@ -5,6 +5,7 @@ import LockOutlinedIcon from '@mui/icons-material/LockOutlined';
 import {
     isSecondaryAuthUnlocked, requestSecondaryAuth, syncSecondaryAuth, useSecondaryAuthKnown, useSecondaryAuthUnlocked,
 } from '../lib/secondaryAuth';
+import {dismissSecondaryAuth} from '../axios';
 
 /**
  * 2차 인증이 있어야 열리는 화면(계좌·자산·목표·리밸런싱·관리자). 서버의 SecurityPaths.SECONDARY_AUTH_PATTERNS 와 맞출 것.
@@ -21,11 +22,14 @@ export default function SecondaryAuthRoute() {
     const [syncSettled, setSyncSettled] = useState(false);
     const autoPrompted = useRef(false);   // 들어왔을 때·인증이 풀렸을 때 창은 한 번만 자동으로 띄운다
     const mounted = useRef(true);
+    const waiting = useRef(false);        // 이 화면이 연 창의 결과를 기다리는 중인지
 
+    // 창이 떠 있는 채로 이 화면을 벗어나면(브라우저 뒤로 가기 등) 창도 닫는다. 남겨 두면 인증이 필요 없는 화면 위에 창이 남는다
     useEffect(() => {
         mounted.current = true;
         return () => {
             mounted.current = false;
+            if (waiting.current) dismissSecondaryAuth();
         };
     }, []);
 
@@ -48,8 +52,11 @@ export default function SecondaryAuthRoute() {
 
     const prompt = useCallback(async (leaveOnCancel: boolean) => {
         setPrompting(true);
+        waiting.current = true;
         try {
-            const passed = await requestSecondaryAuth({skipIfUnlocked: true});
+            // 서버에 묻는 사이 이 화면을 벗어났으면 창을 띄우지 않는다
+            const passed = await requestSecondaryAuth({skipIfUnlocked: true, shouldPrompt: () => mounted.current});
+            waiting.current = false;
             // 이미 이 화면을 벗어났거나, 창을 닫았어도 그사이 인증됐으면 옮기지 않는다
             if (passed || !leaveOnCancel || !mounted.current || isSecondaryAuthUnlocked()) return;
             // 앱 안에서 뒤로 갈 기록이 있을 때만 뒤로 간다 (react-router 가 history.state.idx 에 순번을 남긴다)
@@ -62,6 +69,7 @@ export default function SecondaryAuthRoute() {
         } catch (error) {
             console.error(error);
         } finally {
+            waiting.current = false;
             if (mounted.current) setPrompting(false);
         }
     }, [navigate]);

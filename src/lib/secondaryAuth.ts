@@ -107,10 +107,14 @@ export const resetSecondaryAuth = () => {
  * 2차 비밀번호를 아직 만들지 않은 회원에게는 설정 창이 뜬다(서버가 알려 준 값으로 가린다).
  * 창을 열기 전에 서버에 한 번 더 묻는다. 그 사이 관리자가 2차 비밀번호를 초기화했으면 인증 창이 아니라 설정 창이 떠야 한다.
  * skipIfUnlocked: 서버가 이미 인증됐다고 답하면 창 없이 true (보호된 화면 가드용. 상단 자물쇠의 연장은 창을 띄워야 한다)
+ * shouldPrompt: 서버에 묻는 사이 부른 화면을 벗어났으면 false 를 돌려줄 함수. false 면 창 없이 false
  */
-export const requestSecondaryAuth = async ({skipIfUnlocked = false}: {skipIfUnlocked?: boolean} = {}): Promise<boolean> => {
+export const requestSecondaryAuth = async (
+    {skipIfUnlocked = false, shouldPrompt}: {skipIfUnlocked?: boolean, shouldPrompt?: () => boolean} = {},
+): Promise<boolean> => {
     await syncSecondaryAuth();
     if (skipIfUnlocked && isSecondaryAuthUnlocked()) return true;
+    if (shouldPrompt && !shouldPrompt()) return false;
     try {
         await promptSecondaryAuth(state.passwordSet ? 'AUTH_4040' : 'AUTH_4041');
         return true;

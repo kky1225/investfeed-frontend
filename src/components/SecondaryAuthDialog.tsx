@@ -1,4 +1,4 @@
-import {useState} from 'react';
+import {useEffect, useRef, useState} from 'react';
 import {useMutation} from '@tanstack/react-query';
 import Dialog from '@mui/material/Dialog';
 import DialogTitle from '@mui/material/DialogTitle';
@@ -45,6 +45,16 @@ export default function SecondaryAuthDialog({open, mode, onSuccess, onClose}: Se
     const {user, updateUser} = useAuth();
     // 여러 번 틀려 2차 비밀번호가 정지된 상태인지. 창을 열 때 서버에 묻고, 입력하다 정지되면 그때 바뀐다.
     const [suspended, markSuspended] = useSecondaryPasswordSuspended(open, mode === 'verify');
+    const closeWhenSettled = useRef(false);   // 확인 중에 닫아 달라는 요청이 와서, 실패로 끝나면 닫아야 하는지
+
+    /** 확인 중에 닫아 달라는 요청이 왔으면 닫고 true. 결과를 기다린 쪽은 취소를 받는다 */
+    const closeIfRequested = () => {
+        if (!closeWhenSettled.current) return false;
+        closeWhenSettled.current = false;
+        resetState();
+        onClose();
+        return true;
+    };
 
     const resetState = () => {
         setStep('input');
@@ -86,11 +96,13 @@ export default function SecondaryAuthDialog({open, mode, onSuccess, onClose}: Se
             }
         },
         onSuccess: () => {
+            closeWhenSettled.current = false;
             resetState();
             onSuccess();
         },
         onError: (err: unknown) => {
             console.error(err);
+            if (closeIfRequested()) return;
             const alreadySet = err instanceof AlreadySetError;
             if (!handleSuspended(alreadySet ? err.cause : err)) {
                 setError(alreadySet
@@ -108,11 +120,13 @@ export default function SecondaryAuthDialog({open, mode, onSuccess, onClose}: Se
             requireOk(await verifySecondaryPassword({password: code}), '2차 비밀번호 인증');
         },
         onSuccess: () => {
+            closeWhenSettled.current = false;
             resetState();
             onSuccess();
         },
         onError: (err: unknown) => {
             console.error(err);
+            if (closeIfRequested()) return;
             if (!handleSuspended(err)) {
                 // 틀렸으면 서버가 남은 횟수까지 적어 준 문구를 그대로 보여 준다. 틀린 것이 아닌 실패(서버 오류 등)는 따로 안내한다.
                 setError(wrongSecondaryPasswordMessage(err) ?? '2차 비밀번호를 확인하지 못했습니다. 잠시 후 다시 시도해주세요.');
@@ -145,6 +159,25 @@ export default function SecondaryAuthDialog({open, mode, onSuccess, onClose}: Se
         resetState();
         onClose();
     };
+
+    // 창을 띄운 화면을 벗어나 닫아 달라는 요청(dismissSecondaryAuth). 사용자가 닫은 것과 같은 길로 닫는다.
+    // 확인 중이면 결과를 기다린다: 성공이면 그대로 통과시키고, 실패면 그때 닫는다
+    const dismiss = () => {
+        if (loading) {
+            closeWhenSettled.current = true;
+            return;
+        }
+        handleClose();
+    };
+    const dismissRef = useRef(dismiss);
+    useEffect(() => {
+        dismissRef.current = dismiss;
+    });
+    useEffect(() => {
+        const listener = () => dismissRef.current();
+        window.addEventListener('hide-secondary-auth', listener);
+        return () => window.removeEventListener('hide-secondary-auth', listener);
+    }, []);
 
     const getTitle = () => {
         if (mode === 'setup') return step === 'confirm' ? '2차 비밀번호 확인' : '2차 비밀번호 설정';

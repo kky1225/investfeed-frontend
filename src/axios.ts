@@ -29,6 +29,16 @@ export const promptSecondaryAuth = (code: string): Promise<void> =>
         window.dispatchEvent(new CustomEvent('show-secondary-auth', { detail: { code } }));
     });
 
+/**
+ * 떠 있는 2차 비밀번호 창을 닫는다. 창(SecondaryAuthDialog)이 사용자가 닫은 것과 같은 길로 닫으므로 기다리던 쪽은 모두
+ * SecondaryAuthCancelledError 를 받는다. 확인 중이면 창이 결과를 기다린 뒤 실패일 때만 닫는다.
+ * 창을 띄운 보호된 화면을 벗어났을 때(SecondaryAuthRoute) 쓴다. 창이 떠 있지 않으면 아무것도 하지 않는다.
+ */
+export const dismissSecondaryAuth = () => {
+    if (!isSecondaryAuthPending) return;
+    window.dispatchEvent(new CustomEvent('hide-secondary-auth'));
+};
+
 /** 2차 비밀번호 창을 닫아 요청을 그만둔 경우. 호출부는 실패 안내를 띄우지 않는다 */
 export class SecondaryAuthCancelledError extends Error {
     constructor() {
